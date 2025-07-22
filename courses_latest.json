@@ -1,0 +1,4727 @@
+[
+  {
+    "Program": "BSCS",
+    "Category": "University Courses",
+    "Code": "IF 100",
+    "Name": "Computational Approaches to Problem Solving",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "University Courses",
+    "Code": "MATH 101",
+    "Name": "Calculus I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "University Courses",
+    "Code": "CIP 101N",
+    "Name": "Civic Involvement Projects I-N",
+    "ECTS": "1",
+    "SU_credit": "0",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "University Courses",
+    "Code": "NS 101",
+    "Name": "Science of Nature I",
+    "ECTS": "6",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "University Courses",
+    "Code": "SPS 101",
+    "Name": "Humanity and Society I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "University Courses",
+    "Code": "TLL 101",
+    "Name": "Turkish Language and Literature I",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "University Courses",
+    "Code": "AL 102",
+    "Name": "Academic Literacies",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "University Courses",
+    "Code": "MATH 102",
+    "Name": "Calculus II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "University Courses",
+    "Code": "NS 102",
+    "Name": "Science of Nature II",
+    "ECTS": "6",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "University Courses",
+    "Code": "SPS 102",
+    "Name": "Humanity and Society II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "University Courses",
+    "Code": "TLL 102",
+    "Name": "Turkish Language and Literature II",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "University Courses",
+    "Code": "HIST 191",
+    "Name": "Principles of Atat\u00fcrk and the History of the Turkish Revolution I",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "University Courses",
+    "Code": "HIST 192",
+    "Name": "Principles of Atat\u00fcrk and the History of the Turkish Revolution II",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "University Courses",
+    "Code": "HUM 201",
+    "Name": "Major Works of Literature",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "University Courses",
+    "Code": "PROJ 201",
+    "Name": "Undergraduate Project Course",
+    "ECTS": "1",
+    "SU_credit": "1",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "University Courses",
+    "Code": "HUM 202",
+    "Name": "Major Works of Western Art",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "University Courses",
+    "Code": "HUM 207",
+    "Name": "Major Works of Western Philosophy",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "University Courses",
+    "Code": "SPS 303",
+    "Name": "Law and Ethics",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "University Courses",
+    "Code": "HUM 311",
+    "Name": "Major Works of Literature: The World Before Modernity",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "University Courses",
+    "Code": "HUM 312",
+    "Name": "Major Works of Modern Art",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "University Courses",
+    "Code": "HUM 317",
+    "Name": "Major Works of Moral Philosophy",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "University Courses",
+    "Code": "HUM 321",
+    "Name": "Major Works of Literature: The Modern World",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "University Courses",
+    "Code": "HUM 322",
+    "Name": "Major Works of Art: The World Before Modernity",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "University Courses",
+    "Code": "HUM 371",
+    "Name": "Major Works of Literature: The Islamic World",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "Required Courses",
+    "Code": "CS 201",
+    "Name": "Programming Fundamentals",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "Required Courses",
+    "Code": "CS 204",
+    "Name": "Advanced Programming",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "Required Courses",
+    "Code": "CS 300",
+    "Name": "Data Structures",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "Required Courses",
+    "Code": "CS 301",
+    "Name": "Algorithms",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "Required Courses",
+    "Code": "CS 303",
+    "Name": "Logic and Digital System Design",
+    "ECTS": "7",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "Required Courses",
+    "Code": "CS 395",
+    "Name": "Internship Project",
+    "ECTS": "5",
+    "SU_credit": "0",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "Required Courses",
+    "Code": "ENS 491",
+    "Name": "Graduation Project (Design)",
+    "ECTS": "2",
+    "SU_credit": "1",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "Required Courses",
+    "Code": "ENS 492",
+    "Name": "Graduation Project  (Implementation)",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "Required Courses",
+    "Code": "MATH 201",
+    "Name": "Linear Algebra",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "Required Courses",
+    "Code": "MATH 203",
+    "Name": "Introduction to Probability",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSCS",
+    "Category": "Required Courses",
+    "Code": "MATH 204",
+    "Name": "Discrete Mathematics",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "University Courses",
+    "Code": "AL 102",
+    "Name": "Academic Literacies",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "University Courses",
+    "Code": "CIP 101N",
+    "Name": "Civic Involvement Projects I-N",
+    "ECTS": "1",
+    "SU_credit": "0",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "University Courses",
+    "Code": "HIST 191",
+    "Name": "Principles of Atat\u00fcrk and the History of the Turkish Revolution I",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "University Courses",
+    "Code": "HIST 192",
+    "Name": "Principles of Atat\u00fcrk and the History of the Turkish Revolution II",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "University Courses",
+    "Code": "HUM 201",
+    "Name": "Major Works of Literature",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "University Courses",
+    "Code": "HUM 202",
+    "Name": "Major Works of Western Art",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "University Courses",
+    "Code": "HUM 207",
+    "Name": "Major Works of Western Philosophy",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "University Courses",
+    "Code": "HUM 311",
+    "Name": "Major Works of Literature: The World Before Modernity",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "University Courses",
+    "Code": "HUM 312",
+    "Name": "Major Works of Modern Art",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "University Courses",
+    "Code": "HUM 317",
+    "Name": "Major Works of Moral Philosophy",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "University Courses",
+    "Code": "HUM 321",
+    "Name": "Major Works of Literature: The Modern World",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "University Courses",
+    "Code": "HUM 322",
+    "Name": "Major Works of Art: The World Before Modernity",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "University Courses",
+    "Code": "HUM 371",
+    "Name": "Major Works of Literature: The Islamic World",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "University Courses",
+    "Code": "IF 100",
+    "Name": "Computational Approaches to Problem Solving",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "University Courses",
+    "Code": "MATH 101",
+    "Name": "Calculus I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "University Courses",
+    "Code": "MATH 102",
+    "Name": "Calculus II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "University Courses",
+    "Code": "NS 101",
+    "Name": "Science of Nature I",
+    "ECTS": "6",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "University Courses",
+    "Code": "NS 102",
+    "Name": "Science of Nature II",
+    "ECTS": "6",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "University Courses",
+    "Code": "PROJ 201",
+    "Name": "Undergraduate Project Course",
+    "ECTS": "1",
+    "SU_credit": "1",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "University Courses",
+    "Code": "SPS 101",
+    "Name": "Humanity and Society I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "University Courses",
+    "Code": "SPS 102",
+    "Name": "Humanity and Society II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "University Courses",
+    "Code": "SPS 303",
+    "Name": "Law and Ethics",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "University Courses",
+    "Code": "TLL 101",
+    "Name": "Turkish Language and Literature I",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "University Courses",
+    "Code": "TLL 102",
+    "Name": "Turkish Language and Literature II",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "Required Courses",
+    "Code": "CS 412",
+    "Name": "Machine Learning",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "Required Courses",
+    "Code": "DSA 201",
+    "Name": "Advanced Programming for Data Science",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "Required Courses",
+    "Code": "DSA 210",
+    "Name": "Introduction to Data Science",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "Required Courses",
+    "Code": "DSA 301",
+    "Name": "Data Visualization",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "Required Courses",
+    "Code": "DSA 395",
+    "Name": "Internship Project",
+    "ECTS": "5",
+    "SU_credit": "0",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "Required Courses",
+    "Code": "DSA 492",
+    "Name": "Graduation Project",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "Required Courses",
+    "Code": "ECON 301",
+    "Name": "Econometrics",
+    "ECTS": "7",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "Required Courses",
+    "Code": "MATH 201",
+    "Name": "Linear Algebra",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "Required Courses",
+    "Code": "MATH 203",
+    "Name": "Introduction to Probability",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "Required Courses",
+    "Code": "MATH 306",
+    "Name": "Statistical Modelling",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSDSA",
+    "Category": "Required Courses",
+    "Code": "OPIM 390",
+    "Name": "Introduction to Business Analytics",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "SBS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "University Courses",
+    "Code": "IF 100",
+    "Name": "Computational Approaches to Problem Solving",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "University Courses",
+    "Code": "MATH 101",
+    "Name": "Calculus I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "University Courses",
+    "Code": "CIP 101N",
+    "Name": "Civic Involvement Projects I-N",
+    "ECTS": "1",
+    "SU_credit": "0",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "University Courses",
+    "Code": "NS 101",
+    "Name": "Science of Nature I",
+    "ECTS": "6",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "University Courses",
+    "Code": "SPS 101",
+    "Name": "Humanity and Society I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "University Courses",
+    "Code": "TLL 101",
+    "Name": "Turkish Language and Literature I",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "University Courses",
+    "Code": "AL 102",
+    "Name": "Academic Literacies",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "University Courses",
+    "Code": "MATH 102",
+    "Name": "Calculus II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "University Courses",
+    "Code": "NS 102",
+    "Name": "Science of Nature II",
+    "ECTS": "6",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "University Courses",
+    "Code": "SPS 102",
+    "Name": "Humanity and Society II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "University Courses",
+    "Code": "TLL 102",
+    "Name": "Turkish Language and Literature II",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "University Courses",
+    "Code": "HIST 191",
+    "Name": "Principles of Atat\u00fcrk and the History of the Turkish Revolution I",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "University Courses",
+    "Code": "HIST 192",
+    "Name": "Principles of Atat\u00fcrk and the History of the Turkish Revolution II",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "University Courses",
+    "Code": "HUM 201",
+    "Name": "Major Works of Literature",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "University Courses",
+    "Code": "PROJ 201",
+    "Name": "Undergraduate Project Course",
+    "ECTS": "1",
+    "SU_credit": "1",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "University Courses",
+    "Code": "HUM 202",
+    "Name": "Major Works of Western Art",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "University Courses",
+    "Code": "HUM 207",
+    "Name": "Major Works of Western Philosophy",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "University Courses",
+    "Code": "SPS 303",
+    "Name": "Law and Ethics",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "University Courses",
+    "Code": "HUM 311",
+    "Name": "Major Works of Literature: The World Before Modernity",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "University Courses",
+    "Code": "HUM 312",
+    "Name": "Major Works of Modern Art",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "University Courses",
+    "Code": "HUM 317",
+    "Name": "Major Works of Moral Philosophy",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "University Courses",
+    "Code": "HUM 321",
+    "Name": "Major Works of Literature: The Modern World",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "University Courses",
+    "Code": "HUM 322",
+    "Name": "Major Works of Art: The World Before Modernity",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "University Courses",
+    "Code": "HUM 371",
+    "Name": "Major Works of Literature: The Islamic World",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Required Courses",
+    "Code": "ECON 201",
+    "Name": "Games and Strategies",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Required Courses",
+    "Code": "ECON 202",
+    "Name": "Macroeconomics",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Required Courses",
+    "Code": "ECON 204",
+    "Name": "Microeconomics",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Required Courses",
+    "Code": "ECON 300",
+    "Name": "Project and Internship",
+    "ECTS": "5",
+    "SU_credit": "0",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Required Courses",
+    "Code": "ECON 301",
+    "Name": "Econometrics",
+    "ECTS": "7",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Required Courses",
+    "Code": "MATH 203",
+    "Name": "Introduction to Probability",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Required Courses",
+    "Code": "MATH 306",
+    "Name": "Statistical Modelling",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Mathematics Requirement Courses",
+    "Code": "MATH 201",
+    "Name": "Linear Algebra",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Mathematics Requirement Courses",
+    "Code": "MATH 202",
+    "Name": "Differential Equations",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Mathematics Requirement Courses",
+    "Code": "MATH 204",
+    "Name": "Discrete Mathematics",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Core Elective Courses",
+    "Code": "ECON 310",
+    "Name": "Game Theory",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Core Elective Courses",
+    "Code": "ECON 320",
+    "Name": "Public Economics",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Core Elective Courses",
+    "Code": "ECON 330",
+    "Name": "Industrial Organization",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Core Elective Courses",
+    "Code": "ECON 340",
+    "Name": "International Economics",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Core Elective Courses",
+    "Code": "ECON 350",
+    "Name": "Financial Institutions and Markets",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Core Elective Courses",
+    "Code": "ECON 360",
+    "Name": "Advanced Macroeconomics",
+    "ECTS": "7",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Core Elective Courses",
+    "Code": "ECON 370",
+    "Name": "Advanced Microeconomics",
+    "ECTS": "7",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Core Elective Courses",
+    "Code": "ECON 430",
+    "Name": "Labor Economics",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Area Elective Courses",
+    "Code": "ACC 201",
+    "Name": "Introduction to Financial Accounting and Reporting",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "SBS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Area Elective Courses",
+    "Code": "ECON 312",
+    "Name": "Behavioral Economics",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Area Elective Courses",
+    "Code": "ECON 321",
+    "Name": "Education Economics and Policy",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Area Elective Courses",
+    "Code": "ECON 322",
+    "Name": "Health Economics and Policy",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Area Elective Courses",
+    "Code": "ECON 323",
+    "Name": "Energy and Environmental Economics",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Area Elective Courses",
+    "Code": "ECON 345",
+    "Name": "International Finance",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Area Elective Courses",
+    "Code": "ECON 399",
+    "Name": "Independent Study",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Area Elective Courses",
+    "Code": "ECON 400",
+    "Name": "History of Economic Thought",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Area Elective Courses",
+    "Code": "ECON 401",
+    "Name": "Applied Econometrics",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Area Elective Courses",
+    "Code": "ECON 405",
+    "Name": "Law and Economics",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Area Elective Courses",
+    "Code": "ECON 407",
+    "Name": "The Political Economy of European Integration",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Area Elective Courses",
+    "Code": "ECON 414",
+    "Name": "Applied Macroeconomics",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Area Elective Courses",
+    "Code": "ECON 415",
+    "Name": "Advanced Industrial Organization",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Area Elective Courses",
+    "Code": "ECON 420",
+    "Name": "Growth and Development",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Area Elective Courses",
+    "Code": "ECON 435",
+    "Name": "Discrete Choice Methods",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Area Elective Courses",
+    "Code": "ECON 481",
+    "Name": "Advanced Microeconomic Theory I",
+    "ECTS": "7",
+    "SU_credit": "4",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Area Elective Courses",
+    "Code": "ECON 482",
+    "Name": "Advanced Microeconomic Theory II",
+    "ECTS": "7",
+    "SU_credit": "4",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Area Elective Courses",
+    "Code": "ECON 483",
+    "Name": "Advanced Macroeconomic Theory I",
+    "ECTS": "7",
+    "SU_credit": "4",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Area Elective Courses",
+    "Code": "ECON 484",
+    "Name": "Advanced Macroeconomic Theory II",
+    "ECTS": "7",
+    "SU_credit": "4",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Area Elective Courses",
+    "Code": "ECON 488",
+    "Name": "Matchings and Markets",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Area Elective Courses",
+    "Code": "ECON 492",
+    "Name": "Seminar on the Turkish Economy",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Area Elective Courses",
+    "Code": "ECON 494",
+    "Name": "Spatial Data Science",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAECON",
+    "Category": "Area Elective Courses",
+    "Code": "ECON 495",
+    "Name": "Machine Learning for Policy Evaluation",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "University Courses",
+    "Code": "IF 100",
+    "Name": "Computational Approaches to Problem Solving",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "University Courses",
+    "Code": "MATH 101",
+    "Name": "Calculus I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "University Courses",
+    "Code": "CIP 101N",
+    "Name": "Civic Involvement Projects I-N",
+    "ECTS": "1",
+    "SU_credit": "0",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "University Courses",
+    "Code": "NS 101",
+    "Name": "Science of Nature I",
+    "ECTS": "6",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "University Courses",
+    "Code": "SPS 101",
+    "Name": "Humanity and Society I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "University Courses",
+    "Code": "TLL 101",
+    "Name": "Turkish Language and Literature I",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "University Courses",
+    "Code": "AL 102",
+    "Name": "Academic Literacies",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "University Courses",
+    "Code": "MATH 102",
+    "Name": "Calculus II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "University Courses",
+    "Code": "NS 102",
+    "Name": "Science of Nature II",
+    "ECTS": "6",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "University Courses",
+    "Code": "SPS 102",
+    "Name": "Humanity and Society II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "University Courses",
+    "Code": "TLL 102",
+    "Name": "Turkish Language and Literature II",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "University Courses",
+    "Code": "HIST 191",
+    "Name": "Principles of Atat\u00fcrk and the History of the Turkish Revolution I",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "University Courses",
+    "Code": "HIST 192",
+    "Name": "Principles of Atat\u00fcrk and the History of the Turkish Revolution II",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "University Courses",
+    "Code": "HUM 201",
+    "Name": "Major Works of Literature",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "University Courses",
+    "Code": "PROJ 201",
+    "Name": "Undergraduate Project Course",
+    "ECTS": "1",
+    "SU_credit": "1",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "University Courses",
+    "Code": "HUM 202",
+    "Name": "Major Works of Western Art",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "University Courses",
+    "Code": "HUM 207",
+    "Name": "Major Works of Western Philosophy",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "University Courses",
+    "Code": "SPS 303",
+    "Name": "Law and Ethics",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "University Courses",
+    "Code": "HUM 311",
+    "Name": "Major Works of Literature: The World Before Modernity",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "University Courses",
+    "Code": "HUM 312",
+    "Name": "Major Works of Modern Art",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "University Courses",
+    "Code": "HUM 317",
+    "Name": "Major Works of Moral Philosophy",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "University Courses",
+    "Code": "HUM 321",
+    "Name": "Major Works of Literature: The Modern World",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "University Courses",
+    "Code": "HUM 322",
+    "Name": "Major Works of Art: The World Before Modernity",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "University Courses",
+    "Code": "HUM 371",
+    "Name": "Major Works of Literature: The Islamic World",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "Required Courses",
+    "Code": "CS 303",
+    "Name": "Logic and Digital System Design",
+    "ECTS": "7",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "Required Courses",
+    "Code": "EE 200",
+    "Name": "Electronic Circuit Implementations",
+    "ECTS": "2",
+    "SU_credit": "2",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "Required Courses",
+    "Code": "EE 202",
+    "Name": "Electronic Circuits II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "Required Courses",
+    "Code": "EE 308",
+    "Name": "Microcomputer Based System Design",
+    "ECTS": "7",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "Required Courses",
+    "Code": "EE 395",
+    "Name": "Internship Project",
+    "ECTS": "5",
+    "SU_credit": "0",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "Required Courses",
+    "Code": "ENS 203",
+    "Name": "Electronic Circuits I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "Required Courses",
+    "Code": "ENS 211",
+    "Name": "Signals",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "Required Courses",
+    "Code": "ENS 491",
+    "Name": "Graduation Project (Design)",
+    "ECTS": "2",
+    "SU_credit": "1",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "Required Courses",
+    "Code": "ENS 492",
+    "Name": "Graduation Project  (Implementation)",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "Required Courses",
+    "Code": "MATH 201",
+    "Name": "Linear Algebra",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "Required Courses",
+    "Code": "MATH 202",
+    "Name": "Differential Equations",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "Required Courses",
+    "Code": "MATH 203",
+    "Name": "Introduction to Probability",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSEE",
+    "Category": "Required Courses",
+    "Code": "MATH 204",
+    "Name": "Discrete Mathematics",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "University Courses",
+    "Code": "IF 100",
+    "Name": "Computational Approaches to Problem Solving",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "University Courses",
+    "Code": "MATH 101",
+    "Name": "Calculus I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "University Courses",
+    "Code": "CIP 101N",
+    "Name": "Civic Involvement Projects I-N",
+    "ECTS": "1",
+    "SU_credit": "0",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "University Courses",
+    "Code": "NS 101",
+    "Name": "Science of Nature I",
+    "ECTS": "6",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "University Courses",
+    "Code": "SPS 101",
+    "Name": "Humanity and Society I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "University Courses",
+    "Code": "TLL 101",
+    "Name": "Turkish Language and Literature I",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "University Courses",
+    "Code": "AL 102",
+    "Name": "Academic Literacies",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "University Courses",
+    "Code": "MATH 102",
+    "Name": "Calculus II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "University Courses",
+    "Code": "NS 102",
+    "Name": "Science of Nature II",
+    "ECTS": "6",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "University Courses",
+    "Code": "SPS 102",
+    "Name": "Humanity and Society II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "University Courses",
+    "Code": "TLL 102",
+    "Name": "Turkish Language and Literature II",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "University Courses",
+    "Code": "HIST 191",
+    "Name": "Principles of Atat\u00fcrk and the History of the Turkish Revolution I",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "University Courses",
+    "Code": "HIST 192",
+    "Name": "Principles of Atat\u00fcrk and the History of the Turkish Revolution II",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "University Courses",
+    "Code": "HUM 201",
+    "Name": "Major Works of Literature",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "University Courses",
+    "Code": "PROJ 201",
+    "Name": "Undergraduate Project Course",
+    "ECTS": "1",
+    "SU_credit": "1",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "University Courses",
+    "Code": "HUM 202",
+    "Name": "Major Works of Western Art",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "University Courses",
+    "Code": "HUM 207",
+    "Name": "Major Works of Western Philosophy",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "University Courses",
+    "Code": "SPS 303",
+    "Name": "Law and Ethics",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "University Courses",
+    "Code": "HUM 311",
+    "Name": "Major Works of Literature: The World Before Modernity",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "University Courses",
+    "Code": "HUM 312",
+    "Name": "Major Works of Modern Art",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "University Courses",
+    "Code": "HUM 317",
+    "Name": "Major Works of Moral Philosophy",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "University Courses",
+    "Code": "HUM 321",
+    "Name": "Major Works of Literature: The Modern World",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "University Courses",
+    "Code": "HUM 322",
+    "Name": "Major Works of Art: The World Before Modernity",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "University Courses",
+    "Code": "HUM 371",
+    "Name": "Major Works of Literature: The Islamic World",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "Required Courses",
+    "Code": "DSA 201",
+    "Name": "Advanced Programming for Data Science",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "Required Courses",
+    "Code": "ENS 208",
+    "Name": "Introduction to Industrial Engineering",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "Required Courses",
+    "Code": "ENS 491",
+    "Name": "Graduation Project (Design)",
+    "ECTS": "2",
+    "SU_credit": "1",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "Required Courses",
+    "Code": "ENS 492",
+    "Name": "Graduation Project  (Implementation)",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "Required Courses",
+    "Code": "IE 303",
+    "Name": "Decision Economics",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "Required Courses",
+    "Code": "IE 305",
+    "Name": "Simulation",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "Required Courses",
+    "Code": "IE 311",
+    "Name": "Operations Research I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "Required Courses",
+    "Code": "IE 312",
+    "Name": "Operations Research II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "Required Courses",
+    "Code": "IE 313",
+    "Name": "Operations Research III",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "Required Courses",
+    "Code": "IE 395",
+    "Name": "Internship Project",
+    "ECTS": "5",
+    "SU_credit": "0",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "Required Courses",
+    "Code": "MATH 201",
+    "Name": "Linear Algebra",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "Required Courses",
+    "Code": "MATH 203",
+    "Name": "Introduction to Probability",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMS",
+    "Category": "Required Courses",
+    "Code": "MATH 306",
+    "Name": "Statistical Modelling",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "University Courses",
+    "Code": "IF 100",
+    "Name": "Computational Approaches to Problem Solving",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "University Courses",
+    "Code": "MATH 101",
+    "Name": "Calculus I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "University Courses",
+    "Code": "CIP 101N",
+    "Name": "Civic Involvement Projects I-N",
+    "ECTS": "1",
+    "SU_credit": "0",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "University Courses",
+    "Code": "NS 101",
+    "Name": "Science of Nature I",
+    "ECTS": "6",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "University Courses",
+    "Code": "SPS 101",
+    "Name": "Humanity and Society I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "University Courses",
+    "Code": "TLL 101",
+    "Name": "Turkish Language and Literature I",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "University Courses",
+    "Code": "AL 102",
+    "Name": "Academic Literacies",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "University Courses",
+    "Code": "MATH 102",
+    "Name": "Calculus II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "University Courses",
+    "Code": "NS 102",
+    "Name": "Science of Nature II",
+    "ECTS": "6",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "University Courses",
+    "Code": "SPS 102",
+    "Name": "Humanity and Society II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "University Courses",
+    "Code": "TLL 102",
+    "Name": "Turkish Language and Literature II",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "University Courses",
+    "Code": "HIST 191",
+    "Name": "Principles of Atat\u00fcrk and the History of the Turkish Revolution I",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "University Courses",
+    "Code": "HIST 192",
+    "Name": "Principles of Atat\u00fcrk and the History of the Turkish Revolution II",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "University Courses",
+    "Code": "HUM 201",
+    "Name": "Major Works of Literature",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "University Courses",
+    "Code": "PROJ 201",
+    "Name": "Undergraduate Project Course",
+    "ECTS": "1",
+    "SU_credit": "1",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "University Courses",
+    "Code": "HUM 202",
+    "Name": "Major Works of Western Art",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "University Courses",
+    "Code": "HUM 207",
+    "Name": "Major Works of Western Philosophy",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "University Courses",
+    "Code": "SPS 303",
+    "Name": "Law and Ethics",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "University Courses",
+    "Code": "HUM 311",
+    "Name": "Major Works of Literature: The World Before Modernity",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "University Courses",
+    "Code": "HUM 312",
+    "Name": "Major Works of Modern Art",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "University Courses",
+    "Code": "HUM 317",
+    "Name": "Major Works of Moral Philosophy",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "University Courses",
+    "Code": "HUM 321",
+    "Name": "Major Works of Literature: The Modern World",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "University Courses",
+    "Code": "HUM 322",
+    "Name": "Major Works of Art: The World Before Modernity",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "University Courses",
+    "Code": "HUM 371",
+    "Name": "Major Works of Literature: The Islamic World",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "Required Courses",
+    "Code": "ECON 202",
+    "Name": "Macroeconomics",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "Required Courses",
+    "Code": "ECON 204",
+    "Name": "Microeconomics",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "Required Courses",
+    "Code": "ENG 300",
+    "Name": "Professional Communication Skills in English",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "Required Courses",
+    "Code": "MGMT 201",
+    "Name": "Introduction to Management",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "SBS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "Required Courses",
+    "Code": "MGMT 203",
+    "Name": "Introduction to Data Analysis and Research in Business",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "SBS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "Required Courses",
+    "Code": "MGMT 300",
+    "Name": "Summer Internship",
+    "ECTS": "5",
+    "SU_credit": "0",
+    "Faculty": "SBS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "Core Electives",
+    "Code": "ACC 201",
+    "Name": "Introduction to Financial Accounting and Reporting",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "SBS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "Core Electives",
+    "Code": "ACC 301",
+    "Name": "Managerial Accounting",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "SBS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "Core Electives",
+    "Code": "FIN 301",
+    "Name": "Financial Management",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "SBS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "Core Electives",
+    "Code": "FIN 401",
+    "Name": "Corporate Finance",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "SBS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "Core Electives",
+    "Code": "MGMT 401",
+    "Name": "Business Strategy",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "SBS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "Core Electives",
+    "Code": "MGMT 402",
+    "Name": "Entrepreneurship",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "SBS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "Core Electives",
+    "Code": "MGMT 403",
+    "Name": "International Business",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "SBS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "Core Electives",
+    "Code": "MKTG 301",
+    "Name": "Introduction to Marketing",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "SBS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "Core Electives",
+    "Code": "MKTG 402",
+    "Name": "Consumer Behavior",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "SBS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "Core Electives",
+    "Code": "OPIM 301",
+    "Name": "Operations Management",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "SBS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "Core Electives",
+    "Code": "OPIM 302",
+    "Name": "Management Information Systems",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "SBS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "Core Electives",
+    "Code": "ORG 301",
+    "Name": "Organizations and Organizing",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "SBS"
+  },
+  {
+    "Program": "BAMAN",
+    "Category": "Core Electives",
+    "Code": "ORG 302",
+    "Name": "Organizational Behavior",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "SBS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "University Courses",
+    "Code": "IF 100",
+    "Name": "Computational Approaches to Problem Solving",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "University Courses",
+    "Code": "MATH 101",
+    "Name": "Calculus I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "University Courses",
+    "Code": "CIP 101N",
+    "Name": "Civic Involvement Projects I-N",
+    "ECTS": "1",
+    "SU_credit": "0",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "University Courses",
+    "Code": "NS 101",
+    "Name": "Science of Nature I",
+    "ECTS": "6",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "University Courses",
+    "Code": "SPS 101",
+    "Name": "Humanity and Society I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "University Courses",
+    "Code": "TLL 101",
+    "Name": "Turkish Language and Literature I",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "University Courses",
+    "Code": "AL 102",
+    "Name": "Academic Literacies",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "University Courses",
+    "Code": "MATH 102",
+    "Name": "Calculus II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "University Courses",
+    "Code": "NS 102",
+    "Name": "Science of Nature II",
+    "ECTS": "6",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "University Courses",
+    "Code": "SPS 102",
+    "Name": "Humanity and Society II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "University Courses",
+    "Code": "TLL 102",
+    "Name": "Turkish Language and Literature II",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "University Courses",
+    "Code": "HIST 191",
+    "Name": "Principles of Atat\u00fcrk and the History of the Turkish Revolution I",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "University Courses",
+    "Code": "HIST 192",
+    "Name": "Principles of Atat\u00fcrk and the History of the Turkish Revolution II",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "University Courses",
+    "Code": "HUM 201",
+    "Name": "Major Works of Literature",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "University Courses",
+    "Code": "PROJ 201",
+    "Name": "Undergraduate Project Course",
+    "ECTS": "1",
+    "SU_credit": "1",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "University Courses",
+    "Code": "HUM 202",
+    "Name": "Major Works of Western Art",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "University Courses",
+    "Code": "HUM 207",
+    "Name": "Major Works of Western Philosophy",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "University Courses",
+    "Code": "SPS 303",
+    "Name": "Law and Ethics",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "University Courses",
+    "Code": "HUM 311",
+    "Name": "Major Works of Literature: The World Before Modernity",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "University Courses",
+    "Code": "HUM 312",
+    "Name": "Major Works of Modern Art",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "University Courses",
+    "Code": "HUM 317",
+    "Name": "Major Works of Moral Philosophy",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "University Courses",
+    "Code": "HUM 321",
+    "Name": "Major Works of Literature: The Modern World",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "University Courses",
+    "Code": "HUM 322",
+    "Name": "Major Works of Art: The World Before Modernity",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "University Courses",
+    "Code": "HUM 371",
+    "Name": "Major Works of Literature: The Islamic World",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "Required Courses",
+    "Code": "ENS 202",
+    "Name": "Thermodynamics",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "Required Courses",
+    "Code": "ENS 205",
+    "Name": "Introduction to Materials Science",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "Required Courses",
+    "Code": "ENS 491",
+    "Name": "Graduation Project (Design)",
+    "ECTS": "2",
+    "SU_credit": "1",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "Required Courses",
+    "Code": "ENS 492",
+    "Name": "Graduation Project  (Implementation)",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "Required Courses",
+    "Code": "MATH 202",
+    "Name": "Differential Equations",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "Required Courses",
+    "Code": "MAT 204",
+    "Name": "Electrical, Optical and Magnetic Properties of Materials",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "Required Courses",
+    "Code": "MAT 312",
+    "Name": "Materials Characterization",
+    "ECTS": "7",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "Required Courses",
+    "Code": "MAT 314",
+    "Name": "Mechanical Properties of Materials",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "Required Courses",
+    "Code": "MAT 395",
+    "Name": "Internship Project",
+    "ECTS": "5",
+    "SU_credit": "0",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSMAT",
+    "Category": "Required Courses",
+    "Code": "NS 218",
+    "Name": "Fundamentals of Nanoscience",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "University Courses",
+    "Code": "IF 100",
+    "Name": "Computational Approaches to Problem Solving",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "University Courses",
+    "Code": "MATH 101",
+    "Name": "Calculus I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "University Courses",
+    "Code": "CIP 101N",
+    "Name": "Civic Involvement Projects I-N",
+    "ECTS": "1",
+    "SU_credit": "0",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "University Courses",
+    "Code": "NS 101",
+    "Name": "Science of Nature I",
+    "ECTS": "6",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "University Courses",
+    "Code": "SPS 101",
+    "Name": "Humanity and Society I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "University Courses",
+    "Code": "TLL 101",
+    "Name": "Turkish Language and Literature I",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BSME",
+    "Category": "University Courses",
+    "Code": "AL 102",
+    "Name": "Academic Literacies",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BSME",
+    "Category": "University Courses",
+    "Code": "MATH 102",
+    "Name": "Calculus II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "University Courses",
+    "Code": "NS 102",
+    "Name": "Science of Nature II",
+    "ECTS": "6",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "University Courses",
+    "Code": "SPS 102",
+    "Name": "Humanity and Society II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "University Courses",
+    "Code": "TLL 102",
+    "Name": "Turkish Language and Literature II",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BSME",
+    "Category": "University Courses",
+    "Code": "HIST 191",
+    "Name": "Principles of Atat\u00fcrk and the History of the Turkish Revolution I",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "University Courses",
+    "Code": "HIST 192",
+    "Name": "Principles of Atat\u00fcrk and the History of the Turkish Revolution II",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "University Courses",
+    "Code": "HUM 201",
+    "Name": "Major Works of Literature",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "University Courses",
+    "Code": "PROJ 201",
+    "Name": "Undergraduate Project Course",
+    "ECTS": "1",
+    "SU_credit": "1",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "University Courses",
+    "Code": "HUM 202",
+    "Name": "Major Works of Western Art",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "University Courses",
+    "Code": "HUM 207",
+    "Name": "Major Works of Western Philosophy",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "University Courses",
+    "Code": "SPS 303",
+    "Name": "Law and Ethics",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "University Courses",
+    "Code": "HUM 311",
+    "Name": "Major Works of Literature: The World Before Modernity",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "University Courses",
+    "Code": "HUM 312",
+    "Name": "Major Works of Modern Art",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "University Courses",
+    "Code": "HUM 317",
+    "Name": "Major Works of Moral Philosophy",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "University Courses",
+    "Code": "HUM 321",
+    "Name": "Major Works of Literature: The Modern World",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "University Courses",
+    "Code": "HUM 322",
+    "Name": "Major Works of Art: The World Before Modernity",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "University Courses",
+    "Code": "HUM 371",
+    "Name": "Major Works of Literature: The Islamic World",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "Required Courses",
+    "Code": "CS 201",
+    "Name": "Programming Fundamentals",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "Required Courses",
+    "Code": "ENS 203",
+    "Name": "Electronic Circuits I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "Required Courses",
+    "Code": "ENS 204",
+    "Name": "Mechanics",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "Required Courses",
+    "Code": "ENS 206",
+    "Name": "Systems Modeling and Control",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "Required Courses",
+    "Code": "ENS 214",
+    "Name": "Dynamics",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "Required Courses",
+    "Code": "ENS 491",
+    "Name": "Graduation Project (Design)",
+    "ECTS": "2",
+    "SU_credit": "1",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "Required Courses",
+    "Code": "ENS 492",
+    "Name": "Graduation Project  (Implementation)",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "Required Courses",
+    "Code": "MATH 201",
+    "Name": "Linear Algebra",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "Required Courses",
+    "Code": "MATH 202",
+    "Name": "Differential Equations",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "Required Courses",
+    "Code": "ME 301",
+    "Name": "Mechanical Systems I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "Required Courses",
+    "Code": "ME 303",
+    "Name": "Control System Design",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "Required Courses",
+    "Code": "ME 305",
+    "Name": "Power Electronics",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSME",
+    "Category": "Required Courses",
+    "Code": "ME 395",
+    "Name": "Internship Project",
+    "ECTS": "5",
+    "SU_credit": "0",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "University Courses",
+    "Code": "IF 100",
+    "Name": "Computational Approaches to Problem Solving",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "University Courses",
+    "Code": "MATH 101",
+    "Name": "Calculus I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "University Courses",
+    "Code": "CIP 101N",
+    "Name": "Civic Involvement Projects I-N",
+    "ECTS": "1",
+    "SU_credit": "0",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "University Courses",
+    "Code": "NS 101",
+    "Name": "Science of Nature I",
+    "ECTS": "6",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "University Courses",
+    "Code": "SPS 101",
+    "Name": "Humanity and Society I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "University Courses",
+    "Code": "TLL 101",
+    "Name": "Turkish Language and Literature I",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "University Courses",
+    "Code": "AL 102",
+    "Name": "Academic Literacies",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "University Courses",
+    "Code": "MATH 102",
+    "Name": "Calculus II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "University Courses",
+    "Code": "NS 102",
+    "Name": "Science of Nature II",
+    "ECTS": "6",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "University Courses",
+    "Code": "SPS 102",
+    "Name": "Humanity and Society II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "University Courses",
+    "Code": "TLL 102",
+    "Name": "Turkish Language and Literature II",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "University Courses",
+    "Code": "HIST 191",
+    "Name": "Principles of Atat\u00fcrk and the History of the Turkish Revolution I",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "University Courses",
+    "Code": "HIST 192",
+    "Name": "Principles of Atat\u00fcrk and the History of the Turkish Revolution II",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "University Courses",
+    "Code": "HUM 201",
+    "Name": "Major Works of Literature",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "University Courses",
+    "Code": "PROJ 201",
+    "Name": "Undergraduate Project Course",
+    "ECTS": "1",
+    "SU_credit": "1",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "University Courses",
+    "Code": "HUM 202",
+    "Name": "Major Works of Western Art",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "University Courses",
+    "Code": "HUM 207",
+    "Name": "Major Works of Western Philosophy",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "University Courses",
+    "Code": "SPS 303",
+    "Name": "Law and Ethics",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "University Courses",
+    "Code": "HUM 311",
+    "Name": "Major Works of Literature: The World Before Modernity",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "University Courses",
+    "Code": "HUM 312",
+    "Name": "Major Works of Modern Art",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "University Courses",
+    "Code": "HUM 317",
+    "Name": "Major Works of Moral Philosophy",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "University Courses",
+    "Code": "HUM 321",
+    "Name": "Major Works of Literature: The Modern World",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "University Courses",
+    "Code": "HUM 322",
+    "Name": "Major Works of Art: The World Before Modernity",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "University Courses",
+    "Code": "HUM 371",
+    "Name": "Major Works of Literature: The Islamic World",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "Required Courses",
+    "Code": "BIO 301",
+    "Name": "Introduction to Molecular Biology",
+    "ECTS": "7",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "Required Courses",
+    "Code": "BIO 303",
+    "Name": "Genetics",
+    "ECTS": "7",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "Required Courses",
+    "Code": "BIO 321",
+    "Name": "Biochemistry I",
+    "ECTS": "7",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "Required Courses",
+    "Code": "BIO 332",
+    "Name": "Cell Biology",
+    "ECTS": "7",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "Required Courses",
+    "Code": "BIO 395",
+    "Name": "Internship Project",
+    "ECTS": "5",
+    "SU_credit": "0",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "Required Courses",
+    "Code": "ENS 210",
+    "Name": "Computational Biology",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "Required Courses",
+    "Code": "ENS 491",
+    "Name": "Graduation Project (Design)",
+    "ECTS": "2",
+    "SU_credit": "1",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "Required Courses",
+    "Code": "ENS 492",
+    "Name": "Graduation Project  (Implementation)",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "Required Courses",
+    "Code": "NS 201",
+    "Name": "Discovering Life",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "Required Courses",
+    "Code": "NS 207",
+    "Name": "Organic Chemistry",
+    "ECTS": "7",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BSBIO",
+    "Category": "Required Courses",
+    "Code": "NS 216",
+    "Name": "Life on Earth",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "University Courses",
+    "Code": "IF 100",
+    "Name": "Computational Approaches to Problem Solving",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "University Courses",
+    "Code": "MATH 101",
+    "Name": "Calculus I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "University Courses",
+    "Code": "CIP 101N",
+    "Name": "Civic Involvement Projects I-N",
+    "ECTS": "1",
+    "SU_credit": "0",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "University Courses",
+    "Code": "NS 101",
+    "Name": "Science of Nature I",
+    "ECTS": "6",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "University Courses",
+    "Code": "SPS 101",
+    "Name": "Humanity and Society I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "University Courses",
+    "Code": "TLL 101",
+    "Name": "Turkish Language and Literature I",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "University Courses",
+    "Code": "AL 102",
+    "Name": "Academic Literacies",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "University Courses",
+    "Code": "MATH 102",
+    "Name": "Calculus II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "University Courses",
+    "Code": "NS 102",
+    "Name": "Science of Nature II",
+    "ECTS": "6",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "University Courses",
+    "Code": "SPS 102",
+    "Name": "Humanity and Society II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "University Courses",
+    "Code": "TLL 102",
+    "Name": "Turkish Language and Literature II",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "University Courses",
+    "Code": "HIST 191",
+    "Name": "Principles of Atat\u00fcrk and the History of the Turkish Revolution I",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "University Courses",
+    "Code": "HIST 192",
+    "Name": "Principles of Atat\u00fcrk and the History of the Turkish Revolution II",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "University Courses",
+    "Code": "HUM 201",
+    "Name": "Major Works of Literature",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "University Courses",
+    "Code": "PROJ 201",
+    "Name": "Undergraduate Project Course",
+    "ECTS": "1",
+    "SU_credit": "1",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "University Courses",
+    "Code": "HUM 202",
+    "Name": "Major Works of Western Art",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "University Courses",
+    "Code": "HUM 207",
+    "Name": "Major Works of Western Philosophy",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "University Courses",
+    "Code": "SPS 303",
+    "Name": "Law and Ethics",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "University Courses",
+    "Code": "HUM 311",
+    "Name": "Major Works of Literature: The World Before Modernity",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "University Courses",
+    "Code": "HUM 312",
+    "Name": "Major Works of Modern Art",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "University Courses",
+    "Code": "HUM 317",
+    "Name": "Major Works of Moral Philosophy",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "University Courses",
+    "Code": "HUM 321",
+    "Name": "Major Works of Literature: The Modern World",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "University Courses",
+    "Code": "HUM 322",
+    "Name": "Major Works of Art: The World Before Modernity",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "University Courses",
+    "Code": "HUM 371",
+    "Name": "Major Works of Literature: The Islamic World",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Required Courses",
+    "Code": "ECON 202",
+    "Name": "Macroeconomics",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Required Courses",
+    "Code": "IR 201",
+    "Name": "International Relations Theory",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Required Courses",
+    "Code": "POLS 250",
+    "Name": "Comparative Politics",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Required Courses",
+    "Code": "POLS 301",
+    "Name": "Political Theory I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Required Courses",
+    "Code": "POLS 352",
+    "Name": "Turkish Politics I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Required Courses",
+    "Code": "POLS 473",
+    "Name": "Political Theory II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Required Courses",
+    "Code": "PSIR 300",
+    "Name": "Project and Internship",
+    "ECTS": "5",
+    "SU_credit": "0",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Required Courses",
+    "Code": "PSIR 311",
+    "Name": "Research Methods for Political Science and International Relations I",
+    "ECTS": "7",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Required Courses",
+    "Code": "PSIR 401",
+    "Name": "Research Methods for Political Science and International Relations II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Core Electives I (Political Science)",
+    "Code": "LAW 312",
+    "Name": "Comparative Constitutional Law",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Core Electives I (Political Science)",
+    "Code": "POLS 251",
+    "Name": "Borders, Citizens, Immigrants, Refugees",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Core Electives I (Political Science)",
+    "Code": "POLS 353",
+    "Name": "Turkish Politics II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Core Electives I (Political Science)",
+    "Code": "POLS 404",
+    "Name": "Comparative Party Systems and Electoral Behavior",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Core Electives I (Political Science)",
+    "Code": "POLS 455",
+    "Name": "Rise and Fall of Democracy",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Core Electives I (Political Science)",
+    "Code": "POLS 483",
+    "Name": "Ethnicity and Nationalism",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Core Electives I (Political Science)",
+    "Code": "POLS 493",
+    "Name": "Comparative Local Government",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Core Electives I (Political Science)",
+    "Code": "SOC 201",
+    "Name": "Social Theory",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Core Electives II (International Relations)",
+    "Code": "CONF 400",
+    "Name": "International Conflict and Peace",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Core Electives II (International Relations)",
+    "Code": "IR 301",
+    "Name": "Globalization and International Relations",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Core Electives II (International Relations)",
+    "Code": "IR 342",
+    "Name": "Turkish Foreign Policy",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Core Electives II (International Relations)",
+    "Code": "IR 391",
+    "Name": "International Political Economy",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Core Electives II (International Relations)",
+    "Code": "IR 394",
+    "Name": "World Politics",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Core Electives II (International Relations)",
+    "Code": "IR 405",
+    "Name": "European Foreign Policy",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Core Electives II (International Relations)",
+    "Code": "IR 489",
+    "Name": "Human Rights in World Affairs",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Core Electives II (International Relations)",
+    "Code": "LAW 311",
+    "Name": "International Law",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Core Electives II (International Relations)",
+    "Code": "POLS 492",
+    "Name": "European Union: Politics, Policies and Governance",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Area Electives",
+    "Code": "CONF 431",
+    "Name": "Conflict Resolution Practice",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Area Electives",
+    "Code": "DSA 201",
+    "Name": "Advanced Programming for Data Science",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Area Electives",
+    "Code": "ECON 320",
+    "Name": "Public Economics",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Area Electives",
+    "Code": "HIST 348",
+    "Name": "Diplomatic History of the Modern Era I (1815-1950)",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Area Electives",
+    "Code": "HIST 485",
+    "Name": "Minority Questions in Contemporary T\u00fcrkiye",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Area Electives",
+    "Code": "IR 341",
+    "Name": "Global Governance",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Area Electives",
+    "Code": "IR 403",
+    "Name": "Political Violence in the Post-Cold War Era",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Area Electives",
+    "Code": "PHIL 301",
+    "Name": "Philosophy of Social Sciences",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Area Electives",
+    "Code": "PHIL 450",
+    "Name": "Science and Society",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Area Electives",
+    "Code": "POLS 351",
+    "Name": "Dynamics of Political Change",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Area Electives",
+    "Code": "POLS 366",
+    "Name": "Special Topics in Political Science and International Relations",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Area Electives",
+    "Code": "POLS 399",
+    "Name": "Independent Study",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Area Electives",
+    "Code": "POLS 403",
+    "Name": "Political Psychology",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Area Electives",
+    "Code": "POLS 422",
+    "Name": "Politics and Culture",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Area Electives",
+    "Code": "POLS 434",
+    "Name": "Formal Modelling and Political Analysis I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Area Electives",
+    "Code": "POLS 446",
+    "Name": "Latin American Politics",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Area Electives",
+    "Code": "POLS 457",
+    "Name": "The Politics of Authoritarian Regimes",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Area Electives",
+    "Code": "SOC 301",
+    "Name": "Political Sociology",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Area Electives",
+    "Code": "SOC 408",
+    "Name": "Religion and Politics",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Area Electives",
+    "Code": "SOC 420",
+    "Name": "Infrastructure and Mobilities",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Area Electives",
+    "Code": "SOC 425",
+    "Name": "Power, Economy, and Society",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Area Electives",
+    "Code": "SPS 374",
+    "Name": "Global Environmental Challenges",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Area Electives",
+    "Code": "SPS 384",
+    "Name": "Climate Change and Environmental Politics",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSIR",
+    "Category": "Area Electives",
+    "Code": "SPS 404",
+    "Name": "Six Key Global Challenges:",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "University Courses",
+    "Code": "IF 100",
+    "Name": "Computational Approaches to Problem Solving",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "University Courses",
+    "Code": "MATH 101",
+    "Name": "Calculus I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "University Courses",
+    "Code": "CIP 101N",
+    "Name": "Civic Involvement Projects I-N",
+    "ECTS": "1",
+    "SU_credit": "0",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "University Courses",
+    "Code": "NS 101",
+    "Name": "Science of Nature I",
+    "ECTS": "6",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "University Courses",
+    "Code": "SPS 101",
+    "Name": "Humanity and Society I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "University Courses",
+    "Code": "TLL 101",
+    "Name": "Turkish Language and Literature I",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "University Courses",
+    "Code": "AL 102",
+    "Name": "Academic Literacies",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "University Courses",
+    "Code": "MATH 102",
+    "Name": "Calculus II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "University Courses",
+    "Code": "NS 102",
+    "Name": "Science of Nature II",
+    "ECTS": "6",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "University Courses",
+    "Code": "SPS 102",
+    "Name": "Humanity and Society II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "University Courses",
+    "Code": "TLL 102",
+    "Name": "Turkish Language and Literature II",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "University Courses",
+    "Code": "HIST 191",
+    "Name": "Principles of Atat\u00fcrk and the History of the Turkish Revolution I",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "University Courses",
+    "Code": "HIST 192",
+    "Name": "Principles of Atat\u00fcrk and the History of the Turkish Revolution II",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "University Courses",
+    "Code": "HUM 201",
+    "Name": "Major Works of Literature",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "University Courses",
+    "Code": "PROJ 201",
+    "Name": "Undergraduate Project Course",
+    "ECTS": "1",
+    "SU_credit": "1",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "University Courses",
+    "Code": "HUM 202",
+    "Name": "Major Works of Western Art",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "University Courses",
+    "Code": "HUM 207",
+    "Name": "Major Works of Western Philosophy",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "University Courses",
+    "Code": "SPS 303",
+    "Name": "Law and Ethics",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "University Courses",
+    "Code": "HUM 311",
+    "Name": "Major Works of Literature: The World Before Modernity",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "University Courses",
+    "Code": "HUM 312",
+    "Name": "Major Works of Modern Art",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "University Courses",
+    "Code": "HUM 317",
+    "Name": "Major Works of Moral Philosophy",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "University Courses",
+    "Code": "HUM 321",
+    "Name": "Major Works of Literature: The Modern World",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "University Courses",
+    "Code": "HUM 322",
+    "Name": "Major Works of Art: The World Before Modernity",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "University Courses",
+    "Code": "HUM 371",
+    "Name": "Major Works of Literature: The Islamic World",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "Required Courses",
+    "Code": "PSY 201",
+    "Name": "Mind and Behavior",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "Required Courses",
+    "Code": "PSY 202",
+    "Name": "Research Methods and Statistics for Psychology I",
+    "ECTS": "7",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "Required Courses",
+    "Code": "PSY 300",
+    "Name": "Project and Internship",
+    "ECTS": "5",
+    "SU_credit": "0",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "Required Courses",
+    "Code": "PSY 310",
+    "Name": "Cognitive Processes",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "Required Courses",
+    "Code": "PSY 320",
+    "Name": "Developmental Psychology",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "Required Courses",
+    "Code": "PSY 340",
+    "Name": "Social Psychology",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "Required Courses",
+    "Code": "PSY 350",
+    "Name": "Introduction to Neuroscience",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "Philosophy Requirement Course",
+    "Code": "PHIL 300",
+    "Name": "Philosophy of Science",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "Philosophy Requirement Course",
+    "Code": "PHIL 301",
+    "Name": "Philosophy of Social Sciences",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "Core Electives",
+    "Code": "ORG 302",
+    "Name": "Organizational Behavior",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "SBS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "Core Electives",
+    "Code": "PSY 304",
+    "Name": "Research Methods and Statistics for Psychology II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "Core Electives",
+    "Code": "PSY 305",
+    "Name": "Experimental Psychology",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "Core Electives",
+    "Code": "PSY 306",
+    "Name": "Testing and Measurement",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "Core Electives",
+    "Code": "PSY 311",
+    "Name": "Emotion",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "Core Electives",
+    "Code": "PSY 312",
+    "Name": "Sensation / Perception",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "Core Electives",
+    "Code": "PSY 314",
+    "Name": "Language",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "Core Electives",
+    "Code": "PSY 315",
+    "Name": "Memory",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "Core Electives",
+    "Code": "PSY 345",
+    "Name": "Stress and Well-Being in Adulthood",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "Core Electives",
+    "Code": "PSY 360",
+    "Name": "Abnormal Behavior",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "Core Electives",
+    "Code": "PSY 361",
+    "Name": "Personality",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "Core Electives",
+    "Code": "PSY 366",
+    "Name": "Child and Adolescent Psychopathology",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "Core Electives",
+    "Code": "PSY 443",
+    "Name": "Psychology of the Self",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAPSY",
+    "Category": "Core Electives",
+    "Code": "PSY 452",
+    "Name": "Cognitive Neuroscience",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "University Courses",
+    "Code": "IF 100",
+    "Name": "Computational Approaches to Problem Solving",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "University Courses",
+    "Code": "MATH 101",
+    "Name": "Calculus I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "University Courses",
+    "Code": "CIP 101N",
+    "Name": "Civic Involvement Projects I-N",
+    "ECTS": "1",
+    "SU_credit": "0",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "University Courses",
+    "Code": "NS 101",
+    "Name": "Science of Nature I",
+    "ECTS": "6",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "University Courses",
+    "Code": "SPS 101",
+    "Name": "Humanity and Society I",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "University Courses",
+    "Code": "TLL 101",
+    "Name": "Turkish Language and Literature I",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "University Courses",
+    "Code": "AL 102",
+    "Name": "Academic Literacies",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "University Courses",
+    "Code": "MATH 102",
+    "Name": "Calculus II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "University Courses",
+    "Code": "NS 102",
+    "Name": "Science of Nature II",
+    "ECTS": "6",
+    "SU_credit": "4",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "University Courses",
+    "Code": "SPS 102",
+    "Name": "Humanity and Society II",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "University Courses",
+    "Code": "TLL 102",
+    "Name": "Turkish Language and Literature II",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "SL"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "University Courses",
+    "Code": "HIST 191",
+    "Name": "Principles of Atat\u00fcrk and the History of the Turkish Revolution I",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "University Courses",
+    "Code": "HIST 192",
+    "Name": "Principles of Atat\u00fcrk and the History of the Turkish Revolution II",
+    "ECTS": "3",
+    "SU_credit": "2",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "University Courses",
+    "Code": "HUM 201",
+    "Name": "Major Works of Literature",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "University Courses",
+    "Code": "PROJ 201",
+    "Name": "Undergraduate Project Course",
+    "ECTS": "1",
+    "SU_credit": "1",
+    "Faculty": "FENS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "University Courses",
+    "Code": "HUM 202",
+    "Name": "Major Works of Western Art",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "University Courses",
+    "Code": "HUM 207",
+    "Name": "Major Works of Western Philosophy",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "University Courses",
+    "Code": "SPS 303",
+    "Name": "Law and Ethics",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "University Courses",
+    "Code": "HUM 311",
+    "Name": "Major Works of Literature: The World Before Modernity",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "University Courses",
+    "Code": "HUM 312",
+    "Name": "Major Works of Modern Art",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "University Courses",
+    "Code": "HUM 317",
+    "Name": "Major Works of Moral Philosophy",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "University Courses",
+    "Code": "HUM 321",
+    "Name": "Major Works of Literature: The Modern World",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "University Courses",
+    "Code": "HUM 322",
+    "Name": "Major Works of Art: The World Before Modernity",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "University Courses",
+    "Code": "HUM 371",
+    "Name": "Major Works of Literature: The Islamic World",
+    "ECTS": "5",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "Required Courses",
+    "Code": "VA 201",
+    "Name": "Visual Language I",
+    "ECTS": "7",
+    "SU_credit": "4",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "Required Courses",
+    "Code": "VA 203",
+    "Name": "Language of Drawing I",
+    "ECTS": "7",
+    "SU_credit": "4",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "Required Courses",
+    "Code": "VA 300",
+    "Name": "Project and Internship",
+    "ECTS": "5",
+    "SU_credit": "0",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "Required Courses",
+    "Code": "VA 301",
+    "Name": "Art Studio I",
+    "ECTS": "7",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "Required Courses",
+    "Code": "VA 303",
+    "Name": "Design Studio I",
+    "ECTS": "7",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "Required Courses",
+    "Code": "VA 401",
+    "Name": "Art Studio III",
+    "ECTS": "7",
+    "SU_credit": "4",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "Required Courses",
+    "Code": "VA 403",
+    "Name": "Design Studio III",
+    "ECTS": "7",
+    "SU_credit": "4",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "Core Electives I (Art/Design History Courses)",
+    "Code": "HART 292",
+    "Name": "From Modern to Contemporary Art",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "Core Electives I (Art/Design History Courses)",
+    "Code": "HART 293",
+    "Name": "Contemporary Art",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "Core Electives I (Art/Design History Courses)",
+    "Code": "HART 380",
+    "Name": "Bauhaus",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "Core Electives I (Art/Design History Courses)",
+    "Code": "HART 413",
+    "Name": "Visual Arts in T\u00fcrkiye",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "Core Electives I (Art/Design History Courses)",
+    "Code": "HART 426",
+    "Name": "Leonardo and Michelangelo: Heroes of the Renaissance",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "Core Electives I (Art/Design History Courses)",
+    "Code": "VA 315",
+    "Name": "Visual Culture",
+    "ECTS": "7",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "Core Electives I (Art/Design History Courses)",
+    "Code": "VA 420",
+    "Name": "Concepts & Debates in Contemporary Art",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "Core Electives I (Art/Design History Courses)",
+    "Code": "VA 430",
+    "Name": "Art Analysis: Theory and Criticism",
+    "ECTS": "6",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "Core Electives II (Skill Courses)",
+    "Code": "VA 202",
+    "Name": "Visual Language II",
+    "ECTS": "7",
+    "SU_credit": "4",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "Core Electives II (Skill Courses)",
+    "Code": "VA 204",
+    "Name": "Language of Drawing II",
+    "ECTS": "7",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "Core Electives II (Skill Courses)",
+    "Code": "VA 234",
+    "Name": "Design with Typography",
+    "ECTS": "7",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "Core Electives II (Skill Courses)",
+    "Code": "VA 302",
+    "Name": "Art Studio II",
+    "ECTS": "7",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "Core Electives II (Skill Courses)",
+    "Code": "VA 304",
+    "Name": "Design Studio II",
+    "ECTS": "7",
+    "SU_credit": "3",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "Core Electives II (Skill Courses)",
+    "Code": "VA 402",
+    "Name": "Art Studio IV",
+    "ECTS": "7",
+    "SU_credit": "4",
+    "Faculty": "FASS"
+  },
+  {
+    "Program": "BAVACD",
+    "Category": "Core Electives II (Skill Courses)",
+    "Code": "VA 404",
+    "Name": "Design Studio IV",
+    "ECTS": "7",
+    "SU_credit": "4",
+    "Faculty": "FASS"
+  }
+]
