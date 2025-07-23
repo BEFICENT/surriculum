@@ -1,5 +1,5 @@
 let course_data;
-//can only be CS, BIO, MAT, EE, ME, IE, ECON:
+//can only be CS, BIO, MAT, EE, ME, IE, ECON, DSA, MAN, PSIR, PSY, VACD:
 let initial_major_chosen = 'CS'
 
 function SUrriculum(major_chosen_by_user)
@@ -70,6 +70,10 @@ function SUrriculum(major_chosen_by_user)
                 datalist.innerHTML +=  "<option value='" + 'ME' + "'>";
                 datalist.innerHTML +=  "<option value='" + 'ECON' + "'>";
                 datalist.innerHTML +=  "<option value='" + 'DSA' + "'>";
+                datalist.innerHTML +=  "<option value='" + 'MAN' + "'>";
+                datalist.innerHTML +=  "<option value='" + 'PSIR' + "'>";
+                datalist.innerHTML +=  "<option value='" + 'PSY' + "'>";
+                datalist.innerHTML +=  "<option value='" + 'VACD' + "'>";
                 datalist.id = 'datalist_majors';
                 change_major_element.appendChild(input_major);
                 change_major_element.appendChild(datalist);

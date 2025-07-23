@@ -14,7 +14,7 @@ https://beficent.github.io/surriculum/
 
 This repository is a fork of the original Surriculum project, updated and maintained by BEFICENT (Bilal M. G.). The updates include:
 
-- Added support for the Data Science and Analytics (DSA) program
+- Added support for the Data Science and Analytics (DSA) program and additional majors (MAN, PSIR, PSY, VACD)
 - Fixed graduation requirements checking functionality
 - Updated course lists for all programs
 - Improved basic science and engineering credit calculation
@@ -34,7 +34,7 @@ If you need to update the course data or add new programs, follow these steps:
    - Verify the generated `X.json's` contains the correct course information
 
 2. **Update program-specific JSON files**:
-   - Each program (CS, BIO, EE, IE, MAT, ME, ECON, DSA) has its own JSON file
+   - Each program (CS, BIO, EE, IE, MAT, ME, ECON, DSA, MAN, PSIR, PSY, VACD) has its own JSON file
    - Make sure to update the appropriate files when programs change their requirements
    - Ensure courses are properly categorized (university, required, core, area, free, faculty)
 

@@ -141,6 +141,14 @@ function displaySummary(curriculum, major_chosen_by_user) {
         limits = ["4.0", "125", "240","41","39", "21", "9","15","60","90"];
     } else if(major_chosen_by_user == 'DSA') {
         limits = ["4.0", "125", "240","41","30", "27", "12","15","60","90"];
+    } else if(major_chosen_by_user == 'MAN') {
+        limits = ["4.0", "125", "240","41","18", "12", "18","30","0","0"];
+    } else if(major_chosen_by_user == 'PSIR') {
+        limits = ["4.0", "125", "240","41","18", "12", "18","30","0","0"];
+    } else if(major_chosen_by_user == 'PSY') {
+        limits = ["4.0", "125", "240","41","18", "12", "18","30","0","0"];
+    } else if(major_chosen_by_user == 'VACD') {
+        limits = ["4.0", "125", "240","41","18", "12", "18","30","0","0"];
     }
 
     for (let i = 0; i < 10; i++) {

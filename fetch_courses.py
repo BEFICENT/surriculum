@@ -17,6 +17,10 @@ PROGRAM_FILES = {
     'BSMAT': 'MAT.json',
     'BSME': 'ME.json',
     'BSDSA': 'DSA.json',  # Adding Data Science and Analytics program
+    'BAMAN': 'MAN.json',  # Management program
+    'BAPSIR': 'PSIR.json',  # Political Science and International Relations
+    'BAPSY': 'PSY.json',  # Psychology program
+    'BAVACD': 'VACD.json',  # Visual Arts and Visual Communication Design
 }
 
 

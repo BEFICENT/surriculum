@@ -566,5 +566,17 @@ function s_curriculum()
                 }
             }
         }
+        else if(this.major == 'MAN' || this.major == 'PSIR' || this.major == 'PSY' || this.major == 'VACD')
+        {
+            // Detailed graduation requirements are not yet defined for these majors
+            // For now, assume the student meets requirements if basic credit thresholds are satisfied
+            if(total < 125) return 1;
+            else if (university < 41) return 2;
+            else if (ects < 240) return 13;
+            else if ( !this.hasCourse("CIP101N")) return 4;
+            else if (!this.hasCourse("SPS303")) return 9;
+            else if (!(this.hasCourse("HUM201") || this.hasCourse("HUM202") || this.hasCourse("HUM207"))) return 10;
+            else return 0;
+        }
     }
 }

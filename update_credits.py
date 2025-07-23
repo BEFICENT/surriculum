@@ -97,6 +97,10 @@ if __name__ == "__main__":
         'BSMAT': 'MAT.json',
         'BSME': 'ME.json',
         'BSDSA': 'DSA.json',
+        'BAMAN': 'MAN.json',
+        'BAPSIR': 'PSIR.json',
+        'BAPSY': 'PSY.json',
+        'BAVACD': 'VACD.json',
     }
 
     print("Extracting credits from CSV file...")
