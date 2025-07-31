@@ -1,4 +1,13 @@
 @import url('https://fonts.googleapis.com/css2?family=Montserrat&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+
+:root {
+    --primary-color: #00205B; /* Sabanci blue */
+    --background-color: #f6f8fa;
+    --accent-color: #5AA874;
+    --button-color: #284B7E;
+    --text-color: #333;
+}
 
 *
 {
@@ -15,17 +24,18 @@ body
     display: flex;
     flex-direction: column;
     margin: 0px;
-    font-family: 'Roboto', sans-serif;
-    background-color: rgb(0, 66, 136);
+    font-family: 'Inter', sans-serif;
+    background-color: var(--background-color);
+    color: var(--text-color);
     height: 100vh;
 }
 
 .title
 {
-    background-color: rgb(0, 66, 136);
+    background-color: var(--primary-color);
     font-size: max(30px, 2vh);
-    font-weight: 500;
-    font-family: 'roboto', sans-serif;
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
     color: white;
     flex: 1;
     display: flex;
@@ -115,11 +125,7 @@ body
 
 .board
 {
-    background-color: rgb(216, 216, 216);
-    background-image: url('./assets/sabanci.jpg');
-    background-size: cover;
-    background-repeat: no-repeat;
-    background-position: center;
+    background-color: var(--background-color);
     margin: 0px;
     height: 94vh;
     display: flex;
@@ -127,6 +133,8 @@ body
     flex-wrap: nowrap;
     overflow-x: auto;
     position: relative;
+    padding: 10px;
+    box-sizing: border-box;
 }
 
 .summary_modal, .graduation_modal
@@ -214,10 +222,13 @@ body
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    margin: 0px;
+    margin: 0px 10px;
     width: 300px;
     height: 94vh;
-
+    background-color: #fff;
+    border-radius: 6px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    overflow: hidden;
 }
 
 .total_credit, .head_btn
@@ -338,7 +349,7 @@ body
 .semester
 {
     margin: 0px;
-    background: #c7d6e7;
+    background: #f0f2f7;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
@@ -351,11 +362,13 @@ body
 
 .course
 {
-    border: 1px solid grey;
-    border-radius: 5px;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
     margin-top: 6px;
     margin-bottom: 6px;
     font-size: 25px;
+    background-color: #ffffff;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 
 .addCourse
@@ -365,12 +378,12 @@ body
     margin-top: 10px;
     border: 0px;
     font-weight: 500;
-    color:rgb(36, 112, 193);
+    color: var(--button-color);
     font-size:15px;
     margin:0px;
     border-bottom-left-radius: 5px;
     border-bottom-right-radius: 5px;
-    background-color: #c7d6e7;
+    background-color: #f0f2f7;
     height: 40px;
 }
 
@@ -498,7 +511,7 @@ input
     justify-content: space-between;
     align-items: center;
     padding: 10px;
-    background: #c7d6e7;
+    background: #eef1f7;
     height: 37px;
 }
 
@@ -525,7 +538,7 @@ input
     height: 30px;
     z-index: 2;
 
-    background-color: #c7d6e7;
+    background-color: #eef1f7;
     
 }
 
@@ -617,21 +630,28 @@ input
     margin-bottom: 20px;
 
     width: 180px;
-    border-radius: 3px;
+    border-radius: 4px;
     font-size: 15px;
     border: 0px;
 
     display: flex;
     justify-content: center;
     align-items: center;
-    background-color: #435A74;
+    background-color: var(--button-color);
     color: white;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.2s;
+}
+.btn:hover {
+    background-color: #1d3b71;
+    transform: translateY(-2px);
 }
 .change_major > input
 {
     width: 180px;
     height: 100%;
-    background-color: #435A74;
+    background-color: var(--button-color);
+    color: white;
 }
 
 .doubleMajor > input,
@@ -639,7 +659,7 @@ input
 .entryTermDM > input {
     width: 180px;
     height: 100%;
-    background-color: #435A74;
+    background-color: var(--button-color);
     color: white;
 }
 
@@ -648,10 +668,10 @@ input
    used throughout the app (same width, colours and border radius). */
 .doubleMajorSelect {
     width: 180px;
-    border-radius: 3px;
+    border-radius: 4px;
     font-size: 15px;
     border: 0;
-    background-color: #435A74;
+    background-color: var(--button-color);
     color: white;
     height: 30px;
     padding-left: 4px;
