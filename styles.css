@@ -9,6 +9,55 @@ html, body
 {
     overscroll-behavior: none;
 }
+:root {
+    --bg-color: rgb(0, 66, 136);
+    --header-bg: rgb(0, 66, 136);
+    --text-color: white;
+    --board-bg: rgb(216, 216, 216);
+    --btn-bg: #435A74;
+    --btn-text-color: white;
+    --accent-bg: #5aa874;
+    --semester-bg: #c7d6e7;
+    --import-bg: #ffffff;
+    --import-text: #333;
+    --modal-bg: rgb(190, 219, 219);
+    --summary-child-bg: rgb(245, 237, 252);
+    --course-link-color: rgb(36, 112, 193);
+    --date-input-bg: #86b396;
+}
+.light-theme {
+    --bg-color: rgb(0, 66, 136);
+    --header-bg: rgb(0, 66, 136);
+    --text-color: white;
+    --board-bg: rgb(216, 216, 216);
+    --btn-bg: #435A74;
+    --btn-text-color: white;
+    --semester-bg: #c7d6e7;
+    --import-bg: #ffffff;
+    --import-text: #333;
+    --modal-bg: rgb(190, 219, 219);
+    --summary-child-bg: rgb(245, 237, 252);
+    --course-link-color: rgb(36, 112, 193);
+    --date-input-bg: #86b396;
+}
+
+.dark-theme {
+    --bg-color: #1a1a1a;
+    --header-bg: #333;
+    --text-color: #f0f0f0;
+    --board-bg: #555;
+    --btn-bg: #444;
+    --btn-text-color: #f0f0f0;
+    --semester-bg: #444;
+    --import-bg: #444;
+    --import-text: #eee;
+    --modal-bg: #444;
+    --summary-child-bg: #555;
+    --course-link-color: #9ad1ff;
+    --date-input-bg: #666;
+}
+
+
 
 body
 {
@@ -16,17 +65,18 @@ body
     flex-direction: column;
     margin: 0px;
     font-family: 'Roboto', sans-serif;
-    background-color: rgb(0, 66, 136);
+    color: var(--text-color);
+    background-color: var(--bg-color);
     height: 100vh;
 }
 
 .title
 {
-    background-color: rgb(0, 66, 136);
+    background-color: var(--header-bg);
     font-size: max(30px, 2vh);
     font-weight: 500;
     font-family: 'roboto', sans-serif;
-    color: white;
+    color: var(--text-color);
     flex: 1;
     display: flex;
     align-items: center;
@@ -57,16 +107,24 @@ body
     z-index: 11; /* Higher than container */
     cursor: pointer;
 }
+.theme-toggle {
+    width: auto !important;
+    height: 30px;
+    margin: 0 !important;
+    padding: 0 15px;
+    cursor: pointer;
+}
+
 
 .import-section {
     position: absolute;
     top: 40px;
     right: 0;
     width: 350px;
-    background-color: #ffffff;
+    background-color: var(--import-bg);
     border-radius: 5px;
     box-shadow: 0 3px 6px rgba(0, 0, 0, 0.16);
-    color: #333;
+    color: var(--import-text);
     z-index: 100;
     padding: 15px;
 }
@@ -78,7 +136,7 @@ body
 .import-description p {
     font-size: 14px;
     margin: 5px 0;
-    color: #444;
+    color: var(--import-text);
 }
 
 .import-description ol {
@@ -89,7 +147,7 @@ body
 .import-description li {
     font-size: 13px;
     margin: 5px 0;
-    color: #555;
+    color: var(--import-text);
 }
 
 .import-controls {
@@ -115,7 +173,7 @@ body
 
 .board
 {
-    background-color: rgb(216, 216, 216);
+    background-color: var(--board-bg);
     background-image: url('./assets/sabanci.jpg');
     background-size: cover;
     background-repeat: no-repeat;
@@ -136,7 +194,7 @@ body
 .summary_modal, .graduation_modal
 {
     z-index: 4;
-    background-color: rgb(190, 219, 219);
+    background-color: var(--modal-bg);
     border: 0px;
     border-radius: 5px;
     position: absolute;
@@ -164,7 +222,7 @@ body
     height: 41px;
     margin-left: 5%;
     margin-right: 5%;
-    background-color: rgb(245, 237, 252);
+    background-color: var(--summary-child-bg);
     border-radius: 5px;
 
     display: flex;
@@ -250,7 +308,7 @@ body
     height: 10px;
     margin-top: 20px;
     margin-bottom: 20px;
-    background-color: #5aa874;
+    background-color: var(--accent-bg);
 }
 
 .total_credit
@@ -267,7 +325,7 @@ body
     height: 10px;
     margin-top: 20px;
     margin-bottom: 20px;
-    background-color: #5aa874;
+    background-color: var(--accent-bg);
 }
 
 .total_credit_line
@@ -304,7 +362,7 @@ body
     margin-right: -5px;
     margin-top: 10px;
     margin-bottom: 10px;
-    background-color:#5aa874;
+    background-color:var(--accent-bg);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -321,7 +379,7 @@ body
 
 .date
 {
-    background-color: #5aa874;
+    background-color: var(--accent-bg);
     border-top-left-radius: 5px;
     border-top-right-radius: 5px;
     height: 40px;
@@ -338,7 +396,7 @@ body
     margin: 5px;
     padding: 5px;
     border: 0px;
-    background-color: #86b396;
+    background-color: var(--date-input-bg);
     color: white;
 }
 
@@ -366,7 +424,7 @@ body
 .semester
 {
     margin: 0px;
-    background: #c7d6e7;
+    background: var(--semester-bg);
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
@@ -393,12 +451,12 @@ body
     margin-top: 10px;
     border: 0px;
     font-weight: 500;
-    color:rgb(36, 112, 193);
+    color:var(--course-link-color);
     font-size:15px;
     margin:0px;
     border-bottom-left-radius: 5px;
     border-bottom-right-radius: 5px;
-    background-color: #c7d6e7;
+    background-color: var(--semester-bg);
     height: 40px;
 }
 
@@ -493,7 +551,7 @@ input
     font-size: 12px;
     margin: 0px;
     margin-right: 5px;
-    color:rgb(36, 112, 193);
+    color:var(--course-link-color);
 
     position: absolute;
     bottom: 0;
@@ -526,7 +584,7 @@ input
     justify-content: space-between;
     align-items: center;
     padding: 10px;
-    background: #c7d6e7;
+    background: var(--semester-bg);
     height: 37px;
 }
 
@@ -553,7 +611,7 @@ input
     height: 30px;
     z-index: 2;
 
-    background-color: #c7d6e7;
+    background-color: var(--semester-bg);
     
 }
 
@@ -595,7 +653,7 @@ input
     height: 20px;
     z-index: 2;
     margin-right: 10px;
-    background-color: #5aa874;
+    background-color: var(--accent-bg);
     border: 0px;
     background-size: cover;
     background-repeat: no-repeat;
@@ -663,14 +721,14 @@ input
     display: flex;
     justify-content: center;
     align-items: center;
-    background-color: #435A74;
-    color: white;
+    background-color: var(--btn-bg);
+    color: var(--btn-text-color);
 }
 .change_major > input
 {
     width: 180px;
     height: 100%;
-    background-color: #435A74;
+    background-color: var(--btn-bg);
 }
 
 .doubleMajor > input,
@@ -678,7 +736,7 @@ input
 .entryTermDM > input {
     width: 180px;
     height: 100%;
-    background-color: #435A74;
+    background-color: var(--btn-bg);
     color: white;
 }
 
@@ -690,7 +748,7 @@ input
     border-radius: 3px;
     font-size: 15px;
     border: 0;
-    background-color: #435A74;
+    background-color: var(--btn-bg);
     color: white;
     height: 30px;
     padding-left: 4px;
@@ -725,5 +783,5 @@ input
   }
 
 footer p {
-    color: white;
+    color: var(--text-color);
 }
