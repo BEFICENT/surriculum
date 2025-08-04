@@ -4,10 +4,14 @@
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SUrriculum -v2.3 (beta)</title>
-    <link rel="stylesheet" href="styles.css"/>
+    <title>SUrriculum -v2.4 (beta)</title>
+    <link rel="stylesheet" href="styles.css" type="text/css"/>
     <link rel="icon" href="assets/favicon.ico" type="image/ico">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
+    <!-- Your existing JavaScript files -->
     <script src="helper_functions.js"></script>
     <script src="mouse_and_drag.js"></script>
     <script src="s_semester.js"></script>
@@ -19,86 +23,134 @@
     <script type="module" src="flagMessages.js"></script>
     <script src="s_curriculum.js"></script>
     <script type="module" src="requirements.js"></script>
+    <script src="curriculum_manager.js"></script>
+
 
     <script>
-      // Specify the path to the worker script
-      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@2.10.377/build/pdf.worker.js';
+        // Specify the path to the worker script
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@2.10.377/build/pdf.worker.js';
     </script>
 
     <script src="main.js" defer></script>
-
     <script src="theme.js" defer></script>
 </head>
 <body class="light-theme">
-    <div class="title">
-        <a href="https://beficent.github.io/surriculum/" style="text-decoration: none; color: inherit;">
-            SUrriculum -v2.3 (beta)
+<div class="app">
+    <!-- Header -->
+    <header class="header">
+        <a href="https://beficent.github.io/surriculum/" class="header-title">
+            SUrriculum v2.4
         </a>
 
-        <button id="themeToggle" class="theme-toggle btn">Theme</button>
-        <div class="import-container">
-            <button class="import-toggle btn">
-                <p>Import Academic Records</p>
+        <div class="header-controls">
+            <button id="themeToggle" class="btn btn-secondary btn-sm">
+                🌙 Theme
             </button>
-            <div class="import-section" style="display: none;">
-                <div class="import-description">
-                    <p>Import your courses from Academic Records Summary:</p>
-                    <ol>
-                        <li>Go to SIS and view your Academic Records Summary</li>
-                        <li>Save the page as HTML (right-click → Save as... → HTML only)</li>
-                        <li>Upload the saved HTML file below</li>
-                    </ol>
-                </div>
-                <div class="import-controls">
-                    <input type="file" id="academicRecordsInput" accept=".html,.htm">
-                    <button id="importAcademicRecords" class="btn">Import</button>
-                </div>
-                <div id="course-import-box">
-                    <p><b>Choose your major and double major before importing</b></p>
+
+            <div class="import-container">
+                <button class="btn btn-secondary btn-sm import-toggle">
+                    📁 Import Records
+                </button>
+
+                <div class="import-dropdown" id="importDropdown">
+                    <h3 class="import-title">Import Academic Records</h3>
+                    <div class="import-instructions">
+                        <p>Import your courses from Academic Records Summary:</p>
+                        <ol>
+                            <li>Go to SIS and view your Academic Records Summary</li>
+                            <li>Save the page as HTML (right-click → Save as... → HTML only)</li>
+                            <li>Upload the saved HTML file below</li>
+                        </ol>
+                    </div>
+                    <div class="import-controls">
+                        <input type="file" id="academicRecordsInput" class="import-file" accept=".html,.htm">
+                        <button id="importAcademicRecords" class="btn btn-primary btn-sm">Import</button>
+                    </div>
+                    <div id="course-import-box" style="margin-top: 12px; padding: 12px; background: var(--bg-surface); border-radius: var(--radius-sm); font-size: 0.875rem;">
+                        <strong>Choose your major and double major before importing</strong>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
-    <div class="board">
-        <div class="overlay"></div>
-        <div class="container_btn">
-            <div class="head_btn">
-                <div class="head_btn_line"></div>
-                <div class="head_btn_end"> <p>+</p> </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2 class="sidebar-title">📚 Controls</h2>
             </div>
-            <div class="btns">
-                <div class="major-row">
-                    <button class="change_major btn"><p>...</p></button>
-                    <button class="entryTerm btn"><p>Admit Term</p></button>
+
+            <div class="sidebar-content">
+                <div class="control-group">
+                    <div class="control-row">
+                        <button class="btn btn-primary change_major">
+                            <span>Select Major</span>
+                        </button>
+                        <button class="btn btn-secondary entryTerm">
+                            <span>Admit Term</span>
+                        </button>
+                    </div>
+
+                    <div class="control-row">
+                        <button class="btn btn-primary doubleMajor">
+                            <span>Double Major: None</span>
+                        </button>
+                        <button class="btn btn-secondary entryTermDM">
+                            <span>Admit Term(DM)</span>
+                        </button>
+                    </div>
                 </div>
-                <!-- Double Major button: behaves like major selection.  The
-                     current double major (or None) is displayed as text.  When
-                     clicked it becomes an input allowing the user to choose
-                     another major or select none.  -->
-                <div class="major-row">
-                    <button class="doubleMajor btn"><p>Double Major: None</p></button>
-                    <button class="entryTermDM btn"><p>Admit Term(DM)</p></button>
+
+                <div class="control-group">
+                    <button class="btn btn-primary addSemester" style="width: 100%; margin-bottom: 12px;">
+                        ➕ New Semester
+                    </button>
+
+                    <div class="control-row">
+                        <button class="btn btn-secondary check">
+                            ✅ Check Graduation
+                        </button>
+                        <button class="btn btn-secondary summary">
+                            📊 Summary
+                        </button>
+                    </div>
                 </div>
-                <button class="addSemester btn"> <p>New Semester</p> </button>
-                <div class="major-row">
-                    <button class="check btn"><p>Check Graduation</p></button>
-                    <button class="summary btn"><p class="summary_p">Summary</p></button>
+
+                <div class="control-group">
+                    <button class="btn btn-secondary autoAdd" style="width: 100%; margin-bottom: 12px;">
+                        🎓 Add First Year Courses
+                    </button>
+                    <button class="btn btn-secondary customCourse" style="width: 100%; margin-bottom: 12px;">
+                        ➕ Add Custom Course
+                    </button>
                 </div>
-                <div class="major-row">
-                    <button class="autoAdd btn"> <p>Add First Year Courses</p></button>
-                    <!-- Button to add a custom user-defined course -->
-                    <button class="customCourse btn"><p>Add Custom Course</p></button>
+
+                <div class="control-group">
+                    <button class="btn btn-secondary deleteCustom" style="width: 100%; margin-bottom: 12px; color: #DC2626;">
+                        🗑️ Delete Custom Courses
+                    </button>
+                    <button class="btn btn-secondary resetLocal" style="width: 100%; color: #DC2626;">
+                        ↻ Reset Local Data
+                    </button>
                 </div>
-                <!-- Button to delete all custom courses for the current major -->
-                <button class="deleteCustom btn"><p>Delete Custom Courses</p></button>
-                <!-- Button to reset all locally stored data (custom courses, saved semesters, etc.) -->
-                <button class="resetLocal btn"><p>Reset Local Data</p></button>
             </div>
-        </div>
+        </aside>
+
+        <!-- Board -->
+        <main class="board" id="board">
+            <!-- Semester containers will be added here dynamically -->
+        </main>
     </div>
-    <footer>
+
+    <!-- Footer -->
+    <footer class="footer">
         <p>Always verify the graduation requirements yourself. For any issues you spot, send an e-mail to: bilal.gebenoglu@sabanciuniv.edu</p>
     </footer>
+</div>
 
+<!-- Overlay for modals -->
+<div class="modal-overlay hidden" id="modalOverlay"></div>
 </body>
 </html>

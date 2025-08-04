@@ -2,16 +2,19 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
 {
     const board = document.querySelector(".board");
 
+    // Create main semester container with correct CSS class
     let container = document.createElement("div");
-    container.classList.add("container_semester");
-    if(aslastelement) 
+    container.classList.add("semester-container"); // Changed from "container_semester"
+    container.setAttribute("draggable", "true"); // Make draggable
+
+    if(aslastelement)
     {
         curriculum.container_id++;
         container.id = 'con' + curriculum.container_id;
     }
     else 
     {
-        let containers = document.querySelectorAll(".container_semester");
+        let containers = document.querySelectorAll(".semester-container"); // Updated selector
         containers.forEach((element)=>{
             element.id = 'con' + (extractNumericValue(element.id) + 1);
             curriculum.container_id = extractNumericValue(element.id);
@@ -19,26 +22,29 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
         container.id = 'con' + 1;
     }
 
-    let total_credit = document.createElement("div");
-    total_credit.classList.add("total_credit");
-    let total_credit_line_l = document.createElement("div");
-    total_credit_line_l.classList.add("total_credit_line");
-    let total_credit_line_r = document.createElement("div");
-    total_credit_line_r.classList.add("total_credit_line");
-    let total_credit_text = document.createElement("div");
-    total_credit_text.classList.add("total_credit_text");
-    total_credit_text.innerHTML = "<span> Total: 0 credits </span>"
-    total_credit.appendChild(total_credit_line_l);
-    total_credit.appendChild(total_credit_text);
-    total_credit.appendChild(total_credit_line_r);
+    // Create semester div with proper structure
+    let semester = document.createElement("div");
+    semester.classList.add("semester");
+    curriculum.semester_id++;
+    semester.id = 's' + curriculum.semester_id;
 
-    container.appendChild(total_credit);
+    let newsem = new s_semester(semester.id, course_data);
+    // Attach this new semester to the curriculum list
+    if(aslastelement){
+        curriculum.semesters.push(newsem);
+    }
+    else{
+        curriculum.semesters.unshift(newsem);
+    }
 
-    let subcontainer = document.createElement("div");
-    subcontainer.classList.add("subcontainer_semester");
-    
-    let date = document.createElement("div");
-    date.classList.add("date");
+    // Create semester header with proper structure
+    let semesterHeader = document.createElement("div");
+    semesterHeader.classList.add("semester-header");
+
+    // Create date input element
+    let dateInput = document.createElement("input");
+    dateInput.type = "text";
+    dateInput.classList.add("semester-title");
 
     //DATE DEFAULT:
     if(!date_custom) {
@@ -46,14 +52,14 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
         let nextTermIndex = 0;
 
         // Get all existing semesters to determine the next logical one
-        const existingSemesters = document.querySelectorAll('.date p');
+        const existingSemesters = document.querySelectorAll('.semester-title');
         if (existingSemesters.length > 0) {
             // Determine the chronologically latest semester using the
             // ordering of the global `terms` array (latest term has the
             // smallest index).
             let latestIdx = terms.length;
             existingSemesters.forEach(semElem => {
-                const semText = semElem.textContent;
+                const semText = semElem.value;
                 const idx = terms.indexOf(semText);
                 if (idx !== -1 && idx < latestIdx) {
                     latestIdx = idx;
@@ -105,166 +111,154 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
             nextTermIndex = (idx !== -1) ? idx : terms.length - 1;
         }
 
-        date.innerHTML = '<p>' + terms[nextTermIndex] + '</p>';
+        dateInput.value = terms[nextTermIndex];
     }
     //DATE CUSTOM:
     else 
     {
-        date.innerHTML = '<p>' + date_custom + '</p>';
+        dateInput.value = date_custom;
     }
 
-    let closebtn = document.createElement("button");
-    closebtn.classList.add("delete_semester");
-    let drag = document.createElement("div");
-    drag.classList.add("semester_drag");
-    let edit = document.createElement("div");
-    edit.classList.add("semester_date_edit");
-    let icons = document.createElement("div");
-    icons.classList.add("icons");
-    icons.appendChild(edit);
-    icons.appendChild(drag);
-    icons.appendChild(closebtn);
-    date.appendChild(icons)
+    // Create semester actions container
+    let semesterActions = document.createElement("div");
+    semesterActions.classList.add("semester-actions");
 
-    subcontainer.appendChild(date);
+    // Create action buttons with proper classes and icons
+    let editBtn = document.createElement("button");
+    editBtn.classList.add("semester-action-btn", "semester_date_edit");
+    editBtn.title = "Edit";
+    editBtn.innerHTML = "✏️";
 
-    let semester = document.createElement("div");
-    semester.classList.add("semester");
-    curriculum.semester_id++;
-    semester.id = 's' + curriculum.semester_id;
-    let newsem = new s_semester(semester.id, course_data);
-    // Attach this new semester to the curriculum list
-    if(aslastelement){
-        curriculum.semesters.push(newsem);
-    } 
-    else{
-        curriculum.semesters.unshift(newsem);
-    }
-    // Record the term index for chronological ordering. The date element
-    // contains a <p> with the term string. Use it to compute the index
-    // within the global `terms` array (defined in helper_functions.js).
+    let dragBtn = document.createElement("button");
+    dragBtn.classList.add("semester-action-btn", "semester_drag");
+    dragBtn.title = "Drag";
+    dragBtn.innerHTML = "↔️";
+
+    let summaryBtn = document.createElement("button");
+    summaryBtn.classList.add("semester-action-btn", "toggle_summary");
+    summaryBtn.title = "Toggle Summary";
+    summaryBtn.innerHTML = "📊";
+
+    let deleteBtn = document.createElement("button");
+    deleteBtn.classList.add("semester-action-btn", "delete_semester");
+    deleteBtn.title = "Delete";
+    deleteBtn.innerHTML = "🗑️";
+
+    // Append buttons to actions container
+    semesterActions.appendChild(editBtn);
+    semesterActions.appendChild(dragBtn);
+    semesterActions.appendChild(summaryBtn);
+    semesterActions.appendChild(deleteBtn);
+
+    // Append elements to header
+    semesterHeader.appendChild(dateInput);
+    semesterHeader.appendChild(semesterActions);
+
+    // Create semester content
+    let semesterCourses = document.createElement("div");
+    semesterCourses.classList.add("semester-courses");
+
+    // Create a dedicated container for course cards
+    let coursesContainer = document.createElement("div");
+    coursesContainer.classList.add("courses");
+
+    // Create add course button
+    let addCourseBtn = document.createElement("div");
+    addCourseBtn.classList.add("add-course", "addCourse");
+    addCourseBtn.innerHTML = "➕ Add Course";
+
+    // Create semester totals section with better styling
+    let semesterTotals = document.createElement("div");
+    semesterTotals.classList.add("semester-totals");
+
+    let totalsGrid = document.createElement("div");
+    totalsGrid.classList.add("semester-totals-grid");
+
+    // Create total items for different credit types
+    const totalTypes = [
+        { key: 'totalCredit', label: 'Total Credits' },
+        { key: 'totalGPA', label: 'GPA' },
+        { key: 'totalCore', label: 'Core' },
+        { key: 'totalArea', label: 'Area' },
+        { key: 'totalFree', label: 'Free' },
+        { key: 'totalUniversity', label: 'University' }
+    ];
+
+    totalTypes.forEach(type => {
+        let totalItem = document.createElement("div");
+        totalItem.classList.add("semester-total-item");
+
+        let label = document.createElement("span");
+        label.classList.add("semester-total-label");
+        label.textContent = type.label + ":";
+
+        let value = document.createElement("span");
+        value.classList.add("semester-total-value");
+        value.classList.add(`total-${type.key.toLowerCase()}`);
+        value.textContent = "0";
+
+        totalItem.appendChild(label);
+        totalItem.appendChild(value);
+        totalsGrid.appendChild(totalItem);
+    });
+
+    semesterTotals.appendChild(totalsGrid);
+
+    let summaryWrapper = document.createElement("div");
+    summaryWrapper.classList.add("semester-summary-wrapper");
+    summaryWrapper.appendChild(semesterTotals);
+
+    // Assemble the semester structure
+    semesterCourses.appendChild(coursesContainer);
+    semesterCourses.appendChild(addCourseBtn);
+    semester.appendChild(semesterHeader);
+    semester.appendChild(semesterCourses);
+    semester.appendChild(summaryWrapper);
+
+    // Add semester to container
+    container.appendChild(semester);
+
+    // Record the term index for chronological ordering
     try {
-        const dateTextElem = date.querySelector('p');
-        const dateText = dateTextElem ? dateTextElem.innerHTML : '';
+        const dateText = dateInput.value;
         newsem.termIndex = terms.indexOf(dateText);
     } catch (err) {
         // If date or terms are unavailable, leave termIndex as null
         newsem.termIndex = null;
     }
 
-    const btn = document.querySelector(".addSemester");
-    let addCourse = document.createElement("button");
-    addCourse.classList.add("addCourse");
-    addCourse.innerHTML = "+ Add another course";
-
-
-    subcontainer.appendChild(semester);
-    subcontainer.appendChild(addCourse);
-    container.appendChild(subcontainer);
-    
-    if(aslastelement) 
+    // Insert into board with safety checks
+    if(aslastelement)
     {
-        board.insertBefore(container, btn.parentNode.parentNode);
+        // Safely insert before the button's container, with fallback
+        const addSemesterBtn = document.querySelector(".addSemester");
+        const buttonContainer = addSemesterBtn ? addSemesterBtn.closest('.sidebar') : null;
+
+        // Since we want to add to the board, just append
+        board.appendChild(container);
     }
     else 
     {
-        board.insertBefore(container, board.firstChild);
+        // Safely insert at the beginning, with fallback
+        const firstChild = board.firstChild;
+        if (firstChild) {
+            board.insertBefore(container, firstChild);
+        } else {
+            // Fallback: append if no first child
+            board.appendChild(container);
+        }
     }
 
     //adding courses:
     for(let i = 0; i < courseList.length; i++)
     {
-        curriculum.course_id++;
-        let myCourse = new s_course(courseList[i], 'c' + curriculum.course_id);
-        let courseCode = myCourse.code;
-        try
-        {
-            getInfo(courseCode, course_data)['EL_Type'].toUpperCase();
-        }
-        catch
-        {
-            continue
-        }
-        if(!curriculum.hasCourse(myCourse.code)) 
-        {
-            let courseCredit = parseInt(getInfo(courseCode, course_data)['SU_credit']);
-            curriculum.getSemester(semester.id).addCourse(myCourse);
-            let dom_course = document.createElement('div');
-            dom_course.classList.add('course');
-            dom_course.id = 'c' + curriculum.course_id;
-            //dom_course.setAttribute('draggable','true');
-
-
-            //dom_course.innerHTML = '<button class="delete_course"></button>';
-            //creating course container in course dom:
-            let c_container = document.createElement("div")
-            c_container.classList.add("course_container");
-            let c_label = document.createElement("div");
-            c_label.classList.add("course_label");
-            c_label.innerHTML = '<div>'+courseList[i]+'</div>' + '<button class="delete_course"></button>';
-            let c_info = document.createElement("div");
-            c_info.classList.add("course_info");
-            c_info.innerHTML = '<div class="course_name">'+ getInfo(courseCode, course_data)['Course_Name'] +'</div>';
-            //console.log(getInfo(courseCode, course_data)['EL_Type']);
-            c_info.innerHTML += '<div class="course_type">'+getInfo(courseCode, course_data)['EL_Type'].toUpperCase() + '</div>';
-
-            //let gr_container = document.createElement('div');
-            //gr_container.classList.add('grade_container');
-
-            c_info.innerHTML += '<div class="course_credit">' +courseCredit+ '.0 credits </div>';
-            //gr_container.innerHTML += '<div class="grade">Add grade</div>';
-            //c_info.appendChild(gr_container);
-            var grade = document.createElement('div');
-            grade.classList.add('grade');
-            if(!grade_list.length || !grade_list[i].length)
-            {
-                grade.innerHTML = 'Add grade';
-            }
-            else
-            {
-                grade.innerHTML = grade_list[i];
-                grade.style.fontSize = '20px'
-                grade.style.paddingRight = '7px';
-                grade.style.paddingBottom = '7px';
-                // GPA is affected by all letter grades except transfers (T)
-                curriculum.getSemester(semester.id).totalGPA += (courseCredit * letter_grades_global_dic[grade_list[i]]);
-                if(grade_list[i] != 'T'){
-                    curriculum.getSemester(semester.id).totalGPACredits += courseCredit;
-                }
-                // If grade is F, the course should not count towards earned credits
-                if(grade_list[i] == 'F'){
-                    let info = getInfo(courseCode, course_data);
-                    if(info){
-                        adjustSemesterTotals(curriculum.getSemester(semester.id), info, -1);
-                    }
-                }
-            }
-            c_container.appendChild(c_label)
-            c_container.appendChild(c_info);
-            c_container.appendChild(grade);
-            
-            dom_course.appendChild(c_container);
-
-
-            let dom_semester = document.querySelector('#' + semester.id)
-            dom_semester.insertBefore(dom_course, dom_semester.querySelector(".addCourse"));
-
-            let dom_tc = dom_course.parentNode.parentNode.parentNode.querySelector('span');
-            dom_tc.innerHTML = 'Total: ' + curriculum.getSemester(semester.id).totalCredit + ' credits';
+        const courseCode = courseList[i];
+        const courseId = CurriculumManager.addCourse(semester.id, courseCode, curriculum, course_data);
+        if (courseId && grade_list.length && grade_list[i] && grade_list[i].length) {
+            CurriculumManager.updateCourseGrade(courseId, grade_list[i], curriculum);
         }
     }
 
-    // Once the semester has been created and all initial courses added, re-run
-    // the category allocation to compute each course's effective type. This
-    // ensures that newly inserted semesters (especially those added at the
-    // beginning) are considered in chronological order when allocating core
-    // and area credits. If the recalc function is not present (e.g., during
-    // testing), this call is ignored.
-    try {
-        if (typeof curriculum.recalcEffectiveTypes === 'function') {
-            curriculum.recalcEffectiveTypes(course_data);
-        }
-    } catch (err) {
-        // Silent failure if curriculum or recalc is undefined
-    }
+    // Update semester totals display
+    CurriculumManager.updateSemesterTotalsDisplay(semester.id, curriculum);
 }

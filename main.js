@@ -1,3 +1,77 @@
+
+// Theme initialization
+(function() {
+    const themeKey = 'theme';
+    const darkThemeClass = 'dark-theme';
+
+    function applyTheme(theme) {
+        if (theme === 'dark') {
+            document.documentElement.classList.add(darkThemeClass);
+        } else {
+            document.documentElement.classList.remove(darkThemeClass);
+        }
+    }
+
+    function saveTheme(theme) {
+        try {
+            localStorage.setItem(themeKey, theme);
+        } catch (e) {
+            console.error('Failed to save theme to localStorage', e);
+        }
+    }
+
+    // Add theme toggle button to the header
+    const headerControls = document.querySelector('.header-controls');
+    if (headerControls) {
+        const themeToggleButton = document.createElement('button');
+        themeToggleButton.classList.add('btn', 'btn-sm');
+        themeToggleButton.setAttribute('aria-label', 'Toggle theme');
+        themeToggleButton.style.fontSize = '1.2rem'; // Make icon larger
+        
+        const updateIcon = () => {
+            if (document.documentElement.classList.contains(darkThemeClass)) {
+                themeToggleButton.textContent = '☀️';
+            } else {
+                themeToggleButton.textContent = '🌙';
+            }
+        };
+
+        themeToggleButton.addEventListener('click', () => {
+            const isDark = document.documentElement.classList.contains(darkThemeClass);
+            if (isDark) {
+                applyTheme('light');
+                saveTheme('light');
+            } else {
+                applyTheme('dark');
+                saveTheme('dark');
+            }
+            updateIcon();
+        });
+        
+        // Set initial theme and icon
+        let savedTheme;
+        try {
+            savedTheme = localStorage.getItem(themeKey);
+        } catch (e) {}
+
+        if (savedTheme) {
+            applyTheme(savedTheme);
+        } else {
+            // If no saved theme, check system preference
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                applyTheme('dark');
+                saveTheme('dark');
+            } else {
+                applyTheme('light');
+                saveTheme('light');
+            }
+        }
+        
+        updateIcon(); // Set initial icon based on theme
+        headerControls.appendChild(themeToggleButton);
+    }
+})();
+
 // Import statements removed. `s_curriculum` is expected to be defined
 // globally by s_curriculum.js when loaded as a non-module script.
 
@@ -346,41 +420,71 @@ function SUrriculum(major_chosen_by_user) {
         // Targeting primary major change
         if (element.classList.contains('change_major')) {
             if (!change_major_element.querySelector('input')) {
-                change_major_element.innerHTML = '';
-                let input_major = document.createElement('input');
-                input_major.placeholder = 'choose a major';
-                input_major.setAttribute('list', 'datalist_majors');
-                let datalist = document.createElement('datalist');
+                // Create modern dropdown instead of replacing content
+                const dropdown = document.createElement('div');
+                dropdown.classList.add('major-dropdown');
+                dropdown.style.cssText = `
+                    position: absolute;
+                    top: 100%;
+                    left: 0;
+                    right: 0;
+                    background: var(--bg-surface);
+                    border: 2px solid var(--accent);
+                    border-radius: var(--radius-md);
+                    box-shadow: var(--shadow-lg);
+                    z-index: 1000;
+                    max-height: 300px;
+                    overflow-y: auto;
+                `;
+
                 const majorsList = getMajorsForTerm(entryTermCode);
-                majorsList.forEach(function(m) {
-                    datalist.innerHTML += "<option value='" + m + "'>";
-                });
-                datalist.id = 'datalist_majors';
-                change_major_element.appendChild(input_major);
-                change_major_element.appendChild(datalist);
-                input_major.addEventListener('input', function(e2) {
-                    const major_chosen_new = (e2.target.value).toUpperCase();
-                    let majorIsValid = false;
-                    const options = document.getElementById('datalist_majors').children;
-                    for (let i = 0; i < options.length; i++) {
-                        if (options[i].value === major_chosen_new) majorIsValid = true;
-                    }
-                    if (majorIsValid) {
-                        change_major_element.innerHTML = '<p>Major: ' + major_chosen_new + '</p>';
+                majorsList.forEach(function(major) {
+                    const option = document.createElement('div');
+                    option.classList.add('major-option');
+                    option.textContent = major;
+                    option.style.cssText = `
+                        padding: 12px 16px;
+                        cursor: pointer;
+                        border-bottom: 1px solid var(--border);
+                        transition: background-color 0.2s;
+                    `;
+
+                    option.addEventListener('mouseenter', function() {
+                        this.style.backgroundColor = 'var(--accent-light)';
+                    });
+
+                    option.addEventListener('mouseleave', function() {
+                        this.style.backgroundColor = 'transparent';
+                    });
+
+                    option.addEventListener('click', function() {
+                        const major_chosen_new = major.toUpperCase();
+                        change_major_element.innerHTML = '<span>Major: ' + major_chosen_new + '</span>';
                         localStorage.removeItem('major');
                         localStorage.setItem('major', major_chosen_new);
+                        dropdown.remove();
                         location.reload();
-                    } else {
-                        e2.target.parentNode.innerHTML = '<p>Major: ' + major_chosen_by_user + '</p>';
-                    }
+                    });
+
+                    dropdown.appendChild(option);
                 });
+
+                // Position dropdown relative to button
+                change_major_element.style.position = 'relative';
+                change_major_element.appendChild(dropdown);
+
+                // Close dropdown when clicking outside
+                const closeDropdown = function(event) {
+                    if (!change_major_element.contains(event.target)) {
+                        dropdown.remove();
+                        document.removeEventListener('click', closeDropdown);
+                    }
+                };
+                setTimeout(() => document.addEventListener('click', closeDropdown), 0);
             }
         }
         // Targeting double major change
-        // Mirror the primary major input behaviour for the doubleMajor button.
-        // When the user clicks the doubleMajor button, replace its text
-        // with an input field that allows selecting a second major or
-        // clearing it (None).
+        // Use dropdown interface like the main major selector for consistency
         if (double_major_element) {
             let targetDM = e.target;
             try {
@@ -389,125 +493,257 @@ function SUrriculum(major_chosen_by_user) {
                 }
             } catch {}
             if (targetDM.classList.contains('doubleMajor')) {
-                // Avoid adding another input if one already exists
-                if (!double_major_element.querySelector('input')) {
-                    double_major_element.innerHTML = '';
-                    const dmInput = document.createElement('input');
-                    dmInput.placeholder = 'choose double major';
-                    dmInput.setAttribute('list', 'datalist_dm');
-                    const dmDatalist = document.createElement('datalist');
-                    dmDatalist.id = 'datalist_dm';
-                    // Add None option (empty value) and majors
-                    dmDatalist.innerHTML += "<option value='None'>";
-                    const majors = getMajorsForTerm(entryTermDMCode);
-                    majors.forEach(function(m) {
-                        dmDatalist.innerHTML += "<option value='" + m + "'>";
+                // Avoid adding another dropdown if one already exists
+                if (!double_major_element.querySelector('.major-dropdown')) {
+                    // Create modern dropdown for double major
+                    const dropdown = document.createElement('div');
+                    dropdown.classList.add('major-dropdown');
+                    dropdown.style.cssText = `
+                        position: absolute;
+                        top: 100%;
+                        left: 0;
+                        right: 0;
+                        background: var(--bg-surface);
+                        border: 2px solid var(--accent);
+                        border-radius: var(--radius-md);
+                        box-shadow: var(--shadow-lg);
+                        z-index: 1000;
+                        max-height: 300px;
+                        overflow-y: auto;
+                    `;
+
+                    // Add "None" option first
+                    const noneOption = document.createElement('div');
+                    noneOption.classList.add('major-option');
+                    noneOption.textContent = 'None';
+                    noneOption.style.cssText = `
+                        padding: 12px 16px;
+                        cursor: pointer;
+                        border-bottom: 1px solid var(--border);
+                        transition: background-color 0.2s;
+                        font-style: italic;
+                    `;
+
+                    noneOption.addEventListener('mouseenter', function() {
+                        this.style.backgroundColor = 'var(--accent-light)';
                     });
-                    double_major_element.appendChild(dmInput);
-                    double_major_element.appendChild(dmDatalist);
-                    dmInput.addEventListener('input', function(e2) {
-                        let newVal = (e2.target.value || '').toUpperCase();
-                        if (newVal === 'NONE' || newVal === '') {
-                            // Clear double major
-                            double_major_element.innerHTML = '<p>Double Major: None</p>';
-                            // Remove DM from localStorage
-                            try {
-                                localStorage.removeItem('doubleMajor');
-                            } catch (_) {}
-                            curriculum.doubleMajor = '';
-                            // Clear DM types and datalist
-                            try {
-                                for (let i = 0; i < curriculum.semesters.length; i++) {
-                                    const sem = curriculum.semesters[i];
-                                    for (let j = 0; j < sem.courses.length; j++) {
-                                        sem.courses[j].effective_type_dm = '';
-                                    }
-                                }
-                                curriculum.recalcEffectiveTypes(course_data);
-                                curriculum.recalcEffectiveTypesDouble([]);
-                                curriculum.doubleMajorCourseData = [];
-                                const html = getCoursesDataList(course_data);
-                                document.querySelectorAll('datalist').forEach(function(dl) {
-                                    if (dl.id === 'datalist') dl.innerHTML = html;
-                                });
-                            } catch (_) {}
-                        } else {
-                            // Validate against majors list
-                            let valid = false;
-                            const opts2 = dmDatalist.children;
-                            for (let i = 0; i < opts2.length; i++) {
-                                if (opts2[i].value.toUpperCase() === newVal) {
-                                    valid = true; break;
+
+                    noneOption.addEventListener('mouseleave', function() {
+                        this.style.backgroundColor = 'transparent';
+                    });
+
+                    noneOption.addEventListener('click', function() {
+                        double_major_element.innerHTML = '<span>Double Major: None</span>';
+                        try {
+                            localStorage.removeItem('doubleMajor');
+                        } catch (_) {}
+                        curriculum.doubleMajor = '';
+                        // Clear DM types and reset course data
+                        try {
+                            for (let i = 0; i < curriculum.semesters.length; i++) {
+                                for (let j = 0; j < curriculum.semesters[i].courses.length; j++) {
+                                    const c = curriculum.semesters[i].courses[j];
+                                    c.effective_type_dm = '';
                                 }
                             }
-                            if (valid) {
-                                double_major_element.innerHTML = '<p>Double Major: ' + newVal + '</p>';
-                                try {
-                                    localStorage.setItem('doubleMajor', newVal);
-                                } catch (_) {}
-                                setDoubleMajor(newVal);
-                            } else {
-                                // Invalid selection resets display
-                                double_major_element.innerHTML = '<p>Double Major: ' + ((localStorage.getItem('doubleMajor') || '') || 'None') + '</p>';
-                            }
+                            curriculum.recalcEffectiveTypes(course_data);
+                            curriculum.recalcEffectiveTypesDouble([]);
+                            curriculum.doubleMajorCourseData = [];
+                            const optionsHTML = getCoursesDataList(course_data);
+                            document.querySelectorAll('datalist').forEach(function(dl) {
+                                if (dl.id === 'datalist') {
+                                    dl.innerHTML = optionsHTML;
+                                }
+                            });
+                        } catch (_) {}
+                        dropdown.remove();
+                    });
+
+                    dropdown.appendChild(noneOption);
+
+                    // Add available majors
+                    const majorsList = getMajorsForTerm(entryTermDMCode);
+                    majorsList.forEach(function(major) {
+                        const option = document.createElement('div');
+                        option.classList.add('major-option');
+                        option.textContent = major;
+                        option.style.cssText = `
+                            padding: 12px 16px;
+                            cursor: pointer;
+                            border-bottom: 1px solid var(--border);
+                            transition: background-color 0.2s;
+                        `;
+
+                        option.addEventListener('mouseenter', function() {
+                            this.style.backgroundColor = 'var(--accent-light)';
+                        });
+
+                        option.addEventListener('mouseleave', function() {
+                            this.style.backgroundColor = 'transparent';
+                        });
+
+                        option.addEventListener('click', function() {
+                            const major_chosen_new = major.toUpperCase();
+                            double_major_element.innerHTML = '<span>Double Major: ' + major_chosen_new + '</span>';
+                            setDoubleMajor(major_chosen_new);
+                            dropdown.remove();
+                        });
+
+                        dropdown.appendChild(option);
+                    });
+
+                    // Position dropdown relative to button
+                    double_major_element.style.position = 'relative';
+                    double_major_element.appendChild(dropdown);
+
+                    // Close dropdown when clicking outside
+                    const closeDropdown = function(event) {
+                        if (!double_major_element.contains(event.target)) {
+                            dropdown.remove();
+                            document.removeEventListener('click', closeDropdown);
                         }
-                    });
+                    };
+                    setTimeout(() => document.addEventListener('click', closeDropdown), 0);
                 }
             }
         }
 
-        // Entry term (main major) selector
+        // Entry term (main major) selector - use dropdown like major selection
         if (entry_term_el) {
             let targetET = e.target;
             if (targetET.parentNode && targetET.parentNode.classList.contains('entryTerm')) {
                 targetET = targetET.parentNode;
             }
             if (targetET.classList.contains('entryTerm')) {
-                if (!entry_term_el.querySelector('input')) {
-                    entry_term_el.innerHTML = '';
-                    const inp = document.createElement('input');
-                    inp.placeholder = 'choose term';
-                    inp.setAttribute('list','datalist_terms');
-                    const dl = document.createElement('datalist');
-                    dl.id = 'datalist_terms';
-                    entryTerms.forEach(function(t){ dl.innerHTML += `<option value='${t}'>`; });
-                    entry_term_el.appendChild(inp); entry_term_el.appendChild(dl);
-                    inp.addEventListener('input', function(ev){
-                        if (entryTerms.indexOf(ev.target.value) !== -1) {
-                            localStorage.setItem('entryTerm', ev.target.value);
+                if (!entry_term_el.querySelector('.term-dropdown')) {
+                    // Create modern dropdown for entry term
+                    const dropdown = document.createElement('div');
+                    dropdown.classList.add('term-dropdown');
+                    dropdown.style.cssText = `
+                        position: absolute;
+                        top: 100%;
+                        left: 0;
+                        right: 0;
+                        background: var(--bg-surface);
+                        border: 2px solid var(--accent);
+                        border-radius: var(--radius-md);
+                        box-shadow: var(--shadow-lg);
+                        z-index: 1000;
+                        max-height: 300px;
+                        overflow-y: auto;
+                    `;
+
+                    entryTerms.forEach(function(term) {
+                        const option = document.createElement('div');
+                        option.classList.add('term-option');
+                        option.textContent = term;
+                        option.style.cssText = `
+                            padding: 12px 16px;
+                            cursor: pointer;
+                            border-bottom: 1px solid var(--border);
+                            transition: background-color 0.2s;
+                        `;
+
+                        option.addEventListener('mouseenter', function() {
+                            this.style.backgroundColor = 'var(--accent-light)';
+                        });
+
+                        option.addEventListener('mouseleave', function() {
+                            this.style.backgroundColor = 'transparent';
+                        });
+
+                        option.addEventListener('click', function() {
+                            entry_term_el.innerHTML = '<span>Admit Term: ' + term + '</span>';
+                            localStorage.setItem('entryTerm', term);
+                            dropdown.remove();
                             location.reload();
-                        } else {
-                            entry_term_el.innerHTML = `<p>Admit Term: ${entryTermName}</p>`;
-                        }
+                        });
+
+                        dropdown.appendChild(option);
                     });
+
+                    // Position dropdown relative to button
+                    entry_term_el.style.position = 'relative';
+                    entry_term_el.appendChild(dropdown);
+
+                    // Close dropdown when clicking outside
+                    const closeDropdown = function(event) {
+                        if (!entry_term_el.contains(event.target)) {
+                            dropdown.remove();
+                            document.removeEventListener('click', closeDropdown);
+                        }
+                    };
+                    setTimeout(() => document.addEventListener('click', closeDropdown), 0);
                 }
             }
         }
 
-        // Entry term for double major
+        // Entry term for double major - use dropdown like other selections
         if (entry_term_dm_el) {
             let targetDT = e.target;
             if (targetDT.parentNode && targetDT.parentNode.classList.contains('entryTermDM')) {
                 targetDT = targetDT.parentNode;
             }
             if (targetDT.classList.contains('entryTermDM')) {
-                if (!entry_term_dm_el.querySelector('input')) {
-                    entry_term_dm_el.innerHTML = '';
-                    const inp = document.createElement('input');
-                    inp.placeholder = 'choose term';
-                    inp.setAttribute('list','datalist_terms_dm');
-                    const dl = document.createElement('datalist');
-                    dl.id = 'datalist_terms_dm';
-                    entryTerms.forEach(function(t){ dl.innerHTML += `<option value='${t}'>`; });
-                    entry_term_dm_el.appendChild(inp); entry_term_dm_el.appendChild(dl);
-                    inp.addEventListener('input', function(ev){
-                        if (entryTerms.indexOf(ev.target.value) !== -1) {
-                            localStorage.setItem('entryTermDM', ev.target.value);
+                if (!entry_term_dm_el.querySelector('.term-dropdown')) {
+                    // Create modern dropdown for DM entry term
+                    const dropdown = document.createElement('div');
+                    dropdown.classList.add('term-dropdown');
+                    dropdown.style.cssText = `
+                        position: absolute;
+                        top: 100%;
+                        left: 0;
+                        right: 0;
+                        background: var(--bg-surface);
+                        border: 2px solid var(--accent);
+                        border-radius: var(--radius-md);
+                        box-shadow: var(--shadow-lg);
+                        z-index: 1000;
+                        max-height: 300px;
+                        overflow-y: auto;
+                    `;
+
+                    entryTerms.forEach(function(term) {
+                        const option = document.createElement('div');
+                        option.classList.add('term-option');
+                        option.textContent = term;
+                        option.style.cssText = `
+                            padding: 12px 16px;
+                            cursor: pointer;
+                            border-bottom: 1px solid var(--border);
+                            transition: background-color 0.2s;
+                        `;
+
+                        option.addEventListener('mouseenter', function() {
+                            this.style.backgroundColor = 'var(--accent-light)';
+                        });
+
+                        option.addEventListener('mouseleave', function() {
+                            this.style.backgroundColor = 'transparent';
+                        });
+
+                        option.addEventListener('click', function() {
+                            entry_term_dm_el.innerHTML = '<span>Admit Term(DM): ' + term + '</span>';
+                            localStorage.setItem('entryTermDM', term);
+                            dropdown.remove();
                             location.reload();
-                        } else {
-                            entry_term_dm_el.innerHTML = `<p>Admit Term(DM): ${entryTermDMName}</p>`;
-                        }
+                        });
+
+                        dropdown.appendChild(option);
                     });
+
+                    // Position dropdown relative to button
+                    entry_term_dm_el.style.position = 'relative';
+                    entry_term_dm_el.appendChild(dropdown);
+
+                    // Close dropdown when clicking outside
+                    const closeDropdown = function(event) {
+                        if (!entry_term_dm_el.contains(event.target)) {
+                            dropdown.remove();
+                            document.removeEventListener('click', closeDropdown);
+                        }
+                    };
+                    setTimeout(() => document.addEventListener('click', closeDropdown), 0);
                 }
             }
         }
@@ -533,7 +769,7 @@ function SUrriculum(major_chosen_by_user) {
 
     let dragged_item = null;
     document.addEventListener('dragstart', function(e){
-        if(e.target.classList.contains("container_semester"))
+        if(e.target.classList.contains("semester-container"))  // Updated from "container_semester"
         {dragged_item = e.target;}
     })
     document.addEventListener('dragover', function(e){
@@ -597,16 +833,24 @@ function SUrriculum(major_chosen_by_user) {
         createSemeter(false, fs_courses, curriculum, course_data, [], entryTerm);
     })
 
-    document.querySelector('.check>p').addEventListener('click', function(){document.querySelector('.check').click();})
+    const checkElement = document.querySelector('.check>p');
+    if (checkElement) {
+        checkElement.addEventListener('click', function(){document.querySelector('.check').click();});
+    }
+
     const check_graduation = document.querySelector('.check');
-    check_graduation.addEventListener('click', function(){
-        displayGraduationResults(curriculum);
-    })
+    if (check_graduation) {
+        check_graduation.addEventListener('click', function(){
+            displayGraduationResults(curriculum);
+        });
+    }
 
     const summary = document.querySelector('.summary');
-    summary.addEventListener('click', function(){
-        displaySummary(curriculum, major_chosen_by_user);
-    })
+    if (summary) {
+        summary.addEventListener('click', function(){
+            displaySummary(curriculum, major_chosen_by_user);
+        });
+    }
 
     // ----------------------------------------------------------------------
     // Custom Course: create a modal form to let the user define a new
@@ -918,7 +1162,7 @@ function SUrriculum(major_chosen_by_user) {
                                     // Create new DM course object using the same credit
                                     // values as the main custom course so that DM totals
                                     // count these credits correctly.
-                                    const matchDM = combo.match(/^([A-Z]+)(\d+)/);
+                                    const matchDM = combo.match(/^([A-Z]+)(\d+)$/);
                                     const mDM = matchDM ? matchDM[1] : combo.replace(/\d+.*/, '');
                                     const nDM = matchDM ? matchDM[2] : combo.replace(/[A-Z]+/, '');
                                     const newCourseDM = {
@@ -1108,7 +1352,7 @@ function SUrriculum(major_chosen_by_user) {
             showCourseTypeFormDM(item.code, item.title, function(selectedType) {
                 if (selectedType) {
                     // Parse major prefix and code number
-                    const match = item.code.match(/^([A-Z]+)(\d+)/);
+                    const match = item.code.match(/^([A-Z]+)(\d+)$/);
                     const maj = match ? match[1] : item.code.replace(/\d+.*/, '');
                     const num = match ? match[2] : item.code.replace(/[A-Z]+/, '');
                     const newCourseDM = {
@@ -1518,23 +1762,23 @@ function SUrriculum(major_chosen_by_user) {
 
     // Add event listener for the import toggle button
     document.querySelector('.import-toggle').addEventListener('click', function() {
-        const importSection = document.querySelector('.import-section');
-        if (importSection.style.display === 'none' || !importSection.style.display) {
-            importSection.style.display = 'block';
+        const importDropdown = document.querySelector('.import-dropdown'); // Changed from .import-section
+        if (importDropdown.style.display === 'none' || !importDropdown.style.display) {
+            importDropdown.style.display = 'block';
         } else {
-            importSection.style.display = 'none';
+            importDropdown.style.display = 'none';
         }
     });
 
     // Close import panel when clicking outside
     document.addEventListener('click', function(e) {
-        const importSection = document.querySelector('.import-section');
+        const importDropdown = document.querySelector('.import-dropdown'); // Changed from .import-section
         const importToggle = document.querySelector('.import-toggle');
 
-        if (importSection && importSection.style.display === 'block' &&
-            !importSection.contains(e.target) &&
+        if (importDropdown && importDropdown.style.display === 'block' &&
+            !importDropdown.contains(e.target) &&
             !importToggle.contains(e.target)) {
-            importSection.style.display = 'none';
+            importDropdown.style.display = 'none';
         }
     });
 

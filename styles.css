@@ -1,787 +1,694 @@
-@import url('https://fonts.googleapis.com/css2?family=Montserrat&display=swap');
-
-*
-{
-    z-index: 1;
-}
-
-html, body 
-{
-    overscroll-behavior: none;
-}
+/* === CSS VARIABLES === */
 :root {
-    --bg-color: rgb(0, 66, 136);
-    --header-bg: rgb(0, 66, 136);
-    --text-color: white;
-    --board-bg: rgb(216, 216, 216);
-    --btn-bg: #435A74;
-    --btn-text-color: white;
-    --accent-bg: #5aa874;
-    --semester-bg: #c7d6e7;
-    --import-bg: #ffffff;
-    --import-text: #333;
-    --modal-bg: rgb(190, 219, 219);
-    --summary-child-bg: rgb(245, 237, 252);
-    --course-link-color: rgb(36, 112, 193);
-    --date-input-bg: #86b396;
-}
-.light-theme {
-    --bg-color: rgb(0, 66, 136);
-    --header-bg: rgb(0, 66, 136);
-    --text-color: white;
-    --board-bg: rgb(216, 216, 216);
-    --btn-bg: #435A74;
-    --btn-text-color: white;
-    --semester-bg: #c7d6e7;
-    --import-bg: #ffffff;
-    --import-text: #333;
-    --modal-bg: rgb(190, 219, 219);
-    --summary-child-bg: rgb(245, 237, 252);
-    --course-link-color: rgb(36, 112, 193);
-    --date-input-bg: #86b396;
+    /* Light theme */
+    --primary: #0D47A1;
+    --primary-hover: #1565C0;
+    --primary-active: #0A3D91;
+    --secondary: #1976D2;
+    --accent: #4CAF50;
+
+    --bg-main: #F8FAFC;
+    --bg-card: #FFFFFF;
+    --bg-surface: #F1F5F9;
+    --bg-header: linear-gradient(135deg, #0D47A1 0%, #1976D2 100%);
+
+    --text-primary: #1E293B;
+    --text-secondary: #64748B;
+    --text-muted: #94A3B8;
+    --text-inverse: #FFFFFF;
+
+    --border: #E2E8F0;
+    --border-hover: #CBD5E1;
+
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
 }
 
 .dark-theme {
-    --bg-color: #1a1a1a;
-    --header-bg: #333;
-    --text-color: #f0f0f0;
-    --board-bg: #555;
-    --btn-bg: #444;
-    --btn-text-color: #f0f0f0;
-    --semester-bg: #444;
-    --import-bg: #444;
-    --import-text: #eee;
-    --modal-bg: #444;
-    --summary-child-bg: #555;
-    --course-link-color: #9ad1ff;
-    --date-input-bg: #666;
+    --primary: #3B82F6;
+    --primary-hover: #2563EB;
+    --primary-active: #1D4ED8;
+    --secondary: #60A5FA;
+    --accent: #10B981;
+
+    --bg-main: #0F172A;
+    --bg-card: #1E293B;
+    --bg-surface: #334155;
+    --bg-header: linear-gradient(135deg, #1E293B 0%, #334155 100%);
+
+    --text-primary: #F1F5F9;
+    --text-secondary: #CBD5E1;
+    --text-muted: #94A3B8;
+    --text-inverse: #0F172A;
+
+    --border: #334155;
+    --border-hover: #475569;
+
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.3);
 }
 
+/* === RESET & BASE === */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
 
+html, body {
+    height: 100%;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text-primary);
+    background: var(--bg-main);
+    overscroll-behavior: none;
+}
 
-body
-{
+/* === LAYOUT === */
+.app {
     display: flex;
     flex-direction: column;
-    margin: 0px;
-    font-family: 'Roboto', sans-serif;
-    color: var(--text-color);
-    background-color: var(--bg-color);
     height: 100vh;
 }
 
-.title
-{
-    background-color: var(--header-bg);
-    font-size: max(30px, 2vh);
-    font-weight: 500;
-    font-family: 'roboto', sans-serif;
-    color: var(--text-color);
-    flex: 1;
+.header {
+    background: var(--bg-header);
+    color: var(--text-inverse);
+    padding: 0 24px;
+    height: 64px;
     display: flex;
     align-items: center;
-    height: 6vh;
-    margin: 0px;
-    padding-left: 10px;
-    z-index: 2;
+    justify-content: space-between;
+    box-shadow: var(--shadow-sm);
+    z-index: 10;
+}
+
+.header-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    text-decoration: none;
+    color: white;
+    letter-spacing: -0.025em;
+}
+
+.header-controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.main-content {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+}
+
+.board {
+    flex: 1;
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+    background: var(--bg-main);
     position: relative;
 }
 
-.import-container {
-    position: absolute;
-    right: 20px;
-    top: 50%;
-    transform: translateY(-50%);
+/* === BUTTONS === */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 16px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-decoration: none;
+    white-space: nowrap;
+    min-height: 36px;
+}
+
+.btn-primary {
+    background: var(--primary);
+    color: white;
+    box-shadow: var(--shadow-sm);
+}
+
+.btn-primary:hover {
+    background: var(--primary-hover);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+}
+
+.btn-primary:active {
+    background: var(--primary-active);
+    transform: translateY(0);
+}
+
+.btn-secondary {
+    background: var(--bg-card);
+    color: white;
+    border: 1px solid var(--border);
+}
+
+.btn-secondary:hover {
+    background: var(--bg-surface);
+    border-color: var(--border-hover);
+}
+
+.btn-sm {
+    padding: 6px 12px;
+    font-size: 0.75rem;
+    min-height: 28px;
+}
+
+/* === SIDEBAR === */
+.sidebar {
+    width: 320px;
+    background: var(--bg-card);
+    border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
-    align-items: flex-end;
-    z-index: 10; /* Ensure it's above other elements */
+    overflow: hidden;
 }
 
-.import-toggle {
-    width: auto !important;
-    height: 30px;
-    margin: 0 !important;
-    padding: 0 15px;
-    position: relative; /* Add position context */
-    z-index: 11; /* Higher than container */
+.sidebar-header {
+    padding: 24px;
+    border-bottom: 1px solid var(--border);
+}
+
+.sidebar-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.sidebar-content {
+    flex: 1;
+    padding: 24px;
+    overflow-y: auto;
+}
+
+.control-group {
+    margin-bottom: 24px;
+}
+
+.control-group:last-child {
+    margin-bottom: 0;
+}
+
+.control-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.control-row .btn {
+    flex: 1;
+    font-size: 0.8rem;
+}
+
+/* === SEMESTER CONTAINER === */
+.semester-container {
+    width: 300px;
+    margin: 20px;
+    flex-shrink: 0;
+}
+
+.semester {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    overflow: hidden;
+    height: fit-content;
+    max-height: calc(100vh - 140px);
+    display: flex;
+    flex-direction: column;
+    min-height: 300px;
+}
+
+.semester-header {
+    background: var(--accent);
+    color: var(--text-inverse);
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 600;
+}
+
+.semester-header input {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: var(--text-inverse);
+    font-weight: 600;
+    font-size: 1rem;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    width: 150px;
+}
+
+.semester-header input::placeholder {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.semester-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.semester-action-btn {
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: var(--radius-sm);
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease;
 }
-.theme-toggle {
-    width: auto !important;
-    height: 30px;
-    margin: 0 !important;
-    padding: 0 15px;
+
+.semester-action-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.semester-courses {
+    flex: 1;
+    padding: 16px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 200px;
+    max-height: calc(100vh - 240px);
+}
+
+/* === SEMESTER TOTALS STYLING === */
+.semester-totals {
+    background: var(--bg-surface);
+    border-top: 1px solid var(--border);
+    padding: 12px 16px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.semester-totals-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 16px;
+}
+
+.semester-total-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+}
+
+.semester-total-label {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.semester-total-value {
+    font-weight: 600;
+    color: var(--primary);
+    background: var(--bg-card);
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+}
+
+/* === COURSE CARDS === */
+.course-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    margin-bottom: 12px;
+    overflow: visible;
+    transition: all 0.15s ease;
+}
+
+.course-card:hover {
+    border-color: var(--border-hover);
+    box-shadow: var(--shadow-sm);
+}
+
+.course-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-surface);
+}
+
+.course-code {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+}
+
+.course-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+/* === GRADE STYLING === */
+.grade {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-primary);
     cursor: pointer;
+    transition: all 0.15s ease;
+    min-width: 32px;
+    text-align: center;
 }
 
+.grade:hover {
+    border-color: var(--primary);
+    background: var(--bg-surface);
+}
 
-.import-section {
+.grade:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+}
+
+.grade option {
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+
+.course-delete {
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    transition: all 0.15s ease;
+}
+
+.course-delete:hover {
+    background: #FEE2E2;
+    color: #DC2626;
+}
+
+.course-body {
+    padding: 12px 16px;
+}
+
+.course-name {
+    font-size: 0.875rem;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+    font-weight: 500;
+    line-height: 1.3;
+}
+
+.course-details {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.course-meta {
+    display: flex;
+    gap: 12px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    flex-wrap: wrap;
+}
+
+.course-meta span {
+    background: var(--bg-surface);
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    font-weight: 500;
+}
+
+/* === ADD COURSE === */
+.add-course {
+    margin-top: 8px;
+    padding: 12px;
+    text-align: center;
+    color: var(--primary);
+    cursor: pointer;
+    border-top: 1px dashed var(--border);
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: all 0.15s ease;
+}
+
+.add-course:hover {
+    background: var(--bg-surface);
+    color: var(--primary-hover);
+}
+
+.add-course-form {
+    padding: 16px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-surface);
+}
+
+.add-course-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.875rem;
+    margin-bottom: 12px;
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+
+.add-course-input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(13, 71, 161, 0.1);
+}
+
+.add-course-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+/* === IMPORT DROPDOWN === */
+.import-container {
+    position: relative;
+}
+
+.import-dropdown {
     position: absolute;
-    top: 40px;
+    top: calc(100% + 8px);
     right: 0;
-    width: 350px;
-    background-color: var(--import-bg);
-    border-radius: 5px;
-    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.16);
-    color: var(--import-text);
-    z-index: 100;
-    padding: 15px;
+    width: 400px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    padding: 20px;
+    z-index: 50;
+    display: none;
 }
 
-.import-description {
-    margin-bottom: 15px;
+.import-dropdown.active {
+    display: block;
 }
 
-.import-description p {
-    font-size: 14px;
-    margin: 5px 0;
-    color: var(--import-text);
+.import-title {
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--text-primary);
 }
 
-.import-description ol {
+.import-instructions {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+}
+
+.import-instructions ol {
     margin: 8px 0;
-    padding-left: 25px;
+    padding-left: 20px;
 }
 
-.import-description li {
-    font-size: 13px;
-    margin: 5px 0;
-    color: var(--import-text);
+.import-instructions li {
+    margin: 4px 0;
 }
 
 .import-controls {
     display: flex;
+    gap: 12px;
     align-items: center;
-    justify-content: space-between;
-    margin-top: 10px;
 }
 
-#academicRecordsInput {
-    max-width: 200px;
-    padding: 5px;
-    border: 1px solid #ccc;
-    border-radius: 3px;
+.import-file {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-card);
+    color: var(--text-primary);
 }
 
-#importAcademicRecords {
-    height: 30px;
-    margin: 0 !important;
-    padding: 0 15px;
-    width: auto !important;
-}
-
-.board
-{
-    background-color: var(--board-bg);
-    background-image: url('./assets/sabanci.jpg');
-    background-size: cover;
-    background-repeat: no-repeat;
-    background-position: center;
-    margin: 0px;
-    height: 94vh;
-    display: flex;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    position: relative;
-
-    overflow-y: auto;
-    max-height: calc(100vh - 6vh); /* Adjust height based on viewport minus title height */
-    box-sizing: border-box;
-}
-
-.summary_modal, .graduation_modal
-{
-    z-index: 4;
-    background-color: var(--modal-bg);
-    border: 0px;
-    border-radius: 5px;
-    position: absolute;
-    top: 50%;
-    left: 50%;
-
-    display: flex;
-}
-.summary_modal
-{
-    padding-top: 20px;
-    padding-bottom: 20px;
-    width: 350px;
-    max-width: 75vw;
-    height: 563px;
-    transform: translate(-50%, -50%);
-
-    flex-direction: column;
-    justify-content: space-between;
-}
-
-.summary_modal_child
-{
-    width: 90%;
-    height: 41px;
-    margin-left: 5%;
-    margin-right: 5%;
-    background-color: var(--summary-child-bg);
-    border-radius: 5px;
-
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    font-size: 23px;
-    font-weight: 500;
-    z-index: 5;
-    color: gray;
-}
-
-.graduation_modal
-{
-    transform: translate(-50%, -80%);
-    max-width: 80vw;
-    min-width: 60vw;
-
-    justify-content: center;
-}
-.graduation_modal>div
-{
-    margin: 20px;
-    font-size: 25px;
-    color: rgb(109, 109, 109);
-    font-weight: 600;
-}
-
-
-
-.overlay, .summary_modal_overlay, .graduation_modal_overlay
-{
-    background-color: rgba(0, 0, 0, 0.5); /* Adjust the opacity (0.5) as desired */
+/* === MODALS === */
+.modal-overlay {
     position: fixed;
-    overflow-x: auto;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 0;
-    pointer-events: none;
-}
-
-.summary_modal_overlay, .graduation_modal_overlay
-{
-    background-color: rgba(0, 0, 0, 0.6);
-    z-index: 3;
-}
-
-.container_semester
-{
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    margin: 0px;
-    width: 300px;
-    height: 94vh;
-
-}
-
-.container_btn
-{
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    margin: 0px;
-    width: 410px;
-    height: 94vh;
-
-}
-
-.head_btn
-{
-    width: 225px;
-    margin: 0px;
-    display: flex;
-    flex-direction: row;
-    max-height: 5vh;
-}
-
-.head_btn_line
-{
-    width: 195px;
-    height: 10px;
-    margin-top: 20px;
-    margin-bottom: 20px;
-    background-color: var(--accent-bg);
-}
-
-.total_credit
-{
-    margin: 0px;
-    display: flex;
-    flex-direction: row;
-    max-height: 5vh;
-}
-
-.total_credit_line,  .head_btn_end
-{
-    width: 100px;
-    height: 10px;
-    margin-top: 20px;
-    margin-bottom: 20px;
-    background-color: var(--accent-bg);
-}
-
-.total_credit_line
-{
-    width: 90px;
-}
-
-.head_btn_end
-{
-    margin: 10px;
-    margin-left: -5px;
-    width: 30px;
-    height: 30px;
-    border-radius: 15px;
-    display: flex;
-    justify-content: center;
-
-    align-items: center;
-    color: white;
-    font-size: 30px;
-}
-
-.head_btn_end > p
-{
-    margin-bottom: 35px;
-}
-
-.total_credit_text
-{
-    height: 30px;
-    width: 130px;
-    z-index: 2;
-    margin-left: -5px;
-    margin-right: -5px;
-    margin-top: 10px;
-    margin-bottom: 10px;
-    background-color:var(--accent-bg);
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 14px;
+    z-index: 100;
+}
+
+.modal {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    max-width: 90vw;
+    max-height: 90vh;
+    overflow: auto;
+}
+
+/* === FOOTER === */
+.footer {
+    background: var(--bg-header);
     color: white;
-    border-radius: 15px;
-}
-
-.subcontainer_semester, .date, .semester, .course, .addCourse, input, .addCourse
-{
-    width: 260px;
-    margin: 20px;
-}
-
-.date
-{
-    background-color: var(--accent-bg);
-    border-top-left-radius: 5px;
-    border-top-right-radius: 5px;
-    height: 40px;
-    margin: 0px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    color: white;
-}
-
-.date > input
-{
-    width: 70%;
-    margin: 5px;
-    padding: 5px;
-    border: 0px;
-    background-color: var(--date-input-bg);
-    color: white;
-}
-
-::placeholder
-{
-    color: white;
-}
-
-.tick 
-{
-    margin: 20px;
-}
-
-
-
-.date > p, .date > input
-{
-    font-weight: 600;
-    font-size: 20px;
-    margin-left: 10px;
-}
-
-
-
-.semester
-{
-    margin: 0px;
-    background: var(--semester-bg);
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    position: relative;
-    max-height: 68vh;
-    overflow-y: scroll;
-    overflow-x:hidden;
-}
-
-.course
-{
-    border: 1px solid grey;
-    border-radius: 5px;
-    margin-top: 6px;
-    margin-bottom: 6px;
-    font-size: 25px;
-}
-
-.addCourse
-{
+    padding: 16px 24px;
     text-align: center;
-    margin-bottom: 10px;
-    margin-top: 10px;
-    border: 0px;
-    font-weight: 500;
-    color:var(--course-link-color);
-    font-size:15px;
-    margin:0px;
-    border-bottom-left-radius: 5px;
-    border-bottom-right-radius: 5px;
-    background-color: var(--semester-bg);
-    height: 40px;
+    font-size: 0.875rem;
+    opacity: 0.9;
 }
 
-
-input
-{
-    margin: 0px;
-    padding: 7px;
-    font-size: 17px;
-    font-weight: 600;
+/* === UTILITIES === */
+.hidden {
+    display: none !important;
 }
 
-.course
-{
-    display: flex;
-    width: 90%;
-    position: relative;
-    background: white;
-    border: 0px;
-}
-
-.course_container
-{
-    width: 100%;
-    height: 100px;
-    display: flex;
-    flex-direction: column;
-}
-
-.course_label
-{
-    margin: 0px;
-    height: 32px;
-    width: 100%;
-    /*background-color: rgb(42, 85, 123);*/
-    border-bottom: 1px solid gray;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-
-.course_label > div
-{
-    margin-left: 10px;
-    font-size: 17px;
-    font-weight: 600;
-    /*font-family: 'Montserrat';*/
-}
-
-.course_info
-{
-    margin: 0px;
-    height: 75px;
-    width: 100%;
-    font-weight: 300;
-    position: relative;
-}
-
-.course_name
-{
-    font-size: 14px;
-    
-    width: 225px;
-    margin: 5px;
-    margin-left: 10px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.course_type
-{
-    font-size: 12px;
-    margin: 5px;
-    margin-left: 10px;
-    font-style: italic;
-    color: grey
-}
-/*
-.grade_container
-{
-    display: flex;
-    margin: 5px;
-    justify-content: space-between;
-}*/
-.course_credit
-{
-    font-size: 12px;
-    margin-left: 10px;
-}
-.grade
-{
-    font-size: 12px;
-    margin: 0px;
-    margin-right: 5px;
-    color:var(--course-link-color);
-
+.sr-only {
     position: absolute;
-    bottom: 0;
-    right: 0;
-    width: 70px;
-    height: 20px;
-    margin-left: 0px;
-    text-align: right;
-    padding-right: 7px;
-}
-.grade_input
-{
-    height: 0px;
-    width: 70px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.grade_input::placeholder
-{
-    color:gray;
-    font-size: 10px;
-}
-
-.input_container
-{
-    display: flex;
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px;
-    background: var(--semester-bg);
-    height: 37px;
-}
-
-
-.input_container > input
-{
-    max-width: 60%;
-    border-radius: 5px;
-    border: 0px;
-}
-.input_container > input::placeholder
-{
-    color:gray;
-    font-size: 15px;
-}
-.enter, .delete_add_course
-{
-    background-image: url('./assets/tick.png');
-    background-size: cover;
-    background-repeat: no-repeat;
-    background-position: center;
-
-    width: 30px;
-    height: 30px;
-    z-index: 2;
-
-    background-color: var(--semester-bg);
-    
-}
-
-.delete_add_course
-{
-    background-image: url('./assets/closed.png');
-}
-
-.input_container > input, .enter
-{
-    margin: 0px;
-}
-
-.delete_course
-{
-    width: 15px;
-    height: 15px;
-    margin-right: 10px;
-    
-    background-image: url('./assets/closed.png');
-    background-size: cover;
-    background-repeat: no-repeat;
-    background-position: center;
-    border: 0px;
-    z-index: 2;
-    background-color: white;
-}
-
-.icons
-{
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-
-.delete_semester, .semester_drag, .semester_date_edit, .date > .tick
-{
-    width: 20px;
-    height: 20px;
-    z-index: 2;
-    margin-right: 10px;
-    background-color: var(--accent-bg);
-    border: 0px;
-    background-size: cover;
-    background-repeat: no-repeat;
-    background-position: center;
-}
-
-.delete_semester
-{
-    background-image: url('./assets/closedw.png');
-}
-
-.semester_drag
-{
-    background-image: url('./assets/dragw.png');
-}
-.semester_date_edit
-{
-    background-image: url('./assets/editw.png'); 
-}
-
-.btns
-{
-    display:flex;
-    margin: 60px;
-    flex-direction: column;
-    justify-content: flex-start;
-    align-items: center;
-}
-
-.major-row {
-    display: flex;
-    justify-content: center;
-    gap: 10px;
-    width: 100%;
-    margin-bottom: 20px;
-}
-.major-row .btn {
-    width: 140px;
-    margin-bottom: 0;
-    font-size: calc(0.6em + 0.4vw); /* Adjusted text size to fit within button */
-    text-align: center;
-    white-space: normal; /* Allow text wrapping */
-    overflow: visible; /* Remove overflow restrictions */
-}
-.major-row .change_major > input,
-.major-row .entryTerm > input,
-.major-row .doubleMajor > input,
-.major-row .entryTermDM > input {
-    width: 140px;
-    font-size: calc(0.6em + 0.4vw); /* Adjusted text size to fit within input */
-    text-align: center;
-    white-space: normal; /* Allow text wrapping */
-    overflow: visible; /* Remove overflow restrictions */
-}
-
-.btn
-{
-    margin-bottom: 20px;
-
-    width: 180px;
-    border-radius: 3px;
-    font-size: 15px;
-    border: 0px;
-
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    background-color: var(--btn-bg);
-    color: var(--btn-text-color);
-}
-.change_major > input
-{
-    width: 180px;
-    height: 100%;
-    background-color: var(--btn-bg);
-}
-
-.doubleMajor > input,
-.entryTerm > input,
-.entryTermDM > input {
-    width: 180px;
-    height: 100%;
-    background-color: var(--btn-bg);
-    color: white;
-}
-
-/* Style the double major selection to match the appearance of the main
-   major control.  The select element inherits the button-like look
-   used throughout the app (same width, colours and border radius). */
-.doubleMajorSelect {
-    width: 180px;
-    border-radius: 3px;
-    font-size: 15px;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
     border: 0;
-    background-color: var(--btn-bg);
-    color: white;
-    height: 30px;
-    padding-left: 4px;
-    padding-right: 4px;
-}
-.doubleMajorSelect option {
-    color: black;
-    background-color: white;
 }
 
-.change_major > input::placeholder
-{
-    color: gray;
+/* === RESPONSIVE === */
+@media (max-width: 768px) {
+    .sidebar {
+        width: 280px;
+    }
+
+    .semester-container {
+        width: 280px;
+    }
+
+    .import-dropdown {
+        width: 320px;
+    }
+
+    .header {
+        padding: 0 16px;
+    }
+
+    .header-title {
+        font-size: 1.25rem;
+    }
 }
 
+/* === ANIMATIONS === */
 @keyframes shake {
-    0% { transform: translate(0, 0) rotate(0); }
-    10% { transform: translate(-1px, 0) rotate(-3deg); }
-    20% { transform: translate(1px, 0) rotate(3deg); }
-    30% { transform: translate(-1px, 0) rotate(-3deg); }
-    40% { transform: translate(1px, 0) rotate(3deg); }
-    50% { transform: translate(-1px, 0) rotate(-3deg); }
-    60% { transform: translate(1px, 0) rotate(3deg); }
-    70% { transform: translate(-1px, 0) rotate(-3deg); }
-    80% { transform: translate(1px, 0) rotate(3deg); }
-    90% { transform: translate(-1px, 0) rotate(-3deg); }
-    100% { transform: translate(0, 0) rotate(0); }
-  }
-  
-  .shake {
-    animation: shake 2s infinite;
-  }
+    0%, 100% { transform: translateX(0); }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-2px); }
+    20%, 40%, 60%, 80% { transform: translateX(2px); }
+}
 
-footer p {
-    color: var(--text-color);
+.shake {
+    animation: shake 0.5s ease-in-out;
+}
+
+/* === SCROLLBAR === */
+.semester-courses::-webkit-scrollbar,
+.sidebar-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.semester-courses::-webkit-scrollbar-track,
+.sidebar-content::-webkit-scrollbar-track {
+    background: var(--bg-surface);
+}
+
+.semester-courses::-webkit-scrollbar-thumb,
+.sidebar-content::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+}
+
+.semester-courses::-webkit-scrollbar-thumb:hover,
+.sidebar-content::-webkit-scrollbar-thumb:hover {
+    background: var(--border-hover);
+}
+
+/* === LEGACY COMPATIBILITY === */
+/* Keep these classes for compatibility with your existing JS */
+.change_major, .entryTerm, .doubleMajor, .entryTermDM,
+.addSemester, .check, .summary, .autoAdd, .customCourse,
+.deleteCustom, .resetLocal {
+    /* Styles already applied via .btn classes */
+}
+
+.semester_date_edit, .semester_drag, .delete_semester {
+    /* Styles already applied via .semester-action-btn classes */
+}
+
+/* Input styles for dynamic content */
+input[type="text"], input[type="file"], select {
+    font-family: inherit;
+    font-size: inherit;
+}
+
+/* Ensure proper focus styles */
+input:focus, select:focus, button:focus {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+.semester-summary-wrapper {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease-in-out;
+}
+
+.semester-summary-wrapper.active {
+    max-height: 500px;
 }

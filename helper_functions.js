@@ -304,3 +304,38 @@ function getAncestor(element, ancestor_class)
     }
     return null;
 }
+
+// Function to update semester totals display with better formatting
+function updateSemesterTotalsDisplay(semesterId, curriculum) {
+    const semester = curriculum.getSemester(semesterId);
+    if (!semester) return;
+
+    const semesterElement = document.getElementById(semesterId);
+    if (!semesterElement) return;
+
+    const totalsElement = semesterElement.querySelector('.semester-totals');
+    if (!totalsElement) return;
+
+    // Calculate GPA for this semester
+    let semesterGPA = '0.00';
+    if (semester.totalGPACredits > 0) {
+        semesterGPA = (semester.totalGPA / semester.totalGPACredits).toFixed(2);
+    }
+
+    // Update each total value
+    const updates = [
+        { selector: '.total-totalcredit', value: semester.totalCredit },
+        { selector: '.total-totalgpa', value: semesterGPA },
+        { selector: '.total-totalcore', value: semester.totalCore },
+        { selector: '.total-totalarea', value: semester.totalArea },
+        { selector: '.total-totalfree', value: semester.totalFree },
+        { selector: '.total-totaluniversity', value: semester.totalUniversity }
+    ];
+
+    updates.forEach(update => {
+        const element = totalsElement.querySelector(update.selector);
+        if (element) {
+            element.textContent = update.value;
+        }
+    });
+}

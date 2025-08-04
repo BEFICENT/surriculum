@@ -6,41 +6,60 @@
 // Display graduation check results in a modal
 function displayGraduationResults(curriculum) {
     if(!document.querySelector('.graduation_modal')) {
-        const board_dom = document.querySelector(".board");
+        // Create overlay with proper modal styling
         const overlay = document.createElement("div");
-        overlay.classList.add('graduation_modal_overlay');
+        overlay.classList.add('modal-overlay');
+        overlay.style.zIndex = '1000';
+
+        // Create modal with proper styling
         const modal = document.createElement("div");
-        modal.classList.add('graduation_modal');
-        board_dom.appendChild(overlay);
-        board_dom.appendChild(modal);
-        const leftPosition = ((board_dom.offsetWidth) / 2) + board_dom.scrollLeft;
-        modal.style.left = leftPosition + 'px';
+        modal.classList.add('modal', 'graduation_modal');
+        modal.style.cssText = `
+            padding: 24px;
+            min-width: 400px;
+            max-width: 600px;
+        `;
+
         // Compose results for primary major
-        let html = '';
+        let html = '<h2 style="margin-bottom: 16px; color: var(--text-primary);">Graduation Check Results</h2>';
         const flagMain = curriculum.canGraduate();
         const msgMain = buildFlagMessages(curriculum.major) || {};
-        html += '<div><strong>' + curriculum.major + ':</strong> ';
+        html += '<div style="margin-bottom: 12px; padding: 12px; border-radius: var(--radius-md); background: var(--bg-surface);"><strong>' + curriculum.major + ':</strong> ';
         if (flagMain === 0) {
-            html += 'Congrats! You can graduate!!!';
+            html += '<span style="color: var(--accent);">🎉 Congrats! You can graduate!</span>';
         } else {
             const fcn = msgMain[flagMain];
-            html += 'You cannot graduate: ' + (fcn ? fcn() : `Error code ${flagMain}`);
+            html += '<span style="color: #ef4444;">❌ You cannot graduate: ' + (fcn ? fcn() : `Error code ${flagMain}`) + '</span>';
         }
         html += '</div>';
+
         // If double major selected, compute second major result
         if (curriculum.doubleMajor) {
-            // Compose results for double major
-            const flagMain = curriculum.canGraduateDouble();
-            const msgMain = buildFlagMessages(curriculum.doubleMajor) || {};
-            html += '<div><strong>' + curriculum.doubleMajor + ':</strong> ';
-            if (flagMain === 0) {
-                html += 'Congrats! You can graduate!!!';
+            const flagDM = curriculum.canGraduateDouble();
+            const msgDM = buildFlagMessages(curriculum.doubleMajor) || {};
+            html += '<div style="margin-bottom: 12px; padding: 12px; border-radius: var(--radius-md); background: var(--bg-surface);"><strong>' + curriculum.doubleMajor + ':</strong> ';
+            if (flagDM === 0) {
+                html += '<span style="color: var(--accent);">🎉 Congrats! You can graduate!</span>';
             } else {
-                const fcn = msgMain[flagMain];
-                html += 'You cannot graduate: ' + (fcn ? fcn() : `Error code ${flagMain}`);
+                const fcn = msgDM[flagDM];
+                html += '<span style="color: #ef4444;">❌ You cannot graduate: ' + (fcn ? fcn() : `Error code ${flagDM}`) + '</span>';
             }
+            html += '</div>';
         }
+
+        // Add close button
+        html += '<div style="margin-top: 20px; text-align: right;"><button onclick="this.closest(\'.modal-overlay\').remove()" style="padding: 8px 16px; background: var(--primary); color: white; border: none; border-radius: var(--radius-md); cursor: pointer;">Close</button></div>';
+
         modal.innerHTML = html;
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        // Close on overlay click
+        overlay.addEventListener('click', function(e) {
+            if (e.target === overlay) {
+                overlay.remove();
+            }
+        });
     }
 }
 
@@ -48,40 +67,56 @@ function displayGraduationResults(curriculum) {
 function displaySummary(curriculum, major_chosen_by_user) {
     // Do not create more than one set of summary modals. If any exist, abort.
     if (document.querySelector('.summary_modal')) return;
+
+    // Create overlay with proper modal styling
+    const overlay = document.createElement("div");
+    overlay.classList.add('modal-overlay');
+    overlay.style.zIndex = '1000';
+
     // Helper to build a summary modal for a given set of totals and limits.
-    function buildSummaryModal(totals, limits, gpa, labelPrefix) {
-        const board_dom = document.querySelector(".board");
+    function buildSummaryModal(totals, limits, gpa, title, isSecondModal = false) {
         const modal = document.createElement("div");
-        modal.classList.add('summary_modal');
-        // Use the same overlay for both modals; create only if not present
-        let overlay = document.querySelector('.summary_modal_overlay');
-        if (!overlay) {
-            overlay = document.createElement('div');
-            overlay.classList.add('summary_modal_overlay');
-            board_dom.appendChild(overlay);
-        }
-        board_dom.appendChild(modal);
-        // Position relative to board scroll; first modal centered, second offset
-        const leftBase = ((board_dom.offsetWidth) / 2) + board_dom.scrollLeft;
-        // Determine how many modals already exist to offset accordingly
-        const index = document.querySelectorAll('.summary_modal').length - 1;
-        // Each additional modal is shifted right by 400px to avoid overlap
-        modal.style.left = (leftBase + index * 400) + 'px';
-        // Build content
-        const labels = ['GPA: ', 'SU Credits: ', 'ECTS: ', 'University: ',  'Required: ', 'Core: ', 'Area: ', 'Free: ',  'Basic Science: ', 'Engineering: '];
+        modal.classList.add('modal', 'summary_modal');
+        modal.style.cssText = `
+            padding: 24px;
+            min-width: 350px;
+            max-width: 500px;
+            margin: ${isSecondModal ? '0 0 0 20px' : '0 20px 0 0'};
+        `;
+
+        // Build content with better styling
+        let html = `<h2 style="margin-bottom: 16px; color: var(--text-primary);">${title} Summary</h2>`;
+
+        const labels = ['GPA', 'SU Credits', 'ECTS', 'University', 'Required', 'Core', 'Area', 'Free', 'Basic Science', 'Engineering'];
         const total_values = [gpa, totals.total, totals.ects, totals.university, totals.required, totals.core, totals.area, totals.free, totals.science, totals.engineering];
+        const limits_values = ['4.00', limits[1], limits[2], limits[3], limits[4], limits[5], limits[6], limits[7], limits[8], limits[9]];
+
         for (let i = 0; i < 10; i++) {
-            const child = document.createElement('div');
-            child.classList.add('summary_modal_child');
-            if (i === 0) {
-                child.innerHTML = '<p>GPA: ' + gpa + ' / 4.00</p>';
-            } else {
-                child.innerHTML = '<p>' + labels[i] + total_values[i] + ' / ' + limits[i] + '</p>';
-            }
-            modal.appendChild(child);
+            const isGPA = i === 0;
+            const current = total_values[i];
+            const limit = limits_values[i];
+            const percentage = isGPA ? (parseFloat(current) / 4.0 * 100) : (limit !== '0' ? (parseFloat(current) / parseFloat(limit) * 100) : 0);
+
+            html += `
+                <div style="margin-bottom: 12px; padding: 12px; border-radius: var(--radius-md); background: var(--bg-surface);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <span style="font-weight: 500;">${labels[i]}:</span>
+                        <span style="font-weight: 600;">${current} / ${limit}</span>
+                    </div>
+                    ${!isGPA && limit !== '0' ? `
+                        <div style="background: var(--border); border-radius: 4px; height: 6px; overflow: hidden;">
+                            <div style="background: ${percentage >= 100 ? 'var(--accent)' : 'var(--primary)'}; height: 100%; width: ${Math.min(percentage, 100)}%; transition: width 0.3s ease;"></div>
+                        </div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px;">${percentage.toFixed(1)}%</div>
+                    ` : ''}
+                </div>
+            `;
         }
+
+        modal.innerHTML = html;
         return modal;
     }
+
     // Compute overall GPA and totals for primary major
     let totalsMain = {
         area: 0, core: 0, free: 0, university: 0, required: 0,
@@ -104,10 +139,8 @@ function displaySummary(curriculum, major_chosen_by_user) {
         gpaValue += sem.totalGPA;
     }
     const gpaMain = gpaCredits ? (gpaValue / gpaCredits).toFixed(3) : '0.000';
+
     // Determine limits from requirements for primary major
-    // Access the requirements object via the global scope to avoid reference
-    // errors when this script runs in environments without an imported
-    // variable.
     const allReq = (typeof globalThis !== 'undefined' && globalThis.requirements)
         ? globalThis.requirements
         : {};
@@ -134,8 +167,22 @@ function displaySummary(curriculum, major_chosen_by_user) {
         String(reqMain.science || 0),
         String(reqMain.engineering || 0)
     ];
+
+    // Create container for modals
+    const modalContainer = document.createElement('div');
+    modalContainer.style.cssText = `
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        max-width: 90vw;
+        max-height: 90vh;
+        overflow: auto;
+    `;
+
     // Build primary summary modal
-    buildSummaryModal(totalsMain, limitsMain, gpaMain);
+    const mainModal = buildSummaryModal(totalsMain, limitsMain, gpaMain, curriculum.major);
+    modalContainer.appendChild(mainModal);
+
     // If a double major exists, compute totals for DM and show a second modal
     if (curriculum.doubleMajor) {
         let totalsDM = {
@@ -146,19 +193,12 @@ function displaySummary(curriculum, major_chosen_by_user) {
         let gpaValueDM = 0.0;
         for (let i = 0; i < curriculum.semesters.length; i++) {
             const sem = curriculum.semesters[i];
-            // Total credits always sum all courses
             totalsDM.total += sem.totalCredit;
-            // Use DM allocations for core/area/free
             totalsDM.core += sem.totalCoreDM || 0;
             totalsDM.area += sem.totalAreaDM || 0;
             totalsDM.free += sem.totalFreeDM || 0;
-            // For required and university, use DM-specific totals if present.
-            // Fall back to the primary totals if DM totals are undefined,
-            // ensuring backward compatibility.
             totalsDM.university += (sem.totalUniversityDM !== undefined ? sem.totalUniversityDM : sem.totalUniversity);
             totalsDM.required += (sem.totalRequiredDM !== undefined ? sem.totalRequiredDM : sem.totalRequired);
-            // Science, engineering and ECTS are inherent to the course and
-            // counted the same for both majors.  They remain unchanged.
             totalsDM.science += sem.totalScience;
             totalsDM.engineering += sem.totalEngineering;
             totalsDM.ects += sem.totalECTS;
@@ -166,6 +206,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
             gpaValueDM += sem.totalGPA;
         }
         const gpaDM = gpaCreditsDM ? (gpaValueDM / gpaCreditsDM).toFixed(3) : '0.000';
+
         // Determine limits for DM (SU +30, ECTS +60)
         const dmReq = lookupReq(curriculum.doubleMajor, curriculum.entryTermDM);
         const limitsDM = [
@@ -180,13 +221,41 @@ function displaySummary(curriculum, major_chosen_by_user) {
             String(dmReq.science || 0),
             String(dmReq.engineering || 0)
         ];
-        buildSummaryModal(totalsDM, limitsDM, gpaDM);
+
+        const dmModal = buildSummaryModal(totalsDM, limitsDM, gpaDM, curriculum.doubleMajor, true);
+        modalContainer.appendChild(dmModal);
     }
+
+    // Add close button
+    const closeButton = document.createElement('button');
+    closeButton.innerHTML = 'Close';
+    closeButton.style.cssText = `
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        padding: 8px 16px;
+        background: var(--primary);
+        color: white;
+        border: none;
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        font-size: 14px;
+    `;
+    closeButton.onclick = () => overlay.remove();
+
+    overlay.appendChild(modalContainer);
+    overlay.appendChild(closeButton);
+    document.body.appendChild(overlay);
+
+    // Close on overlay click
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) {
+            overlay.remove();
+        }
+    });
 }
 
-// Attach the functions to the global window so that other scripts can
-// call them without using ES module syntax. This is important when
-// running under file:// where module imports may fail.
+// Make functions available globally
 if (typeof window !== 'undefined') {
     window.displayGraduationResults = displayGraduationResults;
     window.displaySummary = displaySummary;
