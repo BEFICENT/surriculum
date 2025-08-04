@@ -123,7 +123,7 @@ function dynamic_click(e, curriculum, course_data)
 
         semObj.deleteCourse(courseElement.id);
         courseElement.remove();
-        CurriculumManager.updateSemesterTotalsDisplay(semesterElement.id, curriculum);
+        CurriculumManager.updateSemesterTotalsDisplay(semesterElement.id, curriculum, course_data);
     }
     //CLICKED "<semester_date_edit>"
     else if(e.target.classList.contains("semester_date_edit"))
