@@ -255,10 +255,10 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
         const courseCode = courseList[i];
         const courseId = CurriculumManager.addCourse(semester.id, courseCode, curriculum, course_data);
         if (courseId && grade_list.length && grade_list[i] && grade_list[i].length) {
-            CurriculumManager.updateCourseGrade(courseId, grade_list[i], curriculum);
+            CurriculumManager.updateCourseGrade(courseId, grade_list[i], curriculum, course_data);
         }
     }
 
     // Update semester totals display
-    CurriculumManager.updateSemesterTotalsDisplay(semester.id, curriculum);
+    CurriculumManager.updateSemesterTotalsDisplay(semester.id, curriculum, course_data);
 }
