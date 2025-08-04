@@ -137,11 +137,19 @@ function recalculateAndApplyTotals(semester, course_data) {
         }
     });
 
+    // Store totals using both the new property names (e.g. totalCredits)
+    // and the legacy ones (e.g. totalCredit) so that older parts of the
+    // codebase that still expect the singular form continue to work.
+    // GPA information is also exposed via the historic totalGPA and
+    // totalGPACredits fields in addition to the computed gpa value.
     semester.totalCredits = totalCredits;
+    semester.totalCredit = totalCredits;
     semester.totalCore = totalCore;
     semester.totalArea = totalArea;
     semester.totalFree = totalFree;
     semester.totalUniversity = totalUniversity;
+    semester.totalGPA = gpaPoints;
+    semester.totalGPACredits = gpaCredits;
     semester.gpa = gpaCredits > 0 ? gpaPoints / gpaCredits : 0;
 }
 
@@ -173,7 +181,10 @@ const CurriculumManager = {
             }
         };
 
-        updateTotal('.total-totalcredit', semester.totalCredits);
+        // Use the legacy property name (totalCredit) when updating the UI so
+        // that the displayed numbers stay in sync with parts of the code that
+        // still rely on the singular form.
+        updateTotal('.total-totalcredit', semester.totalCredit);
         updateTotal('.total-totalgpa', semester.gpa.toFixed(2));
         updateTotal('.total-totalcore', semester.totalCore);
         updateTotal('.total-totalarea', semester.totalArea);
