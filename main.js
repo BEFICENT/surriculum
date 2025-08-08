@@ -256,8 +256,11 @@ function SUrriculum(major_chosen_by_user) {
         window.curriculum = curriculum;
     }
     // Initialize course details toggle state and event
-    let showDetails = false;
-    try { showDetails = localStorage.getItem('showCourseDetails') === 'true'; } catch (_) {}
+    let showDetails = true;
+    try {
+        const saved = localStorage.getItem('showCourseDetails');
+        if (saved !== null) showDetails = saved === 'true';
+    } catch (_) {}
     if (typeof window !== 'undefined') {
         window.showCourseDetails = showDetails;
     }
@@ -274,8 +277,11 @@ function SUrriculum(major_chosen_by_user) {
         });
     }
 
-    let hideTaken = false;
-    try { hideTaken = localStorage.getItem('hideTakenCourses') === 'true'; } catch (_) {}
+    let hideTaken = true;
+    try {
+        const saved = localStorage.getItem('hideTakenCourses');
+        if (saved !== null) hideTaken = saved === 'true';
+    } catch (_) {}
     if (typeof window !== 'undefined') {
         window.hideTakenCourses = hideTaken;
     }
