@@ -323,8 +323,13 @@ function dynamic_click(e, curriculum, course_data)
         let dom_tc = e.target.parentNode.parentNode.parentNode.parentNode.parentNode.parentNode.querySelector('span');
         dom_tc.innerHTML = 'Total: ' + semObj.totalCredit + ' credits';
 
-        semObj.totalGPA -= (letter_grades_global_dic[grade] * credit);
-        if(grade != 'T'){semObj.totalGPACredits -= credit;}
+        const gradeValue = letter_grades_global_dic[grade];
+        if (gradeValue !== undefined) {
+            semObj.totalGPA -= gradeValue * credit;
+            if (grade !== 'T') {
+                semObj.totalGPACredits -= credit;
+            }
+        }
 
 
         e.target.parentNode.parentNode.parentNode.remove();
@@ -412,8 +417,13 @@ function dynamic_click(e, curriculum, course_data)
             let courseName = e.target.parentNode.querySelector('.course_label').firstChild.innerHTML;
             let credit = parseInt(getInfo(courseName, course_data)['SU_credit']);
 
-            curriculum.getSemester(sem.id).totalGPA -= (letter_grades_global_dic[prevGrade] * credit);
-            if(prevGrade != 'T'){curriculum.getSemester(sem.id).totalGPACredits -= credit;}
+            const prevGradeValue = letter_grades_global_dic[prevGrade];
+            if (prevGradeValue !== undefined) {
+                curriculum.getSemester(sem.id).totalGPA -= prevGradeValue * credit;
+                if (prevGrade !== 'T') {
+                    curriculum.getSemester(sem.id).totalGPACredits -= credit;
+                }
+            }
         }
 
         // Create modern dropdown
@@ -452,8 +462,13 @@ function dynamic_click(e, curriculum, course_data)
                 let courseName = gradeElement.parentNode.querySelector('.course_label').firstChild.innerHTML;
                 let credit = parseInt(getInfo(courseName, course_data)['SU_credit']);
                 let semObj = curriculum.getSemester(sem.id);
-                semObj.totalGPA += (letter_grades_global_dic[grade] * credit);
-                if(grade != 'T'){semObj.totalGPACredits += credit;}
+                const gradeValue = letter_grades_global_dic[grade];
+                if (gradeValue !== undefined) {
+                    semObj.totalGPA += gradeValue * credit;
+                    if (grade !== 'T') {
+                        semObj.totalGPACredits += credit;
+                    }
+                }
 
                 // Adjust earned credits
                 let info = getInfo(courseName, course_data);

@@ -230,16 +230,19 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
             else
             {
                 grade.innerHTML = grade_list[i];
-                // GPA is affected by all letter grades except transfers (T)
-                curriculum.getSemester(semester.id).totalGPA += (courseCredit * letter_grades_global_dic[grade_list[i]]);
-                if(grade_list[i] != 'T'){
-                    curriculum.getSemester(semester.id).totalGPACredits += courseCredit;
-                }
-                // If grade is F, the course should not count towards earned credits
-                if(grade_list[i] == 'F'){
-                    let info = getInfo(courseCode, course_data);
-                    if(info){
-                        adjustSemesterTotals(curriculum.getSemester(semester.id), info, -1);
+                const gradeValue = letter_grades_global_dic[grade_list[i]];
+                if (gradeValue !== undefined) {
+                    // GPA is affected by all letter grades except transfers (T)
+                    curriculum.getSemester(semester.id).totalGPA += courseCredit * gradeValue;
+                    if (grade_list[i] !== 'T') {
+                        curriculum.getSemester(semester.id).totalGPACredits += courseCredit;
+                    }
+                    // If grade is F, the course should not count towards earned credits
+                    if (grade_list[i] === 'F') {
+                        let info = getInfo(courseCode, course_data);
+                        if (info) {
+                            adjustSemesterTotals(curriculum.getSemester(semester.id), info, -1);
+                        }
                     }
                 }
             }
