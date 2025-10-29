@@ -66,7 +66,7 @@ export function buildFlagMessages(major) {
       26: () => `You need to complete your Physics requirement (PHYS201, PHYS202, or PHYS204)!`,
       27: () => `You need at least 3 FENS courses in your core electives!`,
       28: () => `You need at least 3 FASS courses in your core electives!`,
-      29: () => `You need at least 3 SBS courses in your core electives!,`,
+      29: () => `You need at least 3 SBS courses in your core electives!`,
       30: () => `You need at least 9 Core I elective credits, beware of mutually exclusive courses!`,
       31: () => `You need at least 12 Core II elective credits, beware of mutually exclusive courses!`,
       32: () => `You need at least 15 Required credits, beware of mutually exclusive courses!`,
