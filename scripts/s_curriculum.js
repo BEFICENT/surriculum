@@ -453,11 +453,11 @@ function s_curriculum()
                         const course = this.semesters[i].courses[a];
                         if (course.category === 'Area') {
                             areaCount++;
-                            if (course.code.startsWith('ACC')) coreAreas.add('ACC');
-                            else if (course.code.startsWith('FIN')) coreAreas.add('FIN');
-                            else if (course.code.startsWith('MKTG')) coreAreas.add('MKTG');
-                            else if (course.code.startsWith('OPIM')) coreAreas.add('OPIM');
-                            else if (course.code.startsWith('ORG')) coreAreas.add('ORG');
+                            if (course.code.startsWith('ACC')) areaAreas.add('ACC');
+                            else if (course.code.startsWith('FIN')) areaAreas.add('FIN');
+                            else if (course.code.startsWith('MKTG')) areaAreas.add('MKTG');
+                            else if (course.code.startsWith('OPIM')) areaAreas.add('OPIM');
+                            else if (course.code.startsWith('ORG')) areaAreas.add('ORG');
                         }
                     }
                 }
@@ -1244,8 +1244,13 @@ function s_curriculum()
                 let dmType = 'free';
                 let credit = 0;
                 let dmStaticType = '';
+                // Clear previously cached DM category before recalculating.
+                delete course.categoryDM;
                 if (info) {
                     dmStaticType = (info['EL_Type'] || '').toLowerCase();
+                    if (dmStaticType) {
+                        course.categoryDM = dmStaticType.charAt(0).toUpperCase() + dmStaticType.slice(1);
+                    }
                     credit = parseInt(info['SU_credit'] || '0');
                     dmType = dmStaticType;
                     if (dmForceCSCore && course.code === 'CS201') {
@@ -1294,6 +1299,7 @@ function s_curriculum()
                     credit = parseInt(course.SU_credit || course.SU_credit || '0');
                     dmType = 'none';
                     dmStaticType = 'none';
+                    delete course.categoryDM;
                 }
                 // Assign DM effective type
                 course.effective_type_dm = dmType;
@@ -1471,7 +1477,7 @@ function s_curriculum()
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
-                        if (course.code.startsWith('EE4') && course.category === 'Core') {
+                        if (course.code.startsWith('EE4') && course.categoryDM === 'Core') {
                             ee400LevelCredits += course.SU_credit;
                         }
                     }
@@ -1483,7 +1489,7 @@ function s_curriculum()
                     for (let i = 0; i < this.semesters.length && !hasSpecificAreaCourse; i++) {
                         for (let a = 0; a < this.semesters[i].courses.length; a++) {
                             const course = this.semesters[i].courses[a];
-                            if (specificAreaCourses.includes(course.code) || (course.code.startsWith('EE48') && course.category === 'Area')) {
+                            if (specificAreaCourses.includes(course.code) || (course.code.startsWith('EE48') && course.categoryDM === 'Area')) {
                                 hasSpecificAreaCourse = true;
                                 break;
                             }
@@ -1598,7 +1604,7 @@ function s_curriculum()
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
-                        if (course.category === 'Core') {
+                        if (course.categoryDM === 'Core') {
                             coreCount++;
                             if (course.code.startsWith('ACC')) coreAreas.add('ACC');
                             else if (course.code.startsWith('FIN')) coreAreas.add('FIN');
@@ -1617,13 +1623,13 @@ function s_curriculum()
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
-                        if (course.category === 'Area') {
+                        if (course.categoryDM === 'Area') {
                             areaCount++;
-                            if (course.code.startsWith('ACC')) coreAreas.add('ACC');
-                            else if (course.code.startsWith('FIN')) coreAreas.add('FIN');
-                            else if (course.code.startsWith('MKTG')) coreAreas.add('MKTG');
-                            else if (course.code.startsWith('OPIM')) coreAreas.add('OPIM');
-                            else if (course.code.startsWith('ORG')) coreAreas.add('ORG');
+                            if (course.code.startsWith('ACC')) areaAreas.add('ACC');
+                            else if (course.code.startsWith('FIN')) areaAreas.add('FIN');
+                            else if (course.code.startsWith('MKTG')) areaAreas.add('MKTG');
+                            else if (course.code.startsWith('OPIM')) areaAreas.add('OPIM');
+                            else if (course.code.startsWith('ORG')) areaAreas.add('ORG');
                         }
                     }
                 }
@@ -1638,7 +1644,7 @@ function s_curriculum()
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
-                        if (course.category === 'Free') {
+                        if (course.categoryDM === 'Free') {
                             freeElectivesCount += course.SU_credit;
                             if (course.Faculty_Course === 'FASS' || course.Faculty_Course === 'FENS') {
                                 fassFensCredits += course.SU_credit;
@@ -1739,7 +1745,7 @@ function s_curriculum()
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
-                        if (course.category === 'Core') {
+                        if (course.categoryDM === 'Core') {
                             psyCoreCount++;
                         }
                     }
@@ -1851,7 +1857,7 @@ function s_curriculum()
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
-                        if (course.category === 'Core') {
+                        if (course.categoryDM === 'Core') {
                             if (course.Faculty_Course === 'FENS') fensCoreCount++;
                             else if (course.Faculty_Course === 'FASS') fassCoreCount++;
                             else if (course.Faculty_Course === 'SBS') sbsCoreCount++;
@@ -1865,7 +1871,7 @@ function s_curriculum()
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
-                        if (course.category === 'Core') {
+                        if (course.categoryDM === 'Core') {
                             coreSUCredits += (course.SU_credit || parseInt(course.SU_credit) || 0);
                         }
                     }
