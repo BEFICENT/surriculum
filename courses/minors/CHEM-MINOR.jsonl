@@ -1,0 +1,5 @@
+{"Major": "CHEM", "Code": "202", "Course_Name": "Chemical Kinetics", "ECTS": "7", "Engineering": 0, "Basic_Science": 0, "SU_credit": "4", "Faculty": "FENS", "EL_Type": "required", "Faculty_Course": "No"}
+{"Major": "CHEM", "Code": "301", "Course_Name": "Inorganic Chemistry", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "required", "Faculty_Course": "No"}
+{"Major": "CHEM", "Code": "302", "Course_Name": "Analytical Chemistry", "ECTS": "7", "Engineering": 0, "Basic_Science": 0, "SU_credit": "4", "Faculty": "FENS", "EL_Type": "required", "Faculty_Course": "No"}
+{"Major": "ENS", "Code": "202", "Course_Name": "Thermodynamics", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "required", "Faculty_Course": "No"}
+{"Major": "NS", "Code": "207", "Course_Name": "Organic Chemistry", "ECTS": "7", "Engineering": 0, "Basic_Science": 0, "SU_credit": "4", "Faculty": "FENS", "EL_Type": "required", "Faculty_Course": "No"}

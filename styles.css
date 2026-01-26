@@ -72,6 +72,11 @@
     display: none !important;
 }
 
+/* Minor selectors in sidebar */
+.minorSelect {
+    flex: 1;
+}
+
 html, body {
     height: 100%;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;

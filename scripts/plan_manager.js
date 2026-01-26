@@ -7,7 +7,7 @@
   const PLAN_PREFIX = 'surriculum.plan.';
   const MAX_PLANS = 10;
   const DEFAULT_PLAN_NAME = 'Default Plan';
-  const LEGACY_KEYS = ['major', 'doubleMajor', 'entryTerm', 'entryTermDM', 'curriculum', 'grades', 'dates'];
+  const LEGACY_KEYS = ['major', 'doubleMajor', 'entryTerm', 'entryTermDM', 'minor1', 'minor2', 'minor3', 'curriculum', 'grades', 'dates'];
 
   function createModal({ title, bodyHtml, input, buttons }) {
     return new Promise((resolve) => {
@@ -312,6 +312,9 @@
       doubleMajor: get('doubleMajor') || null,
       entryTerm: get('entryTerm') || null,
       entryTermDM: get('entryTermDM') || null,
+      minor1: get('minor1') || null,
+      minor2: get('minor2') || null,
+      minor3: get('minor3') || null,
       curriculum: safeJsonParse(get('curriculum') || 'null', null),
       grades: safeJsonParse(get('grades') || 'null', null),
       dates: safeJsonParse(get('dates') || 'null', null),
@@ -342,6 +345,9 @@
     if (state.doubleMajor != null) setRaw('doubleMajor', String(state.doubleMajor));
     if (state.entryTerm != null) setRaw('entryTerm', String(state.entryTerm));
     if (state.entryTermDM != null) setRaw('entryTermDM', String(state.entryTermDM));
+    if (state.minor1 != null) setRaw('minor1', String(state.minor1));
+    if (state.minor2 != null) setRaw('minor2', String(state.minor2));
+    if (state.minor3 != null) setRaw('minor3', String(state.minor3));
 
     if (state.curriculum != null) setJson('curriculum', state.curriculum);
     if (state.grades != null) setJson('grades', state.grades);

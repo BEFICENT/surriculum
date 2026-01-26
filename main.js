@@ -306,6 +306,14 @@ function SUrriculum(major_chosen_by_user) {
         const dmControlsRow = document.getElementById('doubleMajorControlsRow');
         const dmButtonRow = document.getElementById('doubleMajorButtonRow');
         const addDmBtn = document.getElementById('addDoubleMajorBtn');
+        const minor1Row = document.getElementById('minor1Row');
+        const minor2Row = document.getElementById('minor2Row');
+        const minor3Row = document.getElementById('minor3Row');
+        const addMinorRow = document.getElementById('addMinorRow');
+        const addMinorBtn = document.getElementById('addMinorBtn');
+        const minor1Select = document.getElementById('minor1');
+        const minor2Select = document.getElementById('minor2');
+        const minor3Select = document.getElementById('minor3');
 
         const setDmUiVisible = (visible) => {
             try {
@@ -316,6 +324,14 @@ function SUrriculum(major_chosen_by_user) {
                     if (dmControlsRow) dmControlsRow.classList.add('is-hidden');
                     if (dmButtonRow) dmButtonRow.classList.remove('is-hidden');
                 }
+            } catch (_) {}
+        };
+
+        const setMinorRowVisible = (row, visible) => {
+            try {
+                if (!row) return;
+                if (visible) row.classList.remove('is-hidden');
+                else row.classList.add('is-hidden');
             } catch (_) {}
         };
         // Populate and bind dropdown controls for major and entry terms
@@ -367,7 +383,7 @@ function SUrriculum(major_chosen_by_user) {
         // is None/empty.
         try {
             const hasDM = !!(planGetItem('doubleMajor') || '');
-            let showPref = true;
+            let showPref = false;
             try {
                 const stored = localStorage.getItem('showDoubleMajorControls');
                 if (stored !== null) showPref = stored === 'true';
@@ -383,6 +399,138 @@ function SUrriculum(major_chosen_by_user) {
                     setDmUiVisible(true);
                     try { localStorage.setItem('showDoubleMajorControls', 'true'); } catch (_) {}
                     try { if (dmElem) dmElem.focus(); } catch (_) {}
+                });
+            }
+        } catch (_) {}
+
+        // Minor UI (up to 3): similar UX to double major, but allows multiple.
+        try {
+            const minorReq = (typeof window !== 'undefined' && window.minorRequirements) ? window.minorRequirements : {};
+            const minorList = Object.values(minorReq || {}).filter(Boolean).sort((a, b) => {
+                const an = String(a.name || a.minor || '');
+                const bn = String(b.name || b.minor || '');
+                return an.localeCompare(bn);
+            });
+            const optionsHtml = ['<option value=\"\">None</option>'].concat(
+                minorList.map(rec => `<option value=\"${escapeHtml(rec.minor)}\">${escapeHtml(rec.name || rec.minor)}</option>`)
+            ).join('');
+
+            const getMinor = (k) => {
+                try { return planGetItem(k) || ''; } catch (_) {}
+                return '';
+            };
+            const setMinor = (k, v) => {
+                try {
+                    if (v) planSetItem(k, v);
+                    else planRemoveItem(k);
+                } catch (_) {}
+            };
+
+            const saved1 = getMinor('minor1');
+            const saved2 = getMinor('minor2');
+            const saved3 = getMinor('minor3');
+            const hasAny = !!(saved1 || saved2 || saved3);
+
+            let showPref = false; // hide minor controls on first visit
+            try {
+                const stored = localStorage.getItem('showMinorControls');
+                if (stored !== null) showPref = stored === 'true';
+            } catch (_) {}
+
+            const ensureSelect = (sel, value) => {
+                if (!sel || sel.tagName !== 'SELECT') return;
+                sel.innerHTML = optionsHtml;
+                sel.value = value || '';
+            };
+            ensureSelect(minor1Select, saved1);
+            ensureSelect(minor2Select, saved2);
+            ensureSelect(minor3Select, saved3);
+
+            // Visibility: if no minors selected, obey preference; otherwise show
+            // the rows needed to display the selected minors.
+            if (!hasAny && !showPref) {
+                setMinorRowVisible(minor1Row, false);
+                setMinorRowVisible(minor2Row, false);
+                setMinorRowVisible(minor3Row, false);
+            } else {
+                setMinorRowVisible(minor1Row, true);
+                setMinorRowVisible(minor2Row, !!saved2);
+                setMinorRowVisible(minor3Row, !!saved3);
+            }
+
+            const updateAddMinorBtn = () => {
+                try {
+                    if (!addMinorBtn) return;
+                    const r1 = minor1Row && !minor1Row.classList.contains('is-hidden');
+                    const r2 = minor2Row && !minor2Row.classList.contains('is-hidden');
+                    const r3 = minor3Row && !minor3Row.classList.contains('is-hidden');
+                    const atMax = !!(r1 && r2 && r3);
+                    addMinorBtn.disabled = atMax;
+                    if (addMinorRow) {
+                        if (atMax) addMinorRow.classList.add('is-hidden');
+                        else addMinorRow.classList.remove('is-hidden');
+                    }
+                } catch (_) {}
+            };
+            updateAddMinorBtn();
+
+            const onMinorChange = (slot, value) => {
+                // Persist and keep minors compact: if an earlier slot is cleared,
+                // shift later minors up.
+                const v = value || '';
+                if (slot === 1) {
+                    if (!v) {
+                        const next1 = saved2 || '';
+                        const next2 = saved3 || '';
+                        setMinor('minor1', next1);
+                        setMinor('minor2', next2);
+                        setMinor('minor3', '');
+                        const stillHasAny = !!(next1 || next2);
+                        try { localStorage.setItem('showMinorControls', stillHasAny ? 'true' : 'false'); } catch (_) {}
+                    } else {
+                        setMinor('minor1', v);
+                        try { localStorage.setItem('showMinorControls', 'true'); } catch (_) {}
+                    }
+                } else if (slot === 2) {
+                    if (!v) {
+                        setMinor('minor2', saved3 || '');
+                        setMinor('minor3', '');
+                    } else {
+                        setMinor('minor2', v);
+                    }
+                    try { localStorage.setItem('showMinorControls', 'true'); } catch (_) {}
+                } else if (slot === 3) {
+                    if (!v) setMinor('minor3', '');
+                    else setMinor('minor3', v);
+                    try { localStorage.setItem('showMinorControls', 'true'); } catch (_) {}
+                }
+                location.reload();
+            };
+
+            if (minor1Select) {
+                minor1Select.addEventListener('change', (e) => onMinorChange(1, e.target.value));
+            }
+            if (minor2Select) {
+                minor2Select.addEventListener('change', (e) => onMinorChange(2, e.target.value));
+            }
+            if (minor3Select) {
+                minor3Select.addEventListener('change', (e) => onMinorChange(3, e.target.value));
+            }
+
+            if (addMinorBtn) {
+                addMinorBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    try { localStorage.setItem('showMinorControls', 'true'); } catch (_) {}
+                    // Reveal the next hidden minor row.
+                    if (minor1Row && minor1Row.classList.contains('is-hidden')) setMinorRowVisible(minor1Row, true);
+                    else if (minor2Row && minor2Row.classList.contains('is-hidden')) setMinorRowVisible(minor2Row, true);
+                    else if (minor3Row && minor3Row.classList.contains('is-hidden')) setMinorRowVisible(minor3Row, true);
+                    updateAddMinorBtn();
+                    try {
+                        if (minor1Row && !minor1Row.classList.contains('is-hidden') && minor1Select && !minor1Select.value) minor1Select.focus();
+                        else if (minor2Row && !minor2Row.classList.contains('is-hidden') && minor2Select && !minor2Select.value) minor2Select.focus();
+                        else if (minor3Row && !minor3Row.classList.contains('is-hidden') && minor3Select && !minor3Select.value) minor3Select.focus();
+                    } catch (_) {}
                 });
             }
         } catch (_) {}
@@ -434,6 +582,60 @@ function SUrriculum(major_chosen_by_user) {
             }
         } catch (_) {}
     }
+
+    // Preload minor course lists (up to 3). Minor catalogs are stored under
+    // courses/minors/<PROGRAM>.jsonl and are merged into the Add Course
+    // dropdown similarly to double majors.
+    function fetchMinorCourseData(minorProgram) {
+        if (!minorProgram) return [];
+        const paths = [
+            `courses/minors/${minorProgram}.jsonl`,
+            `courses/minors/${minorProgram}.json`,
+            `${minorProgram}.jsonl`,
+            `${minorProgram}.json`,
+        ];
+        const tryRead = (path) => {
+            try {
+                const xhr = new XMLHttpRequest();
+                xhr.open('GET', path, false);
+                xhr.overrideMimeType('application/json');
+                xhr.send(null);
+                if (xhr.status === 200 || xhr.status === 0) {
+                    const parsed = parseJsonOrJsonl(xhr.responseText);
+                    if (parsed === null) return null;
+                    return Array.isArray(parsed) ? parsed : [];
+                }
+            } catch (_) {}
+            return null;
+        };
+        for (const p of paths) {
+            const read = tryRead(p);
+            if (read !== null) return read;
+        }
+        return [];
+    }
+
+    const minorProgramsSet = new Set();
+    try {
+        const m1 = planGetItem('minor1') || '';
+        const m2 = planGetItem('minor2') || '';
+        const m3 = planGetItem('minor3') || '';
+        if (m1) minorProgramsSet.add(m1);
+        if (m2) minorProgramsSet.add(m2);
+        if (m3) minorProgramsSet.add(m3);
+    } catch (_) {}
+    const minorPrograms = Array.from(minorProgramsSet);
+    const minorCourseDataByCode = {};
+    try {
+        for (const mp of minorPrograms) {
+            const data = fetchMinorCourseData(mp);
+            if (Array.isArray(data) && data.length) {
+                minorCourseDataByCode[mp] = data.slice();
+            } else {
+                minorCourseDataByCode[mp] = [];
+            }
+        }
+    } catch (_) {}
     let curriculum = new s_curriculum();
     curriculum.major = major_chosen_by_user;
     curriculum.entryTerm = entryTermCode;
@@ -442,6 +644,13 @@ function SUrriculum(major_chosen_by_user) {
         curriculum.doubleMajorCourseData = doubleMajorCourseData;
         curriculum.doubleMajor = savedDMPref;
         curriculum.entryTermDM = entryTermDMCode;
+    }
+    if (minorPrograms.length) {
+        curriculum.minors = minorPrograms.slice();
+        curriculum.minorCourseDataByCode = { ...minorCourseDataByCode };
+    } else {
+        curriculum.minors = [];
+        curriculum.minorCourseDataByCode = {};
     }
 
     // Expose the curriculum object globally so that helper functions

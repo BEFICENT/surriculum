@@ -22,6 +22,22 @@ function isCourseValid(course, course_data)
     } catch (_) {
         // ignore errors
     }
+    // If not found and minors are selected, check each selected minor's
+    // catalog. Minor courses are valid for planning even if they are not
+    // part of the primary major's scraped pools.
+    try {
+        const cur = (typeof window !== 'undefined') ? window.curriculum : null;
+        if (cur && Array.isArray(cur.minors) && cur.minors.length && cur.minorCourseDataByCode) {
+            for (let mi = 0; mi < cur.minors.length; mi++) {
+                const minorCode = cur.minors[mi];
+                const list = cur.minorCourseDataByCode[minorCode];
+                if (!Array.isArray(list)) continue;
+                for (let i = 0; i < list.length; i++) {
+                    if (((list[i]['Major'] + list[i]['Code']) === code)) return true;
+                }
+            }
+        }
+    } catch (_) {}
     return false;
 }
 
@@ -51,6 +67,24 @@ function getInfo(course, course_data)
     } catch (_) {
         // ignore errors
     }
+    // If not found and minors are selected, search within each selected
+    // minor's catalog so we can retrieve metadata (name/credits) for
+    // minor-only courses.
+    try {
+        const cur = (typeof window !== 'undefined') ? window.curriculum : null;
+        if (cur && Array.isArray(cur.minors) && cur.minors.length && cur.minorCourseDataByCode) {
+            for (let mi = 0; mi < cur.minors.length; mi++) {
+                const minorCode = cur.minors[mi];
+                const list = cur.minorCourseDataByCode[minorCode];
+                if (!Array.isArray(list)) continue;
+                for (let i = 0; i < list.length; i++) {
+                    if (((list[i]['Major'] + list[i]['Code']) === code)) {
+                        return list[i];
+                    }
+                }
+            }
+        }
+    } catch (_) {}
     return 0;
 }
 
@@ -237,6 +271,21 @@ function getCoursesDataList(course_data)
                 }
             });
         }
+        // Merge courses from selected minors (up to 3).
+        if (cur && Array.isArray(cur.minors) && cur.minors.length && cur.minorCourseDataByCode) {
+            const mainSet = new Set(combined.map(function(c) { return (c.Major + c.Code); }));
+            cur.minors.forEach(function(minorCode) {
+                const list = cur.minorCourseDataByCode[minorCode];
+                if (!Array.isArray(list)) return;
+                list.forEach(function(mc) {
+                    const key = mc.Major + mc.Code;
+                    if (!mainSet.has(key)) {
+                        combined.push(mc);
+                        mainSet.add(key);
+                    }
+                });
+            });
+        }
         if (typeof window !== 'undefined' && window.hideTakenCourses && cur && typeof cur.hasCourse === 'function') {
             combined = combined.filter(c => !cur.hasCourse(c.Major + c.Code));
         }
@@ -271,7 +320,23 @@ function getCoursesList(course_data) {
                 if (!mainSet.has(key)) {
                     dm.__fromDoubleMajor = true;
                     combined.push(dm);
+                    mainSet.add(key);
                 }
+            });
+        }
+        // Merge minors
+        if (cur && Array.isArray(cur.minors) && cur.minors.length && cur.minorCourseDataByCode) {
+            cur.minors.forEach(minorCode => {
+                const list = cur.minorCourseDataByCode[minorCode];
+                if (!Array.isArray(list)) return;
+                list.forEach(mc => {
+                    const key = mc.Major + mc.Code;
+                    if (!mainSet.has(key)) {
+                        mc.__fromMinor = true;
+                        combined.push(mc);
+                        mainSet.add(key);
+                    }
+                });
             });
         }
         if (typeof window !== 'undefined' && window.hideTakenCourses && cur && typeof cur.hasCourse === 'function') {
@@ -282,7 +347,7 @@ function getCoursesList(course_data) {
     return combined.map(item => {
         const code = item.Major + item.Code;
         const name = item.Course_Name;
-        let mainType = item.__fromDoubleMajor ? '' : (item.EL_Type || '');
+        let mainType = (item.__fromDoubleMajor || item.__fromMinor) ? '' : (item.EL_Type || '');
         let dmType = '';
         try {
             const cur = (typeof window !== 'undefined') ? window.curriculum : null;

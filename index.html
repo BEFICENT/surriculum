@@ -19,7 +19,7 @@
     <meta property="og:image" content="https://beficent.github.io/surriculum/assets/sabanci.jpg" />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
-    <title>SUrriculum -v2.5</title>
+    <title>SUrriculum -v2.6</title>
     <link rel="stylesheet" href="styles.css" type="text/css"/>
     
     <link rel="icon" href="assets/favicon.ico" type="image/ico">
@@ -73,6 +73,7 @@
     <script type="module" src="cases/flagMessages.js"></script>
     <script src="scripts/s_curriculum.js"></script>
     <script src="scripts/requirements.js"></script>
+    <script src="scripts/minor_requirements.js"></script>
     <script src="scripts/graduation_check.js"></script>
 
     <script>
@@ -88,7 +89,7 @@
     <!-- Header -->
     <header class="header">
         <a href="https://beficent.github.io/surriculum/" class="header-title">
-            SUrriculum v2.5
+            SUrriculum v2.6
         </a>
 
         <div class="header-controls">
@@ -162,14 +163,30 @@
                         <select class="select-control entryTerm"></select>
                     </div>
 
-                    <div class="control-row" id="doubleMajorControlsRow">
+                    <div class="control-row is-hidden" id="doubleMajorControlsRow">
                         <select class="select-control doubleMajor"></select>
                         <select class="select-control entryTermDM"></select>
                     </div>
 
-                    <div class="control-row is-hidden" id="doubleMajorButtonRow">
+                    <div class="control-row" id="doubleMajorButtonRow">
                         <button class="btn btn-secondary" id="addDoubleMajorBtn" style="width: 100%;">
                             <i class="fa-solid fa-plus"></i>&nbsp;Add Double Major
+                        </button>
+                    </div>
+
+                    <div class="control-row is-hidden" id="minor1Row">
+                        <select class="select-control minorSelect" id="minor1"></select>
+                    </div>
+                    <div class="control-row is-hidden" id="minor2Row">
+                        <select class="select-control minorSelect" id="minor2"></select>
+                    </div>
+                    <div class="control-row is-hidden" id="minor3Row">
+                        <select class="select-control minorSelect" id="minor3"></select>
+                    </div>
+
+                    <div class="control-row" id="addMinorRow">
+                        <button class="btn btn-secondary" id="addMinorBtn" style="width: 100%;">
+                            <i class="fa-solid fa-plus"></i>&nbsp;Add Minor
                         </button>
                     </div>
                 </div>
