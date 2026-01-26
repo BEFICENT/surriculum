@@ -1,0 +1,1 @@
+url for course pages: https://suis.sabanciuniv.edu/prod/sabanci_www.p_get_courses?levl_code=UG&subj_code=CS&crse_numb=404&lang=eng

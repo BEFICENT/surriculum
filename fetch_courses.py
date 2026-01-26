@@ -6,6 +6,11 @@ from bs4 import BeautifulSoup
 import subprocess
 import os
 import datetime
+import argparse
+import concurrent.futures
+import random
+import threading
+import time
 
 COURSES_DIR = 'courses'
 
@@ -60,10 +65,55 @@ def is_faculty_course(major, code):
     return get_faculty_for_course(major, code) is not None
 
 
+_tls = threading.local()
+_net_semaphore = None
+_http_timeout_s = 30.0
+_http_retries = 2
+_http_backoff_s = 0.5
+_http_sleep_s = 0.0
+
+
+def _get_session():
+    sess = getattr(_tls, "session", None)
+    if sess is None:
+        sess = requests.Session()
+        sess.headers.update(
+            {
+                "User-Agent": "surriculum-fetch/1.0 (+https://github.com/beficent/surriculum)",
+            }
+        )
+        _tls.session = sess
+    return sess
+
+
+def fetch_html(url):
+    """Fetch URL with retries, optional throttling, and per-thread sessions."""
+    sess = _get_session()
+    last_err = None
+    attempts = max(0, int(_http_retries)) + 1
+    for attempt in range(attempts):
+        try:
+            if _net_semaphore is None:
+                resp = sess.get(url, timeout=_http_timeout_s)
+            else:
+                with _net_semaphore:
+                    resp = sess.get(url, timeout=_http_timeout_s)
+            resp.raise_for_status()
+            if _http_sleep_s and _http_sleep_s > 0:
+                time.sleep(_http_sleep_s)
+            return resp.text
+        except Exception as e:
+            last_err = e
+            if attempt >= attempts - 1:
+                raise
+            sleep_for = float(_http_backoff_s) * (2**attempt) + random.uniform(0, 0.25)
+            time.sleep(sleep_for)
+    raise last_err
+
+
 def get_program_codes():
-    resp = requests.get(LIST_URL)
-    resp.raise_for_status()
-    soup = BeautifulSoup(resp.text, 'lxml')
+    html = fetch_html(LIST_URL)
+    soup = BeautifulSoup(html, 'lxml')
     codes = {}
     for a in soup.select('a[href*="P_PROGRAM="]'):
         m = re.search(r'P_PROGRAM=([^&]+)', a['href'])
@@ -74,9 +124,8 @@ def get_program_codes():
 
 def get_latest_term(code):
     url = BASE + f'SU_DEGREE.p_select_term?P_PROGRAM={code}&P_LANG=EN&P_LEVEL=UG'
-    resp = requests.get(url)
-    resp.raise_for_status()
-    soup = BeautifulSoup(resp.text, 'lxml')
+    html = fetch_html(url)
+    soup = BeautifulSoup(html, 'lxml')
     opt = soup.select_one('select[name=P_TERM] option')
     return opt['value'] if opt else None
 
@@ -148,9 +197,8 @@ def parse_table(table, category):
 
 
 def crawl_list(url, category):
-    resp = requests.get(url)
-    resp.raise_for_status()
-    soup = BeautifulSoup(resp.text, 'lxml')
+    html = fetch_html(url)
+    soup = BeautifulSoup(html, 'lxml')
     table = soup.find('table')
     return parse_table(table, category) if table else []
 
@@ -158,9 +206,8 @@ def crawl_list(url, category):
 def crawl_program(code, term):
     url = (BASE + 'SU_DEGREE.p_degree_detail?P_PROGRAM={code}&P_LANG=EN&P_LEVEL=UG'
            '&P_TERM={term}&P_SUBMIT=Select').format(code=code, term=term)
-    resp = requests.get(url)
-    resp.raise_for_status()
-    soup = BeautifulSoup(resp.text, 'lxml')
+    html = fetch_html(url)
+    soup = BeautifulSoup(html, 'lxml')
     results = []
     seen_courses = set()  # Track seen courses to avoid duplicates
 
@@ -356,51 +403,98 @@ def crawl_program(code, term):
 
 
 def main():
+    global _net_semaphore, _http_timeout_s, _http_retries, _http_backoff_s, _http_sleep_s
+
+    parser = argparse.ArgumentParser(description="Fetch and regenerate course catalogs.")
+    parser.add_argument("--workers", type=int, default=6, help="Parallel workers for fetching programs.")
+    parser.add_argument(
+        "--max-inflight",
+        type=int,
+        default=6,
+        help="Maximum simultaneous HTTP requests (helps avoid throttling).",
+    )
+    parser.add_argument("--timeout", type=float, default=30.0, help="HTTP timeout in seconds.")
+    parser.add_argument("--retries", type=int, default=2, help="Retry count for HTTP errors.")
+    parser.add_argument("--backoff", type=float, default=0.5, help="Base backoff seconds for retries (exponential).")
+    parser.add_argument("--sleep", type=float, default=0.0, help="Optional sleep after each successful request.")
+    parser.add_argument("--terms", default="", help="Comma-separated explicit term codes (e.g. 202401,202402).")
+    parser.add_argument("--max-terms", type=int, default=0, help="Limit number of terms processed (debug).")
+    parser.add_argument("--max-programs", type=int, default=0, help="Limit number of programs per term (debug).")
+    parser.add_argument("--skip-coursepages", action="store_true", help="Skip running scrape_coursepages.py after fetching.")
+    args = parser.parse_args()
+
+    _http_timeout_s = float(args.timeout)
+    _http_retries = int(args.retries)
+    _http_backoff_s = float(args.backoff)
+    _http_sleep_s = float(args.sleep)
+    _net_semaphore = threading.Semaphore(max(1, int(args.max_inflight)))
+
     os.makedirs(COURSES_DIR, exist_ok=True)
 
     programs = get_program_codes()
 
-    # Generate term codes from Fall 2019 until Fall 2025 only. Terms follow the
-    # pattern YYYY01 (Fall), YYYY02 (Spring) and YYYY03 (Summer). Do not
-    # generate any terms beyond 2025 Fall to keep the dataset bounded.
-    terms = []
-    for year in range(2019, 2026):
-        suffixes = ('01', '02', '03')
-        if year == 2025:
-            suffixes = ('01',)  # stop at Fall 2025
-        for suf in suffixes:
-            terms.append(f"{year}{suf}")
+    if args.terms.strip():
+        terms = [t.strip() for t in args.terms.split(",") if t.strip()]
+    else:
+        # Generate term codes from Fall 2019 until Fall 2025 only. Terms follow the
+        # pattern YYYY01 (Fall), YYYY02 (Spring) and YYYY03 (Summer). Do not
+        # generate any terms beyond 2025 Fall to keep the dataset bounded.
+        terms = []
+        for year in range(2019, 2026):
+            suffixes = ('01', '02', '03')
+            if year == 2025:
+                suffixes = ('01',)  # stop at Fall 2025
+            for suf in suffixes:
+                terms.append(f"{year}{suf}")
+
+    if args.max_terms and args.max_terms > 0:
+        terms = terms[: int(args.max_terms)]
 
     majors_by_term = {}
 
-    for term in terms:
-        term_dir = os.path.join(COURSES_DIR, term)
-        os.makedirs(term_dir, exist_ok=True)
-        majors_found = []
-        for code, fname in PROGRAM_FILES.items():
-            if code not in programs:
-                continue
-            try:
-                data = crawl_program(code, term)
-                if not data:
-                    raise ValueError('no data parsed')
-            except Exception as e:
-                print(f"Failed {code} {term}: {e}")
-                continue
-            majors_found.append(os.path.splitext(fname)[0])
-            with open(os.path.join(term_dir, fname), 'w') as f:
-                json.dump(data, f, indent=2)
-            print(f"Updated {fname} for term {term} with {len(data)} records")
-        if majors_found:
-            majors_by_term[term] = majors_found
+    workers = max(1, int(args.workers))
+    program_items = list(PROGRAM_FILES.items())
+    if args.max_programs and args.max_programs > 0:
+        program_items = program_items[: int(args.max_programs)]
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+        for term in terms:
+            term_dir = os.path.join(COURSES_DIR, term)
+            os.makedirs(term_dir, exist_ok=True)
+            majors_found = []
+
+            futures = {}
+            for code, fname in program_items:
+                if code not in programs:
+                    continue
+                futures[executor.submit(crawl_program, code, term)] = (code, fname)
+
+            for future in concurrent.futures.as_completed(futures):
+                code, fname = futures[future]
+                try:
+                    data = future.result()
+                    if not data:
+                        raise ValueError('no data parsed')
+                except Exception as e:
+                    print(f"Failed {code} {term}: {e}")
+                    continue
+                majors_found.append(os.path.splitext(fname)[0])
+                with open(os.path.join(term_dir, fname), 'w') as f:
+                    json.dump(data, f, indent=2)
+                print(f"Updated {fname} for term {term} with {len(data)} records")
+
+            if majors_found:
+                majors_by_term[term] = majors_found
 
     # Write mapping of majors per term
     with open(os.path.join(COURSES_DIR, 'terms.json'), 'w') as f:
         json.dump(majors_by_term, f, indent=2)
 
-    # Optionally run update_credits.py after updating course files
-    print("\nRunning update_credits.py to update credits in JSON files...\n")
-    subprocess.run(['python', 'update_credits.py'], check=True)
+    if not args.skip_coursepages:
+        # Populate Basic_Science / Engineering credits by scraping course pages.
+        # (The old CSV-based update_credits.py remains available but is deprecated.)
+        print("\nRunning scrape_coursepages.py to update credits in JSON files...\n")
+        subprocess.run(['python', 'scrape_coursepages.py'], check=True)
 
 
 if __name__ == '__main__':

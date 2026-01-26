@@ -6,6 +6,12 @@ import subprocess
 
 COURSES_DIR = 'courses'
 
+"""
+Deprecated: the university no longer provides an official Basic Science / Engineering
+credits list in the same way this script expects. Prefer `scrape_coursepages.py`,
+which scrapes the ECTS breakdown from each course page.
+"""
+
 def extract_credits_from_csv(csv_path):
     """
     Extract Basic Science and Engineering credits from the CSV file.

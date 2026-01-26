@@ -1,3 +1,6 @@
 Example Files/Academic Records Summary_ex.html
 .idea/
 surriculum.code-workspace
+courses/coursepage_html_cache/
+__pycache__/
+*.pyc
