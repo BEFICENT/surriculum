@@ -68,6 +68,10 @@
     padding: 0;
 }
 
+.is-hidden {
+    display: none !important;
+}
+
 html, body {
     height: 100%;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -687,6 +691,126 @@ html, body {
     max-width: 200px; /* Limit width to prevent overflow */
 }
 
+/* shared divider for dropdown panels */
+/* === PLAN DROPDOWN === */
+.plan-container {
+    position: relative;
+}
+
+.plan-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 360px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    padding: 16px;
+    z-index: 55;
+    display: none;
+}
+
+.plan-dropdown.active {
+    display: block;
+}
+
+.plan-title {
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--text-primary);
+}
+
+.plan-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 340px;
+    overflow: auto;
+    padding-right: 4px;
+}
+
+.plan-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-surface);
+}
+
+.plan-item.active {
+    border-color: var(--primary);
+}
+
+.plan-item.dragging {
+    opacity: 0.7;
+}
+
+.plan-grip {
+    color: var(--text-secondary);
+    cursor: grab;
+    width: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.plan-select {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    text-align: left;
+    cursor: pointer;
+    padding: 2px 0;
+}
+
+.plan-select:hover {
+    color: var(--text-primary);
+}
+
+.plan-actions {
+    display: inline-flex;
+    gap: 4px;
+}
+
+.btn-icon {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-secondary);
+    padding: 4px 6px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    min-height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-icon:hover {
+    background: var(--bg-card);
+    border-color: var(--border);
+}
+
+.btn-icon.danger {
+    color: #DC2626;
+}
+
+.plan-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 12px 0;
+}
+
+.plan-footer {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
 /* === MODALS === */
 .modal-overlay {
     position: fixed;
@@ -706,6 +830,78 @@ html, body {
     max-width: 90vw;
     max-height: 90vh;
     overflow: auto;
+}
+
+.app-modal {
+    width: 520px;
+    max-width: 92vw;
+    padding: 18px 18px 14px;
+    border: 1px solid var(--border);
+}
+
+.app-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.app-modal-title {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+.app-modal-close {
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: var(--radius-sm);
+    padding: 6px 8px;
+    cursor: pointer;
+    min-height: 28px;
+}
+
+.app-modal-close:hover {
+    background: var(--bg-surface);
+    border-color: var(--border);
+}
+
+.app-modal-body {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.35;
+}
+
+.app-modal-body p {
+    margin: 0 0 10px 0;
+}
+
+.app-modal-body ol {
+    margin: 6px 0 10px 18px;
+}
+
+.app-modal-body li {
+    margin: 4px 0;
+}
+
+.app-modal-input {
+    width: 100%;
+    margin-top: 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+
+.app-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 14px;
 }
 
 /* === FOOTER === */
@@ -972,6 +1168,15 @@ html, body {
     color: var(--text-inverse);
     font-weight: 600;
     flex-shrink: 0;
+}
+
+.container_semester.current-term {
+    border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent), var(--shadow-sm);
+}
+
+.container_semester.current-term .total_credit {
+    background: var(--accent);
 }
 
 .container_semester .total_credit_line {

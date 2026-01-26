@@ -75,8 +75,14 @@ function loadRequirements(termCode) {
 let termName = '';
 let termNameDM = '';
 try {
-  termName = localStorage.getItem('entryTerm') || '';
-  termNameDM = localStorage.getItem('entryTermDM') || termName;
+  const ps = (typeof window !== 'undefined') ? window.planStorage : null;
+  const get = (k) => {
+    try { return ps ? ps.getItem(k) : localStorage.getItem(k); } catch (_) {}
+    try { return localStorage.getItem(k); } catch (_) {}
+    return null;
+  };
+  termName = get('entryTerm') || '';
+  termNameDM = get('entryTermDM') || termName;
 } catch (_) {}
 
 let termCode = '';

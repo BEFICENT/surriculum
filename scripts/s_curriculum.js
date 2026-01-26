@@ -54,7 +54,10 @@ function s_curriculum()
                 return this.semesters[i];
             }
         }
-        alert("SEMESTER NOT FOUND");
+        try {
+            console.warn('Semester not found:', id);
+        } catch (_) {}
+        return null;
     };
     this.deleteSemester = function(id)
     {
@@ -154,6 +157,7 @@ function s_curriculum()
                 for(let i = 0; i < this.semesters.length; i++) {
                     for(let a = 0; a < this.semesters[i].courses.length; a++) {
                         let course = this.semesters[i].courses[a];
+                        if (course && course.effective_type === 'none') continue;
                         // Count faculty courses using the new Faculty_Course attribute
                         if(course.Faculty_Course && course.Faculty_Course !== 'No') {
                             facultyCoursesCount++;
@@ -882,7 +886,13 @@ function s_curriculum()
                     try {
                         if (typeof localStorage !== 'undefined') {
                             const key = 'customCourses_' + this.major;
-                            const stored = localStorage.getItem(key);
+                            const ps = (typeof window !== 'undefined') ? window.planStorage : null;
+                            const get = (k) => {
+                                try { return ps ? ps.getItem(k) : localStorage.getItem(k); } catch (_) {}
+                                try { return localStorage.getItem(k); } catch (_) {}
+                                return null;
+                            };
+                            const stored = get(key);
                             if (stored) {
                                 const parsed = JSON.parse(stored);
                                 if (Array.isArray(parsed)) {
@@ -1068,6 +1078,81 @@ function s_curriculum()
                     }
                 } catch (err) {
                     // Ignore DOM errors in non-browser contexts
+                }
+            }
+        }
+
+        // Special-case CS: math course exclusions/alternatives.
+        // - Pre-2025 admits: only ONE of MATH212 or MATH201 counts toward any pool.
+        //   If both are completed, the extra one should not be included in core/area/free pools.
+        // - 2025–2026 admits and later: MATH201 and MATH202 are not included in any course pool.
+        if (this.major === 'CS') {
+            const entry = parseInt(this.entryTerm || '0', 10);
+            const is2025Plus = !isNaN(entry) && entry >= 202501;
+
+            const clamp0 = (n) => (n < 0 ? 0 : n);
+            const parseInt0 = (v) => {
+                const n = parseInt(v || '0', 10);
+                return isNaN(n) ? 0 : n;
+            };
+            const parseFloat0 = (v) => {
+                const n = parseFloat(v || '0');
+                return isNaN(n) ? 0 : n;
+            };
+            const setCourseTypeLabel = (course, label) => {
+                try {
+                    const courseElem = document.getElementById(course.id);
+                    if (!courseElem) return;
+                    const typeElem = courseElem.querySelector('.course_type');
+                    if (typeElem) typeElem.textContent = label;
+                } catch (_) {}
+            };
+            const excludeCourse = (sem, course) => {
+                if (!sem || !course) return;
+                const credit = parseInt0(course.SU_credit);
+                const scienceVal = parseFloat0(course.Basic_Science);
+                const engVal = parseFloat0(course.Engineering);
+                const ectsVal = parseFloat0(course.ECTS);
+
+                // Remove previously-counted contributions (the allocation loop already added these).
+                sem.totalCredit = clamp0(sem.totalCredit - credit);
+                sem.totalScience = clamp0(sem.totalScience - scienceVal);
+                sem.totalEngineering = clamp0(sem.totalEngineering - engVal);
+                sem.totalECTS = clamp0(sem.totalECTS - ectsVal);
+
+                const et = course.effective_type;
+                if (et === 'core') sem.totalCore = clamp0(sem.totalCore - credit);
+                else if (et === 'area') sem.totalArea = clamp0(sem.totalArea - credit);
+                else if (et === 'free') sem.totalFree = clamp0(sem.totalFree - credit);
+                else if (et === 'required') sem.totalRequired = clamp0(sem.totalRequired - credit);
+                else if (et === 'university') sem.totalUniversity = clamp0(sem.totalUniversity - credit);
+
+                course.effective_type = 'none';
+                setCourseTypeLabel(course, 'N/A');
+            };
+
+            const math201 = [];
+            const math202 = [];
+            const math212 = [];
+            for (let i = 0; i < sortedSemesters.length; i++) {
+                const sem = sortedSemesters[i];
+                for (let j = 0; j < sem.courses.length; j++) {
+                    const course = sem.courses[j];
+                    if (!course) continue;
+                    if (course.effective_type === 'none') continue;
+                    if (course.code === 'MATH201') math201.push({ sem, course });
+                    else if (course.code === 'MATH202') math202.push({ sem, course });
+                    else if (course.code === 'MATH212') math212.push({ sem, course });
+                }
+            }
+
+            if (is2025Plus) {
+                for (let i = 0; i < math201.length; i++) excludeCourse(math201[i].sem, math201[i].course);
+                for (let i = 0; i < math202.length; i++) excludeCourse(math202[i].sem, math202[i].course);
+            } else {
+                // If both are present, exclude MATH201 (MATH212 is the primary path).
+                if (math201.length > 0 && math212.length > 0) {
+                    for (let i = 0; i < math201.length; i++) excludeCourse(math201[i].sem, math201[i].course);
                 }
             }
         }
@@ -1559,7 +1644,13 @@ function s_curriculum()
                     try {
                         if (typeof localStorage !== 'undefined') {
                             const keyDM = 'customCourses_' + this.doubleMajor;
-                            const storedDM = localStorage.getItem(keyDM);
+                            const ps = (typeof window !== 'undefined') ? window.planStorage : null;
+                            const get = (k) => {
+                                try { return ps ? ps.getItem(k) : localStorage.getItem(k); } catch (_) {}
+                                try { return localStorage.getItem(k); } catch (_) {}
+                                return null;
+                            };
+                            const storedDM = get(keyDM);
                             if (storedDM) {
                                 const parsedDM = JSON.parse(storedDM);
                                 if (Array.isArray(parsedDM)) {
@@ -1790,6 +1881,54 @@ function s_curriculum()
             }
         }
 
+        // Special-case CS double major: math course exclusions/alternatives.
+        // - Pre-2025 admits: only ONE of MATH212 or MATH201 counts toward CS pools.
+        // - 2025–2026 admits and later: MATH201 and MATH202 are not included in any CS pool.
+        if (this.doubleMajor === 'CS') {
+            const entryDM = parseInt(this.entryTermDM || '0', 10);
+            const is2025PlusDM = !isNaN(entryDM) && entryDM >= 202501;
+
+            const parseInt0 = (v) => {
+                const n = parseInt(v || '0', 10);
+                return isNaN(n) ? 0 : n;
+            };
+            const excludeCourseDM = (sem, course) => {
+                if (!sem || !course) return;
+                const credit = parseInt0(course.SU_credit);
+                const et = course.effective_type_dm;
+                if (et === 'core') sem.totalCoreDM = Math.max(0, sem.totalCoreDM - credit);
+                else if (et === 'area') sem.totalAreaDM = Math.max(0, sem.totalAreaDM - credit);
+                else if (et === 'free') sem.totalFreeDM = Math.max(0, sem.totalFreeDM - credit);
+                else if (et === 'required') sem.totalRequiredDM = Math.max(0, sem.totalRequiredDM - credit);
+                else if (et === 'university') sem.totalUniversityDM = Math.max(0, sem.totalUniversityDM - credit);
+                course.effective_type_dm = 'none';
+            };
+
+            const math201 = [];
+            const math202 = [];
+            const math212 = [];
+            for (let i = 0; i < sorted.length; i++) {
+                const sem = sorted[i];
+                for (let j = 0; j < sem.courses.length; j++) {
+                    const course = sem.courses[j];
+                    if (!course) continue;
+                    if (course.effective_type_dm === 'none') continue;
+                    if (course.code === 'MATH201') math201.push({ sem, course });
+                    else if (course.code === 'MATH202') math202.push({ sem, course });
+                    else if (course.code === 'MATH212') math212.push({ sem, course });
+                }
+            }
+
+            if (is2025PlusDM) {
+                for (let i = 0; i < math201.length; i++) excludeCourseDM(math201[i].sem, math201[i].course);
+                for (let i = 0; i < math202.length; i++) excludeCourseDM(math202[i].sem, math202[i].course);
+            } else {
+                if (math201.length > 0 && math212.length > 0) {
+                    for (let i = 0; i < math201.length; i++) excludeCourseDM(math201[i].sem, math201[i].course);
+                }
+            }
+        }
+
         // Special-case VACD double major: enforce mutually-exclusive pair rules
         // for required and core elective pools and spill extra pool courses into
         // area/free as specified by VACD requirements.
@@ -1951,12 +2090,12 @@ function s_curriculum()
                     const dmTypeLabel = course.effective_type_dm;
                     if (this.doubleMajor && dmTypeLabel) {
                         // Compose both types, capitalize each
-                        const mt = (mainType || '').toString().toUpperCase();
-                        const dt = dmTypeLabel.toUpperCase();
+                        const mt = (mainType === 'none' ? 'N/A' : (mainType || '').toString().toUpperCase());
+                        const dt = (dmTypeLabel === 'none' ? 'N/A' : dmTypeLabel.toUpperCase());
                         typeSpan.textContent = mt + ' / ' + dt;
                     } else {
                         // Only main type
-                        typeSpan.textContent = (mainType || '').toString().toUpperCase();
+                        typeSpan.textContent = (mainType === 'none' ? 'N/A' : (mainType || '').toString().toUpperCase());
                     }
                 }
             }
@@ -2046,6 +2185,7 @@ function s_curriculum()
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
+                        if (course && course.effective_type_dm === 'none') continue;
                         if (course.Faculty_Course && course.Faculty_Course !== 'No') {
                             facultyCoursesCount++;
                             if (course.Faculty_Course === 'FENS') fensCoursesCount++;

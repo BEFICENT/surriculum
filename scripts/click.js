@@ -1,5 +1,14 @@
 function dynamic_click(e, curriculum, course_data)
 {
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     // Guard against early interaction before course data is available. If
     // the course list has not yet been loaded (e.g., the user clicked
     // "Add Course" while the data is still fetching), prevent
@@ -13,7 +22,18 @@ function dynamic_click(e, curriculum, course_data)
         // SUrriculum from a local web server or launching Chrome with
         // --allow-file-access-from-files will resolve this.
         if (e.target.classList.contains('addCourse') || e.target.classList.contains('enter')) {
-            alert('Course data is unavailable. Please serve SUrriculum via a local web server or enable file access to load course lists.');
+            try {
+                const ui = (typeof window !== 'undefined') ? window.uiModal : null;
+                const body =
+                    '<p>Course data is unavailable.</p>' +
+                    '<p>If you opened the app via <code>file://</code>, your browser may block loading the course files.</p>' +
+                    '<p>Please run SUrriculum via a local web server (recommended) or enable file access to load course lists.</p>';
+                if (ui && typeof ui.alert === 'function') {
+                    ui.alert('Course data unavailable', body);
+                } else {
+                    console.warn('Course data is unavailable.');
+                }
+            } catch (_) {}
             return;
         }
     }
@@ -72,7 +92,24 @@ function dynamic_click(e, curriculum, course_data)
             const filtered = options.filter(o => {
                 const codeName = (o.code + ' ' + o.name).toUpperCase();
                 const codeNameNoSpace = (o.code + o.name).toUpperCase().replace(/\s+/g, '');
-                return codeName.includes(normalized) || codeNameNoSpace.includes(normalizedNoSpace);
+                const textMatch = codeName.includes(normalized) || codeNameNoSpace.includes(normalizedNoSpace);
+                if (!textMatch) return false;
+                try {
+                    if (typeof window !== 'undefined' && window.offeredThisTermOnly) {
+                        // Trigger lazy load if needed.
+                        if (!window.courseOfferingsByCode && typeof window.loadCourseOfferingsIndex === 'function') {
+                            window.loadCourseOfferingsIndex().then(() => {
+                                try { renderOptions(filter); } catch (_) {}
+                            });
+                            // While loading, do not filter.
+                            return true;
+                        }
+                        if (typeof window.isCourseOfferedInCurrentTerm === 'function') {
+                            return window.isCourseOfferedInCurrentTerm(o.code);
+                        }
+                    }
+                } catch (_) {}
+                return true;
             });
             filtered.forEach(data => {
                 const opt = document.createElement('div');
@@ -128,6 +165,9 @@ function dynamic_click(e, curriculum, course_data)
         document.addEventListener('hideTakenCoursesToggleChanged', () => {
             options = getCoursesList(course_data);
             datalist.innerHTML = getCoursesDataList(course_data);
+            renderOptions(input.value);
+        });
+        document.addEventListener('offeredThisTermToggleChanged', () => {
             renderOptions(input.value);
         });
 
@@ -201,7 +241,12 @@ function dynamic_click(e, curriculum, course_data)
         }
         // If still invalid after name search, show error
         if (!isCourseValid(courseObj, course_data)) {
-            alert("ERROR: Course Not Found!");
+            try {
+                const ui = (typeof window !== 'undefined') ? window.uiModal : null;
+                const body = '<p>Course not found.</p><p>Please select a course from the dropdown list.</p>';
+                if (ui && typeof ui.alert === 'function') ui.alert('Course not found', body);
+                else console.warn('Course not found');
+            } catch (_) {}
             e.target.parentNode.querySelector("input").value = '';
             return;
         }
@@ -277,7 +322,12 @@ function dynamic_click(e, curriculum, course_data)
                 }
             } catch(err) {}
         } else {
-            alert("You have already added " + myCourse.code);
+            try {
+                const ui = (typeof window !== 'undefined') ? window.uiModal : null;
+                const body = `<p>You have already added <strong>${escapeHtml(myCourse.code || '')}</strong>.</p>`;
+                if (ui && typeof ui.alert === 'function') ui.alert('Already added', body);
+                else console.warn('Already added', myCourse.code);
+            } catch (_) {}
             e.target.parentNode.querySelector("input").value = '';
         }
     }
@@ -407,6 +457,11 @@ function dynamic_click(e, curriculum, course_data)
         } catch(err) {
             // ignore
         }
+        try {
+            if (typeof window !== 'undefined' && typeof window.updateCurrentTermHighlights === 'function') {
+                window.updateCurrentTermHighlights();
+            }
+        } catch (_) {}
     }
     //CLICKED trash in input:
     else if(e.target.classList.contains("delete_add_course"))

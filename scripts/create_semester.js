@@ -74,20 +74,23 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
                 }
             } else {
                 // If we can't find the current term, use a fallback
-                // Find the current academic year in terms array
-                const currentDate = new Date();
-                const currentMonth = currentDate.getMonth();
-                let termToUse;
-
-                if (currentMonth >= 7) { // August-December: Fall semester
+                // Prefer the device-based current term from helper_functions.js
+                let termToUse = '';
+                try {
+                    if (typeof window !== 'undefined' && window.currentTermName) {
+                        termToUse = window.currentTermName;
+                    } else if (typeof window !== 'undefined' && typeof window.getCurrentTermNameFromDate === 'function') {
+                        termToUse = window.getCurrentTermNameFromDate(new Date());
+                    }
+                } catch (_) {}
+                if (!termToUse) {
+                    // Last-resort fallback (legacy month-based heuristic)
+                    const currentDate = new Date();
+                    const currentMonth = currentDate.getMonth();
                     const currentYear = currentDate.getFullYear();
-                    termToUse = 'Fall ' + currentYear + '-' + (currentYear + 1);
-                } else if (currentMonth >= 0 && currentMonth < 5) { // January-May: Spring semester
-                    const currentYear = currentDate.getFullYear();
-                    termToUse = 'Spring ' + (currentYear - 1) + '-' + currentYear;
-                } else { // June-July: Summer
-                    const currentYear = currentDate.getFullYear();
-                    termToUse = 'Summer ' + (currentYear - 1) + '-' + currentYear;
+                    if (currentMonth >= 7) termToUse = 'Fall ' + currentYear + '-' + (currentYear + 1);
+                    else if (currentMonth >= 0 && currentMonth < 5) termToUse = 'Spring ' + (currentYear - 1) + '-' + currentYear;
+                    else termToUse = 'Summer ' + (currentYear - 1) + '-' + currentYear;
                 }
 
                 nextTermIndex = terms.indexOf(termToUse) !== -1 ? terms.indexOf(termToUse) : 0;
@@ -97,7 +100,13 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
             // No semesters yet; start from the user's entry term if available
             let entryTermName = '';
             try {
-                entryTermName = localStorage.getItem('entryTerm') || entryTerms[0];
+                const ps = (typeof window !== 'undefined') ? window.planStorage : null;
+                const get = (k) => {
+                    try { return ps ? ps.getItem(k) : localStorage.getItem(k); } catch (_) {}
+                    try { return localStorage.getItem(k); } catch (_) {}
+                    return null;
+                };
+                entryTermName = get('entryTerm') || entryTerms[0];
             } catch (_) {
                 entryTermName = entryTerms[0];
             }
@@ -170,6 +179,11 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
     {
         board.insertBefore(container, board.firstChild);
     }
+    try {
+        if (typeof window !== 'undefined' && typeof window.updateCurrentTermHighlights === 'function') {
+            window.updateCurrentTermHighlights();
+        }
+    } catch (_) {}
 
     //adding courses:
     for(let i = 0; i < courseList.length; i++)

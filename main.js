@@ -11,6 +11,77 @@ let course_data;
 let initial_major_chosen = 'CS'
 let saveInterval;
 
+const _planIdForSession = (() => {
+    try {
+        if (typeof window !== 'undefined' && window.planStorage && typeof window.planStorage.getActivePlanId === 'function') {
+            return window.planStorage.getActivePlanId();
+        }
+    } catch (_) {}
+    return null;
+})();
+
+function planGetItem(key) {
+    try {
+        if (typeof window !== 'undefined' && window.planStorage && typeof window.planStorage.getItem === 'function') {
+            return window.planStorage.getItem(key, _planIdForSession || undefined);
+        }
+    } catch (_) {}
+    try { return localStorage.getItem(key); } catch (_) {}
+    return null;
+}
+
+function planSetItem(key, value) {
+    try {
+        if (typeof window !== 'undefined' && window.planStorage && typeof window.planStorage.setItem === 'function') {
+            window.planStorage.setItem(key, value, _planIdForSession || undefined);
+            return;
+        }
+    } catch (_) {}
+    try { localStorage.setItem(key, value); } catch (_) {}
+}
+
+function planRemoveItem(key) {
+    try {
+        if (typeof window !== 'undefined' && window.planStorage && typeof window.planStorage.removeItem === 'function') {
+            window.planStorage.removeItem(key, _planIdForSession || undefined);
+            return;
+        }
+    } catch (_) {}
+    try { localStorage.removeItem(key); } catch (_) {}
+}
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+async function uiAlert(title, bodyHtml) {
+    try {
+        const ui = (typeof window !== 'undefined') ? window.uiModal : null;
+        if (ui && typeof ui.alert === 'function') {
+            await ui.alert(title || 'Notice', bodyHtml || '');
+            return;
+        }
+    } catch (_) {}
+    // No browser alerts: fallback to console only.
+    try { console.warn('[uiAlert]', title, bodyHtml); } catch (_) {}
+}
+
+async function uiConfirm(title, bodyHtml, options) {
+    try {
+        const ui = (typeof window !== 'undefined') ? window.uiModal : null;
+        if (ui && typeof ui.confirm === 'function') {
+            return await ui.confirm(title || 'Confirm', bodyHtml || '', options || {});
+        }
+    } catch (_) {}
+    try { console.warn('[uiConfirm]', title, bodyHtml); } catch (_) {}
+    return false;
+}
+
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('sw.js');
@@ -88,6 +159,28 @@ function SUrriculum(major_chosen_by_user) {
     function getMajorsForTerm(code) {
         return majorsByTerm[code] || defaultMajors;
     }
+
+    // Build entry term options from the scraped term manifest so admit term
+    // selectors only show terms for which data exists. Cap the upper bound
+    // dynamically based on the device's current term.
+    try {
+        const termCodeKeys = Object.keys(majorsByTerm || {}).filter(k => /^\d{6}$/.test(k));
+        const termCodes = termCodeKeys.map(k => parseInt(k, 10)).filter(n => !isNaN(n));
+        termCodes.sort((a, b) => b - a);
+        const minCode = 201901; // fixed minimum (Fall 2019-2020)
+        const maxAvailable = termCodes.length ? termCodes[0] : minCode;
+        let currentCode = 0;
+        try {
+            const ctName = (typeof window !== 'undefined' && window.currentTermName) ? window.currentTermName : '';
+            currentCode = parseInt(termNameToCode(ctName), 10) || 0;
+        } catch (_) {}
+        const maxCode = Math.max(maxAvailable, currentCode);
+        const entryCodes = termCodes.filter(c => c >= minCode && c <= maxCode);
+        const entryNames = entryCodes.map(c => termCodeToName(String(c)));
+        if (Array.isArray(entryNames) && entryNames.length) {
+            entryTerms = entryNames;
+        }
+    } catch (_) {}
 
     // Load course list for a specific major and term code (e.g. "202301").
     // Files are stored under courses/<term>/<major>.jsonl. Fallback to the
@@ -174,8 +267,19 @@ function SUrriculum(major_chosen_by_user) {
     // Determine entry terms for main and double majors from localStorage. The
     // terms are stored as display strings (e.g. "Fall 2023-2024"). We convert
     // them to numeric codes to locate the scraped JSON files.
-    const entryTermName = localStorage.getItem('entryTerm') || entryTerms[0];
-    const entryTermDMName = localStorage.getItem('entryTermDM') || entryTermName;
+    let entryTermName = planGetItem('entryTerm') || '';
+    if (!entryTermName || (Array.isArray(entryTerms) && entryTerms.length && !entryTerms.includes(entryTermName))) {
+        entryTermName = entryTerms[0];
+    }
+    let entryTermDMName = planGetItem('entryTermDM') || entryTermName;
+    if (!entryTermDMName || (Array.isArray(entryTerms) && entryTerms.length && !entryTerms.includes(entryTermDMName))) {
+        entryTermDMName = entryTermName;
+    }
+    try {
+        if (!planGetItem('major')) planSetItem('major', major_chosen_by_user);
+        if (!planGetItem('entryTerm')) planSetItem('entryTerm', entryTermName);
+        if (!planGetItem('entryTermDM')) planSetItem('entryTermDM', entryTermDMName);
+    } catch (_) {}
     const entryTermCode = termNameToCode(entryTermName);
     const entryTermDMCode = termNameToCode(entryTermDMName);
 
@@ -199,13 +303,28 @@ function SUrriculum(major_chosen_by_user) {
         let etElem = document.querySelector('.entryTerm');
         let etDmElem = document.querySelector('.entryTermDM');
         let dmElem = document.querySelector('.doubleMajor');
+        const dmControlsRow = document.getElementById('doubleMajorControlsRow');
+        const dmButtonRow = document.getElementById('doubleMajorButtonRow');
+        const addDmBtn = document.getElementById('addDoubleMajorBtn');
+
+        const setDmUiVisible = (visible) => {
+            try {
+                if (visible) {
+                    if (dmControlsRow) dmControlsRow.classList.remove('is-hidden');
+                    if (dmButtonRow) dmButtonRow.classList.add('is-hidden');
+                } else {
+                    if (dmControlsRow) dmControlsRow.classList.add('is-hidden');
+                    if (dmButtonRow) dmButtonRow.classList.remove('is-hidden');
+                }
+            } catch (_) {}
+        };
         // Populate and bind dropdown controls for major and entry terms
         if (change_major_element && change_major_element.tagName === 'SELECT') {
             const majorsList = getMajorsForTerm(entryTermCode);
             change_major_element.innerHTML = majorsList.map(m => `<option value="${m}">${m}</option>`).join('');
             change_major_element.value = major_chosen_by_user;
             change_major_element.addEventListener('change', function(e) {
-                localStorage.setItem('major', e.target.value);
+                planSetItem('major', e.target.value);
                 location.reload();
             });
         }
@@ -213,20 +332,23 @@ function SUrriculum(major_chosen_by_user) {
             etElem.innerHTML = entryTerms.map(t => `<option value="${t}">${t}</option>`).join('');
             etElem.value = entryTermName;
             etElem.addEventListener('change', function(e) {
-                localStorage.setItem('entryTerm', e.target.value);
+                planSetItem('entryTerm', e.target.value);
                 location.reload();
             });
         }
         if (dmElem && dmElem.tagName === 'SELECT') {
             const dmList = ['None'].concat(getMajorsForTerm(entryTermDMCode));
             dmElem.innerHTML = dmList.map(m => `<option value="${m === 'None' ? '' : m}">${m}</option>`).join('');
-            dmElem.value = localStorage.getItem('doubleMajor') || '';
+            dmElem.value = planGetItem('doubleMajor') || '';
             dmElem.addEventListener('change', function(e) {
                 const val = e.target.value;
                 if (val) {
-                    localStorage.setItem('doubleMajor', val);
+                    planSetItem('doubleMajor', val);
+                    try { localStorage.setItem('showDoubleMajorControls', 'true'); } catch (_) {}
                 } else {
-                    localStorage.removeItem('doubleMajor');
+                    planRemoveItem('doubleMajor');
+                    // Collapse the DM controls after the user explicitly sets it to None.
+                    try { localStorage.setItem('showDoubleMajorControls', 'false'); } catch (_) {}
                 }
                 location.reload();
             });
@@ -235,10 +357,35 @@ function SUrriculum(major_chosen_by_user) {
             etDmElem.innerHTML = entryTerms.map(t => `<option value="${t}">${t}</option>`).join('');
             etDmElem.value = entryTermDMName;
             etDmElem.addEventListener('change', function(e) {
-                localStorage.setItem('entryTermDM', e.target.value);
+                planSetItem('entryTermDM', e.target.value);
                 location.reload();
             });
         }
+
+        // Double major UI: show dropdowns by default on first visit, but allow
+        // collapsing them into a single "Add Double Major" button when the DM
+        // is None/empty.
+        try {
+            const hasDM = !!(planGetItem('doubleMajor') || '');
+            let showPref = true;
+            try {
+                const stored = localStorage.getItem('showDoubleMajorControls');
+                if (stored !== null) showPref = stored === 'true';
+            } catch (_) {}
+            if (hasDM) {
+                setDmUiVisible(true);
+                try { localStorage.setItem('showDoubleMajorControls', 'true'); } catch (_) {}
+            } else {
+                setDmUiVisible(showPref);
+            }
+            if (addDmBtn) {
+                addDmBtn.addEventListener('click', function() {
+                    setDmUiVisible(true);
+                    try { localStorage.setItem('showDoubleMajorControls', 'true'); } catch (_) {}
+                    try { if (dmElem) dmElem.focus(); } catch (_) {}
+                });
+            }
+        } catch (_) {}
 
     course_data = json;
 
@@ -252,7 +399,7 @@ function SUrriculum(major_chosen_by_user) {
     // JSON.parse on an empty string would throw; guard accordingly.
     try {
         const customKey = 'customCourses_' + major_chosen_by_user;
-        const stored = localStorage.getItem(customKey);
+        const stored = planGetItem(customKey);
         if (stored) {
             const parsed = JSON.parse(stored);
             if (Array.isArray(parsed)) {
@@ -267,7 +414,7 @@ function SUrriculum(major_chosen_by_user) {
     // are available when reloading semesters from localStorage.
     let savedDMPref = '';
     try {
-        savedDMPref = localStorage.getItem('doubleMajor') || '';
+        savedDMPref = planGetItem('doubleMajor') || '';
     } catch (_) {}
     if (savedDMPref) {
         const dmData = await fetchCourseData(savedDMPref, entryTermDMCode);
@@ -278,7 +425,7 @@ function SUrriculum(major_chosen_by_user) {
         }
         try {
             const keyDM = 'customCourses_' + savedDMPref;
-            const storedDM = localStorage.getItem(keyDM);
+            const storedDM = planGetItem(keyDM);
             if (storedDM) {
                 const parsedDM = JSON.parse(storedDM);
                 if (Array.isArray(parsedDM)) {
@@ -362,6 +509,36 @@ function SUrriculum(major_chosen_by_user) {
         });
     }
 
+    let offeredOnly = false;
+    try {
+        const stored = localStorage.getItem('offeredThisTermOnly');
+        if (stored !== null) {
+            offeredOnly = stored === 'true';
+        }
+    } catch (_) {}
+    if (typeof window !== 'undefined') {
+        window.offeredThisTermOnly = offeredOnly;
+    }
+    const offeredToggle = document.getElementById('offeredThisTermToggle');
+    if (offeredToggle) {
+        offeredToggle.checked = offeredOnly;
+        offeredToggle.addEventListener('change', function(e) {
+            const enabled = e.target.checked;
+            if (typeof window !== 'undefined') {
+                window.offeredThisTermOnly = enabled;
+            }
+            try { localStorage.setItem('offeredThisTermOnly', enabled ? 'true' : 'false'); } catch (_) {}
+            document.dispatchEvent(new Event('offeredThisTermToggleChanged'));
+        });
+    }
+    try {
+        const label = document.getElementById('offeredThisTermLabel');
+        const ctName = (typeof window !== 'undefined' && window.currentTermName) ? window.currentTermName : '';
+        if (label && ctName) {
+            label.textContent = `Only show courses offered in ${ctName}`;
+        }
+    } catch (_) {}
+
     //************************************************
 
     //Targetting dynamically created elements:
@@ -396,6 +573,12 @@ function SUrriculum(major_chosen_by_user) {
         if (e.target.classList.contains('btn'))
         {e.target.style.backgroundColor = '';}
     })
+
+    try {
+        if (typeof window !== 'undefined' && typeof window.updateCurrentTermHighlights === 'function') {
+            window.updateCurrentTermHighlights();
+        }
+    } catch (_) {}
 
     let dragged_item = null;
     document.addEventListener('dragstart', function(e){
@@ -518,18 +701,21 @@ function SUrriculum(major_chosen_by_user) {
     }
 
     const auto_add = document.querySelector('.autoAdd');
-    auto_add.addEventListener('click', function(){
+    auto_add.addEventListener('click', async function(){
         // Check if there are existing semesters
         const semesters = document.querySelectorAll('.semester');
         if (semesters.length > 0) {
-            alert('Error: Add First Year Courses only works when no semesters are present.');
+            await uiAlert(
+                'Cannot add first year courses',
+                '<p><strong>Add First Year Courses</strong> only works when no semesters are present.</p><p>Create a new plan or delete existing semesters and try again.</p>'
+            );
             return;
         }
 
         // Determine the user's entry term so that the automatically added
         // semesters start from that term rather than the earliest term in
         // the list (Fall 2019-2020).
-        const entryTerm = localStorage.getItem('entryTerm') || entryTerms[0];
+        const entryTerm = planGetItem('entryTerm') || entryTerms[0];
         const entryCode = termNameToCode(entryTerm);
 
         // Helper to compute the next chronological term code
@@ -729,13 +915,13 @@ function SUrriculum(major_chosen_by_user) {
                 // Read input values
                 const rawCode = codeInput.value.trim().toUpperCase();
                 if (!rawCode) {
-                    alert('Course code is required.');
+                    uiAlert('Missing course code', '<p>Course code is required.</p>');
                     return;
                 }
                 // Parse major and numeric code from input (letters+digits)
                 const match = rawCode.match(/^([A-Z]+)(\d+)$/);
                 if (!match) {
-                    alert('Invalid course code format. Use e.g. CS300 or MATH101.');
+                    uiAlert('Invalid course code', '<p>Invalid course code format. Use e.g. <strong>CS300</strong> or <strong>MATH101</strong>.</p>');
                     return;
                 }
                 const parsedMajor = match[1];
@@ -757,7 +943,7 @@ function SUrriculum(major_chosen_by_user) {
                     // Persist update to localStorage
                     try {
                         const key = 'customCourses_' + major_chosen_by_user;
-                        const existing = JSON.parse(localStorage.getItem(key) || '[]');
+                        const existing = JSON.parse(planGetItem(key) || '[]');
                         // Find and update the matching course in storage
                         for (let i = 0; i < existing.length; i++) {
                             if (existing[i].Major === courseObj.Major && existing[i].Code === courseObj.Code) {
@@ -765,7 +951,7 @@ function SUrriculum(major_chosen_by_user) {
                                 break;
                             }
                         }
-                        localStorage.setItem(key, JSON.stringify(existing));
+                        planSetItem(key, JSON.stringify(existing));
                     } catch (ex) {
                         console.error('Failed to update custom course:', ex);
                     }
@@ -789,9 +975,9 @@ function SUrriculum(major_chosen_by_user) {
                     // Persist to localStorage under current major
                     try {
                         const key = 'customCourses_' + major_chosen_by_user;
-                        const existing = JSON.parse(localStorage.getItem(key) || '[]');
+                        const existing = JSON.parse(planGetItem(key) || '[]');
                         existing.push(newCourse);
-                        localStorage.setItem(key, JSON.stringify(existing));
+                        planSetItem(key, JSON.stringify(existing));
                     } catch (ex) {
                         console.error('Failed to save custom course:', ex);
                     }
@@ -851,9 +1037,9 @@ function SUrriculum(major_chosen_by_user) {
                                     // Persist DM custom course
                                     try {
                                         const keyDM = 'customCourses_' + curriculum.doubleMajor;
-                                        const existingDM = JSON.parse(localStorage.getItem(keyDM) || '[]');
+                                        const existingDM = JSON.parse(planGetItem(keyDM) || '[]');
                                         existingDM.push(newCourseDM);
-                                        localStorage.setItem(keyDM, JSON.stringify(existingDM));
+                                        planSetItem(keyDM, JSON.stringify(existingDM));
                                     } catch (_) {}
                                     // Recalculate effective types for DM
                                     try {
@@ -901,21 +1087,28 @@ function SUrriculum(major_chosen_by_user) {
     const deleteCustomBtn = document.querySelector('.deleteCustom');
     if (deleteCustomBtn) {
         deleteCustomBtn.addEventListener('click', function() {
+            // async modal inside handler; no need to await here
             handleDeleteCustomCourses();
         });
     }
     // Bind reset local data button click
     const resetLocalBtn = document.querySelector('.resetLocal');
     if (resetLocalBtn) {
-        resetLocalBtn.addEventListener('click', function() {
-            if (confirm('Are you sure you want to reset all local data? This will remove all saved semesters, custom courses, and grades.')) {
+        resetLocalBtn.addEventListener('click', async function() {
+            const ok = await uiConfirm(
+                'Reset local data?',
+                '<p>Are you sure you want to reset <strong>all</strong> local data?</p>' +
+                '<p>This will remove saved semesters, custom courses, grades, and your saved plans.</p>',
+                { confirmText: 'Reset', danger: true }
+            );
+            if (ok) {
                 try {
                     // Explicitly remove all relevant keys from localStorage
-                    localStorage.removeItem('curriculum');
-                    localStorage.removeItem('grades');
-                    localStorage.removeItem('dates');
+                    planRemoveItem('curriculum');
+                    planRemoveItem('grades');
+                    planRemoveItem('dates');
                     const customKey = 'customCourses_' + major_chosen_by_user;
-                    localStorage.removeItem(customKey);
+                    planRemoveItem(customKey);
                     clearInterval(saveInterval);
                     localStorage.clear();
                 } catch (ex) {
@@ -949,13 +1142,21 @@ function SUrriculum(major_chosen_by_user) {
     ensureGhostSemester();
     //Save:
     saveInterval = setInterval(function() {
-        localStorage.removeItem("curriculum");
-        localStorage.setItem("curriculum", serializator(curriculum));
-        localStorage.removeItem("grades");
-        localStorage.setItem("grades", grades_serializator());
-        localStorage.removeItem("dates");
-        localStorage.setItem("dates", dates_serializator());
+        planSetItem("curriculum", serializator(curriculum));
+        planSetItem("grades", grades_serializator());
+        planSetItem("dates", dates_serializator());
     }, 2000);
+
+    // Allow the plan manager to force-flush state before switching/exporting.
+    try {
+        if (typeof window !== 'undefined' && window.planStorage && typeof window.planStorage.registerSaveHook === 'function') {
+            window.planStorage.registerSaveHook(function() {
+                planSetItem("curriculum", serializator(curriculum));
+                planSetItem("grades", grades_serializator());
+                planSetItem("dates", dates_serializator());
+            });
+        }
+    } catch (_) {}
 
     //createSemeter(false, ["MATH101","MATH102","MATH201","MATH203","IF100","TLL101"], curriculum, course_data)
     //createSemeter(false, ["NS101","SPS101","SPS102","AL102","TLL102","HIST192","PROJ201", "NS102", "HIST191", "CIP101N", "CS210", "MATH306", "CS201", "CS204", "MATH204"], curriculum, course_data)
@@ -1044,9 +1245,9 @@ function SUrriculum(major_chosen_by_user) {
                     // Persist to custom courses storage for DM
                     try {
                         const keyDM = 'customCourses_' + curriculum.doubleMajor;
-                        const existingDM = JSON.parse(localStorage.getItem(keyDM) || '[]');
+                        const existingDM = JSON.parse(planGetItem(keyDM) || '[]');
                         existingDM.push(newCourseDM);
-                        localStorage.setItem(keyDM, JSON.stringify(existingDM));
+                        planSetItem(keyDM, JSON.stringify(existingDM));
                     } catch (_) {}
                 }
                 // Process next
@@ -1127,7 +1328,10 @@ function SUrriculum(major_chosen_by_user) {
             // Fetch course data for second major
             fetchCourseData(dm, entryTermDMCode).then(function(jsonDM) {
                 if (!jsonDM || jsonDM.length === 0) {
-                    alert('No course data available for ' + dm + ' in ' + termCodeToName(entryTermDMCode));
+                    uiAlert(
+                        'No course data',
+                        `<p>No course data available for <strong>${escapeHtml(dm)}</strong> in <strong>${escapeHtml(termCodeToName(entryTermDMCode))}</strong>.</p>`
+                    );
                 }
                 doubleMajorCourseData = jsonDM || [];
                 // Save DM course data on the curriculum instance so
@@ -1136,7 +1340,7 @@ function SUrriculum(major_chosen_by_user) {
                 // Load custom courses for second major
                 try {
                     const keyDM = 'customCourses_' + dm;
-                    const storedDM = localStorage.getItem(keyDM);
+                    const storedDM = planGetItem(keyDM);
                     if (storedDM) {
                         const parsedDM = JSON.parse(storedDM);
                         if (Array.isArray(parsedDM)) {
@@ -1175,7 +1379,7 @@ function SUrriculum(major_chosen_by_user) {
                 // Also include custom courses defined for the primary major even if not in semesters
                 try {
                     const keyMain = 'customCourses_' + curriculum.major;
-                    const storedMain = localStorage.getItem(keyMain);
+                    const storedMain = planGetItem(keyMain);
                     if (storedMain) {
                         const parsedMain = JSON.parse(storedMain);
                         if (Array.isArray(parsedMain)) {
@@ -1264,30 +1468,30 @@ function SUrriculum(major_chosen_by_user) {
          * so that the UI reflects the changes. A confirmation prompt guards
          * against accidental deletion.
          */
-        function handleDeleteCustomCourses() {
+        async function handleDeleteCustomCourses() {
             const keyMain = 'customCourses_' + major_chosen_by_user;
             const keyDM = curriculum.doubleMajor ? 'customCourses_' + curriculum.doubleMajor : null;
 
             let customMain = [];
             let customDM = [];
             try {
-                customMain = JSON.parse(localStorage.getItem(keyMain) || '[]');
+                customMain = JSON.parse(planGetItem(keyMain) || '[]');
             } catch (_) { customMain = []; }
             if (keyDM) {
                 try {
-                    customDM = JSON.parse(localStorage.getItem(keyDM) || '[]');
+                    customDM = JSON.parse(planGetItem(keyDM) || '[]');
                 } catch (_) { customDM = []; }
             }
 
             if ((!customMain || customMain.length === 0) && (!customDM || customDM.length === 0)) {
-                alert('There are no custom courses to delete for this major.');
+                await uiAlert('No custom courses', '<p>There are no custom courses to delete for this plan.</p>');
                 return;
             }
 
             let confirmMsg = 'Are you sure you want to delete all custom courses for ' + major_chosen_by_user;
             if (curriculum.doubleMajor) confirmMsg += ' and ' + curriculum.doubleMajor;
             confirmMsg += '?';
-            if (!confirm(confirmMsg)) {
+            if (!(await uiConfirm('Delete custom courses?', `<p>${escapeHtml(confirmMsg)}</p><p>This cannot be undone.</p>`, { confirmText: 'Delete', danger: true }))) {
                 return;
             }
 
@@ -1311,13 +1515,12 @@ function SUrriculum(major_chosen_by_user) {
                 });
             }
 
-            try { localStorage.removeItem(keyMain); } catch (_) {}
-            if (keyDM) { try { localStorage.removeItem(keyDM); } catch (_) {} }
+            try { planRemoveItem(keyMain); } catch (_) {}
+            if (keyDM) { try { planRemoveItem(keyDM); } catch (_) {} }
             // Persist the updated curriculum to localStorage
             try {
                 if (typeof serializator === 'function') {
-                    localStorage.removeItem('curriculum');
-                    localStorage.setItem('curriculum', serializator(curriculum));
+                    planSetItem('curriculum', serializator(curriculum));
                 }
             } catch (ex) {
                 // ignore
@@ -1350,7 +1553,10 @@ function SUrriculum(major_chosen_by_user) {
         // behaviour of the "Add First Year Courses" button.
         const existing = document.querySelectorAll('.semester');
         if (existing.length > 0) {
-            alert('Error: Import only works when no semesters are present.');
+            const ui = (typeof window !== 'undefined') ? window.uiModal : null;
+            const msg = '<p>Import only works when no semesters are present.</p><p>Please start a new plan or clear your semesters first.</p>';
+            if (ui && typeof ui.alert === 'function') await ui.alert('Cannot import', msg);
+            else await uiAlert('Cannot import', msg);
             return;
         }
 
@@ -1361,23 +1567,153 @@ function SUrriculum(major_chosen_by_user) {
             let parsedData;
 
             try {
+                const ui = (typeof window !== 'undefined') ? window.uiModal : null;
+                const isDegreeEvaluation = (text) => {
+                    try {
+                        return /degree\s+evaluation/i.test(String(text || ''));
+                    } catch (_) {
+                        return false;
+                    }
+                };
+                const isAcademicRecordsSummary = (text) => {
+                    try {
+                        return /academic\s+records\s+summary/i.test(String(text || ''));
+                    } catch (_) {
+                        return false;
+                    }
+                };
+                const isYokTranscript = (text) => {
+                    try {
+                        const t = String(text || '');
+                        return t.includes('NOT DÖKÜM BELGESİ') || t.includes('NOT DOKUM BELGESI');
+                    } catch (_) {
+                        return false;
+                    }
+                };
+                const isNoPermissionHtml = (text) => {
+                    try {
+                        const t = String(text || '');
+                        return t.includes('Sorry! You have no permission to access this page') ||
+                               t.includes('You have no permission to access this page') ||
+                               t.includes('Thanks for your patience') ||
+                               t.includes('Information Technology</h3>');
+                    } catch (_) {
+                        return false;
+                    }
+                };
+                const showDegreeEvalWarning = async () => {
+                    const ui = (typeof window !== 'undefined') ? window.uiModal : null;
+                    const title = 'Wrong file: Degree Evaluation';
+                    const body = (
+                        '<p>This looks like a <strong>Degree Evaluation</strong> document. SUrriculum can only import from your <strong>Academic Records Summary</strong>.</p>' +
+                        '<p><strong>Please do not upload Degree Evaluation.</strong></p>' +
+                        '<p>Please upload the correct file:</p>' +
+                        '<ol>' +
+                        '<li>Go to <strong>SUIS</strong> → <strong>Student</strong> → <strong>Student Records</strong> → <strong>Academic Transcript</strong></li>' +
+                        '<li>Open your <strong>Academic Records Summary</strong></li>' +
+                        '<li>Save it as <strong>HTML (preferred)</strong> or print to <strong>PDF</strong></li>' +
+                        '<li>Upload that file here</li>' +
+                        '</ol>' +
+                        '<p>You can also upload your <strong>YÖK Transcript PDF</strong> (not preferred).</p>'
+                    );
+                    try { fileInput.value = ''; } catch (_) {}
+                    try {
+                        if (ui && typeof ui.alert === 'function') {
+                            await ui.alert(title, body);
+                        } else {
+                            await uiAlert(title, body);
+                        }
+                    } catch (_) {}
+                };
+                const showHtmlSaveWarning = async () => {
+                    const title = 'Cannot import this HTML file';
+                    const body =
+                        '<p>This HTML file does not contain your transcript data. This usually happens when you save the page as <strong>HTML only</strong> or when the saved page is missing required content.</p>' +
+                        '<p>Please re-save your <strong>Academic Records Summary</strong> as:</p>' +
+                        '<ol>' +
+                        '<li>Open <strong>Academic Records Summary</strong> in SUIS (make sure you are logged in)</li>' +
+                        '<li>Press <strong>Ctrl+S</strong> / <strong>Save Page As…</strong></li>' +
+                        '<li>Choose <strong>Webpage, Complete</strong> (not “HTML only”)</li>' +
+                        '<li>Upload the saved <strong>.html</strong> file here</li>' +
+                        '</ol>' +
+                        '<p>Alternatively, print the same page to <strong>PDF</strong> and import that.</p>' +
+                        '<p>You can also upload a <strong>YÖK Transcript PDF</strong> (not preferred).</p>';
+                    try { fileInput.value = ''; } catch (_) {}
+                    try {
+                        if (ui && typeof ui.alert === 'function') await ui.alert(title, body);
+                        else await uiAlert(title, body);
+                    } catch (_) {}
+                };
+
                 if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
                     const arrayBuffer = await file.arrayBuffer();
                     const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
                     let text = '';
+                    let totalTextItems = 0;
+
                     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
                         const page = await pdf.getPage(pageNum);
                         const content = await page.getTextContent();
-                        text += content.items.map(item => item.str).join('\n') + '\n';
+                        totalTextItems += (content.items && content.items.length) ? content.items.length : 0;
+                        const strs = content.items.map(item => String(item.str || ''));
+                        const totalLen = strs.reduce((acc, s) => acc + s.length, 0);
+                        const avgLen = totalLen / Math.max(1, strs.length);
+                        // Some PDFs (notably "Microsoft Print to PDF") yield character-level
+                        // text items. Joining those with newlines destroys tokens. Use spaces
+                        // in that case; otherwise preserve the previous newline behavior.
+                        text += (avgLen <= 1.2 ? strs.join(' ') : strs.join('\n')) + '\n';
+                    }
+                    // Academic Records PDFs may mention Degree Evaluation at the end.
+                    // Reject only if it looks like Degree Evaluation AND does not
+                    // contain "Academic Records Summary". Never apply this to YÖK transcripts.
+                    if (!isYokTranscript(text) && isDegreeEvaluation(text) && !isAcademicRecordsSummary(text)) {
+                        await showDegreeEvalWarning();
+                        return;
                     }
                     parsedData = window.academicRecordsParser.parseAcademicRecordsPdf(text);
                 } else {
                     const htmlContent = await file.text();
+                    if (isNoPermissionHtml(htmlContent)) {
+                        await showHtmlSaveWarning();
+                        return;
+                    }
+                    if (isDegreeEvaluation(htmlContent) && !isAcademicRecordsSummary(htmlContent)) {
+                        await showDegreeEvalWarning();
+                        return;
+                    }
                     parsedData = window.academicRecordsParser.parseAcademicRecords(htmlContent);
                 }
             } catch (err) {
                 console.error(err);
-                alert('Failed to read academic records file.');
+                const ui = (typeof window !== 'undefined') ? window.uiModal : null;
+                if (ui && typeof ui.alert === 'function') {
+                    await ui.alert('Import failed', '<p>Failed to read the file.</p><p>Please try exporting again as HTML (preferred) or PDF.</p>');
+                } else {
+                    await uiAlert('Import failed', '<p>Failed to read the file.</p><p>Please try exporting again as HTML (preferred) or PDF.</p>');
+                }
+                return;
+            }
+
+            if (!parsedData || !Array.isArray(parsedData.courses) || parsedData.courses.length === 0) {
+                const ui = (typeof window !== 'undefined') ? window.uiModal : null;
+                try {
+                    if (ui && typeof ui.alert === 'function') {
+                        await ui.alert(
+                            'No courses detected',
+                            '<p>The file was read successfully, but no courses were detected.</p>' +
+                            '<p>Make sure you upload the correct document:</p>' +
+                            '<ol>' +
+                            '<li>SUIS → Student → Student Records → Academic Transcript</li>' +
+                            '<li>Open <strong>Academic Records Summary</strong> (not Degree Evaluation)</li>' +
+                            '<li>Save as <strong>HTML</strong> (preferred) or print to <strong>PDF</strong></li>' +
+                            '</ol>' +
+                            '<p><strong>Important:</strong> Some PDFs created using <strong>Microsoft Print to PDF</strong> may not import correctly. If this happens, re-export the same page using <strong>Save as PDF</strong> (recommended) or save as <strong>HTML</strong> instead.</p>' +
+                            '<p>If you are importing a <strong>YÖK Transcript PDF</strong>, ensure it is the “NOT DÖKÜM BELGESİ” format.</p>'
+                        );
+                    } else {
+                        await uiAlert('No courses detected', '<p>No courses were detected in this file.</p>');
+                    }
+                } catch (_) {}
                 return;
             }
 
@@ -1393,14 +1729,42 @@ function SUrriculum(major_chosen_by_user) {
             const importStats = importResult.stats;
             const pendingList = importResult.pendingCustomCourses || [];
 
-            // Show import results to user
-            let message = `Successfully imported ${importStats.importedCourses} of ${importStats.totalCourses} courses.`;
-
-            if (importStats.notFoundCourses.length > 0) {
-                message += `\n\nThe following ${importStats.notFoundCourses.length} courses were not found in the current program and were not imported:\n${importStats.notFoundCourses.join(', ')}`;
+            const ui = (typeof window !== 'undefined') ? window.uiModal : null;
+            if (!importStats || typeof importStats.importedCourses !== 'number') {
+                if (ui && typeof ui.alert === 'function') {
+                    await ui.alert('Import failed', '<p>Import did not return results.</p>');
+                } else {
+                    await uiAlert('Import failed', '<p>Import did not return results.</p>');
+                }
+                return;
             }
 
-            alert(message);
+            if (importStats.importedCourses === 0) {
+                const body = (
+                    `<p>No courses were imported.</p>` +
+                    `<p>Detected <strong>${importStats.totalCourses || 0}</strong> course(s) in the file, but none could be added to your current plan.</p>` +
+                    `<p>This usually happens if you selected the wrong major/double major before importing, or the file is not the Academic Records Summary.</p>` +
+                    `<p>Please upload the correct file:</p>` +
+                    '<ol>' +
+                    '<li>SUIS → Student → Student Records → Academic Transcript</li>' +
+                    '<li>Open <strong>Academic Records Summary</strong></li>' +
+                    '<li>Save as <strong>HTML</strong> (preferred) or print to <strong>PDF</strong></li>' +
+                    '<li>Upload that file here</li>' +
+                    '</ol>' +
+                    `<p>You can also upload a <strong>YÖK Transcript PDF</strong> (not preferred).</p>`
+                );
+                if (ui && typeof ui.alert === 'function') await ui.alert('No courses imported', body);
+                else await uiAlert('No courses imported', body);
+                return;
+            }
+
+            // Show import results to user
+            const notFound = (importStats.notFoundCourses && importStats.notFoundCourses.length)
+                ? `<p><strong>${importStats.notFoundCourses.length}</strong> course(s) were not found in the current program and were skipped:</p><p><small>${importStats.notFoundCourses.join(', ')}</small></p>`
+                : '';
+            const messageHtml = `<p>Successfully imported <strong>${importStats.importedCourses}</strong> of <strong>${importStats.totalCourses}</strong> course(s).</p>${notFound}`;
+            if (ui && typeof ui.alert === 'function') await ui.alert('Import complete', messageHtml);
+            else await uiAlert('Import complete', messageHtml);
 
             // If there are pending custom courses, process them
             if (pendingList.length > 0) {
@@ -1410,7 +1774,12 @@ function SUrriculum(major_chosen_by_user) {
             const importDropdown = document.getElementById('importDropdown');
             if (importDropdown) importDropdown.classList.remove('active');
         } else {
-            alert('Please select an Academic Records HTML or PDF file.');
+            const ui = (typeof window !== 'undefined') ? window.uiModal : null;
+            if (ui && typeof ui.alert === 'function') {
+                await ui.alert('Select a file', '<p>Please select an <strong>Academic Records Summary</strong> HTML/PDF file (or a YÖK Transcript PDF) and try again.</p>');
+            } else {
+                await uiAlert('Select a file', '<p>Please select a file and try again.</p>');
+            }
         }
     }
     document.getElementById('importAcademicRecords').onclick = handleAcademicRecordsImport;
@@ -1440,7 +1809,7 @@ function SUrriculum(major_chosen_by_user) {
     // reloads.  We also update the select element's value to reflect
     // the stored double major choice.
     try {
-        const savedDMInit = localStorage.getItem('doubleMajor') || '';
+        const savedDMInit = planGetItem('doubleMajor') || '';
         const dmSelect = document.querySelector('.doubleMajor');
         if (dmSelect && dmSelect.tagName === 'SELECT') {
             dmSelect.value = savedDMInit;
@@ -1460,6 +1829,6 @@ function SUrriculum(major_chosen_by_user) {
     });
 }
 
-let major_existing = localStorage.getItem("major");
+let major_existing = planGetItem("major");
 if (major_existing) {SUrriculum(major_existing);}
 else {SUrriculum(initial_major_chosen);}

@@ -215,7 +215,7 @@ function parseYokTranscript(pdfText) {
  */
 function parseAcademicRecordsPdf(pdfText) {
     // Detect YÖK-style transcripts which use a completely different layout
-    if (pdfText.includes('NOT DÖKÜM BELGESİ')) {
+    if (pdfText.includes('NOT DÖKÜM BELGESİ') || pdfText.includes('NOT DOKUM BELGESI')) {
         return parseYokTranscript(pdfText);
     }
 
@@ -230,6 +230,214 @@ function parseAcademicRecordsPdf(pdfText) {
 
     const result = { courses: [], notFoundCourses: [] };
     let currentSemester = 'Unknown Semester';
+
+    function parseAcademicRecordsPdfTokenStream(text) {
+        const tokens = String(text || '').replace(/\r/g, ' ').split(/\s+/).map(t => t.trim()).filter(Boolean);
+        const semesterTerms = new Set(['Fall', 'Spring', 'Summer']);
+        const yearRangeRegex = /^\d{4}-\d{4}$/;
+        const upper = (t) => String(t || '').toUpperCase();
+        const normalizeDigitish = (s) => {
+            const t = String(s || '');
+            // OCR often confuses these in course numbers.
+            return t.replace(/[Il]/g, '1').replace(/O/g, '0');
+        };
+        const gradeTokenRegexUpper = /^(S|A|A-|B\+|B|B-|C\+|C|C-|D\+|D|F|T|P|I|W|NA|U|REGISTERED)$/;
+        const isGradeToken = (tok) => gradeTokenRegexUpper.test(upper(tok));
+        const normalizeGrade = (tok) => {
+            const u = upper(tok);
+            return u === 'REGISTERED' ? 'Registered' : u;
+        };
+        const readGradeAt = (idx) => {
+            const a = tokens[idx] || '';
+            const aU = upper(a);
+            const bU = upper(tokens[idx + 1] || '');
+            if ((aU === 'A' || aU === 'B' || aU === 'C' || aU === 'D') && (bU === '+' || bU === '-')) {
+                const g = aU + bU;
+                if (isGradeToken(g)) return { grade: normalizeGrade(g), next: idx + 2 };
+            }
+            if (isGradeToken(a)) return { grade: normalizeGrade(a), next: idx + 1 };
+            return null;
+        };
+        const isNumberToken = (t) => {
+            if (!t) return false;
+            return !isNaN(parseFloat(t));
+        };
+        const isSemesterAt = (idx) => {
+            const t = tokens[idx];
+            const y = tokens[idx + 1];
+            if (!t || !y) return null;
+            const cap = t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
+            if (!semesterTerms.has(cap)) return null;
+            if (!yearRangeRegex.test(y)) return null;
+            return cap + ' ' + y;
+        };
+        const isCourseStartAt = (idx) => {
+            const tRaw = tokens[idx] || '';
+            const t2Raw = tokens[idx + 1] || '';
+            const t = upper(tRaw);
+            const t2 = upper(t2Raw);
+            const t2Num = normalizeDigitish(t2);
+
+            if (/^[A-Z]{2,6}\d{3,}[A-Z0-9]*$/.test(normalizeDigitish(t))) {
+                return { code: normalizeDigitish(t), next: idx + 1 };
+            }
+            if (/^[A-Z]{2,6}$/.test(t) && /^\d{3,}[A-Z0-9]*$/.test(t2Num)) {
+                return { code: t + t2Num, next: idx + 2 };
+            }
+            // Microsoft Print to PDF sometimes yields character-level tokens like:
+            // "C", "S", "1", "0", "1" or "C", "S", "101". Stitch those back together.
+            if (/^[A-Z]$/.test(t)) {
+                let j = idx;
+                let subj = '';
+                while (j < tokens.length && /^[A-Z]$/.test(upper(tokens[j])) && subj.length < 6) {
+                    subj += upper(tokens[j]);
+                    j++;
+                }
+                if (subj.length < 2) return null;
+
+                // Case A: next token already contains the full number (e.g. "101")
+                const nTok = normalizeDigitish(upper(tokens[j] || ''));
+                if (/^\d{3,}[A-Z0-9]*$/.test(nTok)) {
+                    return { code: subj + nTok, next: j + 1 };
+                }
+
+                // Case B: number is split across multiple digit tokens (e.g. "1","0","1")
+                let k = j;
+                let num = '';
+                while (k < tokens.length && /^\d$/.test(normalizeDigitish(tokens[k])) && num.length < 6) {
+                    num += normalizeDigitish(tokens[k]);
+                    k++;
+                }
+                if (num.length >= 3) {
+                    // Optional suffix token immediately after digits (e.g. "A")
+                    const suf = upper(tokens[k] || '');
+                    if (/^[A-Z0-9]{1,3}$/.test(suf) && !levelTokens.has(suf) && !isGradeToken(suf)) {
+                        return { code: subj + num + suf, next: k + 1 };
+                    }
+                    return { code: subj + num, next: k };
+                }
+            }
+            return null;
+        };
+
+        const out = { courses: [], notFoundCourses: [] };
+        let sem = 'Unknown Semester';
+
+        for (let i = 0; i < tokens.length;) {
+            const semAt = isSemesterAt(i);
+            if (semAt) {
+                sem = semAt;
+                i += 2;
+                continue;
+            }
+
+            const start = isCourseStartAt(i);
+            if (!start) {
+                i++;
+                continue;
+            }
+
+            let code = start.code.replace(/\s+/g, '');
+            i = start.next;
+
+            // Skip ELAE entries (legacy behavior) without terminating parsing.
+            if (code.includes('ELAE')) {
+                continue;
+            }
+
+            // Find the "level" token (UG/GR/...) nearby; Microsoft Print to PDF
+            // often flattens rows into a single token stream.
+            let levelIdx = -1;
+            for (let j = i; j < Math.min(tokens.length, i + 40); j++) {
+                if (levelTokens.has(upper(tokens[j]))) {
+                    levelIdx = j;
+                    break;
+                }
+                // Stop early if we obviously reached the next record.
+                if (isSemesterAt(j) || isCourseStartAt(j)) break;
+            }
+
+            const titleTokens = [];
+            let cursor = i;
+            if (levelIdx !== -1 && levelIdx > i) {
+                for (let j = i; j < levelIdx; j++) {
+                    const tok = tokens[j];
+                    // Avoid accidentally slurping grade/credit tokens as title.
+                    if (isGradeToken(tok) || isNumberToken(tok)) break;
+                    titleTokens.push(tok);
+                }
+                cursor = levelIdx + 1;
+            } else {
+                // Fallback: collect title tokens until we hit grade/credits.
+                while (cursor < tokens.length) {
+                    const tok = tokens[cursor];
+                    if (levelTokens.has(upper(tok)) || isGradeToken(tok) || isNumberToken(tok) || isSemesterAt(cursor) || isCourseStartAt(cursor)) break;
+                    titleTokens.push(tok);
+                    cursor++;
+                    if (titleTokens.length > 30) break;
+                }
+                if (levelTokens.has(upper(tokens[cursor]))) cursor++;
+            }
+
+            const courseTitle = titleTokens.join(' ').trim();
+
+            let grade = '';
+            const g = readGradeAt(cursor);
+            if (g) {
+                grade = g.grade;
+                cursor = g.next;
+            }
+
+            let suCredits = 0;
+            if (cursor < tokens.length && isNumberToken(tokens[cursor])) {
+                suCredits = parseFloat(tokens[cursor]) || 0;
+                cursor++;
+            }
+
+            let ects = 0;
+            if (cursor < tokens.length && isNumberToken(tokens[cursor])) {
+                ects = parseFloat(tokens[cursor]) || 0;
+                cursor++;
+            }
+
+            // Scan status tokens until the next course/semester header to detect
+            // "repeated/excluded" rows.
+            const statusTokens = [];
+            let j = cursor;
+            while (j < tokens.length && !isSemesterAt(j) && !isCourseStartAt(j)) {
+                statusTokens.push(tokens[j]);
+                j++;
+                if (statusTokens.length > 60) break;
+            }
+            const statusText = statusTokens.join(' ').toLowerCase();
+            if ((statusText.includes('repeated') || statusText.includes('excluded')) && !statusText.includes('regardless of whether the course is repeated later')) {
+                i = j;
+                continue;
+            }
+
+            if (code === 'CS210') {
+                code = 'DSA210';
+            }
+
+            if (['W', 'NA'].includes(grade)) {
+                i = j;
+                continue;
+            }
+
+            out.courses.push({
+                code: code,
+                title: courseTitle,
+                grade: grade === 'Registered' ? '' : grade,
+                semester: sem,
+                suCredits: suCredits,
+                ects: ects
+            });
+
+            i = j;
+        }
+
+        return out;
+    }
 
     for (let i = 0; i < lines.length;) {
         const line = lines[i];
@@ -297,7 +505,7 @@ function parseAcademicRecordsPdf(pdfText) {
 
             // Correct the condition to skip courses with ELAE code
             if (code.includes('ELAE')) {
-                return; // Skip this iteration
+                continue; // Skip this iteration
             }
 
             if (['W', 'NA'].includes(grade)) {
@@ -316,6 +524,12 @@ function parseAcademicRecordsPdf(pdfText) {
         }
 
         i++;
+    }
+
+    // Fallback parser for PDFs produced by "Microsoft Print to PDF" which may
+    // flatten rows into a different token ordering.
+    if (result.courses.length === 0) {
+        return parseAcademicRecordsPdfTokenStream(pdfText);
     }
 
     return result;
@@ -467,12 +681,23 @@ function importParsedCourses(parsedCourses, courseData, curriculum) {
                 };
                 // Append to course data so future imports recognize it
                 courseData.push(newCourse);
-                // Persist to localStorage under the current major
+                // Persist to storage under the current major (plan-scoped when available)
                 try {
                     const key = 'customCourses_' + curriculum.major;
-                    const existingList = JSON.parse(localStorage.getItem(key) || '[]');
+                    const ps = (typeof window !== 'undefined') ? window.planStorage : null;
+                    const get = (k) => {
+                        try { return ps ? ps.getItem(k) : localStorage.getItem(k); } catch (_) {}
+                        try { return localStorage.getItem(k); } catch (_) {}
+                        return null;
+                    };
+                    const set = (k, v) => {
+                        try { return ps ? ps.setItem(k, v) : localStorage.setItem(k, v); } catch (_) {}
+                        try { return localStorage.setItem(k, v); } catch (_) {}
+                        return null;
+                    };
+                    const existingList = JSON.parse(get(key) || '[]');
                     existingList.push(newCourse);
-                    localStorage.setItem(key, JSON.stringify(existingList));
+                    set(key, JSON.stringify(existingList));
                 } catch (e) {
                     // ignore storage errors
                 }

@@ -62,25 +62,67 @@ function extractNumericValue(string) {
     return null; // No numeric value found
 }
 
-//terms list & date_list_InnerHTML:
+// Terms list & date_list_InnerHTML:
+// Determine the current term based on the device date.
+// Rules:
+// - Before Jan 20: Fall of (year-1)-(year)
+// - Before June 20: Spring of (year-1)-(year)
+// - Before September: Summer of (year-1)-(year)
+// - Otherwise: Fall of (year)-(year+1)
 let currentDate = new Date();
 let currentYear = currentDate.getFullYear();
-let currentMonth = currentDate.getMonth(); // 0-11, where 0 is January
+let currentMonth = currentDate.getMonth(); // 0-11
+let currentDay = currentDate.getDate(); // 1-31
+
+function getCurrentTermNameFromDate(d) {
+    try {
+        const y = d.getFullYear();
+        const m = d.getMonth();
+        const day = d.getDate();
+        // Jan 1-19
+        if (m === 0 && day < 20) {
+            const start = y - 1;
+            return `Fall ${start}-${start + 1}`;
+        }
+        // Jan 20 -> Jun 19
+        if (m < 5 || (m === 5 && day < 20)) {
+            const start = y - 1;
+            return `Spring ${start}-${start + 1}`;
+        }
+        // Jun 20 -> Aug 31
+        if (m < 8) {
+            const start = y - 1;
+            return `Summer ${start}-${start + 1}`;
+        }
+        // Sep -> Dec
+        const start = y;
+        return `Fall ${start}-${start + 1}`;
+    } catch (_) {
+        return '';
+    }
+}
+if (typeof window !== 'undefined') {
+    window.getCurrentTermNameFromDate = getCurrentTermNameFromDate;
+}
 
 var date_list_InnerHTML = '';
 var terms = [];
 var entry_date_list_InnerHTML = '';
 var entryTerms = [];
 
-// Determine the current academic year
-let academicYear;
-// If we're in the second half of the calendar year (after July), we're in the Fall semester of academicYear/academicYear+1
-// Otherwise, we're in the Spring semester of academicYear-1/academicYear
-if (currentMonth >= 7) { // August or later
-    academicYear = currentYear;
-} else {
-    academicYear = currentYear - 1;
-}
+// Determine the current academic year start based on the current term name.
+let academicYear = currentYear - 1;
+try {
+    const t = getCurrentTermNameFromDate(currentDate);
+    const m = t.match(/(Fall|Spring|Summer)\s+(\d{4})-(\d{4})/);
+    if (m) {
+        academicYear = parseInt(m[2], 10);
+    }
+    if (typeof window !== 'undefined') {
+        window.currentTermName = t;
+        window.currentAcademicYearStart = academicYear;
+    }
+} catch (_) {}
 
 // Generate terms from 2019 onwards. We still keep a window of 6 years in the
 // past and future relative to the current academic year but never go earlier
@@ -105,27 +147,17 @@ for (let i = endYear; i >= startYear; i--) {
     terms.push("Fall " + yearRange);
 }
 
-// Entry term options are limited to Fall 2025-2026. Build a
-// separate list so that admit term selectors are capped while
-// semester dates can extend further into the future.
-const entryEndYear = 2025;
+// Entry term options are capped dynamically (minimum is fixed) and are
+// tightened further in main.js based on the scraped term manifest.
 const entryStartYear = startYear;
+const entryEndYear = academicYear;
 for (let i = entryEndYear; i >= entryStartYear; i--) {
     const yearRange = i + '-' + (i + 1);
-
-    // Allow admitting in any term of the academic year. Previously the most
-    // recent year only listed the Fall term which forced new plans to start
-    // from Fall 2025-2026 regardless of the user's actual admit term.
-    if (i !== 2025){
-        entry_date_list_InnerHTML += "<option value='Summer " + yearRange + "'>";
-        entry_date_list_InnerHTML += "<option value='Spring " + yearRange + "'>";
-    }
+    entry_date_list_InnerHTML += "<option value='Summer " + yearRange + "'>";
+    entry_date_list_InnerHTML += "<option value='Spring " + yearRange + "'>";
     entry_date_list_InnerHTML += "<option value='Fall " + yearRange + "'>";
-
-    if (i !== 2025) {
-        entryTerms.push("Summer " + yearRange);
-        entryTerms.push("Spring " + yearRange);
-    }
+    entryTerms.push("Summer " + yearRange);
+    entryTerms.push("Spring " + yearRange);
     entryTerms.push('Fall ' + yearRange);
 }
 
@@ -149,6 +181,30 @@ function termCodeToName(code) {
     const term = { '01': 'Fall', '02': 'Spring', '03': 'Summer' }[termNum] || '';
     const nextYear = String(parseInt(year, 10) + 1);
     return term + ' ' + year + '-' + nextYear;
+}
+
+// Expose current term code once conversion helpers exist.
+try {
+    if (typeof window !== 'undefined' && window.currentTermName) {
+        window.currentTermCode = termNameToCode(window.currentTermName);
+    }
+} catch (_) {}
+
+// Apply "current term" styling to semester columns.
+function updateCurrentTermHighlights() {
+    try {
+        const ct = (typeof window !== 'undefined') ? window.currentTermName : '';
+        if (!ct) return;
+        document.querySelectorAll('.container_semester').forEach(container => {
+            const p = container.querySelector('.date p');
+            const t = p ? p.textContent.trim() : '';
+            if (t && t === ct) container.classList.add('current-term');
+            else container.classList.remove('current-term');
+        });
+    } catch (_) {}
+}
+if (typeof window !== 'undefined') {
+    window.updateCurrentTermHighlights = updateCurrentTermHighlights;
 }
 
 var grade_list_InnerHTML = '';
@@ -246,6 +302,81 @@ function getCoursesList(course_data) {
     });
 }
 
+// Lazy-load the course page scrape index so we can check whether a course has
+// been offered in the current term. This is used for optional filtering in the
+// course dropdown (Add Course).
+function loadCourseOfferingsIndex() {
+    try {
+        if (typeof window === 'undefined') return Promise.resolve(null);
+        if (window.__courseOfferingsPromise) return window.__courseOfferingsPromise;
+
+        window.__courseOfferingsPromise = (async () => {
+            const tryReadText = async () => {
+                // Prefer synchronous XHR under file:// where fetch can be blocked.
+                try {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('GET', './courses/all_coursepage_info.jsonl', false);
+                    xhr.overrideMimeType('application/json');
+                    xhr.send(null);
+                    if (xhr.status === 200 || xhr.status === 0) return xhr.responseText;
+                } catch (_) {}
+                try {
+                    const res = await fetch('./courses/all_coursepage_info.jsonl');
+                    if (res.ok) return await res.text();
+                } catch (_) {}
+                return '';
+            };
+
+            const text = await tryReadText();
+            const byCode = new Map();
+            if (!text) {
+                window.courseOfferingsByCode = byCode;
+                return byCode;
+            }
+            const lines = text.split(/\r?\n/);
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i] && lines[i].trim();
+                if (!line) continue;
+                try {
+                    const obj = JSON.parse(line);
+                    const id = obj && obj.course_id ? String(obj.course_id) : '';
+                    if (!id) continue;
+                    const termsArr = Array.isArray(obj.last_offered_terms) ? obj.last_offered_terms : [];
+                    const set = new Set();
+                    for (let j = 0; j < termsArr.length; j++) {
+                        const t = termsArr[j] && termsArr[j].term ? String(termsArr[j].term) : '';
+                        if (t) set.add(t);
+                    }
+                    byCode.set(id, set);
+                } catch (_) {
+                    // ignore malformed line
+                }
+            }
+            window.courseOfferingsByCode = byCode;
+            return byCode;
+        })();
+
+        return window.__courseOfferingsPromise;
+    } catch (_) {
+        return Promise.resolve(null);
+    }
+}
+if (typeof window !== 'undefined') {
+    window.loadCourseOfferingsIndex = loadCourseOfferingsIndex;
+    window.isCourseOfferedInCurrentTerm = function(code) {
+        try {
+            const ct = window.currentTermName || '';
+            const idx = window.courseOfferingsByCode;
+            if (!ct || !idx) return true; // if unknown/unloaded, don't filter out
+            const set = idx.get(String(code)) || null;
+            if (!set) return true;
+            return set.has(ct);
+        } catch (_) {
+            return true;
+        }
+    };
+}
+
 // Adjust semester totals by adding or subtracting the specified course's
 // credit, science/engineering values and category totals. `multiplier`
 // should be +1 to add credits or -1 to remove them.
@@ -331,9 +462,15 @@ function dates_serializator()
 function reload(curriculum, course_data)
 {
     let data, grades, dates;
-    try{data = JSON.parse(localStorage.getItem("curriculum"));} catch{}
-    try{grades = JSON.parse(localStorage.getItem("grades"));}   catch{}
-    try{dates = JSON.parse(localStorage.getItem("dates"))}      catch{}
+    const ps = (typeof window !== 'undefined') ? window.planStorage : null;
+    const get = (k) => {
+        try { return ps ? ps.getItem(k) : localStorage.getItem(k); } catch (_) {}
+        try { return localStorage.getItem(k); } catch (_) {}
+        return null;
+    };
+    try{data = JSON.parse(get("curriculum"));} catch{}
+    try{grades = JSON.parse(get("grades"));}   catch{}
+    try{dates = JSON.parse(get("dates"))}      catch{}
     if(data)
     {
         for(let i = 0; i < data.length; i++)

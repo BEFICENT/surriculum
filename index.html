@@ -62,6 +62,7 @@
     </script>
     
     <!-- Core scripts -->
+    <script src="scripts/plan_manager.js"></script>
     <script src="scripts/helper_functions.js"></script>
     <script src="scripts/mouse_and_drag.js"></script>
     <script src="scripts/s_semester.js"></script>
@@ -91,6 +92,27 @@
         </a>
 
         <div class="header-controls">
+            <div class="plan-container">
+                <button id="planToggle" class="btn btn-secondary btn-sm plan-toggle">
+                    <i class="fa-solid fa-layer-group"></i>&nbsp;<span id="activePlanName">Default Plan</span>
+                </button>
+
+                <div class="plan-dropdown" id="planDropdown">
+                    <h3 class="plan-title">Plans</h3>
+                    <div class="plan-list" aria-label="Plans list"></div>
+                    <div class="plan-divider"></div>
+                    <div class="plan-footer">
+                        <button id="addPlanBtn" class="btn btn-primary btn-sm" type="button">
+                            <i class="fa-solid fa-plus"></i>&nbsp;New plan
+                        </button>
+                        <button id="importPlanBtn2" class="btn btn-secondary btn-sm" type="button">
+                            <i class="fa-solid fa-file-arrow-up"></i>&nbsp;Import
+                        </button>
+                        <input type="file" id="planImportInput2" accept=".json" style="display:none" />
+                    </div>
+                </div>
+            </div>
+
             <button id="themeToggle" class="btn btn-secondary btn-sm">
                 <i class="fa-solid fa-moon"></i> Theme
             </button>
@@ -106,7 +128,7 @@
                         <p>Import your courses from Academic Records Summary:</p>
                         <ol>
                             <li>Go to SUIS → Student → Student Records → Academic Transcript and view your Academic Records Summary</li>
-                            <li>Save the page as <strong>HTML (preferred)</strong> or print to <strong>PDF</strong></li>
+                            <li>Save the page as <strong>HTML (Webpage, Complete)</strong> (preferred) or print to <strong>PDF</strong></li>
                             <li>Upload the saved HTML or PDF file below</li>
                         </ol>
                         <p>Or alternatively, upload your YÖK Transcript PDF file <strong>(not preferred)</strong></p>
@@ -140,9 +162,15 @@
                         <select class="select-control entryTerm"></select>
                     </div>
 
-                    <div class="control-row">
+                    <div class="control-row" id="doubleMajorControlsRow">
                         <select class="select-control doubleMajor"></select>
                         <select class="select-control entryTermDM"></select>
+                    </div>
+
+                    <div class="control-row is-hidden" id="doubleMajorButtonRow">
+                        <button class="btn btn-secondary" id="addDoubleMajorBtn" style="width: 100%;">
+                            <i class="fa-solid fa-plus"></i>&nbsp;Add Double Major
+                        </button>
                     </div>
                 </div>
 
@@ -176,6 +204,16 @@
                         <span class="toggle-text">Hide Taken Courses</span>
                         <label class="toggle-switch">
                             <input type="checkbox" id="hideTakenCoursesToggle" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <div class="control-row toggle-row">
+                        <span class="toggle-text" id="offeredThisTermLabel">Only show courses offered this term</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="offeredThisTermToggle">
                             <span class="toggle-slider"></span>
                         </label>
                     </div>

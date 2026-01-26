@@ -4,3 +4,4 @@ Academic\ Records\ Summary_ex.html linguist-generated=true
 # Mark entire directories as generated
 Degree\ Detail\ Pages\ \(for\ inspect\)/* linguist-generated=true
 Pre-Conversion\ Files/* linguist-generated=true
+minor_htmls/* linguist-generated=true
