@@ -18,18 +18,18 @@ BASE = 'https://suis.sabanciuniv.edu/prod/'
 LIST_URL = BASE + 'SU_DEGREE.p_list_degree?P_LEVEL=UG&P_LANG=EN&P_PRG_TYPE='
 
 PROGRAM_FILES = {
-    'BSBIO': 'BIO.json',
-    'BSCS': 'CS.json',
-    'BAECON': 'ECON.json',
-    'BSEE': 'EE.json',
-    'BSMS': 'IE.json',
-    'BSMAT': 'MAT.json',
-    'BSME': 'ME.json',
-    'BSDSA': 'DSA.json',  # Adding Data Science and Analytics program
-    'BAMAN': 'MAN.json',  # Management program
-    'BAPSIR': 'PSIR.json',  # Political Science and International Relations
-    'BAPSY': 'PSY.json',  # Psychology program
-    'BAVACD': 'VACD.json',  # Visual Arts and Visual Communication Design
+    'BSBIO': 'BIO.jsonl',
+    'BSCS': 'CS.jsonl',
+    'BAECON': 'ECON.jsonl',
+    'BSEE': 'EE.jsonl',
+    'BSMS': 'IE.jsonl',
+    'BSMAT': 'MAT.jsonl',
+    'BSME': 'ME.jsonl',
+    'BSDSA': 'DSA.jsonl',  # Adding Data Science and Analytics program
+    'BAMAN': 'MAN.jsonl',  # Management program
+    'BAPSIR': 'PSIR.jsonl',  # Political Science and International Relations
+    'BAPSY': 'PSY.jsonl',  # Psychology program
+    'BAVACD': 'VACD.jsonl',  # Visual Arts and Visual Communication Design
 }
 
 # Predefined faculty courses - these are specific courses, not based on course attributes
@@ -436,14 +436,14 @@ def main():
     if args.terms.strip():
         terms = [t.strip() for t in args.terms.split(",") if t.strip()]
     else:
-        # Generate term codes from Fall 2019 until Fall 2025 only. Terms follow the
+        # Generate term codes from Fall 2019 until Spring 2025 only. Terms follow the
         # pattern YYYY01 (Fall), YYYY02 (Spring) and YYYY03 (Summer). Do not
-        # generate any terms beyond 2025 Fall to keep the dataset bounded.
+        # generate any terms beyond 2025 Spring to keep the dataset bounded.
         terms = []
         for year in range(2019, 2026):
             suffixes = ('01', '02', '03')
             if year == 2025:
-                suffixes = ('01',)  # stop at Fall 2025
+                suffixes = ('01', '02')  # stop at Spring 2025
             for suf in suffixes:
                 terms.append(f"{year}{suf}")
 
@@ -479,16 +479,18 @@ def main():
                     print(f"Failed {code} {term}: {e}")
                     continue
                 majors_found.append(os.path.splitext(fname)[0])
-                with open(os.path.join(term_dir, fname), 'w') as f:
-                    json.dump(data, f, indent=2)
+                with open(os.path.join(term_dir, fname), 'w', encoding='utf-8') as f:
+                    for rec in data:
+                        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
                 print(f"Updated {fname} for term {term} with {len(data)} records")
 
             if majors_found:
                 majors_by_term[term] = majors_found
 
     # Write mapping of majors per term
-    with open(os.path.join(COURSES_DIR, 'terms.json'), 'w') as f:
-        json.dump(majors_by_term, f, indent=2)
+    with open(os.path.join(COURSES_DIR, 'terms.jsonl'), 'w', encoding='utf-8') as f:
+        for term in sorted(majors_by_term.keys()):
+            f.write(json.dumps({"term": term, "majors": majors_by_term[term]}, ensure_ascii=False) + "\n")
 
     if not args.skip_coursepages:
         # Populate Basic_Science / Engineering credits by scraping course pages.

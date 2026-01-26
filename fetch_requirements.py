@@ -122,7 +122,7 @@ def main():
     for year in range(2019, 2026):
         suffixes = ('01', '02', '03')
         if year == 2025:
-            suffixes = ('01',)  # Only Fall 2025 should be scraped
+            suffixes = ('01', '02')  # Only Fall and Spring 2025 should be scraped
         for suf in suffixes:
             terms.append(f"{year}{suf}")
 
@@ -139,8 +139,9 @@ def main():
             if data:
                 out[major] = data
         if out:
-            with open(os.path.join(REQUIREMENTS_DIR, f'{term}.json'), 'w') as f:
-                json.dump(out, f, indent=2)
+            with open(os.path.join(REQUIREMENTS_DIR, f'{term}.jsonl'), 'w', encoding='utf-8') as f:
+                for major in sorted(out.keys()):
+                    f.write(json.dumps({"major": major, **out[major]}, ensure_ascii=False) + "\n")
 
 if __name__ == '__main__':
     main()

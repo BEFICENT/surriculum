@@ -222,7 +222,7 @@ function s_curriculum()
                         let course = this.semesters[i].courses[a];
                         // Check if it's a 400-level EE course in core electives
                         if(course.code.startsWith("EE4") && course.category === "Core") {
-                            ee400LevelCredits += course.SU_credit;
+                            ee400LevelCredits += (parseInt(course.SU_credit || '0') || 0);
                         }
                     }
                 }
@@ -432,7 +432,8 @@ function s_curriculum()
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
-                        if (course.category === 'Core') {
+                        const eff = (course.effective_type || (course.category && course.category.toLowerCase()) || '').toLowerCase();
+                        if (eff === 'core') {
                             coreCount++;
                             if (course.code.startsWith('ACC')) coreAreas.add('ACC');
                             else if (course.code.startsWith('FIN')) coreAreas.add('FIN');
@@ -451,7 +452,8 @@ function s_curriculum()
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
-                        if (course.category === 'Area') {
+                        const eff = (course.effective_type || (course.category && course.category.toLowerCase()) || '').toLowerCase();
+                        if (eff === 'area') {
                             areaCount++;
                             if (course.code.startsWith('ACC')) areaAreas.add('ACC');
                             else if (course.code.startsWith('FIN')) areaAreas.add('FIN');
@@ -472,10 +474,12 @@ function s_curriculum()
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
-                        if (course.category === 'Free') {
-                            freeElectivesCount += course.SU_credit;
+                        const eff = (course.effective_type || (course.category && course.category.toLowerCase()) || '').toLowerCase();
+                        if (eff === 'free') {
+                            const c = parseInt(course.SU_credit || '0') || 0;
+                            freeElectivesCount += c;
                             if (course.Faculty_Course === 'FASS' || course.Faculty_Course === 'FENS') {
-                                fassFensCredits += course.SU_credit;
+                                fassFensCredits += c;
                             }
                             if (basicLanguageCourses.includes(course.code)) {
                                 basicLanguageCoursesCount++;
@@ -534,8 +538,9 @@ function s_curriculum()
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
-                        if (coreElectivesIPool.includes(course.Major + course.Code)) {
-                            coreElectivesICount += course.SU_credit;
+                        const courseCode = course.code || ((course.Major || '') + (course.Code || ''));
+                        if (coreElectivesIPool.includes(courseCode)) {
+                            coreElectivesICount += (parseInt(course.SU_credit || '0') || 0);
                         }
                     }
                 }
@@ -547,8 +552,9 @@ function s_curriculum()
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
-                        if (coreElectivesIIPool.includes(course.Major + course.Code)) {
-                            coreElectivesIICount += course.SU_credit;
+                        const courseCode = course.code || ((course.Major || '') + (course.Code || ''));
+                        if (coreElectivesIIPool.includes(courseCode)) {
+                            coreElectivesIICount += (parseInt(course.SU_credit || '0') || 0);
                         }
                     }
                 }
@@ -642,8 +648,10 @@ function s_curriculum()
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
-                        if (coreElectivesIPool.includes(course.Major + course.Code)) {
-                            coreElectivesICount += course.SU_credit;
+                        const courseCode = course.code || ((course.Major || '') + (course.Code || ''));
+                        const eff = (course.effective_type || (course.category && course.category.toLowerCase()) || '').toLowerCase();
+                        if (eff === 'core' && coreElectivesIPool.includes(courseCode)) {
+                            coreElectivesICount += (parseInt(course.SU_credit || '0') || 0);
                         }
                     }
                 }
@@ -652,40 +660,29 @@ function s_curriculum()
                 // Core Electives II (Skill Courses) for VACD
                 let coreElectivesIICount = 0;
                 const coreElectivesIIPool = ['VA202', 'VA204', 'VA234', 'VA302', 'VA304', 'VA402', 'VA404'];
-                const mutuallyExclusivePairs = [['VA302', 'VA304'], ['VA402', 'VA404']];
-                const takenPairs = new Set();
+                const pairKeyByCode = {
+                    VA302: 'VA302|VA304',
+                    VA304: 'VA302|VA304',
+                    VA402: 'VA402|VA404',
+                    VA404: 'VA402|VA404',
+                };
+                const seenPairKeys = new Set();
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
-                        if (coreElectivesIIPool.includes(course.Major + course.Code)) {
-                            coreElectivesIICount += course.SU_credit;
-                            // Track mutually exclusive pairs
-                            for (const pair of mutuallyExclusivePairs) {
-                                if (pair.includes(course.Major + course.Code)) {
-                                    takenPairs.add(pair.join(','));
-                                }
+                        const courseCode = course.code || ((course.Major || '') + (course.Code || ''));
+                        const eff = (course.effective_type || (course.category && course.category.toLowerCase()) || '').toLowerCase();
+                        if (eff === 'core' && coreElectivesIIPool.includes(courseCode)) {
+                            const pairKey = pairKeyByCode[courseCode];
+                            if (pairKey) {
+                                if (seenPairKeys.has(pairKey)) continue;
+                                seenPairKeys.add(pairKey);
                             }
+                            coreElectivesIICount += (parseInt(course.SU_credit || '0') || 0);
                         }
                     }
                 }
-                // Ensure only one course from each pair is counted
-                if (takenPairs.size > mutuallyExclusivePairs.length) return 31;
                 if (coreElectivesIICount < 12) return 31;
-
-                // New requirement: Only one course from each specified pair is counted
-                const exclusivePairs = [['VA301', 'VA303'], ['VA401', 'VA403'], ['VA300', 'PROJ300']];
-                const takenExclusivePairs = new Set();
-                for (let i = 0; i < this.semesters.length; i++) {
-                    for (let a = 0; a < this.semesters[i].courses.length; a++) {
-                        const course = this.semesters[i].courses[a];
-                        for (const pair of exclusivePairs) {
-                            if (pair.includes(course.code)) {
-                                takenExclusivePairs.add(pair.join(','));
-                            }
-                        }
-                    }
-                }
-                if (takenExclusivePairs.size > exclusivePairs.length) return 32;
             }
         }
         else if(this.major == 'DSA')
@@ -810,12 +807,13 @@ function s_curriculum()
         }
 
         // Sort a copy of semesters chronologically based on the stored
-        // `termIndex` property. If `termIndex` is null (e.g., a newly created
-        // semester without a date), treat it as very large so it will be
-        // allocated last.
+        // `termIndex` property. The `terms` array is ordered most-recent
+        // first, so larger indices represent earlier (older) semesters.
+        // If `termIndex` is null/undefined (e.g., a semester without a valid
+        // date), treat it as very small so it will be allocated last.
         const sortedSemesters = this.semesters.slice().sort((a, b) => {
-            const idxA = (a.termIndex !== null && a.termIndex !== undefined) ? a.termIndex : Number.MAX_SAFE_INTEGER;
-            const idxB = (b.termIndex !== null && b.termIndex !== undefined) ? b.termIndex : Number.MAX_SAFE_INTEGER;
+            const idxA = (a.termIndex !== null && a.termIndex !== undefined) ? a.termIndex : -1;
+            const idxB = (b.termIndex !== null && b.termIndex !== undefined) ? b.termIndex : -1;
             return idxB - idxA; // larger index = earlier term
         });
 
@@ -1073,6 +1071,341 @@ function s_curriculum()
                 }
             }
         }
+
+        // Special-case VACD: enforce mutually-exclusive pairs and pool spillover
+        // rules. Some VACD course pools have the constraint that only one of a
+        // course pair counts toward the minimum pool requirement. Extra courses
+        // taken from the pool should spill into area electives, and then free
+        // electives once area is satisfied.
+        if (this.major === 'VACD') {
+            const reqPairs = [['VA301', 'VA303'], ['VA401', 'VA403'], ['VA300', 'PROJ300']];
+            const corePool1 = ['HART292', 'HART293', 'HART380', 'HART413', 'HART426', 'VA315', 'VA420', 'VA430'];
+            const corePool1Min = 9;
+            const corePool2 = ['VA202', 'VA204', 'VA234', 'VA302', 'VA304', 'VA402', 'VA404'];
+            const corePool2Min = 12;
+            const corePool2Pairs = [['VA302', 'VA304'], ['VA402', 'VA404']];
+
+            const corePool1Set = new Set(corePool1);
+            const corePool2Set = new Set(corePool2);
+            const reqPairKeyByCode = {};
+            for (let i = 0; i < reqPairs.length; i++) {
+                const key = reqPairs[i].join('|');
+                reqPairKeyByCode[reqPairs[i][0]] = key;
+                reqPairKeyByCode[reqPairs[i][1]] = key;
+            }
+            const corePairKeyByCode = {};
+            for (let i = 0; i < corePool2Pairs.length; i++) {
+                const key = corePool2Pairs[i].join('|');
+                corePairKeyByCode[corePool2Pairs[i][0]] = key;
+                corePairKeyByCode[corePool2Pairs[i][1]] = key;
+            }
+
+            function creditOf(course) {
+                const c = parseInt(course.SU_credit || '0');
+                return isNaN(c) ? 0 : c;
+            }
+
+            // Choose a single course from each required pair to count as required.
+            // If both are taken, the extra counts as free elective (it should not
+            // double-count toward the required pool).
+            const chosenRequiredPairKeys = new Set();
+            for (let i = 0; i < sortedSemesters.length; i++) {
+                const sem = sortedSemesters[i];
+                for (let j = 0; j < sem.courses.length; j++) {
+                    const course = sem.courses[j];
+                    if (!course || !course.id) continue;
+                    if (course.effective_type === 'none') continue;
+                    const key = reqPairKeyByCode[course.code];
+                    if (!key) continue;
+                    if (!chosenRequiredPairKeys.has(key)) {
+                        chosenRequiredPairKeys.add(key);
+                        course.effective_type = 'required';
+                    } else {
+                        course.effective_type = 'free';
+                    }
+                }
+            }
+
+            // Select core courses for the two core elective pools, respecting
+            // mutually-exclusive pairs in corePool2.
+            const selectedCoreIds = new Set();
+            const selectedCorePool2PairKeys = new Set();
+            let pool1Credits = 0;
+            let pool2Credits = 0;
+            const overflowPoolCourses = [];
+
+            for (let i = 0; i < sortedSemesters.length; i++) {
+                const sem = sortedSemesters[i];
+                for (let j = 0; j < sem.courses.length; j++) {
+                    const course = sem.courses[j];
+                    if (!course || !course.id) continue;
+                    if (course.effective_type === 'none') continue;
+                    const code = course.code;
+                    if (corePool1Set.has(code)) {
+                        if (pool1Credits < corePool1Min) {
+                            selectedCoreIds.add(course.id);
+                            pool1Credits += creditOf(course);
+                        } else {
+                            overflowPoolCourses.push(course);
+                        }
+                    } else if (corePool2Set.has(code)) {
+                        const pairKey = corePairKeyByCode[code] || null;
+                        if (pool2Credits < corePool2Min && (!pairKey || !selectedCorePool2PairKeys.has(pairKey))) {
+                            selectedCoreIds.add(course.id);
+                            pool2Credits += creditOf(course);
+                            if (pairKey) selectedCorePool2PairKeys.add(pairKey);
+                        } else {
+                            overflowPoolCourses.push(course);
+                        }
+                    }
+                }
+            }
+
+            // Compute how many area credits are still needed, excluding pool
+            // overflow courses which will fill area first.
+            let baseAreaCredits = 0;
+            for (let i = 0; i < this.semesters.length; i++) {
+                const sem = this.semesters[i];
+                for (let j = 0; j < sem.courses.length; j++) {
+                    const course = sem.courses[j];
+                    if (!course || course.effective_type === 'none') continue;
+                    const code = course.code;
+                    if (corePool1Set.has(code) || corePool2Set.has(code)) continue;
+                    if (course.effective_type === 'area') {
+                        baseAreaCredits += creditOf(course);
+                    }
+                }
+            }
+            let areaRemaining = Math.max(0, reqArea - baseAreaCredits);
+
+            // Apply the VACD pool allocation: selected pool courses count as core;
+            // pool overflow counts as area then free.
+            for (let i = 0; i < this.semesters.length; i++) {
+                const sem = this.semesters[i];
+                for (let j = 0; j < sem.courses.length; j++) {
+                    const course = sem.courses[j];
+                    if (!course || !course.id) continue;
+                    if (course.effective_type === 'none') continue;
+                    const code = course.code;
+                    if (!corePool1Set.has(code) && !corePool2Set.has(code)) continue;
+                    if (selectedCoreIds.has(course.id)) {
+                        course.effective_type = 'core';
+                    }
+                }
+            }
+            for (let i = 0; i < overflowPoolCourses.length; i++) {
+                const course = overflowPoolCourses[i];
+                if (!course || course.effective_type === 'none') continue;
+                if (areaRemaining > 0) {
+                    course.effective_type = 'area';
+                    areaRemaining -= creditOf(course);
+                } else {
+                    course.effective_type = 'free';
+                }
+            }
+
+            // Recompute semester category totals to match VACD normalized effective types.
+            for (let i = 0; i < this.semesters.length; i++) {
+                const sem = this.semesters[i];
+                sem.totalArea = 0;
+                sem.totalCore = 0;
+                sem.totalFree = 0;
+                sem.totalUniversity = 0;
+                sem.totalRequired = 0;
+                for (let j = 0; j < sem.courses.length; j++) {
+                    const course = sem.courses[j];
+                    if (!course) continue;
+                    const et = course.effective_type;
+                    if (!et || et === 'none') continue;
+                    const c = creditOf(course);
+                    if (et === 'core') sem.totalCore += c;
+                    else if (et === 'area') sem.totalArea += c;
+                    else if (et === 'free') sem.totalFree += c;
+                    else if (et === 'required') sem.totalRequired += c;
+                    else if (et === 'university') sem.totalUniversity += c;
+                }
+            }
+
+            // Update DOM type labels for VACD normalization.
+            try {
+                for (let i = 0; i < this.semesters.length; i++) {
+                    const sem = this.semesters[i];
+                    for (let j = 0; j < sem.courses.length; j++) {
+                        const course = sem.courses[j];
+                        if (!course || !course.id) continue;
+                        const courseElem = document.getElementById(course.id);
+                        if (!courseElem) continue;
+                        const typeElem = courseElem.querySelector('.course_type');
+                        if (typeElem && course.effective_type) {
+                            typeElem.textContent = course.effective_type.toUpperCase();
+                        }
+                    }
+                }
+            } catch (_) {}
+        }
+
+        // Special-case MAN: core/area electives have additional "at least one
+        // from each area" constraints, and extra core electives can be counted
+        // as area electives. The generic credit-threshold allocator may place
+        // a required area-prefix core elective into area/free, causing the
+        // MAN-specific checks to fail even though a feasible assignment exists.
+        //
+        // Normalize MAN elective effective types after the generic pass by
+        // selecting a subset of static core electives to count as core that
+        // covers all required prefixes, and pushing duplicates/overflow into
+        // area/free to satisfy area elective rules.
+        if (this.major === 'MAN') {
+            const corePrefixes = ['ACC', 'FIN', 'MGMT', 'MKTG', 'OPIM', 'ORG'];
+            const areaPrefixes = ['ACC', 'FIN', 'MKTG', 'OPIM', 'ORG'];
+
+            function firstMatchingPrefix(code, prefixes) {
+                for (let i = 0; i < prefixes.length; i++) {
+                    if (code.startsWith(prefixes[i])) return prefixes[i];
+                }
+                return null;
+            }
+
+            // Gather elective candidates in chronological order (sortedSemesters
+            // is already chronological as used in the allocation loop).
+            const electiveItems = [];
+            for (let i = 0; i < sortedSemesters.length; i++) {
+                const sem = sortedSemesters[i];
+                for (let j = 0; j < sem.courses.length; j++) {
+                    const course = sem.courses[j];
+                    if (!course || !course.id) continue;
+                    if (course.effective_type === 'none') continue;
+                    if (course.category !== 'Core' && course.category !== 'Area') continue;
+                    const credit = parseInt(course.SU_credit || '0');
+                    electiveItems.push({
+                        id: course.id,
+                        code: course.code,
+                        staticType: (course.category || '').toLowerCase(),
+                        credit: isNaN(credit) ? 0 : credit,
+                        courseRef: course,
+                    });
+                }
+            }
+
+            const reqCoreMan = reqCore;
+            const reqAreaMan = reqArea;
+
+            const coreCandidates = electiveItems.filter(it => it.staticType === 'core');
+            const selectedCore = new Set();
+            const coreByPrefix = {};
+            for (let i = 0; i < coreCandidates.length; i++) {
+                const it = coreCandidates[i];
+                const prefix = firstMatchingPrefix(it.code, corePrefixes);
+                if (!prefix) continue;
+                if (!coreByPrefix[prefix]) coreByPrefix[prefix] = [];
+                coreByPrefix[prefix].push(it);
+            }
+            let coreCredits = 0;
+            for (let i = 0; i < corePrefixes.length; i++) {
+                const p = corePrefixes[i];
+                const bucket = coreByPrefix[p] || [];
+                if (bucket.length) {
+                    const pick = bucket[0];
+                    if (!selectedCore.has(pick.id)) {
+                        selectedCore.add(pick.id);
+                        coreCredits += pick.credit;
+                    }
+                }
+            }
+            for (let i = 0; i < coreCandidates.length && coreCredits < reqCoreMan; i++) {
+                const it = coreCandidates[i];
+                if (selectedCore.has(it.id)) continue;
+                selectedCore.add(it.id);
+                coreCredits += it.credit;
+            }
+
+            // Area candidates include static area electives plus overflow core
+            // electives not selected as core.
+            const areaCandidates = electiveItems
+                .filter(it => it.staticType === 'area')
+                .concat(coreCandidates.filter(it => !selectedCore.has(it.id)));
+
+            const selectedArea = new Set();
+            const areaByPrefix = {};
+            for (let i = 0; i < areaCandidates.length; i++) {
+                const it = areaCandidates[i];
+                const prefix = firstMatchingPrefix(it.code, areaPrefixes);
+                if (!prefix) continue;
+                if (!areaByPrefix[prefix]) areaByPrefix[prefix] = [];
+                areaByPrefix[prefix].push(it);
+            }
+            let areaCredits = 0;
+            for (let i = 0; i < areaPrefixes.length; i++) {
+                const p = areaPrefixes[i];
+                const bucket = areaByPrefix[p] || [];
+                if (bucket.length) {
+                    const pick = bucket[0];
+                    if (!selectedArea.has(pick.id) && !selectedCore.has(pick.id)) {
+                        selectedArea.add(pick.id);
+                        areaCredits += pick.credit;
+                    }
+                }
+            }
+            for (let i = 0; i < areaCandidates.length && areaCredits < reqAreaMan; i++) {
+                const it = areaCandidates[i];
+                if (selectedCore.has(it.id) || selectedArea.has(it.id)) continue;
+                selectedArea.add(it.id);
+                areaCredits += it.credit;
+            }
+
+            // Apply normalized effective types for elective items only.
+            for (let i = 0; i < electiveItems.length; i++) {
+                const it = electiveItems[i];
+                if (selectedCore.has(it.id)) {
+                    it.courseRef.effective_type = 'core';
+                } else if (selectedArea.has(it.id)) {
+                    it.courseRef.effective_type = 'area';
+                } else {
+                    it.courseRef.effective_type = 'free';
+                }
+            }
+
+            // Recompute semester category totals (core/area/free/required/university)
+            // to match normalized MAN effective types. totalCredit/science/eng/ECTS
+            // remain correct and are not recomputed here.
+            for (let i = 0; i < this.semesters.length; i++) {
+                const sem = this.semesters[i];
+                sem.totalArea = 0;
+                sem.totalCore = 0;
+                sem.totalFree = 0;
+                sem.totalUniversity = 0;
+                sem.totalRequired = 0;
+                for (let j = 0; j < sem.courses.length; j++) {
+                    const course = sem.courses[j];
+                    if (!course) continue;
+                    const et = course.effective_type;
+                    if (!et || et === 'none') continue;
+                    const credit = parseInt(course.SU_credit || '0');
+                    const c = isNaN(credit) ? 0 : credit;
+                    if (et === 'core') sem.totalCore += c;
+                    else if (et === 'area') sem.totalArea += c;
+                    else if (et === 'free') sem.totalFree += c;
+                    else if (et === 'required') sem.totalRequired += c;
+                    else if (et === 'university') sem.totalUniversity += c;
+                }
+            }
+
+            // Update DOM type label for MAN elective normalization (skip if not present).
+            try {
+                for (let i = 0; i < this.semesters.length; i++) {
+                    const sem = this.semesters[i];
+                    for (let j = 0; j < sem.courses.length; j++) {
+                        const course = sem.courses[j];
+                        if (!course || !course.id) continue;
+                        const courseElem = document.getElementById(course.id);
+                        if (!courseElem) continue;
+                        const typeElem = courseElem.querySelector('.course_type');
+                        if (typeElem && course.effective_type) {
+                            typeElem.textContent = course.effective_type.toUpperCase();
+                        }
+                    }
+                }
+            } catch (_) {}
+        }
         // After reallocation, update the displayed total credits for each
         // semester in the user interface. Each semester element has an id
         // (e.g., 's1') and resides within a container with class
@@ -1194,10 +1527,11 @@ function s_curriculum()
             sem.totalEngineeringDM = 0;
             sem.totalECTSDM = 0;
         }
-        // Sort semesters chronologically by termIndex (larger index = earlier)
+        // Sort semesters chronologically by termIndex (larger index = earlier).
+        // If a semester has no valid termIndex, allocate it last.
         const sorted = this.semesters.slice().sort((a, b) => {
-            const aIdx = (a.termIndex !== null && a.termIndex !== undefined) ? a.termIndex : Number.MAX_SAFE_INTEGER;
-            const bIdx = (b.termIndex !== null && b.termIndex !== undefined) ? b.termIndex : Number.MAX_SAFE_INTEGER;
+            const aIdx = (a.termIndex !== null && a.termIndex !== undefined) ? a.termIndex : -1;
+            const bIdx = (b.termIndex !== null && b.termIndex !== undefined) ? b.termIndex : -1;
             return bIdx - aIdx;
         });
         // Walk semesters and courses allocating DM categories
@@ -1328,6 +1662,277 @@ function s_curriculum()
                     sem.totalScienceDM += parseFloat(course.Basic_Science || '0');
                     sem.totalEngineeringDM += parseFloat(course.Engineering || '0');
                     sem.totalECTSDM += parseFloat(course.ECTS || '0');
+                }
+            }
+        }
+
+        // Special-case MAN double major: normalize core/area elective effective
+        // types to satisfy the per-area constraints while still allowing extra
+        // core electives to count as area electives.
+        if (this.doubleMajor === 'MAN') {
+            const corePrefixes = ['ACC', 'FIN', 'MGMT', 'MKTG', 'OPIM', 'ORG'];
+            const areaPrefixes = ['ACC', 'FIN', 'MKTG', 'OPIM', 'ORG'];
+            function firstMatchingPrefix(code, prefixes) {
+                for (let i = 0; i < prefixes.length; i++) {
+                    if (code.startsWith(prefixes[i])) return prefixes[i];
+                }
+                return null;
+            }
+
+            const dmElectiveItems = [];
+            for (let i = 0; i < sorted.length; i++) {
+                const sem = sorted[i];
+                for (let j = 0; j < sem.courses.length; j++) {
+                    const course = sem.courses[j];
+                    if (!course || !course.id) continue;
+                    if (course.effective_type_dm === 'none') continue;
+                    if (course.categoryDM !== 'Core' && course.categoryDM !== 'Area') continue;
+                    const credit = parseInt(course.SU_credit || '0');
+                    dmElectiveItems.push({
+                        id: course.id,
+                        code: course.code,
+                        staticType: (course.categoryDM || '').toLowerCase(),
+                        credit: isNaN(credit) ? 0 : credit,
+                        courseRef: course,
+                    });
+                }
+            }
+
+            const dmCoreCandidates = dmElectiveItems.filter(it => it.staticType === 'core');
+            const dmSelectedCore = new Set();
+            const dmCoreByPrefix = {};
+            for (let i = 0; i < dmCoreCandidates.length; i++) {
+                const it = dmCoreCandidates[i];
+                const prefix = firstMatchingPrefix(it.code, corePrefixes);
+                if (!prefix) continue;
+                if (!dmCoreByPrefix[prefix]) dmCoreByPrefix[prefix] = [];
+                dmCoreByPrefix[prefix].push(it);
+            }
+            let dmCoreCredits = 0;
+            for (let i = 0; i < corePrefixes.length; i++) {
+                const p = corePrefixes[i];
+                const bucket = dmCoreByPrefix[p] || [];
+                if (bucket.length) {
+                    const pick = bucket[0];
+                    if (!dmSelectedCore.has(pick.id)) {
+                        dmSelectedCore.add(pick.id);
+                        dmCoreCredits += pick.credit;
+                    }
+                }
+            }
+            for (let i = 0; i < dmCoreCandidates.length && dmCoreCredits < dmCoreReq; i++) {
+                const it = dmCoreCandidates[i];
+                if (dmSelectedCore.has(it.id)) continue;
+                dmSelectedCore.add(it.id);
+                dmCoreCredits += it.credit;
+            }
+
+            const dmAreaCandidates = dmElectiveItems
+                .filter(it => it.staticType === 'area')
+                .concat(dmCoreCandidates.filter(it => !dmSelectedCore.has(it.id)));
+
+            const dmSelectedArea = new Set();
+            const dmAreaByPrefix = {};
+            for (let i = 0; i < dmAreaCandidates.length; i++) {
+                const it = dmAreaCandidates[i];
+                const prefix = firstMatchingPrefix(it.code, areaPrefixes);
+                if (!prefix) continue;
+                if (!dmAreaByPrefix[prefix]) dmAreaByPrefix[prefix] = [];
+                dmAreaByPrefix[prefix].push(it);
+            }
+            let dmAreaCredits = 0;
+            for (let i = 0; i < areaPrefixes.length; i++) {
+                const p = areaPrefixes[i];
+                const bucket = dmAreaByPrefix[p] || [];
+                if (bucket.length) {
+                    const pick = bucket[0];
+                    if (!dmSelectedArea.has(pick.id) && !dmSelectedCore.has(pick.id)) {
+                        dmSelectedArea.add(pick.id);
+                        dmAreaCredits += pick.credit;
+                    }
+                }
+            }
+            for (let i = 0; i < dmAreaCandidates.length && dmAreaCredits < dmAreaReq; i++) {
+                const it = dmAreaCandidates[i];
+                if (dmSelectedCore.has(it.id) || dmSelectedArea.has(it.id)) continue;
+                dmSelectedArea.add(it.id);
+                dmAreaCredits += it.credit;
+            }
+
+            for (let i = 0; i < dmElectiveItems.length; i++) {
+                const it = dmElectiveItems[i];
+                if (dmSelectedCore.has(it.id)) it.courseRef.effective_type_dm = 'core';
+                else if (dmSelectedArea.has(it.id)) it.courseRef.effective_type_dm = 'area';
+                else it.courseRef.effective_type_dm = 'free';
+            }
+
+            // Recompute DM category totals to match normalized effective types.
+            for (let i = 0; i < this.semesters.length; i++) {
+                const sem = this.semesters[i];
+                sem.totalCoreDM = 0;
+                sem.totalAreaDM = 0;
+                sem.totalFreeDM = 0;
+                sem.totalRequiredDM = 0;
+                sem.totalUniversityDM = 0;
+                for (let j = 0; j < sem.courses.length; j++) {
+                    const course = sem.courses[j];
+                    if (!course) continue;
+                    const et = course.effective_type_dm;
+                    if (!et || et === 'none') continue;
+                    const credit = parseInt(course.SU_credit || '0');
+                    const c = isNaN(credit) ? 0 : credit;
+                    if (et === 'core') sem.totalCoreDM += c;
+                    else if (et === 'area') sem.totalAreaDM += c;
+                    else if (et === 'free') sem.totalFreeDM += c;
+                    else if (et === 'required') sem.totalRequiredDM += c;
+                    else if (et === 'university') sem.totalUniversityDM += c;
+                }
+            }
+        }
+
+        // Special-case VACD double major: enforce mutually-exclusive pair rules
+        // for required and core elective pools and spill extra pool courses into
+        // area/free as specified by VACD requirements.
+        if (this.doubleMajor === 'VACD') {
+            const reqPairs = [['VA301', 'VA303'], ['VA401', 'VA403'], ['VA300', 'PROJ300']];
+            const corePool1 = ['HART292', 'HART293', 'HART380', 'HART413', 'HART426', 'VA315', 'VA420', 'VA430'];
+            const corePool1Min = 9;
+            const corePool2 = ['VA202', 'VA204', 'VA234', 'VA302', 'VA304', 'VA402', 'VA404'];
+            const corePool2Min = 12;
+            const corePool2Pairs = [['VA302', 'VA304'], ['VA402', 'VA404']];
+
+            const corePool1Set = new Set(corePool1);
+            const corePool2Set = new Set(corePool2);
+            const reqPairKeyByCode = {};
+            for (let i = 0; i < reqPairs.length; i++) {
+                const key = reqPairs[i].join('|');
+                reqPairKeyByCode[reqPairs[i][0]] = key;
+                reqPairKeyByCode[reqPairs[i][1]] = key;
+            }
+            const corePairKeyByCode = {};
+            for (let i = 0; i < corePool2Pairs.length; i++) {
+                const key = corePool2Pairs[i].join('|');
+                corePairKeyByCode[corePool2Pairs[i][0]] = key;
+                corePairKeyByCode[corePool2Pairs[i][1]] = key;
+            }
+            function creditOf(course) {
+                const c = parseInt(course.SU_credit || '0');
+                return isNaN(c) ? 0 : c;
+            }
+
+            // Required pairs: only one counts as required. Extras become free.
+            const chosenReqPairKeys = new Set();
+            for (let i = 0; i < sorted.length; i++) {
+                const sem = sorted[i];
+                for (let j = 0; j < sem.courses.length; j++) {
+                    const course = sem.courses[j];
+                    if (!course || !course.id) continue;
+                    if (course.effective_type_dm === 'none') continue;
+                    const key = reqPairKeyByCode[course.code];
+                    if (!key) continue;
+                    if (!chosenReqPairKeys.has(key)) {
+                        chosenReqPairKeys.add(key);
+                        course.effective_type_dm = 'required';
+                    } else {
+                        course.effective_type_dm = 'free';
+                    }
+                }
+            }
+
+            // Core pools: pick minimum credits from each pool, respecting the
+            // mutually-exclusive pairs in corePool2. Pool overflow fills area
+            // then free.
+            const selectedCoreIds = new Set();
+            const selectedCorePool2PairKeys = new Set();
+            let pool1Credits = 0;
+            let pool2Credits = 0;
+            const overflowPoolCourses = [];
+
+            for (let i = 0; i < sorted.length; i++) {
+                const sem = sorted[i];
+                for (let j = 0; j < sem.courses.length; j++) {
+                    const course = sem.courses[j];
+                    if (!course || !course.id) continue;
+                    if (course.effective_type_dm === 'none') continue;
+                    const code = course.code;
+                    if (corePool1Set.has(code)) {
+                        if (pool1Credits < corePool1Min) {
+                            selectedCoreIds.add(course.id);
+                            pool1Credits += creditOf(course);
+                        } else {
+                            overflowPoolCourses.push(course);
+                        }
+                    } else if (corePool2Set.has(code)) {
+                        const pairKey = corePairKeyByCode[code] || null;
+                        if (pool2Credits < corePool2Min && (!pairKey || !selectedCorePool2PairKeys.has(pairKey))) {
+                            selectedCoreIds.add(course.id);
+                            pool2Credits += creditOf(course);
+                            if (pairKey) selectedCorePool2PairKeys.add(pairKey);
+                        } else {
+                            overflowPoolCourses.push(course);
+                        }
+                    }
+                }
+            }
+
+            let baseAreaCredits = 0;
+            for (let i = 0; i < this.semesters.length; i++) {
+                const sem = this.semesters[i];
+                for (let j = 0; j < sem.courses.length; j++) {
+                    const course = sem.courses[j];
+                    if (!course || course.effective_type_dm === 'none') continue;
+                    const code = course.code;
+                    if (corePool1Set.has(code) || corePool2Set.has(code)) continue;
+                    if (course.effective_type_dm === 'area') {
+                        baseAreaCredits += creditOf(course);
+                    }
+                }
+            }
+            let areaRemaining = Math.max(0, dmAreaReq - baseAreaCredits);
+
+            for (let i = 0; i < this.semesters.length; i++) {
+                const sem = this.semesters[i];
+                for (let j = 0; j < sem.courses.length; j++) {
+                    const course = sem.courses[j];
+                    if (!course || !course.id) continue;
+                    if (course.effective_type_dm === 'none') continue;
+                    const code = course.code;
+                    if (!corePool1Set.has(code) && !corePool2Set.has(code)) continue;
+                    if (selectedCoreIds.has(course.id)) {
+                        course.effective_type_dm = 'core';
+                    }
+                }
+            }
+            for (let i = 0; i < overflowPoolCourses.length; i++) {
+                const course = overflowPoolCourses[i];
+                if (!course || course.effective_type_dm === 'none') continue;
+                if (areaRemaining > 0) {
+                    course.effective_type_dm = 'area';
+                    areaRemaining -= creditOf(course);
+                } else {
+                    course.effective_type_dm = 'free';
+                }
+            }
+
+            // Recompute DM category totals after VACD normalization.
+            for (let i = 0; i < this.semesters.length; i++) {
+                const sem = this.semesters[i];
+                sem.totalCoreDM = 0;
+                sem.totalAreaDM = 0;
+                sem.totalFreeDM = 0;
+                sem.totalRequiredDM = 0;
+                sem.totalUniversityDM = 0;
+                for (let j = 0; j < sem.courses.length; j++) {
+                    const course = sem.courses[j];
+                    if (!course) continue;
+                    const et = course.effective_type_dm;
+                    if (!et || et === 'none') continue;
+                    const c = creditOf(course);
+                    if (et === 'core') sem.totalCoreDM += c;
+                    else if (et === 'area') sem.totalAreaDM += c;
+                    else if (et === 'free') sem.totalFreeDM += c;
+                    else if (et === 'required') sem.totalRequiredDM += c;
+                    else if (et === 'university') sem.totalUniversityDM += c;
                 }
             }
         }
@@ -1478,7 +2083,7 @@ function s_curriculum()
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
                         if (course.code.startsWith('EE4') && course.categoryDM === 'Core') {
-                            ee400LevelCredits += course.SU_credit;
+                            ee400LevelCredits += (parseInt(course.SU_credit || '0') || 0);
                         }
                     }
                 }
@@ -1604,7 +2209,8 @@ function s_curriculum()
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
-                        if (course.categoryDM === 'Core') {
+                        const eff = (course.effective_type_dm || (course.categoryDM && course.categoryDM.toLowerCase()) || '').toLowerCase();
+                        if (eff === 'core') {
                             coreCount++;
                             if (course.code.startsWith('ACC')) coreAreas.add('ACC');
                             else if (course.code.startsWith('FIN')) coreAreas.add('FIN');
@@ -1623,7 +2229,8 @@ function s_curriculum()
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
-                        if (course.categoryDM === 'Area') {
+                        const eff = (course.effective_type_dm || (course.categoryDM && course.categoryDM.toLowerCase()) || '').toLowerCase();
+                        if (eff === 'area') {
                             areaCount++;
                             if (course.code.startsWith('ACC')) areaAreas.add('ACC');
                             else if (course.code.startsWith('FIN')) areaAreas.add('FIN');
@@ -1644,10 +2251,12 @@ function s_curriculum()
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
-                        if (course.categoryDM === 'Free') {
-                            freeElectivesCount += course.SU_credit;
+                        const eff = (course.effective_type_dm || (course.categoryDM && course.categoryDM.toLowerCase()) || '').toLowerCase();
+                        if (eff === 'free') {
+                            const c = parseInt(course.SU_credit || '0') || 0;
+                            freeElectivesCount += c;
                             if (course.Faculty_Course === 'FASS' || course.Faculty_Course === 'FENS') {
-                                fassFensCredits += course.SU_credit;
+                                fassFensCredits += c;
                             }
                             if (basicLanguageCourses.includes(course.code)) {
                                 basicLanguageCoursesCount++;
@@ -1693,8 +2302,9 @@ function s_curriculum()
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
-                        if (coreElectivesIPool.includes(course.Major + course.Code)) {
-                            coreElectivesICount += course.SU_credit;
+                        const courseCode = course.code || ((course.Major || '') + (course.Code || ''));
+                        if (coreElectivesIPool.includes(courseCode)) {
+                            coreElectivesICount += (parseInt(course.SU_credit || '0') || 0);
                         }
                     }
                 }
@@ -1706,8 +2316,9 @@ function s_curriculum()
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
-                        if (coreElectivesIIPool.includes(course.Major + course.Code)) {
-                            coreElectivesIICount += course.SU_credit;
+                        const courseCode = course.code || ((course.Major || '') + (course.Code || ''));
+                        if (coreElectivesIIPool.includes(courseCode)) {
+                            coreElectivesIICount += (parseInt(course.SU_credit || '0') || 0);
                         }
                     }
                 }
@@ -1784,8 +2395,10 @@ function s_curriculum()
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
-                        if (coreElectivesIPool.includes(course.Major + course.Code)) {
-                            coreElectivesICount += course.SU_credit;
+                        const courseCode = course.code || ((course.Major || '') + (course.Code || ''));
+                        const eff = (course.effective_type_dm || (course.categoryDM && course.categoryDM.toLowerCase()) || '').toLowerCase();
+                        if (eff === 'core' && coreElectivesIPool.includes(courseCode)) {
+                            coreElectivesICount += (parseInt(course.SU_credit || '0') || 0);
                         }
                     }
                 }
@@ -1794,40 +2407,29 @@ function s_curriculum()
                 // Core Electives II (Skill Courses) for VACD
                 let coreElectivesIICount = 0;
                 const coreElectivesIIPool = ['VA202', 'VA204', 'VA234', 'VA302', 'VA304', 'VA402', 'VA404'];
-                const mutuallyExclusivePairs = [['VA302', 'VA304'], ['VA402', 'VA404']];
-                const takenPairs = new Set();
+                const pairKeyByCode = {
+                    VA302: 'VA302|VA304',
+                    VA304: 'VA302|VA304',
+                    VA402: 'VA402|VA404',
+                    VA404: 'VA402|VA404',
+                };
+                const seenPairKeys = new Set();
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
-                        if (coreElectivesIIPool.includes(course.Major + course.Code)) {
-                            coreElectivesIICount += course.SU_credit;
-                            // Track mutually exclusive pairs
-                            for (const pair of mutuallyExclusivePairs) {
-                                if (pair.includes(course.Major + course.Code)) {
-                                    takenPairs.add(pair.join(','));
-                                }
+                        const courseCode = course.code || ((course.Major || '') + (course.Code || ''));
+                        const eff = (course.effective_type_dm || (course.categoryDM && course.categoryDM.toLowerCase()) || '').toLowerCase();
+                        if (eff === 'core' && coreElectivesIIPool.includes(courseCode)) {
+                            const pairKey = pairKeyByCode[courseCode];
+                            if (pairKey) {
+                                if (seenPairKeys.has(pairKey)) continue;
+                                seenPairKeys.add(pairKey);
                             }
+                            coreElectivesIICount += (parseInt(course.SU_credit || '0') || 0);
                         }
                     }
                 }
-                // Ensure only one course from each pair is counted
-                if (takenPairs.size > mutuallyExclusivePairs.length) return 31;
                 if (coreElectivesIICount < 12) return 31;
-
-                // New requirement: Only one course from each specified pair is counted
-                const exclusivePairs = [['VA301', 'VA303'], ['VA401', 'VA403'], ['VA300', 'PROJ300']];
-                const takenExclusivePairs = new Set();
-                for (let i = 0; i < this.semesters.length; i++) {
-                    for (let a = 0; a < this.semesters[i].courses.length; a++) {
-                        const course = this.semesters[i].courses[a];
-                        for (const pair of exclusivePairs) {
-                            if (pair.includes(course.code)) {
-                                takenExclusivePairs.add(pair.join(','));
-                            }
-                        }
-                    }
-                }
-                if (takenExclusivePairs.size > exclusivePairs.length) return 32;
             }
         } else if (maj === 'DSA') {
             {
@@ -1872,7 +2474,7 @@ function s_curriculum()
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
                         if (course.categoryDM === 'Core') {
-                            coreSUCredits += (course.SU_credit || parseInt(course.SU_credit) || 0);
+                            coreSUCredits += (parseInt(course.SU_credit || '0') || 0);
                         }
                     }
                 }

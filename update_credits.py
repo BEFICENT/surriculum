@@ -69,10 +69,25 @@ def update_json_with_credits(json_path, credits_map):
     Update a JSON file with Basic Science and Engineering credits.
     """
 
-
     try:
-        with open(json_path, 'r') as file:
-            data = json.load(file)
+        data = []
+        if json_path.endswith('.jsonl'):
+            with open(json_path, 'r', encoding='utf-8') as file:
+                for line in file:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(rec, dict):
+                        data.append(rec)
+        else:
+            with open(json_path, 'r', encoding='utf-8') as file:
+                data = json.load(file)
+                if not isinstance(data, list):
+                    data = []
 
         updated_count = 0
         for course in data:
@@ -82,8 +97,13 @@ def update_json_with_credits(json_path, credits_map):
                 course['Engineering'] = credits_map[course_code]['Engineering']
                 updated_count += 1
 
-        with open(json_path, 'w') as file:
-            json.dump(data, file, indent=2)
+        if json_path.endswith('.jsonl'):
+            with open(json_path, 'w', encoding='utf-8') as file:
+                for rec in data:
+                    file.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        else:
+            with open(json_path, 'w', encoding='utf-8') as file:
+                json.dump(data, file, indent=2, ensure_ascii=False)
 
         print(f"Updated {json_path} with BS and Eng credits for {updated_count} courses")
 
@@ -107,15 +127,27 @@ def update_all_program_files(credits_map, program_files):
         term_path = os.path.join(COURSES_DIR, term) if term != '.' else COURSES_DIR
         term_ok = True
         for program_file in program_files.values():
-            program_file_path = os.path.join(term_path, program_file)
-            if os.path.exists(program_file_path):
+            primary_path = os.path.join(term_path, program_file)
+            alt_path = None
+            if program_file.endswith('.jsonl'):
+                alt_path = os.path.join(term_path, program_file[:-1])  # .jsonl -> .json
+            elif program_file.endswith('.json'):
+                alt_path = os.path.join(term_path, program_file + 'l')  # .json -> .jsonl
+
+            target = None
+            if os.path.exists(primary_path):
+                target = primary_path
+            elif alt_path and os.path.exists(alt_path):
+                target = alt_path
+
+            if target:
                 try:
-                    update_json_with_credits(program_file_path, credits_map)
+                    update_json_with_credits(target, credits_map)
                 except Exception as e:
-                    print(f"Failed updating {program_file_path}: {e}")
+                    print(f"Failed updating {target}: {e}")
                     term_ok = False
             else:
-                print(f"Missing {program_file_path}")
+                print(f"Missing {primary_path}")
                 term_ok = False
         if not term_ok:
             failed_terms.append(term)
@@ -129,18 +161,18 @@ if __name__ == "__main__":
     csv_path = "Pre-Conversion Files/katalog_basic_eng_degerler_202401_yuklenen_07.05.2025 (1)-converted.csv"
 
     program_files = {
-        'BSBIO': 'BIO.json',
-        'BSCS': 'CS.json',
-        'BAECON': 'ECON.json',
-        'BSEE': 'EE.json',
-        'BSMS': 'IE.json',
-        'BSMAT': 'MAT.json',
-        'BSME': 'ME.json',
-        'BSDSA': 'DSA.json',
-        'BAMAN': 'MAN.json',
-        'BAPSIR': 'PSIR.json',
-        'BAPSY': 'PSY.json',
-        'BAVACD': 'VACD.json',
+        'BSBIO': 'BIO.jsonl',
+        'BSCS': 'CS.jsonl',
+        'BAECON': 'ECON.jsonl',
+        'BSEE': 'EE.jsonl',
+        'BSMS': 'IE.jsonl',
+        'BSMAT': 'MAT.jsonl',
+        'BSME': 'ME.jsonl',
+        'BSDSA': 'DSA.jsonl',
+        'BAMAN': 'MAN.jsonl',
+        'BAPSIR': 'PSIR.jsonl',
+        'BAPSY': 'PSY.jsonl',
+        'BAVACD': 'VACD.jsonl',
     }
 
     print("Extracting credits from CSV file...")

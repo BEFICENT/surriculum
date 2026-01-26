@@ -1,0 +1,12 @@
+{"major": "BIO", "university": 41, "required": 39, "core": 29, "area": 9, "free": 15, "ects": 240, "total": 133, "internshipCourse": "BIO395"}
+{"major": "CS", "university": 41, "required": 40, "core": 27, "area": 9, "free": 15, "engineering": 90, "science": 60, "ects": 240, "total": 132, "internshipCourse": "CS395"}
+{"major": "DSA", "university": 41, "required": 31, "core": 27, "area": 12, "free": 15, "ects": 240, "total": 126, "internshipCourse": "DSA395"}
+{"major": "ECON", "university": 44, "required": 21, "core": 12, "area": 18, "free": 30, "ects": 240, "total": 125}
+{"major": "EE", "university": 41, "required": 39, "core": 25, "area": 9, "free": 15, "engineering": 90, "science": 60, "ects": 240, "total": 129, "internshipCourse": "EE395"}
+{"major": "IE", "university": 41, "required": 41, "core": 27, "area": 9, "free": 15, "engineering": 90, "science": 60, "ects": 240, "total": 133, "internshipCourse": "IE395"}
+{"major": "MAN", "university": 44, "required": 15, "core": 18, "area": 24, "free": 26, "ects": 240, "total": 127}
+{"major": "MAT", "university": 41, "required": 36, "core": 31, "area": 9, "free": 15, "engineering": 90, "science": 60, "ects": 240, "total": 132, "internshipCourse": "MAT395"}
+{"major": "ME", "university": 41, "required": 45, "core": 21, "area": 9, "free": 15, "engineering": 90, "science": 60, "ects": 240, "total": 131, "internshipCourse": "ME395"}
+{"major": "PSIR", "university": 44, "required": 24, "core": 24, "area": 15, "free": 18, "ects": 240, "total": 125}
+{"major": "PSY", "university": 44, "required": 21, "core": 21, "area": 18, "free": 21, "ects": 240, "total": 125}
+{"major": "VACD", "university": 44, "required": 15, "core": 21, "area": 24, "free": 21, "ects": 240, "total": 125}

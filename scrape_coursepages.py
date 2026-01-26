@@ -241,23 +241,58 @@ def parse_coursepage_html(html: str, *, source_url: str) -> Dict[str, Any]:
 def iter_course_json_paths(courses_dir: str) -> Iterable[str]:
     for root, _, files in os.walk(courses_dir):
         for fname in files:
-            if not fname.endswith(".json"):
+            if not (fname.endswith(".json") or fname.endswith(".jsonl")):
                 continue
-            if fname == "terms.json":
+            if fname in {"terms.json", "terms.jsonl", "all_coursepage_info.jsonl", "basic_science_credits.jsonl"}:
                 continue
             yield os.path.join(root, fname)
+
+def read_course_list(path: str) -> List[Dict[str, Any]]:
+    if path.endswith(".jsonl"):
+        records: List[Dict[str, Any]] = []
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(rec, dict):
+                    records.append(rec)
+        return records
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except json.JSONDecodeError:
+        # Best-effort fallback: treat as JSONL if a .json file already migrated.
+        records: List[Dict[str, Any]] = []
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(rec, dict):
+                    records.append(rec)
+        return records
+    except Exception:
+        return []
+
+    return data if isinstance(data, list) else []
 
 
 def collect_unique_courses(courses_dir: str) -> Tuple[Dict[str, CourseKey], set[str]]:
     unique: Dict[str, CourseKey] = {}
     expected_breakdown: set[str] = set()
     for path in iter_course_json_paths(courses_dir):
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except Exception:
-            continue
-        if not isinstance(data, list):
+        data = read_course_list(path)
+        if not data:
             continue
         for item in data:
             if not isinstance(item, dict):
@@ -360,12 +395,8 @@ def fetch_coursepage_html(
 
 def update_course_json_files(courses_dir: str, credits_by_course_id: Dict[str, Dict[str, float]]) -> None:
     for path in iter_course_json_paths(courses_dir):
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except Exception:
-            continue
-        if not isinstance(data, list):
+        data = read_course_list(path)
+        if not data:
             continue
 
         changed = False
@@ -386,8 +417,13 @@ def update_course_json_files(courses_dir: str, credits_by_course_id: Dict[str, D
                 changed = True
 
         if changed:
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+            if path.endswith(".jsonl"):
+                with open(path, "w", encoding="utf-8") as f:
+                    for rec in data:
+                        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+            else:
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2, ensure_ascii=False)
 
 def _is_valid_scrape(parsed: Dict[str, Any], course: CourseKey) -> bool:
     subj = parsed.get("parsed_subj_code")
