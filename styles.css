@@ -975,6 +975,246 @@ html, body {
     color: var(--text-primary)
 }
 
+/* Summary minor quick actions */
+.summary_overlay_content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    width: 100%;
+    max-width: 1200px;
+    padding: 10px 12px;
+}
+
+.summary_header_row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.summary_minor_row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+}
+
+.summary_minor_btn {
+    padding: 10px 14px;
+    font-size: 1rem;
+    border-radius: var(--radius-md);
+}
+
+.summary_cards_row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    width: 100%;
+    flex-wrap: wrap;
+}
+
+.summary_minor_panel {
+    width: min(920px, 92vw);
+    max-height: 90vh;
+    overflow: auto;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    padding: 16px 16px 14px;
+    color: var(--text-primary);
+}
+
+.summary_minor_panel_header {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.summary_minor_panel_title {
+    font-weight: 700;
+    font-size: 1.05rem;
+}
+
+.summary_back_btn {
+    padding: 10px 14px;
+}
+
+.summary_minor_switch_row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+
+.summary_minor_switch_btn {
+    padding: 9px 12px;
+}
+
+.summary_minor_switch_btn.is-active {
+    background: var(--primary);
+    color: #fff;
+    border-color: transparent;
+}
+
+.summary_minor_panel_body {
+    padding-top: 4px;
+}
+
+/* Minor summary content (used in Summary overlay) */
+.minor-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    color: var(--text-primary);
+}
+
+.minor-summary .ms-subtitle {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+.minor-summary .ms-section {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 10px 10px 8px;
+    background: var(--bg-main);
+}
+
+.minor-summary .ms-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+.minor-summary .ms-title {
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.minor-summary .ms-req {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.minor-summary .ms-rules {
+    color: var(--text-secondary);
+    font-size: 0.92rem;
+    margin: 4px 0 8px;
+}
+
+.minor-summary .ms-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.minor-summary .ms-course {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 8px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+}
+
+.minor-summary .ms-course.is-taken {
+    border-color: rgba(22, 163, 74, 0.55);
+    background: rgba(22, 163, 74, 0.10);
+}
+
+.minor-summary .ms-course-left {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.minor-summary .ms-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: #9CA3AF;
+    flex: 0 0 auto;
+}
+
+.minor-summary .ms-course.is-taken .ms-dot {
+    background: #16A34A;
+}
+
+.minor-summary .ms-course.is-overflow .ms-dot {
+    background: #F59E0B;
+}
+
+.minor-summary .ms-course.is-overflow {
+    border-color: rgba(245, 158, 11, 0.55);
+    background: rgba(245, 158, 11, 0.10);
+}
+
+.minor-summary .ms-legend {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    align-items: center;
+    color: var(--text-secondary);
+    font-size: 0.92rem;
+    padding: 6px 0 2px;
+}
+
+.minor-summary .ms-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.minor-summary .ms-dot.ms-dot-green { background: #16A34A; }
+.minor-summary .ms-dot.ms-dot-yellow { background: #F59E0B; }
+.minor-summary .ms-dot.ms-dot-gray { background: #9CA3AF; }
+
+.minor-summary .ms-subheader {
+    margin-top: 8px;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-size: 0.92rem;
+}
+
+.minor-summary .ms-code {
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.minor-summary .ms-name {
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.minor-summary .ms-meta {
+    color: var(--text-secondary);
+    white-space: nowrap;
+    font-size: 0.9rem;
+}
+
+.minor-summary .ms-empty {
+    color: var(--text-secondary);
+    font-size: 0.92rem;
+    padding: 6px 2px;
+}
+
 
 /* === UTILITIES === */
 .hidden {
@@ -1090,6 +1330,32 @@ html, body {
 }
 
 /* === MODERN SCROLLBAR STYLING === */
+/* Apply the custom scrollbar globally (all scrollable elements). */
+*::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #4facfe 0%, #00f2fe 100%);
+    border-radius: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #00b4d8 0%, #0077b6 100%);
+}
+
+/* Firefox */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #4facfe transparent;
+}
+
 .semester-courses::-webkit-scrollbar,
 .sidebar-content::-webkit-scrollbar,
 .subcontainer_semester .semester::-webkit-scrollbar,

@@ -48,10 +48,10 @@ Always verify graduation requirements yourself. For issues or suggestions, conta
 Course catalogs and requirements are stored as JSONL files (`.jsonl`) under `courses/` and `requirements/`. The app and scrapers still support legacy `.json` as a fallback.
 
 0. Install scraper dependencies: `pip install -r requirements.txt`
-1. Edit `fetch_courses.py` if the university site changes and run `python fetch_courses.py` to regenerate the JSONL files. The scraper downloads data for every term starting from Fall 2019 and stores them under `courses/<TERM>/`. A `terms.jsonl` file indicates which majors are available for each term.
+1. Edit `fetch_courses.py` if the university site changes and run `python fetch_courses.py` to regenerate the JSONL files. The scraper downloads data for every term starting from Fall 2019 and stores them under `courses/<TERM>/`. A `terms.jsonl` file indicates which majors are available for each term. By default it also updates **minor** catalogs/requirements for the newest term (use `--skip-minors` to disable).
 2. Run `scrape_coursepages.py` to populate `Basic_Science` and `Engineering` values by scraping each course page (the old CSV-based `update_credits.py` is deprecated).
-3. Run `python fetch_requirements.py` to scrape updated graduation rules into the JSONL files under `requirements/`. Update matching messages in `main.js` if necessary.
-4. Run `python fetch_minors.py` to scrape minor catalogs and requirements into `courses/minors/*.jsonl` and `requirements/minors.jsonl` (note: currently treated as a single “latest” term snapshot).
+3. Run `python fetch_requirements.py` to scrape updated graduation rules into the JSONL files under `requirements/`. By default it also updates **minor** catalogs/requirements for the same term set (use `--skip-minors` to disable). Update matching messages in `main.js` if necessary.
+4. Run `python fetch_minors.py --terms <TERM>` to scrape minor catalogs and requirements for a specific admit term into `courses/minors/<TERM>/*.jsonl` and `requirements/minors/<TERM>.jsonl` (use multiple comma-separated terms to add more).
 
 To migrate existing pretty-printed `.json` files in-place, use `python migrate_to_jsonl.py` (add `--delete-json` to remove the legacy files after conversion).
 

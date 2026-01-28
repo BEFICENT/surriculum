@@ -1,0 +1,16 @@
+{"Major": "HUM", "Code": "207", "Course_Name": "Major Works of Western Philosophy", "ECTS": "5", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "required", "Faculty_Course": "No"}
+{"Major": "PHIL", "Code": "202", "Course_Name": "Problems of Philosophy", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "required", "Faculty_Course": "No"}
+{"Major": "HUM", "Code": "317", "Course_Name": "Major Works of Moral Philosophy", "ECTS": "5", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "PHIL", "Code": "300", "Course_Name": "Philosophy of Science", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "PHIL", "Code": "301", "Course_Name": "Philosophy of Social Sciences", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "PHIL", "Code": "310", "Course_Name": "Philosophy of Mind", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "PHIL", "Code": "321", "Course_Name": "Symbolic Logic", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "PHIL", "Code": "340", "Course_Name": "Bioethics", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "PHIL", "Code": "370", "Course_Name": "Philosophy of Artificial Intelligence", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "PHIL", "Code": "401", "Course_Name": "Epistemology", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "PHIL", "Code": "450", "Course_Name": "Science and Society", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "PHIL", "Code": "460", "Course_Name": "Environmental Ethics and Sustainability", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "POLS", "Code": "301", "Course_Name": "Political Theory I", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "POLS", "Code": "473", "Course_Name": "Political Theory II", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "PHIL", "Code": "322", "Course_Name": "Philosophy of Art", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
+{"Major": "PHIL", "Code": "399", "Course_Name": "Independent Study", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}

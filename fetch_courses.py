@@ -420,6 +420,7 @@ def main():
     parser.add_argument("--terms", default="", help="Comma-separated explicit term codes (e.g. 202401,202402).")
     parser.add_argument("--max-terms", type=int, default=0, help="Limit number of terms processed (debug).")
     parser.add_argument("--max-programs", type=int, default=0, help="Limit number of programs per term (debug).")
+    parser.add_argument("--skip-minors", action="store_true", help="Skip fetching minor catalogs/requirements.")
     parser.add_argument("--skip-coursepages", action="store_true", help="Skip running scrape_coursepages.py after fetching.")
     args = parser.parse_args()
 
@@ -491,6 +492,37 @@ def main():
     with open(os.path.join(COURSES_DIR, 'terms.jsonl'), 'w', encoding='utf-8') as f:
         for term in sorted(majors_by_term.keys()):
             f.write(json.dumps({"term": term, "majors": majors_by_term[term]}, ensure_ascii=False) + "\n")
+
+    if not args.skip_minors:
+        # Fetch minor catalogs + requirements. By default we only fetch the
+        # same term set as majors (either the explicit --terms list, or the
+        # generated list in this script).
+        try:
+            minor_terms = [t for t in (terms or []) if re.fullmatch(r"\d{6}", t)]
+            if minor_terms:
+                # Be gentler than the majors scraper to avoid getting blocked:
+                # minors scraping is an additional N requests per term.
+                minor_workers = min(max(1, int(args.workers)), 3)
+                minor_max_inflight = min(max(1, int(args.max_inflight)), 3)
+                minor_sleep = max(float(_http_sleep_s or 0.0), 0.05 if len(minor_terms) > 1 else 0.0)
+                print("\nRunning fetch_minors.py to update minor catalogs/requirements...\n")
+                subprocess.run(
+                    [
+                        'python',
+                        'fetch_minors.py',
+                        '--terms', ",".join(minor_terms),
+                        '--workers', str(minor_workers),
+                        '--max-inflight', str(minor_max_inflight),
+                        '--timeout', str(_http_timeout_s),
+                        '--retries', str(_http_retries),
+                        '--backoff', str(_http_backoff_s),
+                        '--sleep', str(minor_sleep),
+                        '--write-legacy',
+                    ],
+                    check=True
+                )
+        except Exception as e:
+            print(f"Warning: failed to fetch minors: {e}")
 
     if not args.skip_coursepages:
         # Populate Basic_Science / Engineering credits by scraping course pages.

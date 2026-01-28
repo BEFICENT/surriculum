@@ -1,0 +1,9 @@
+{"Major": "ECON", "Code": "201", "Course_Name": "Games and Strategies", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "required", "Faculty_Course": "No"}
+{"Major": "PSY", "Code": "201", "Course_Name": "Mind and Behavior", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "required", "Faculty_Course": "No"}
+{"Major": "CS", "Code": "210", "Course_Name": "Introduction to Data Science", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "DSA", "Code": "210", "Course_Name": "Introduction to Data Science", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "MATH", "Code": "306", "Course_Name": "Statistical Modelling", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "MGMT", "Code": "203", "Course_Name": "Introduction to Data Analysis and Research in Business", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "PSIR", "Code": "311", "Course_Name": "Research Methods for Political Science and International Relations I", "ECTS": "7", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "PSY", "Code": "202", "Course_Name": "Research Methods and Statistics for Psychology I", "ECTS": "7", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "SPS", "Code": "311", "Course_Name": "Research Methods I", "ECTS": "7", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}

@@ -3,6 +3,207 @@
 // requirements). This is necessary when running under the file:// scheme
 // where ES module imports may not be available.
 
+// Compute how taken courses are allocated for a minor, including the
+// "overflow" behavior (Core → Area → Free) and equivalence rules.
+function computeMinorAllocation(curriculum, minorCode) {
+    const reqMap = (typeof window !== 'undefined' && window.minorRequirements) ? window.minorRequirements : {};
+    const req = reqMap ? reqMap[minorCode] : null;
+    const dataByCode = curriculum && curriculum.minorCourseDataByCode ? curriculum.minorCourseDataByCode : {};
+    const courseData = dataByCode ? dataByCode[minorCode] : null;
+
+    const parseInt0 = (v) => {
+        const n = parseInt(v || '0', 10);
+        return isNaN(n) ? 0 : n;
+    };
+    const normalizeCode = (v) => String(v || '').toUpperCase().replace(/\s+/g, '');
+
+    if (!req || !Array.isArray(courseData)) {
+        return { ok: false, title: minorCode, error: 'Missing minor data files.' };
+    }
+
+    // Collect passed/planned courses (ignore grade F).
+    const taken = new Set();
+    try {
+        for (let i = 0; i < curriculum.semesters.length; i++) {
+            const sem = curriculum.semesters[i];
+            for (let j = 0; j < sem.courses.length; j++) {
+                const c = sem.courses[j];
+                if (!c || !c.code) continue;
+                let gradeText = '';
+                try {
+                    const elem = document.getElementById(c.id);
+                    const gr = elem ? elem.querySelector('.grade') : null;
+                    gradeText = gr ? gr.textContent.trim() : '';
+                } catch (_) {}
+                if (gradeText === 'F') continue;
+                taken.add(normalizeCode(c.code));
+            }
+        }
+    } catch (_) {}
+
+    const categories = req.categories || {};
+    const fullOrder = ['required', 'core', 'area', 'free'];
+    const nextInOrder = (cat) => {
+        const idx = fullOrder.indexOf(cat);
+        return idx >= 0 && idx < fullOrder.length - 1 ? fullOrder[idx + 1] : null;
+    };
+
+    // Course metadata + pools
+    const courseByCode = new Map();
+    const pools = { required: [], core: [], area: [], free: [], university: [] };
+    for (let i = 0; i < courseData.length; i++) {
+        const c = courseData[i];
+        const code = normalizeCode((c.Major || '') + (c.Code || ''));
+        if (!code) continue;
+        const baseCat = String(c.EL_Type || '').toLowerCase();
+        courseByCode.set(code, { ...c, __code: code, __baseCat: baseCat });
+        if (pools[baseCat]) pools[baseCat].push(code);
+    }
+
+    // Equivalence lookup per category.
+    const eqGroupLookup = {};
+    for (const catKey of fullOrder) {
+        const cfg = categories[catKey] || {};
+        const eq = Array.isArray(cfg.equivalents) ? cfg.equivalents : [];
+        const lookup = new Map();
+        for (let i = 0; i < eq.length; i++) {
+            const group = Array.isArray(eq[i]) ? eq[i] : [];
+            for (let j = 0; j < group.length; j++) {
+                lookup.set(normalizeCode(group[j]), i);
+            }
+        }
+        eqGroupLookup[catKey] = lookup;
+    }
+
+    const totals = {
+        required: { courses: 0, credits: 0 },
+        core: { courses: 0, credits: 0 },
+        area: { courses: 0, credits: 0 },
+        free: { courses: 0, credits: 0 },
+    };
+    const usedEqGroup = {
+        required: new Set(),
+        core: new Set(),
+        area: new Set(),
+        free: new Set(),
+    };
+
+    const needsMet = (cat) => {
+        const cfg = categories[cat] || {};
+        const needC = parseInt0(cfg.minCourses);
+        const needS = parseInt0(cfg.minSU);
+        if (!needC && !needS) return false; // do not auto-overflow categories with no requirements
+        const have = totals[cat] || { courses: 0, credits: 0 };
+        return (have.courses >= needC) && (have.credits >= needS);
+    };
+
+    const canCountEquivalenceIn = (cat, code) => {
+        const lookup = eqGroupLookup[cat];
+        if (!lookup) return true;
+        const groupId = lookup.get(code);
+        if (groupId === undefined) return true;
+        return !usedEqGroup[cat].has(groupId);
+    };
+    const markEquivalenceUsed = (cat, code) => {
+        const lookup = eqGroupLookup[cat];
+        if (!lookup) return;
+        const groupId = lookup.get(code);
+        if (groupId === undefined) return;
+        usedEqGroup[cat].add(groupId);
+    };
+
+    // Build list of taken minor courses (only those present in this minor).
+    const takenMinorCourses = [];
+    for (const code of taken) {
+        const rec = courseByCode.get(code);
+        if (!rec) continue;
+        const baseCat = fullOrder.includes(rec.__baseCat) ? rec.__baseCat : 'free';
+        const credit = parseInt0(rec.SU_credit);
+        takenMinorCourses.push({ code, baseCat, credit });
+    }
+    const catSortIdx = (cat) => {
+        const idx = fullOrder.indexOf(cat);
+        return idx === -1 ? 999 : idx;
+    };
+    takenMinorCourses.sort((a, b) => {
+        const ai = catSortIdx(a.baseCat);
+        const bi = catSortIdx(b.baseCat);
+        if (ai !== bi) return ai - bi;
+        return String(a.code).localeCompare(String(b.code));
+    });
+
+    const allocationByCode = {};
+    for (let i = 0; i < takenMinorCourses.length; i++) {
+        const c = takenMinorCourses[i];
+        let cat = c.baseCat;
+        while (cat) {
+            if (!canCountEquivalenceIn(cat, c.code)) {
+                cat = nextInOrder(cat);
+                continue;
+            }
+            const next = nextInOrder(cat);
+            if (next && needsMet(cat)) {
+                cat = next;
+                continue;
+            }
+            totals[cat].courses += 1;
+            totals[cat].credits += c.credit;
+            markEquivalenceUsed(cat, c.code);
+            allocationByCode[c.code] = { allocatedCat: cat, baseCat: c.baseCat, movedDown: cat !== c.baseCat, credit: c.credit };
+            break;
+        }
+    }
+
+    // Validate completion.
+    let allOk = true;
+    const perCatOk = {};
+    for (const catKey of fullOrder) {
+        const cfg = categories[catKey] || {};
+        const needC = parseInt0(cfg.minCourses);
+        const needS = parseInt0(cfg.minSU);
+        const have = totals[catKey];
+        let ok = true;
+        if (needC) ok = ok && (have.courses >= needC);
+        if (needS) ok = ok && (have.credits >= needS);
+        if (catKey === 'required' && cfg.allListedRequired) {
+            const eq = Array.isArray(cfg.equivalents) ? cfg.equivalents : [];
+            const eqFlat = new Set(eq.flat().map(x => normalizeCode(x)));
+            const poolCodes = pools.required || [];
+            for (let i = 0; i < poolCodes.length; i++) {
+                const code = poolCodes[i];
+                if (eqFlat.has(code)) continue;
+                if (!taken.has(code)) ok = false;
+            }
+            for (let i = 0; i < eq.length; i++) {
+                const group = Array.isArray(eq[i]) ? eq[i].map(x => normalizeCode(x)) : [];
+                if (group.length && !group.some(c => taken.has(c))) ok = false;
+            }
+        }
+        perCatOk[catKey] = ok;
+        if ((categories[catKey] && typeof categories[catKey] === 'object') && !ok) allOk = false;
+    }
+
+    const totalCourses = totals.required.courses + totals.core.courses + totals.area.courses + totals.free.courses;
+    const totalCredits = totals.required.credits + totals.core.credits + totals.area.credits + totals.free.credits;
+    const minAllC = parseInt0(req.minCourses);
+    const minAllS = parseInt0(req.minSU);
+    if (minAllC && totalCourses < minAllC) allOk = false;
+    if (minAllS && totalCredits < minAllS) allOk = false;
+    if (!Object.keys(categories).length) allOk = false;
+
+    return {
+        ok: allOk,
+        title: req.name || minorCode,
+        req,
+        categories,
+        totals,
+        perCatOk,
+        pools,
+        courseByCode,
+        allocationByCode,
+    };
+}
+
 // Display graduation check results in a modal
 function displayGraduationResults(curriculum) {
     if(!document.querySelector('.graduation_modal')) {
@@ -39,230 +240,28 @@ function displayGraduationResults(curriculum) {
         }
 
         // Optional: show minor completion status (does not affect graduation).
-        function getGradeTextForCourseId(courseId) {
-            try {
-                const elem = document.getElementById(courseId);
-                if (!elem) return '';
-                const gr = elem.querySelector('.grade');
-                return gr ? gr.textContent.trim() : '';
-            } catch (_) {
-                return '';
-            }
-        }
-
         function evaluateMinor(minorCode) {
-            const reqMap = (typeof window !== 'undefined' && window.minorRequirements) ? window.minorRequirements : {};
-            const req = reqMap ? reqMap[minorCode] : null;
-            const dataByCode = curriculum && curriculum.minorCourseDataByCode ? curriculum.minorCourseDataByCode : {};
-            const courseData = dataByCode ? dataByCode[minorCode] : null;
-            if (!req || !Array.isArray(courseData)) {
-                return { ok: false, title: minorCode, lines: ['Missing minor data files.'] };
+            const res = computeMinorAllocation(curriculum, minorCode);
+            if (res.error) return { ok: false, title: minorCode, lines: [res.error] };
+
+            // Keep the graduation modal compact: show only status + missing pools.
+            const req = res.req || {};
+            const cats = req.categories || {};
+            const order = ['required', 'core', 'area', 'free'];
+            const missing = [];
+            for (const cat of order) {
+                if (!cats[cat]) continue;
+                if (res.perCatOk && res.perCatOk[cat] === false) {
+                    missing.push(cat.toUpperCase());
+                }
             }
 
-            // Collect passed/planned courses (ignore grade F).
-            const taken = new Set();
-            try {
-                for (let i = 0; i < curriculum.semesters.length; i++) {
-                    const sem = curriculum.semesters[i];
-                    for (let j = 0; j < sem.courses.length; j++) {
-                        const c = sem.courses[j];
-                        if (!c || !c.code) continue;
-                        const grade = getGradeTextForCourseId(c.id);
-                        if (grade === 'F') continue;
-                        taken.add(String(c.code).toUpperCase().replace(/\s+/g, ''));
-                    }
-                }
-            } catch (_) {}
-
-            const parseInt0 = (v) => {
-                const n = parseInt(v || '0', 10);
-                return isNaN(n) ? 0 : n;
-            };
-
-            const normalizeCode = (rec) => {
-                try {
-                    return String((rec.Major || '') + (rec.Code || '')).toUpperCase().replace(/\s+/g, '');
-                } catch (_) {
-                    return '';
-                }
-            };
-
-            const courseByCode = new Map();
-            const pools = {};
-            for (let i = 0; i < courseData.length; i++) {
-                const c = courseData[i];
-                const code = normalizeCode(c);
-                if (!code) continue;
-                courseByCode.set(code, c);
-                const cat = (c.EL_Type || '').toLowerCase();
-                if (!cat) continue;
-                if (!pools[cat]) pools[cat] = [];
-                pools[cat].push(code);
-            }
-
-            const categories = req.categories || {};
             const lines = [];
-
-            // Build equivalence lookup per category.
-            const eqGroupByCat = {};
-            const eqGroupLookup = {};
-            for (const catKey of ['required', 'core', 'area', 'free']) {
-                const cfg = categories[catKey] || {};
-                const eq = Array.isArray(cfg.equivalents) ? cfg.equivalents : [];
-                eqGroupByCat[catKey] = eq;
-                const lookup = new Map();
-                for (let i = 0; i < eq.length; i++) {
-                    const group = Array.isArray(eq[i]) ? eq[i] : [];
-                    for (let j = 0; j < group.length; j++) {
-                        lookup.set(String(group[j]).toUpperCase().replace(/\s+/g, ''), i);
-                    }
-                }
-                eqGroupLookup[catKey] = lookup;
+            if (missing.length) {
+                lines.push(`Missing: ${missing.join(', ')}`);
             }
-
-            // Allocate taken minor courses similar to how majors work:
-            // - Required fills required first, then can overflow to Core/Area/Free
-            // - Core fills core first, then can overflow to Area/Free
-            // - Area fills area first, then can overflow to Free
-            // - Free always stays free
-            // This allows "extra core courses" to count towards area, etc.
-            const fullOrder = ['required', 'core', 'area', 'free'];
-            const nextInOrder = (cat) => {
-                const idx = fullOrder.indexOf(cat);
-                return idx >= 0 && idx < fullOrder.length - 1 ? fullOrder[idx + 1] : null;
-            };
-            const cfgFor = (cat) => categories[cat] || { minSU: 0, minCourses: 0, equivalents: [], allListedRequired: false };
-            const needsMet = (cat, totals) => {
-                const cfg = cfgFor(cat);
-                const needC = parseInt0(cfg.minCourses);
-                const needS = parseInt0(cfg.minSU);
-                const have = totals[cat] || { courses: 0, credits: 0 };
-                return (have.courses >= needC) && (have.credits >= needS);
-            };
-
-            const totals = {
-                required: { courses: 0, credits: 0 },
-                core: { courses: 0, credits: 0 },
-                area: { courses: 0, credits: 0 },
-                free: { courses: 0, credits: 0 }
-            };
-            const usedEqGroup = {
-                required: new Set(),
-                core: new Set(),
-                area: new Set(),
-                free: new Set()
-            };
-
-            const takenMinorCourses = [];
-            for (const code of taken) {
-                const rec = courseByCode.get(code);
-                if (!rec) continue;
-                const baseCat = String(rec.EL_Type || '').toLowerCase();
-                const credit = parseInt0(rec.SU_credit);
-                takenMinorCourses.push({ code, baseCat, credit });
-            }
-            const catSortIdx = (cat) => {
-                const idx = fullOrder.indexOf(cat);
-                return idx === -1 ? 999 : idx;
-            };
-            takenMinorCourses.sort((a, b) => {
-                const ai = catSortIdx(a.baseCat);
-                const bi = catSortIdx(b.baseCat);
-                if (ai !== bi) return ai - bi;
-                return String(a.code).localeCompare(String(b.code));
-            });
-
-            const canCountEquivalenceIn = (cat, code) => {
-                const lookup = eqGroupLookup[cat];
-                if (!lookup) return true;
-                const groupId = lookup.get(code);
-                if (groupId === undefined) return true;
-                return !usedEqGroup[cat].has(groupId);
-            };
-            const markEquivalenceUsed = (cat, code) => {
-                const lookup = eqGroupLookup[cat];
-                if (!lookup) return;
-                const groupId = lookup.get(code);
-                if (groupId === undefined) return;
-                usedEqGroup[cat].add(groupId);
-            };
-
-            for (let i = 0; i < takenMinorCourses.length; i++) {
-                const c = takenMinorCourses[i];
-                let cat = fullOrder.includes(c.baseCat) ? c.baseCat : 'free';
-                while (cat) {
-                    // Equivalent-group rule: at most 1 from each group can count
-                    // for that category. If already used, overflow to next.
-                    if (!canCountEquivalenceIn(cat, c.code)) {
-                        cat = nextInOrder(cat);
-                        continue;
-                    }
-                    // Overflow to help satisfy later pools when current is full.
-                    const next = nextInOrder(cat);
-                    if (next && needsMet(cat, totals)) {
-                        cat = next;
-                        continue;
-                    }
-                    totals[cat].courses += 1;
-                    totals[cat].credits += c.credit;
-                    markEquivalenceUsed(cat, c.code);
-                    break;
-                }
-            }
-
-            // Validate and render per-category status, including "all courses
-            // below are required" enforcement where present.
-            let allOk = true;
-            const toLabel = (catKey) => catKey.charAt(0).toUpperCase() + catKey.slice(1);
-            for (const catKey of fullOrder) {
-                const cfg = categories[catKey];
-                const needC = parseInt0(cfg && cfg.minCourses);
-                const needS = parseInt0(cfg && cfg.minSU);
-                const have = totals[catKey];
-                const shouldShow = !!cfg || needC > 0 || needS > 0;
-                if (!shouldShow) continue;
-
-                let ok = true;
-                if (needC) ok = ok && (have.courses >= needC);
-                if (needS) ok = ok && (have.credits >= needS);
-
-                // If the page stated "all courses below are required", enforce that
-                // all non-equivalent required courses are taken and each equivalent
-                // group has at least one taken.
-                if (catKey === 'required' && cfg && cfg.allListedRequired) {
-                    const eq = Array.isArray(cfg.equivalents) ? cfg.equivalents : [];
-                    const eqFlat = new Set(eq.flat().map(x => String(x).toUpperCase().replace(/\s+/g, '')));
-                    const poolCodes = pools.required || [];
-                    // Non-equivalent required courses
-                    for (let i = 0; i < poolCodes.length; i++) {
-                        const code = poolCodes[i];
-                        if (eqFlat.has(code)) continue;
-                        if (!taken.has(code)) ok = false;
-                    }
-                    // Each equivalent group
-                    for (let i = 0; i < eq.length; i++) {
-                        const group = Array.isArray(eq[i]) ? eq[i].map(x => String(x).toUpperCase().replace(/\s+/g, '')) : [];
-                        if (group.length && !group.some(c => taken.has(c))) ok = false;
-                    }
-                }
-
-                lines.push(`${toLabel(catKey)}: ${have.courses}/${needC || 0} course(s), ${have.credits}/${needS || 0} SU credits`);
-                if (!ok) allOk = false;
-            }
-
-            // Overall minimums (if present on the summary table).
-            const totalCourses = totals.required.courses + totals.core.courses + totals.area.courses + totals.free.courses;
-            const totalCredits = totals.required.credits + totals.core.credits + totals.area.credits + totals.free.credits;
-            const minAllC = parseInt0(req.minCourses);
-            const minAllS = parseInt0(req.minSU);
-            if (minAllC || minAllS) {
-                lines.push(`Total: ${totalCourses}/${minAllC || 0} course(s), ${totalCredits}/${minAllS || 0} SU credits`);
-                if (minAllC && totalCourses < minAllC) allOk = false;
-                if (minAllS && totalCredits < minAllS) allOk = false;
-            }
-
-            if (!Object.keys(categories).length) allOk = false;
-            return { ok: allOk, title: req.name || minorCode, lines };
+            lines.push('See Summary → Minor for details.');
+            return { ok: res.ok, title: res.title || minorCode, lines };
         }
 
         if (Array.isArray(curriculum.minors) && curriculum.minors.length) {
@@ -284,6 +283,277 @@ function displayGraduationResults(curriculum) {
 function displaySummary(curriculum, major_chosen_by_user) {
     // Do not create more than one set of summary modals. If any exist, abort.
     if (document.querySelector('.summary_modal')) return;
+
+    // Ensure the shared overlay exists.
+    let overlayEl = document.querySelector('.summary_modal_overlay');
+    if (!overlayEl) {
+        overlayEl = document.createElement('div');
+        overlayEl.classList.add('summary_modal_overlay');
+        document.body.appendChild(overlayEl);
+    }
+
+    // Build a stable layout container so we can place minor controls close to
+    // the major summary cards and switch between views.
+    let contentEl = overlayEl.querySelector('.summary_overlay_content');
+    if (!contentEl) {
+        contentEl = document.createElement('div');
+        contentEl.className = 'summary_overlay_content';
+        overlayEl.appendChild(contentEl);
+    } else {
+        contentEl.innerHTML = '';
+    }
+
+    const headerRowEl = document.createElement('div');
+    headerRowEl.className = 'summary_header_row';
+    contentEl.appendChild(headerRowEl);
+
+    const cardsRowEl = document.createElement('div');
+    cardsRowEl.className = 'summary_cards_row';
+    contentEl.appendChild(cardsRowEl);
+
+    const minorPanelEl = document.createElement('div');
+    minorPanelEl.className = 'summary_minor_panel is-hidden';
+    contentEl.appendChild(minorPanelEl);
+
+    function getTakenCourseCodes() {
+        const taken = new Set();
+        try {
+            for (let i = 0; i < curriculum.semesters.length; i++) {
+                const sem = curriculum.semesters[i];
+                for (let j = 0; j < sem.courses.length; j++) {
+                    const c = sem.courses[j];
+                    if (!c || !c.code) continue;
+                    let gradeText = '';
+                    try {
+                        const elem = document.getElementById(c.id);
+                        const gr = elem ? elem.querySelector('.grade') : null;
+                        gradeText = gr ? gr.textContent.trim() : '';
+                    } catch (_) {}
+                    if (gradeText === 'F') continue;
+                    taken.add(String(c.code).toUpperCase().replace(/\s+/g, ''));
+                }
+            }
+        } catch (_) {}
+        return taken;
+    }
+
+    // Minor buttons: show a compact, visual guide for each selected minor,
+    // and render the minor summary inside the same overlay (hiding majors).
+    try {
+        const minors = Array.isArray(curriculum.minors) ? curriculum.minors.filter(Boolean) : [];
+        if (minors.length) {
+            const minorRow = document.createElement('div');
+            minorRow.className = 'summary_minor_row';
+            headerRowEl.appendChild(minorRow);
+
+            const taken = getTakenCourseCodes();
+            const reqMap = (typeof window !== 'undefined' && window.minorRequirements) ? window.minorRequirements : {};
+
+            const parseInt0 = (v) => {
+                const n = parseInt(v || '0', 10);
+                return isNaN(n) ? 0 : n;
+            };
+
+            const showMajors = () => {
+                try {
+                    minorPanelEl.classList.add('is-hidden');
+                    cardsRowEl.classList.remove('is-hidden');
+                    headerRowEl.classList.remove('is-hidden');
+                } catch (_) {}
+            };
+
+            const showMinorSummary = (minorCode) => {
+                const allocRes = computeMinorAllocation(curriculum, minorCode);
+                if (allocRes.error) {
+                    const ui = (typeof window !== 'undefined') ? window.uiModal : null;
+                    if (ui && typeof ui.alert === 'function') {
+                        ui.alert('Minor summary unavailable', `<p>${allocRes.error}</p>`);
+                    }
+                    return;
+                }
+
+                const req = allocRes.req || {};
+                const title = `${minorCode} — ${req.name || 'Minor'}`;
+                const categories = req.categories || {};
+                const catOrder = ['required', 'core', 'area', 'free'];
+                const totals = allocRes.totals || {};
+                const allocationByCode = allocRes.allocationByCode || {};
+                const courseByCode = allocRes.courseByCode || new Map();
+                const pools = allocRes.pools || { required: [], core: [], area: [], free: [] };
+
+                const termName = (() => {
+                    if (req.term) return req.term;
+                    const tc = curriculum && curriculum.entryTermMinor ? String(curriculum.entryTermMinor) : '';
+                    try {
+                        const fn = (typeof window !== 'undefined' && typeof window.termCodeToName === 'function') ? window.termCodeToName : null;
+                        return fn ? fn(tc) : tc;
+                    } catch (_) {
+                        return tc;
+                    }
+                })();
+
+                const renderEq = (cfg) => {
+                    const eq = cfg && Array.isArray(cfg.equivalents) ? cfg.equivalents : [];
+                    if (!eq.length) return '';
+                    const parts = eq.map(g => Array.isArray(g) ? g.join(' / ') : String(g));
+                    return `<div class="ms-rules"><strong>Rule:</strong> Choose 1 of: ${parts.join(' • ')}</div>`;
+                };
+
+                const renderPoolCourse = (code, sectionCat) => {
+                    const rec = courseByCode.get(code);
+                    if (!rec) return '';
+                    const name = rec.Course_Name || '';
+                    const su = rec.SU_credit || '0';
+                    const alloc = allocationByCode[code];
+                    if (!alloc) {
+                        return `
+                          <div class="ms-course is-missing">
+                            <div class="ms-course-left">
+                              <span class="ms-dot"></span>
+                              <span class="ms-code">${code}</span>
+                              <span class="ms-name">${name}</span>
+                            </div>
+                            <div class="ms-meta">${su} SU</div>
+                          </div>
+                        `;
+                    }
+                    const isHere = alloc.allocatedCat === sectionCat;
+                    const statusClass = isHere ? 'is-taken' : 'is-overflow';
+                    const countsAs = isHere ? '' : ` • Counts as ${String(alloc.allocatedCat || '').toUpperCase()}`;
+                    return `
+                      <div class="ms-course ${statusClass}">
+                        <div class="ms-course-left">
+                          <span class="ms-dot"></span>
+                          <span class="ms-code">${code}</span>
+                          <span class="ms-name">${name}</span>
+                        </div>
+                        <div class="ms-meta">${su} SU${countsAs}</div>
+                      </div>
+                    `;
+                };
+
+                const renderOverflowHere = (code) => {
+                    const rec = courseByCode.get(code);
+                    const alloc = allocationByCode[code];
+                    if (!rec || !alloc) return '';
+                    const name = rec.Course_Name || '';
+                    const su = rec.SU_credit || '0';
+                    const fromTxt = ` • From ${String(alloc.baseCat || '').toUpperCase()}`;
+                    return `
+                      <div class="ms-course is-overflow">
+                        <div class="ms-course-left">
+                          <span class="ms-dot"></span>
+                          <span class="ms-code">${code}</span>
+                          <span class="ms-name">${name}</span>
+                        </div>
+                        <div class="ms-meta">${su} SU${fromTxt}</div>
+                      </div>
+                    `;
+                };
+
+                let body = `<div class="minor-summary">`;
+                body += `<div class="ms-subtitle">Admit term: <strong>${termName || 'Unknown'}</strong></div>`;
+                body += `<div class="ms-legend">
+                    <div class="ms-legend-item"><span class="ms-dot ms-dot-green"></span>Counts in this pool</div>
+                    <div class="ms-legend-item"><span class="ms-dot ms-dot-yellow"></span>Counts in a lower pool (overflow)</div>
+                    <div class="ms-legend-item"><span class="ms-dot ms-dot-gray"></span>Not taken</div>
+                  </div>`;
+
+                for (const cat of catOrder) {
+                    const cfg = categories[cat];
+                    const poolCodes = Array.isArray(pools[cat]) ? pools[cat].slice() : [];
+                    const overflowHere = Object.keys(allocationByCode)
+                        .filter(code => {
+                            const a = allocationByCode[code];
+                            return a && a.allocatedCat === cat && a.movedDown;
+                        })
+                        .sort((a, b) => String(a).localeCompare(String(b)));
+
+                    if (!cfg && !poolCodes.length && !overflowHere.length) continue;
+
+                    const needC = parseInt0(cfg && cfg.minCourses);
+                    const needS = parseInt0(cfg && cfg.minSU);
+                    const have = totals[cat] || { courses: 0, credits: 0 };
+
+                    body += `<div class="ms-section">`;
+                    body += `<div class="ms-header"><div class="ms-title">${cat.toUpperCase()}</div><div class="ms-req">${have.courses}/${needC || 0} courses • ${have.credits}/${needS || 0} SU</div></div>`;
+                    if (cfg && cfg.allListedRequired && cat === 'required') {
+                        body += `<div class="ms-rules"><strong>Rule:</strong> All listed courses are required (equivalence groups count as “choose one”).</div>`;
+                    }
+                    body += renderEq(cfg);
+
+                    if (overflowHere.length) {
+                        body += `<div class="ms-subheader">Overflow counting here</div>`;
+                        body += `<div class="ms-list">`;
+                        body += overflowHere.map(c => renderOverflowHere(c)).join('');
+                        body += `</div>`;
+                    }
+
+                    body += `<div class="ms-subheader">Course pool</div>`;
+                    body += `<div class="ms-list">`;
+                    body += poolCodes.length ? poolCodes.sort((a,b)=>String(a).localeCompare(String(b))).map(code => renderPoolCourse(code, cat)).join('') : `<div class="ms-empty">No courses listed in this pool.</div>`;
+                    body += `</div></div>`;
+                }
+
+                body += `</div>`;
+
+                // Render inside overlay and hide majors.
+                minorPanelEl.innerHTML = `
+                  <div class="summary_minor_panel_header">
+                    <button class="btn btn-secondary summary_back_btn" type="button">Back to majors</button>
+                    <div class="summary_minor_panel_title">${title}</div>
+                  </div>
+                  <div class="summary_minor_switch_row">
+                    ${minors.map(code => {
+                        const rec = reqMap ? reqMap[code] : null;
+                        const label = rec && rec.name ? rec.name : code;
+                        const active = code === minorCode ? 'is-active' : '';
+                        return `<button type="button" class="btn btn-secondary summary_minor_switch_btn ${active}" data-minor-code="${code}">${label}</button>`;
+                    }).join('')}
+                  </div>
+                  <div class="summary_minor_panel_body">${body}</div>
+                `;
+                try {
+                    const backBtn = minorPanelEl.querySelector('.summary_back_btn');
+                    if (backBtn) {
+                        backBtn.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            showMajors();
+                        });
+                    }
+                    minorPanelEl.querySelectorAll('.summary_minor_switch_btn').forEach(btn => {
+                        btn.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const code = btn.getAttribute('data-minor-code') || '';
+                            if (code) showMinorSummary(code);
+                        });
+                    });
+                } catch (_) {}
+
+                try {
+                    minorPanelEl.classList.remove('is-hidden');
+                    cardsRowEl.classList.add('is-hidden');
+                    headerRowEl.classList.add('is-hidden');
+                } catch (_) {}
+            };
+
+            for (const minorCode of minors) {
+                const rec = reqMap ? reqMap[minorCode] : null;
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-secondary summary_minor_btn';
+                btn.textContent = rec && rec.name ? rec.name : minorCode;
+                btn.title = minorCode;
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    showMinorSummary(minorCode);
+                });
+                minorRow.appendChild(btn);
+            }
+        }
+    } catch (_) {}
     const majorNames = {
         CS: 'Computer Science and Engineering',
         DSA: 'Data Science and Analytics',
@@ -300,18 +570,9 @@ function displaySummary(curriculum, major_chosen_by_user) {
     };
     // Helper to build a summary modal for a given set of totals and limits.
     function buildSummaryModal(totals, limits, gpa, majorCode) {
-        // Overlay is shared by all summary modals. Create it on demand and
-        // append to the body so it covers the full viewport. The overlay uses
-        // flexbox centering so modals appear in the middle of the screen.
-        let overlay = document.querySelector('.summary_modal_overlay');
-        if (!overlay) {
-            overlay = document.createElement('div');
-            overlay.classList.add('summary_modal_overlay');
-            document.body.appendChild(overlay);
-        }
         const modal = document.createElement('div');
         modal.classList.add('summary_modal');
-        overlay.appendChild(modal);
+        cardsRowEl.appendChild(modal);
         if (majorCode) {
             const header = document.createElement('div');
             header.classList.add('summary_modal_title');

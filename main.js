@@ -275,13 +275,33 @@ function SUrriculum(major_chosen_by_user) {
     if (!entryTermDMName || (Array.isArray(entryTerms) && entryTerms.length && !entryTerms.includes(entryTermDMName))) {
         entryTermDMName = entryTermName;
     }
+
+    // Minor admit term options: prefer the scraped minor term manifest if
+    // available; otherwise fall back to the general entry terms list.
+    let minorEntryTerms = entryTerms;
+    try {
+        const codes = (typeof window !== 'undefined' && typeof window.loadMinorTermCodes === 'function')
+            ? window.loadMinorTermCodes()
+            : [];
+        if (Array.isArray(codes) && codes.length) {
+            const names = codes.map(c => termCodeToName(String(c))).filter(Boolean);
+            if (names.length) minorEntryTerms = names;
+        }
+    } catch (_) {}
+    let entryTermMinorName = planGetItem('entryTermMinor') || entryTermName;
+    if (!entryTermMinorName || (Array.isArray(minorEntryTerms) && minorEntryTerms.length && !minorEntryTerms.includes(entryTermMinorName))) {
+        if (Array.isArray(minorEntryTerms) && minorEntryTerms.includes(entryTermName)) entryTermMinorName = entryTermName;
+        else entryTermMinorName = minorEntryTerms[0] || entryTermName;
+    }
     try {
         if (!planGetItem('major')) planSetItem('major', major_chosen_by_user);
         if (!planGetItem('entryTerm')) planSetItem('entryTerm', entryTermName);
         if (!planGetItem('entryTermDM')) planSetItem('entryTermDM', entryTermDMName);
+        if (!planGetItem('entryTermMinor')) planSetItem('entryTermMinor', entryTermMinorName);
     } catch (_) {}
     const entryTermCode = termNameToCode(entryTermName);
     const entryTermDMCode = termNameToCode(entryTermDMName);
+    const entryTermMinorCode = termNameToCode(entryTermMinorName);
 
     // Storage for the double major's course data.  It will be populated when
     // the user selects a double major via setDoubleMajor().
@@ -302,6 +322,7 @@ function SUrriculum(major_chosen_by_user) {
         let change_major_element = document.querySelector('.change_major');
         let etElem = document.querySelector('.entryTerm');
         let etDmElem = document.querySelector('.entryTermDM');
+        let etMinorElem = document.querySelector('.entryTermMinor');
         let dmElem = document.querySelector('.doubleMajor');
         const dmControlsRow = document.getElementById('doubleMajorControlsRow');
         const dmButtonRow = document.getElementById('doubleMajorButtonRow');
@@ -309,6 +330,7 @@ function SUrriculum(major_chosen_by_user) {
         const minor1Row = document.getElementById('minor1Row');
         const minor2Row = document.getElementById('minor2Row');
         const minor3Row = document.getElementById('minor3Row');
+        const minorTermRow = document.getElementById('minorTermRow');
         const addMinorRow = document.getElementById('addMinorRow');
         const addMinorBtn = document.getElementById('addMinorBtn');
         const minor1Select = document.getElementById('minor1');
@@ -377,6 +399,14 @@ function SUrriculum(major_chosen_by_user) {
                 location.reload();
             });
         }
+        if (etMinorElem && etMinorElem.tagName === 'SELECT') {
+            etMinorElem.innerHTML = (minorEntryTerms || []).map(t => `<option value="${t}">${t}</option>`).join('');
+            etMinorElem.value = entryTermMinorName;
+            etMinorElem.addEventListener('change', function(e) {
+                planSetItem('entryTermMinor', e.target.value);
+                location.reload();
+            });
+        }
 
         // Double major UI: show dropdowns by default on first visit, but allow
         // collapsing them into a single "Add Double Major" button when the DM
@@ -405,6 +435,12 @@ function SUrriculum(major_chosen_by_user) {
 
         // Minor UI (up to 3): similar UX to double major, but allows multiple.
         try {
+            // Load term-specific minor requirements if available.
+            try {
+                if (typeof window !== 'undefined' && typeof window.loadMinorRequirementsForTerm === 'function' && entryTermMinorCode) {
+                    window.minorRequirements = window.loadMinorRequirementsForTerm(entryTermMinorCode) || {};
+                }
+            } catch (_) {}
             const minorReq = (typeof window !== 'undefined' && window.minorRequirements) ? window.minorRequirements : {};
             const minorList = Object.values(minorReq || {}).filter(Boolean).sort((a, b) => {
                 const an = String(a.name || a.minor || '');
@@ -452,10 +488,12 @@ function SUrriculum(major_chosen_by_user) {
                 setMinorRowVisible(minor1Row, false);
                 setMinorRowVisible(minor2Row, false);
                 setMinorRowVisible(minor3Row, false);
+                setMinorRowVisible(minorTermRow, false);
             } else {
                 setMinorRowVisible(minor1Row, true);
                 setMinorRowVisible(minor2Row, !!saved2);
                 setMinorRowVisible(minor3Row, !!saved3);
+                setMinorRowVisible(minorTermRow, true);
             }
 
             const updateAddMinorBtn = () => {
@@ -525,6 +563,7 @@ function SUrriculum(major_chosen_by_user) {
                     if (minor1Row && minor1Row.classList.contains('is-hidden')) setMinorRowVisible(minor1Row, true);
                     else if (minor2Row && minor2Row.classList.contains('is-hidden')) setMinorRowVisible(minor2Row, true);
                     else if (minor3Row && minor3Row.classList.contains('is-hidden')) setMinorRowVisible(minor3Row, true);
+                    if (minorTermRow && minorTermRow.classList.contains('is-hidden')) setMinorRowVisible(minorTermRow, true);
                     updateAddMinorBtn();
                     try {
                         if (minor1Row && !minor1Row.classList.contains('is-hidden') && minor1Select && !minor1Select.value) minor1Select.focus();
@@ -586,9 +625,11 @@ function SUrriculum(major_chosen_by_user) {
     // Preload minor course lists (up to 3). Minor catalogs are stored under
     // courses/minors/<PROGRAM>.jsonl and are merged into the Add Course
     // dropdown similarly to double majors.
-    function fetchMinorCourseData(minorProgram) {
+    function fetchMinorCourseData(minorProgram, termCode) {
         if (!minorProgram) return [];
+        const tc = String(termCode || '').trim();
         const paths = [
+            ...(tc ? [`courses/minors/${tc}/${minorProgram}.jsonl`, `courses/minors/${tc}/${minorProgram}.json`] : []),
             `courses/minors/${minorProgram}.jsonl`,
             `courses/minors/${minorProgram}.json`,
             `${minorProgram}.jsonl`,
@@ -628,7 +669,7 @@ function SUrriculum(major_chosen_by_user) {
     const minorCourseDataByCode = {};
     try {
         for (const mp of minorPrograms) {
-            const data = fetchMinorCourseData(mp);
+            const data = fetchMinorCourseData(mp, entryTermMinorCode);
             if (Array.isArray(data) && data.length) {
                 minorCourseDataByCode[mp] = data.slice();
             } else {
@@ -640,6 +681,7 @@ function SUrriculum(major_chosen_by_user) {
     curriculum.major = major_chosen_by_user;
     curriculum.entryTerm = entryTermCode;
     curriculum.entryTermDM = entryTermDMCode;
+    curriculum.entryTermMinor = entryTermMinorCode;
     if (savedDMPref) {
         curriculum.doubleMajorCourseData = doubleMajorCourseData;
         curriculum.doubleMajor = savedDMPref;
@@ -753,6 +795,30 @@ function SUrriculum(major_chosen_by_user) {
     //Targetting dynamically created elements:
     document.addEventListener('click', function(e){
         dynamic_click(e, curriculum, course_data);
+        // Summary/graduation overlays: clicking outside the cards/panels should close.
+        try {
+            if (e.target && typeof e.target.closest === 'function') {
+                const summaryOverlay = e.target.closest('.summary_modal_overlay');
+                if (summaryOverlay) {
+                    const insideCard = e.target.closest('.summary_modal');
+                    const insideMinorPanel = e.target.closest('.summary_minor_panel');
+                    if (!insideCard && !insideMinorPanel) {
+                        try { document.querySelectorAll('.summary_modal').forEach(function(mod){ mod.remove(); }); } catch {}
+                        try { document.querySelectorAll('.summary_modal_overlay').forEach(function(ov){ ov.remove(); }); } catch {}
+                    }
+                    return;
+                }
+                const gradOverlay = e.target.closest('.graduation_modal_overlay');
+                if (gradOverlay) {
+                    const insideGrad = e.target.closest('.graduation_modal');
+                    if (!insideGrad) {
+                        try{document.querySelector('.graduation_modal').remove();} catch{}
+                        try{document.querySelector('.graduation_modal_overlay').remove();} catch{}
+                    }
+                    return;
+                }
+            }
+        } catch (_) {}
         if (!(e.target.parentNode.classList.contains('summary_modal_child')) &&
             !e.target.classList.contains('summary_modal_child') &&
             !e.target.classList.contains('summary_modal') &&

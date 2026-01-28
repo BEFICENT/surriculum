@@ -1,0 +1,20 @@
+{"Major": "IR", "Code": "201", "Course_Name": "International Relations Theory", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "required", "Faculty_Course": "No"}
+{"Major": "IR", "Code": "391", "Course_Name": "International Political Economy", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "required", "Faculty_Course": "No"}
+{"Major": "ECON", "Code": "340", "Course_Name": "International Economics", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "IR", "Code": "342", "Course_Name": "Turkish Foreign Policy", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "IR", "Code": "392", "Course_Name": "Foreign Policy Analysis", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "IR", "Code": "394", "Course_Name": "World Politics", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "IR", "Code": "405", "Course_Name": "European Foreign Policy", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "LAW", "Code": "311", "Course_Name": "International Law", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "MGMT", "Code": "413", "Course_Name": "Strategic Innovation", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "SPS", "Code": "384", "Course_Name": "Climate Change and Environmental Politics", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "ANTH", "Code": "255", "Course_Name": "Local Cultures, Global Forces", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
+{"Major": "CONF", "Code": "400", "Course_Name": "International Conflict and Peace", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
+{"Major": "CULT", "Code": "453", "Course_Name": "Spaces of Migration", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
+{"Major": "ECON", "Code": "345", "Course_Name": "International Finance", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
+{"Major": "ECON", "Code": "350", "Course_Name": "Financial Institutions and Markets", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
+{"Major": "IR", "Code": "301", "Course_Name": "Globalization and International Relations", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
+{"Major": "IR", "Code": "489", "Course_Name": "Human Rights in World Affairs", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
+{"Major": "MGMT", "Code": "406", "Course_Name": "Globalization", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "area", "Faculty_Course": "No"}
+{"Major": "ORG", "Code": "403", "Course_Name": "Cross-Cultural Management", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "area", "Faculty_Course": "No"}
+{"Major": "SPS", "Code": "374", "Course_Name": "Global Environmental Challenges", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}

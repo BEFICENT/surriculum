@@ -4,6 +4,8 @@ from bs4 import BeautifulSoup
 import os
 import datetime
 import re
+import argparse
+import subprocess
 
 REQUIREMENTS_DIR = 'requirements'
 BASE = 'https://suis.sabanciuniv.edu/prod/'
@@ -25,7 +27,22 @@ PROGRAM_CODES = {
     'BAVACD': 'VACD',
 }
 
-def fetch_requirements(program, term, offline_dir=None):
+_session = None
+
+
+def _get_session():
+    global _session
+    if _session is None:
+        _session = requests.Session()
+        _session.headers.update(
+            {
+                "User-Agent": "surriculum-fetch/1.0 (+https://github.com/beficent/surriculum)",
+            }
+        )
+    return _session
+
+
+def fetch_requirements(program, term, offline_dir=None, timeout_s: float = 30.0):
     """Fetch requirement summary for a program and term.
 
     When ``offline_dir`` is provided and contains a saved HTML page for the
@@ -47,7 +64,7 @@ def fetch_requirements(program, term, offline_dir=None):
             BASE +
             'SU_DEGREE.p_degree_detail?P_PROGRAM={p}&P_LANG=EN&P_LEVEL=UG&P_TERM={t}&P_SUBMIT=Select'
         ).format(p=program, t=term)
-        resp = requests.get(url)
+        resp = _get_session().get(url, timeout=float(timeout_s or 30.0))
         resp.raise_for_status()
         html = resp.text
 
@@ -116,21 +133,35 @@ def fetch_requirements(program, term, offline_dir=None):
     return req
 
 def main():
+    parser = argparse.ArgumentParser(description="Fetch and regenerate graduation requirement summaries.")
+    parser.add_argument("--timeout", type=float, default=30.0, help="HTTP timeout in seconds.")
+    parser.add_argument("--terms", default="", help="Comma-separated explicit term codes (e.g. 202401,202402).")
+    parser.add_argument("--max-terms", type=int, default=0, help="Limit number of terms processed (debug).")
+    parser.add_argument("--skip-minors", action="store_true", help="Skip fetching minor catalogs/requirements.")
+    args = parser.parse_args()
+
     os.makedirs(REQUIREMENTS_DIR, exist_ok=True)
-    # Generate term codes starting from 2019 up to Fall 2025 only.
-    terms = []
-    for year in range(2019, 2026):
-        suffixes = ('01', '02', '03')
-        if year == 2025:
-            suffixes = ('01', '02')  # Only Fall and Spring 2025 should be scraped
-        for suf in suffixes:
-            terms.append(f"{year}{suf}")
+
+    if args.terms.strip():
+        terms = [t.strip() for t in args.terms.split(",") if t.strip()]
+    else:
+        # Generate term codes starting from 2019 up to Spring 2025 only.
+        terms = []
+        for year in range(2019, 2026):
+            suffixes = ('01', '02', '03')
+            if year == 2025:
+                suffixes = ('01', '02')  # stop at Spring 2025
+            for suf in suffixes:
+                terms.append(f"{year}{suf}")
+
+    if args.max_terms and args.max_terms > 0:
+        terms = terms[: int(args.max_terms)]
 
     for term in terms:
         out = {}
         for prog, major in PROGRAM_CODES.items():
             try:
-                data = fetch_requirements(prog, term, None)
+                data = fetch_requirements(prog, term, None, timeout_s=args.timeout)
                 if not data:
                     raise ValueError('no data parsed')
             except Exception as e:
@@ -142,6 +173,38 @@ def main():
             with open(os.path.join(REQUIREMENTS_DIR, f'{term}.jsonl'), 'w', encoding='utf-8') as f:
                 for major in sorted(out.keys()):
                     f.write(json.dumps({"major": major, **out[major]}, ensure_ascii=False) + "\n")
+
+    if not args.skip_minors:
+        # Keep minors in sync with the same term set as major requirements.
+        # This reuses fetch_minors.py, which writes:
+        # - requirements/minors/<TERM>.jsonl
+        # - courses/minors/<TERM>/*.jsonl
+        try:
+            print("\nRunning fetch_minors.py to update minor catalogs/requirements...\n")
+            subprocess.run(
+                [
+                    "python",
+                    "fetch_minors.py",
+                    "--terms",
+                    ",".join(terms),
+                    "--timeout",
+                    str(float(args.timeout)),
+                    "--workers",
+                    "3",
+                    "--max-inflight",
+                    "3",
+                    "--retries",
+                    "2",
+                    "--backoff",
+                    "0.5",
+                    "--sleep",
+                    "0.05" if len(terms) > 1 else "0.0",
+                    "--write-legacy",
+                ],
+                check=True,
+            )
+        except Exception as e:
+            print(f"Warning: failed to fetch minors: {e}")
 
 if __name__ == '__main__':
     main()
