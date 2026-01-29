@@ -27,7 +27,7 @@
     --radius-sm: 4px;
     --radius-md: 8px;
     --radius-lg: 12px;
-    --sidebar-width: 20%;
+    --sidebar-width: clamp(300px, 22vw, 380px);
     --semester-width-default: 300px;
     --semester-width: var(--semester-width-default);
     --brightness-rate: 0.7;
@@ -203,7 +203,8 @@ html, body {
     background: var(--bg-card);
     color: var(--text-primary);
     cursor: pointer;
-    width: 230px;
+    width: auto;
+    min-width: 0;
 }
 
 /* === SIDEBAR === */
@@ -280,7 +281,7 @@ html, body {
     display: flex;
     gap: 12px;
     margin-bottom: 12px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
 }
 
 .control-row .btn {
@@ -289,8 +290,15 @@ html, body {
 }
 
 .control-row .select-control {
-    flex: 1;
+    flex: 1 1 0;
+    min-width: 0;
     font-size: 0.8rem;
+}
+
+@media (max-width: 900px) {
+    .control-row {
+        flex-wrap: wrap;
+    }
 }
 
 .control-row.toggle-row {
@@ -307,6 +315,7 @@ html, body {
     display: inline-block;
     width: 40px;
     height: 20px;
+    flex-shrink: 0;
 }
 
 .toggle-switch input {
@@ -335,7 +344,7 @@ html, body {
     left: 2px;
     bottom: 2px;
     background-color: var(--bg-card);
-    transition: 0.2s;
+    transition: left 0.2s, background-color 0.2s;
     border-radius: 50%;
 }
 
@@ -344,7 +353,7 @@ html, body {
 }
 
 .toggle-switch input:checked + .toggle-slider:before {
-    transform: translateX(20px);
+    left: calc(100% - 18px);
 }
 
 .select-control {
@@ -1019,7 +1028,8 @@ html, body {
     flex-wrap: wrap;
 }
 
-.summary_minor_panel {
+.summary_minor_panel,
+.summary_major_panel {
     width: min(920px, 92vw);
     max-height: 90vh;
     overflow: auto;
@@ -1029,6 +1039,13 @@ html, body {
     box-shadow: var(--shadow-lg);
     padding: 16px 16px 14px;
     color: var(--text-primary);
+}
+
+.summary_detail_btn {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    font-size: 1rem;
 }
 
 .summary_minor_panel_header {
@@ -1070,27 +1087,31 @@ html, body {
     padding-top: 4px;
 }
 
-/* Minor summary content (used in Summary overlay) */
-.minor-summary {
+/* Pool summary content (used in Summary overlay) */
+.minor-summary,
+.major-summary {
     display: flex;
     flex-direction: column;
     gap: 12px;
     color: var(--text-primary);
 }
 
-.minor-summary .ms-subtitle {
+.minor-summary .ms-subtitle,
+.major-summary .ms-subtitle {
     color: var(--text-secondary);
     font-size: 0.95rem;
 }
 
-.minor-summary .ms-section {
+.minor-summary .ms-section,
+.major-summary .ms-section {
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     padding: 10px 10px 8px;
     background: var(--bg-main);
 }
 
-.minor-summary .ms-header {
+.minor-summary .ms-header,
+.major-summary .ms-header {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
@@ -1098,29 +1119,34 @@ html, body {
     margin-bottom: 6px;
 }
 
-.minor-summary .ms-title {
+.minor-summary .ms-title,
+.major-summary .ms-title {
     font-weight: 700;
     letter-spacing: 0.02em;
 }
 
-.minor-summary .ms-req {
+.minor-summary .ms-req,
+.major-summary .ms-req {
     color: var(--text-secondary);
     font-size: 0.9rem;
 }
 
-.minor-summary .ms-rules {
+.minor-summary .ms-rules,
+.major-summary .ms-rules {
     color: var(--text-secondary);
     font-size: 0.92rem;
     margin: 4px 0 8px;
 }
 
-.minor-summary .ms-list {
+.minor-summary .ms-list,
+.major-summary .ms-list {
     display: flex;
     flex-direction: column;
     gap: 6px;
 }
 
-.minor-summary .ms-course {
+.minor-summary .ms-course,
+.major-summary .ms-course {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1131,19 +1157,22 @@ html, body {
     background: var(--bg-card);
 }
 
-.minor-summary .ms-course.is-taken {
+.minor-summary .ms-course.is-taken,
+.major-summary .ms-course.is-taken {
     border-color: rgba(22, 163, 74, 0.55);
     background: rgba(22, 163, 74, 0.10);
 }
 
-.minor-summary .ms-course-left {
+.minor-summary .ms-course-left,
+.major-summary .ms-course-left {
     display: inline-flex;
     align-items: center;
     gap: 8px;
     min-width: 0;
 }
 
-.minor-summary .ms-dot {
+.minor-summary .ms-dot,
+.major-summary .ms-dot {
     width: 10px;
     height: 10px;
     border-radius: 999px;
@@ -1151,20 +1180,24 @@ html, body {
     flex: 0 0 auto;
 }
 
-.minor-summary .ms-course.is-taken .ms-dot {
+.minor-summary .ms-course.is-taken .ms-dot,
+.major-summary .ms-course.is-taken .ms-dot {
     background: #16A34A;
 }
 
-.minor-summary .ms-course.is-overflow .ms-dot {
+.minor-summary .ms-course.is-overflow .ms-dot,
+.major-summary .ms-course.is-overflow .ms-dot {
     background: #F59E0B;
 }
 
-.minor-summary .ms-course.is-overflow {
+.minor-summary .ms-course.is-overflow,
+.major-summary .ms-course.is-overflow {
     border-color: rgba(245, 158, 11, 0.55);
     background: rgba(245, 158, 11, 0.10);
 }
 
-.minor-summary .ms-legend {
+.minor-summary .ms-legend,
+.major-summary .ms-legend {
     display: flex;
     gap: 14px;
     flex-wrap: wrap;
@@ -1174,42 +1207,84 @@ html, body {
     padding: 6px 0 2px;
 }
 
-.minor-summary .ms-legend-item {
+.minor-summary .ms-legend-item,
+.major-summary .ms-legend-item {
     display: inline-flex;
     align-items: center;
     gap: 6px;
 }
 
-.minor-summary .ms-dot.ms-dot-green { background: #16A34A; }
-.minor-summary .ms-dot.ms-dot-yellow { background: #F59E0B; }
-.minor-summary .ms-dot.ms-dot-gray { background: #9CA3AF; }
+.minor-summary .ms-dot.ms-dot-green, .major-summary .ms-dot.ms-dot-green { background: #16A34A; }
+.minor-summary .ms-dot.ms-dot-yellow, .major-summary .ms-dot.ms-dot-yellow { background: #F59E0B; }
+.minor-summary .ms-dot.ms-dot-gray, .major-summary .ms-dot.ms-dot-gray { background: #9CA3AF; }
 
-.minor-summary .ms-subheader {
+.minor-summary .ms-subheader,
+.major-summary .ms-subheader {
     margin-top: 8px;
     font-weight: 700;
     color: var(--text-primary);
     font-size: 0.92rem;
 }
 
-.minor-summary .ms-code {
+.minor-summary .ms-code,
+.major-summary .ms-code {
     font-weight: 700;
     white-space: nowrap;
 }
 
-.minor-summary .ms-name {
+.minor-summary .ms-name,
+.major-summary .ms-name {
     color: var(--text-secondary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.minor-summary .ms-meta {
+.minor-summary .ms-meta,
+.major-summary .ms-meta {
     color: var(--text-secondary);
     white-space: nowrap;
     font-size: 0.9rem;
 }
 
-.minor-summary .ms-empty {
+.ms-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    font-size: 0.82rem;
+    line-height: 1.2;
+}
+
+.ms-chip.is-bs {
+    border-color: rgba(16, 185, 129, 0.55);
+    background: rgba(16, 185, 129, 0.12);
+    color: var(--text-primary);
+}
+
+.ms-chip.is-eng {
+    border-color: rgba(59, 130, 246, 0.55);
+    background: rgba(59, 130, 246, 0.12);
+    color: var(--text-primary);
+}
+
+.ms-chip.is-su {
+    border-color: rgba(245, 158, 11, 0.55);
+    background: rgba(245, 158, 11, 0.12);
+    color: var(--text-primary);
+}
+
+.ms-meta-note {
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+}
+
+.minor-summary .ms-empty,
+.major-summary .ms-empty {
     color: var(--text-secondary);
     font-size: 0.92rem;
     padding: 6px 2px;
@@ -1460,6 +1535,12 @@ html, body {
     padding: 0 8px;
 }
 
+.container_semester .total_credit_text span.is-overlimit {
+    color: #EF4444;
+    font-weight: 800;
+    text-shadow: 0 1px 0 rgba(0, 0, 0, 0.18);
+}
+
 /* Body container - PROPER FLEX LAYOUT */
 .subcontainer_semester {
     display: flex;
@@ -1617,6 +1698,21 @@ html, body {
     text-transform: uppercase;
     color: var(--text-secondary);
     font-size: 0.675rem;
+}
+
+.course_info .course_type.is-overflow-type {
+    color: #F59E0B;
+    font-weight: 700;
+}
+
+.course_info .course_type .course_type_part.is-overflow-type {
+    color: #F59E0B;
+    font-weight: 700;
+}
+
+.course_info .course_type .ct-sep {
+    color: var(--text-muted);
+    font-weight: 400;
 }
 
 .course_info .course_credit {

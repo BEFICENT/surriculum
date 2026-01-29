@@ -7,7 +7,14 @@
   const PLAN_PREFIX = 'surriculum.plan.';
   const MAX_PLANS = 10;
   const DEFAULT_PLAN_NAME = 'Default Plan';
-  const LEGACY_KEYS = ['major', 'doubleMajor', 'entryTerm', 'entryTermDM', 'entryTermMinor', 'minor1', 'minor2', 'minor3', 'curriculum', 'grades', 'dates'];
+  const LEGACY_KEYS = [
+    'major', 'doubleMajor',
+    'entryTerm', 'entryTermDM',
+    // Minor terms: `entryTermMinor` is legacy (single term); keep for migration.
+    'entryTermMinor', 'entryTermMinor1', 'entryTermMinor2', 'entryTermMinor3',
+    'minor1', 'minor2', 'minor3',
+    'curriculum', 'grades', 'dates'
+  ];
 
   function createModal({ title, bodyHtml, input, buttons }) {
     return new Promise((resolve) => {
@@ -250,6 +257,19 @@
       }
     }
 
+    // Derive per-minor admit terms from the legacy single term if needed.
+    try {
+      const legacy = localStorage.getItem(planKey(pid, 'entryTermMinor')) || localStorage.getItem('entryTermMinor');
+      if (legacy) {
+        const k1 = planKey(pid, 'entryTermMinor1');
+        const k2 = planKey(pid, 'entryTermMinor2');
+        const k3 = planKey(pid, 'entryTermMinor3');
+        if (localStorage.getItem(k1) == null) { localStorage.setItem(k1, legacy); didAnything = true; }
+        if (localStorage.getItem(k2) == null) { localStorage.setItem(k2, legacy); didAnything = true; }
+        if (localStorage.getItem(k3) == null) { localStorage.setItem(k3, legacy); didAnything = true; }
+      }
+    } catch (_) {}
+
     // Legacy custom courses (customCourses_<major>)
     const keys = listLocalStorageKeys();
     for (const k of keys) {
@@ -313,6 +333,9 @@
       entryTerm: get('entryTerm') || null,
       entryTermDM: get('entryTermDM') || null,
       entryTermMinor: get('entryTermMinor') || null,
+      entryTermMinor1: get('entryTermMinor1') || null,
+      entryTermMinor2: get('entryTermMinor2') || null,
+      entryTermMinor3: get('entryTermMinor3') || null,
       minor1: get('minor1') || null,
       minor2: get('minor2') || null,
       minor3: get('minor3') || null,
@@ -347,6 +370,9 @@
     if (state.entryTerm != null) setRaw('entryTerm', String(state.entryTerm));
     if (state.entryTermDM != null) setRaw('entryTermDM', String(state.entryTermDM));
     if (state.entryTermMinor != null) setRaw('entryTermMinor', String(state.entryTermMinor));
+    if (state.entryTermMinor1 != null) setRaw('entryTermMinor1', String(state.entryTermMinor1));
+    if (state.entryTermMinor2 != null) setRaw('entryTermMinor2', String(state.entryTermMinor2));
+    if (state.entryTermMinor3 != null) setRaw('entryTermMinor3', String(state.entryTermMinor3));
     if (state.minor1 != null) setRaw('minor1', String(state.minor1));
     if (state.minor2 != null) setRaw('minor2', String(state.minor2));
     if (state.minor3 != null) setRaw('minor3', String(state.minor3));
@@ -598,7 +624,7 @@
             } else {
               newId = planStorage.createPlan(baseName);
               if (newId) {
-                const keys = ['major', 'doubleMajor', 'entryTerm', 'entryTermDM', 'entryTermMinor'];
+                const keys = ['major', 'doubleMajor', 'entryTerm', 'entryTermDM', 'entryTermMinor', 'entryTermMinor1', 'entryTermMinor2', 'entryTermMinor3'];
                 for (const k of keys) {
                   const v = planStorage.getItem(k, currentId);
                   if (v != null) planStorage.setItem(k, v, newId);

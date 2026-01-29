@@ -272,6 +272,10 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
 
             let dom_tc = dom_course.parentNode.parentNode.parentNode.querySelector('span');
             dom_tc.innerHTML = 'Total: ' + curriculum.getSemester(semester.id).totalCredit + ' credits';
+            try {
+                const tc = curriculum.getSemester(semester.id).totalCredit || 0;
+                dom_tc.classList.toggle('is-overlimit', tc > 20);
+            } catch (_) {}
         }
     }
 

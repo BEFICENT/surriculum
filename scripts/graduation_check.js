@@ -6,7 +6,49 @@
 // Compute how taken courses are allocated for a minor, including the
 // "overflow" behavior (Core → Area → Free) and equivalence rules.
 function computeMinorAllocation(curriculum, minorCode) {
-    const reqMap = (typeof window !== 'undefined' && window.minorRequirements) ? window.minorRequirements : {};
+    const computeCgpa = () => {
+        let gpaCredits = 0;
+        let gpaValue = 0.0;
+        try {
+            for (let i = 0; i < curriculum.semesters.length; i++) {
+                const sem = curriculum.semesters[i];
+                gpaCredits += (sem && sem.totalGPACredits) ? sem.totalGPACredits : 0;
+                gpaValue += (sem && sem.totalGPA) ? sem.totalGPA : 0;
+            }
+        } catch (_) {}
+        if (!gpaCredits) return { cgpa: NaN, credits: 0 };
+        const cgpa = gpaValue / gpaCredits;
+        return { cgpa, credits: gpaCredits };
+    };
+
+    const gpaThresholdForMinor = (code) => {
+        // Exception: Entrepreneurship minor requires 2.50 CGPA.
+        if (String(code || '').toUpperCase() === 'ENTREP-MINOR') return 2.50;
+        return 2.72;
+    };
+
+    const termCode = (() => {
+        try {
+            const map = curriculum && curriculum.minorTermsByCode ? curriculum.minorTermsByCode : {};
+            const t = map && map[minorCode] ? String(map[minorCode]) : '';
+            if (t) return t;
+        } catch (_) {}
+        try {
+            return curriculum && curriculum.entryTermMinor ? String(curriculum.entryTermMinor) : '';
+        } catch (_) {
+            return '';
+        }
+    })();
+
+    const reqMap = (() => {
+        try {
+            if (typeof window !== 'undefined' && typeof window.loadMinorRequirementsForTerm === 'function') {
+                const m = window.loadMinorRequirementsForTerm(termCode);
+                if (m && typeof m === 'object') return m;
+            }
+        } catch (_) {}
+        return (typeof window !== 'undefined' && window.minorRequirements) ? window.minorRequirements : {};
+    })();
     const req = reqMap ? reqMap[minorCode] : null;
     const dataByCode = curriculum && curriculum.minorCourseDataByCode ? curriculum.minorCourseDataByCode : {};
     const courseData = dataByCode ? dataByCode[minorCode] : null;
@@ -191,6 +233,15 @@ function computeMinorAllocation(curriculum, minorCode) {
     if (minAllS && totalCredits < minAllS) allOk = false;
     if (!Object.keys(categories).length) allOk = false;
 
+    // Minor CGPA requirement (only if GPA is computable).
+    const { cgpa } = computeCgpa();
+    const gpaThreshold = gpaThresholdForMinor(minorCode);
+    let gpaOk = true;
+    if (isFinite(cgpa)) {
+        gpaOk = cgpa >= gpaThreshold;
+        if (!gpaOk) allOk = false;
+    }
+
     return {
         ok: allOk,
         title: req.name || minorCode,
@@ -201,6 +252,10 @@ function computeMinorAllocation(curriculum, minorCode) {
         pools,
         courseByCode,
         allocationByCode,
+        termCode,
+        cgpa,
+        gpaThreshold,
+        gpaOk,
     };
 }
 
@@ -239,7 +294,7 @@ function displayGraduationResults(curriculum) {
             }
         }
 
-        // Optional: show minor completion status (does not affect graduation).
+        // Show minor completion status (does not affect major graduation).
         function evaluateMinor(minorCode) {
             const res = computeMinorAllocation(curriculum, minorCode);
             if (res.error) return { ok: false, title: minorCode, lines: [res.error] };
@@ -260,6 +315,17 @@ function displayGraduationResults(curriculum) {
             if (missing.length) {
                 lines.push(`Missing: ${missing.join(', ')}`);
             }
+            try {
+                const thr = (String(minorCode || '').toUpperCase() === 'ENTREP-MINOR') ? 2.50 : 2.72;
+                if (isFinite(res.cgpa)) {
+                    const cgpaStr = Number(res.cgpa).toFixed(3);
+                    const bad = res.gpaOk === false;
+                    const msg = `CGPA: ${cgpaStr} (required ≥ ${thr.toFixed(2)})`;
+                    lines.push(bad ? `<span style="color:#DC2626;font-weight:700;">${msg}</span>` : msg);
+                } else {
+                    lines.push(`CGPA requirement: ≥ ${thr.toFixed(2)}`);
+                }
+            } catch (_) {}
             lines.push('See Summary → Minor for details.');
             return { ok: res.ok, title: res.title || minorCode, lines };
         }
@@ -315,6 +381,19 @@ function displaySummary(curriculum, major_chosen_by_user) {
     minorPanelEl.className = 'summary_minor_panel is-hidden';
     contentEl.appendChild(minorPanelEl);
 
+    const majorPanelEl = document.createElement('div');
+    majorPanelEl.className = 'summary_major_panel is-hidden';
+    contentEl.appendChild(majorPanelEl);
+
+    const showOverview = () => {
+        try {
+            minorPanelEl.classList.add('is-hidden');
+            majorPanelEl.classList.add('is-hidden');
+            cardsRowEl.classList.remove('is-hidden');
+            headerRowEl.classList.remove('is-hidden');
+        } catch (_) {}
+    };
+
     function getTakenCourseCodes() {
         const taken = new Set();
         try {
@@ -347,7 +426,29 @@ function displaySummary(curriculum, major_chosen_by_user) {
             headerRowEl.appendChild(minorRow);
 
             const taken = getTakenCourseCodes();
-            const reqMap = (typeof window !== 'undefined' && window.minorRequirements) ? window.minorRequirements : {};
+            const getMinorReq = (code) => {
+                const termCode = (() => {
+                    try {
+                        const map = curriculum && curriculum.minorTermsByCode ? curriculum.minorTermsByCode : {};
+                        const t = map && map[code] ? String(map[code]) : '';
+                        if (t) return t;
+                    } catch (_) {}
+                    try { return curriculum && curriculum.entryTermMinor ? String(curriculum.entryTermMinor) : ''; } catch (_) {}
+                    return '';
+                })();
+                try {
+                    if (typeof window !== 'undefined' && typeof window.loadMinorRequirementsForTerm === 'function') {
+                        const m = window.loadMinorRequirementsForTerm(termCode);
+                        if (m && typeof m === 'object' && m[code]) return m[code];
+                    }
+                } catch (_) {}
+                try {
+                    const fallback = (typeof window !== 'undefined' && window.minorRequirements) ? window.minorRequirements : {};
+                    return fallback && fallback[code] ? fallback[code] : null;
+                } catch (_) {
+                    return null;
+                }
+            };
 
             const parseInt0 = (v) => {
                 const n = parseInt(v || '0', 10);
@@ -355,14 +456,11 @@ function displaySummary(curriculum, major_chosen_by_user) {
             };
 
             const showMajors = () => {
-                try {
-                    minorPanelEl.classList.add('is-hidden');
-                    cardsRowEl.classList.remove('is-hidden');
-                    headerRowEl.classList.remove('is-hidden');
-                } catch (_) {}
+                showOverview();
             };
 
             const showMinorSummary = (minorCode) => {
+                try { majorPanelEl.classList.add('is-hidden'); } catch (_) {}
                 const allocRes = computeMinorAllocation(curriculum, minorCode);
                 if (allocRes.error) {
                     const ui = (typeof window !== 'undefined') ? window.uiModal : null;
@@ -383,7 +481,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
 
                 const termName = (() => {
                     if (req.term) return req.term;
-                    const tc = curriculum && curriculum.entryTermMinor ? String(curriculum.entryTermMinor) : '';
+                    const tc = allocRes.termCode ? String(allocRes.termCode) : (curriculum && curriculum.entryTermMinor ? String(curriculum.entryTermMinor) : '');
                     try {
                         const fn = (typeof window !== 'undefined' && typeof window.termCodeToName === 'function') ? window.termCodeToName : null;
                         return fn ? fn(tc) : tc;
@@ -397,6 +495,22 @@ function displaySummary(curriculum, major_chosen_by_user) {
                     if (!eq.length) return '';
                     const parts = eq.map(g => Array.isArray(g) ? g.join(' / ') : String(g));
                     return `<div class="ms-rules"><strong>Rule:</strong> Choose 1 of: ${parts.join(' • ')}</div>`;
+                };
+
+                const orderPoolCodes = (codes, sectionCat) => {
+                    const arr = Array.isArray(codes) ? codes.slice() : [];
+                    const rank = (code) => {
+                        const alloc = allocationByCode[code];
+                        if (!alloc) return 2; // not taken
+                        if (alloc.allocatedCat === sectionCat) return 0; // taken + counts here
+                        return 1; // taken + counts elsewhere
+                    };
+                    return arr.sort((a, b) => {
+                        const ra = rank(a);
+                        const rb = rank(b);
+                        if (ra !== rb) return ra - rb;
+                        return String(a).localeCompare(String(b));
+                    });
                 };
 
                 const renderPoolCourse = (code, sectionCat) => {
@@ -453,6 +567,17 @@ function displaySummary(curriculum, major_chosen_by_user) {
 
                 let body = `<div class="minor-summary">`;
                 body += `<div class="ms-subtitle">Admit term: <strong>${termName || 'Unknown'}</strong></div>`;
+                try {
+                    if (isFinite(allocRes.cgpa) && allocRes.gpaThreshold) {
+                        const cgpaStr = Number(allocRes.cgpa).toFixed(3);
+                        const thrStr = Number(allocRes.gpaThreshold).toFixed(2);
+                        const ok = allocRes.gpaOk !== false;
+                        const color = ok ? 'color: var(--text-secondary);' : 'color: #DC2626; font-weight: 700;';
+                        body += `<div class="ms-subtitle" style="${color}">CGPA requirement: <strong>${thrStr}</strong> • Your CGPA: <strong>${cgpaStr}</strong></div>`;
+                    } else {
+                        body += `<div class="ms-subtitle">CGPA requirement: <strong>${(String(minorCode || '').toUpperCase() === 'ENTREP-MINOR') ? '2.50' : '2.72'}</strong></div>`;
+                    }
+                } catch (_) {}
                 body += `<div class="ms-legend">
                     <div class="ms-legend-item"><span class="ms-dot ms-dot-green"></span>Counts in this pool</div>
                     <div class="ms-legend-item"><span class="ms-dot ms-dot-yellow"></span>Counts in a lower pool (overflow)</div>
@@ -491,7 +616,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
 
                     body += `<div class="ms-subheader">Course pool</div>`;
                     body += `<div class="ms-list">`;
-                    body += poolCodes.length ? poolCodes.sort((a,b)=>String(a).localeCompare(String(b))).map(code => renderPoolCourse(code, cat)).join('') : `<div class="ms-empty">No courses listed in this pool.</div>`;
+                    body += poolCodes.length ? orderPoolCodes(poolCodes, cat).map(code => renderPoolCourse(code, cat)).join('') : `<div class="ms-empty">No courses listed in this pool.</div>`;
                     body += `</div></div>`;
                 }
 
@@ -505,7 +630,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
                   </div>
                   <div class="summary_minor_switch_row">
                     ${minors.map(code => {
-                        const rec = reqMap ? reqMap[code] : null;
+                        const rec = getMinorReq(code);
                         const label = rec && rec.name ? rec.name : code;
                         const active = code === minorCode ? 'is-active' : '';
                         return `<button type="button" class="btn btn-secondary summary_minor_switch_btn ${active}" data-minor-code="${code}">${label}</button>`;
@@ -540,7 +665,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
             };
 
             for (const minorCode of minors) {
-                const rec = reqMap ? reqMap[minorCode] : null;
+                const rec = getMinorReq(minorCode);
                 const btn = document.createElement('button');
                 btn.className = 'btn btn-secondary summary_minor_btn';
                 btn.textContent = rec && rec.name ? rec.name : minorCode;
@@ -568,8 +693,332 @@ function displaySummary(curriculum, major_chosen_by_user) {
         PSY: 'Psychology',
         VACD: 'Visual Arts and Visual Communications Design'
     };
+
+    const esc = (v) => {
+        try {
+            if (typeof escapeHtml === 'function') return escapeHtml(v);
+        } catch (_) {}
+        return String(v ?? '');
+    };
+
+    const normalizeCode = (v) => String(v || '').toUpperCase().replace(/\s+/g, '');
+    const parseInt0 = (v) => {
+        const n = parseInt(v || '0', 10);
+        return isNaN(n) ? 0 : n;
+    };
+    const termNameFromCode = (termCode) => {
+        const tc = String(termCode || '');
+        try {
+            const fn = (typeof window !== 'undefined' && typeof window.termCodeToName === 'function') ? window.termCodeToName : null;
+            return fn ? fn(tc) : tc;
+        } catch (_) {
+            return tc;
+        }
+    };
+
+    function computeMajorAllocation(view) {
+        const isDM = view === 'dm';
+        const majorCode = isDM ? (curriculum.doubleMajor || '') : (major_chosen_by_user || curriculum.major || '');
+        const entryTerm = isDM ? curriculum.entryTermDM : curriculum.entryTerm;
+        const effField = isDM ? 'effective_type_dm' : 'effective_type';
+        const catalog = isDM
+            ? (Array.isArray(curriculum.doubleMajorCourseData) ? curriculum.doubleMajorCourseData : [])
+            : ((typeof course_data !== 'undefined' && Array.isArray(course_data)) ? course_data : []);
+
+        const courseByCode = new Map();
+        const pools = { university: [], required: [], core: [], area: [], free: [] };
+        try {
+            for (let i = 0; i < catalog.length; i++) {
+                const rec = catalog[i];
+                if (!rec) continue;
+                const code = normalizeCode((rec.Major || '') + (rec.Code || ''));
+                if (!code) continue;
+                const baseCat = String(rec.EL_Type || '').toLowerCase();
+                courseByCode.set(code, { ...rec, __code: code, __baseCat: baseCat });
+                if (pools[baseCat]) pools[baseCat].push(code);
+            }
+        } catch (_) {}
+
+        const allocationByCode = {};
+        const totals = {
+            university: { courses: 0, credits: 0 },
+            required: { courses: 0, credits: 0 },
+            core: { courses: 0, credits: 0 },
+            area: { courses: 0, credits: 0 },
+            free: { courses: 0, credits: 0 },
+        };
+
+        try {
+            for (let i = 0; i < curriculum.semesters.length; i++) {
+                const sem = curriculum.semesters[i];
+                for (let j = 0; j < sem.courses.length; j++) {
+                    const c = sem.courses[j];
+                    if (!c || !c.code) continue;
+                    let gradeText = '';
+                    try {
+                        const elem = document.getElementById(c.id);
+                        const gr = elem ? elem.querySelector('.grade') : null;
+                        gradeText = gr ? gr.textContent.trim() : '';
+                    } catch (_) {}
+                    if (gradeText === 'F') continue;
+
+                    const code = normalizeCode(c.code);
+                    const eff = String((c && c[effField]) || '').toLowerCase();
+                    if (!eff || eff === 'none') continue;
+
+                    const rec = courseByCode.get(code);
+                    const baseCat = rec ? String(rec.__baseCat || '').toLowerCase() : 'none';
+                    const credit = rec ? parseInt0(rec.SU_credit) : parseInt0(c.SU_credit);
+
+                    allocationByCode[code] = {
+                        allocatedCat: eff,
+                        baseCat,
+                        movedDown: !!(baseCat && eff && baseCat !== eff),
+                        credit
+                    };
+                }
+            }
+        } catch (_) {}
+
+        try {
+            for (const code of Object.keys(allocationByCode)) {
+                const a = allocationByCode[code];
+                if (!a || !totals[a.allocatedCat]) continue;
+                totals[a.allocatedCat].courses += 1;
+                totals[a.allocatedCat].credits += a.credit || 0;
+            }
+        } catch (_) {}
+
+        return { majorCode, entryTerm, courseByCode, pools, allocationByCode, totals };
+    }
+
+    const showMajorSummary = (view) => {
+        const isDM = view === 'dm';
+        const allocRes = computeMajorAllocation(view);
+        const majorCode = allocRes.majorCode;
+        if (!majorCode) return;
+
+        const reqRec = lookupReq(majorCode, allocRes.entryTerm) || {};
+        const title = (majorNames[majorCode] || majorCode) + (isDM ? ' — Double Major' : '');
+        const termName = termNameFromCode(allocRes.entryTerm);
+
+        const catOrder = ['university', 'required', 'core', 'area', 'free'];
+        const catOrderAlloc = ['required', 'core', 'area', 'free'];
+        const allocationByCode = allocRes.allocationByCode || {};
+        const courseByCode = allocRes.courseByCode || new Map();
+        const pools = allocRes.pools || {};
+        const totals = allocRes.totals || {};
+
+        const formatNum = (v) => {
+            const n = parseFloat(v || '0');
+            if (!isFinite(n) || n <= 0) return null;
+            return (Math.abs(n - Math.round(n)) < 1e-9) ? String(Math.round(n)) : n.toFixed(1);
+        };
+        const bsChip = (rec) => {
+            if (!rec) return '';
+            const bs = formatNum(rec.Basic_Science);
+            return bs ? `<span class="ms-chip is-bs">BS ${esc(bs)}</span>` : '';
+        };
+        const engChip = (rec) => {
+            if (!rec) return '';
+            const eng = formatNum(rec.Engineering);
+            return eng ? `<span class="ms-chip is-eng">ENG ${esc(eng)}</span>` : '';
+        };
+        const suChip = (su) => `<span class="ms-chip is-su">SU ${esc(su)}</span>`;
+        const metaChips = (rec, su) => {
+            const chips = [];
+            const b = bsChip(rec);
+            const e = engChip(rec);
+            if (b) chips.push(b);
+            if (e) chips.push(e);
+            chips.push(suChip(su));
+            return chips.join(' ');
+        };
+
+        const orderPoolCodes = (codes, sectionCat) => {
+            const arr = Array.isArray(codes) ? codes.slice() : [];
+            const rank = (code) => {
+                const alloc = allocationByCode[code];
+                if (!alloc) return 2; // not taken
+                if (alloc.allocatedCat === sectionCat) return 0; // taken + counts here
+                return 1; // taken + counts elsewhere
+            };
+            return arr.sort((a, b) => {
+                const ra = rank(a);
+                const rb = rank(b);
+                if (ra !== rb) return ra - rb;
+                return String(a).localeCompare(String(b));
+            });
+        };
+
+        const renderPoolCourse = (code, sectionCat) => {
+            const rec = courseByCode.get(code);
+            if (!rec) return '';
+            const name = rec.Course_Name || '';
+            const su = rec.SU_credit || '0';
+            const chips = metaChips(rec, su);
+            const alloc = allocationByCode[code];
+            if (!alloc) {
+                return `
+                  <div class="ms-course is-missing">
+                    <div class="ms-course-left">
+                      <span class="ms-dot"></span>
+                      <span class="ms-code">${esc(code)}</span>
+                      <span class="ms-name">${esc(name)}</span>
+                    </div>
+                    <div class="ms-meta">${chips}</div>
+                  </div>
+                `;
+            }
+            const isHere = alloc.allocatedCat === sectionCat;
+            const statusClass = isHere ? 'is-taken' : 'is-overflow';
+            const countsAs = isHere ? '' : ` <span class="ms-meta-note">• Counts as ${esc(String(alloc.allocatedCat || '').toUpperCase())}</span>`;
+            return `
+              <div class="ms-course ${statusClass}">
+                <div class="ms-course-left">
+                  <span class="ms-dot"></span>
+                  <span class="ms-code">${esc(code)}</span>
+                  <span class="ms-name">${esc(name)}</span>
+                </div>
+                <div class="ms-meta">${chips}${countsAs}</div>
+              </div>
+            `;
+        };
+
+        const renderCountedCourse = (code) => {
+            const rec = courseByCode.get(code);
+            const alloc = allocationByCode[code];
+            const name = rec ? (rec.Course_Name || '') : '';
+            const su = rec ? (rec.SU_credit || '0') : String(alloc && alloc.credit ? alloc.credit : '0');
+            const chips = metaChips(rec, su);
+            if (!alloc) return '';
+            const fromTxt = alloc.baseCat && alloc.baseCat !== 'free'
+                ? ` <span class="ms-meta-note">• From ${esc(String(alloc.baseCat || '').toUpperCase())}</span>`
+                : '';
+            return `
+              <div class="ms-course ${alloc.movedDown ? 'is-overflow' : 'is-taken'}">
+                <div class="ms-course-left">
+                  <span class="ms-dot"></span>
+                  <span class="ms-code">${esc(code)}</span>
+                  <span class="ms-name">${esc(name)}</span>
+                </div>
+                <div class="ms-meta">${chips}${fromTxt}</div>
+              </div>
+            `;
+        };
+
+        let body = `<div class="major-summary">`;
+        body += `<div class="ms-subtitle">Admit term: <strong>${esc(termName || 'Unknown')}</strong></div>`;
+        body += `<div class="ms-legend">
+            <div class="ms-legend-item"><span class="ms-dot ms-dot-green"></span>Counts in this pool</div>
+            <div class="ms-legend-item"><span class="ms-dot ms-dot-yellow"></span>Counts in a different/lower pool</div>
+            <div class="ms-legend-item"><span class="ms-dot ms-dot-gray"></span>Not taken</div>
+          </div>`;
+
+        for (const cat of catOrder) {
+            const needS = parseInt0(reqRec[cat] || 0);
+            const have = totals[cat] || { courses: 0, credits: 0 };
+            const poolCodes = Array.isArray(pools[cat]) ? pools[cat].slice() : [];
+            const countedCodes = Object.keys(allocationByCode)
+                .filter(code => allocationByCode[code] && allocationByCode[code].allocatedCat === cat)
+                .sort((a, b) => {
+                    const aa = allocationByCode[a];
+                    const bb = allocationByCode[b];
+                    const ra = (aa && aa.movedDown) ? 1 : 0;
+                    const rb = (bb && bb.movedDown) ? 1 : 0;
+                    if (ra !== rb) return ra - rb;
+                    return String(a).localeCompare(String(b));
+                });
+
+            // Only show sections that exist in the requirements or have any counted courses.
+            if (!needS && !countedCodes.length && cat !== 'free') continue;
+
+            const showOverflowHere = (cat !== 'required' && cat !== 'university');
+            const overflowHere = showOverflowHere
+                ? countedCodes.filter(code => {
+                    const a = allocationByCode[code];
+                    if (!a || !a.movedDown) return false;
+                    const baseIdx = catOrderAlloc.indexOf(String(a.baseCat || ''));
+                    const catIdx = catOrderAlloc.indexOf(cat);
+                    return baseIdx >= 0 && catIdx >= 0 && baseIdx < catIdx;
+                })
+                : [];
+
+            body += `<div class="ms-section">`;
+            body += `<div class="ms-header"><div class="ms-title">${esc(cat.toUpperCase())}</div><div class="ms-req">${have.courses} courses • ${have.credits}/${needS} SU</div></div>`;
+
+            if (cat === 'free') {
+                body += `<div class="ms-rules"><strong>Note:</strong> This section only lists courses currently counted as FREE.</div>`;
+                body += `<div class="ms-list">`;
+                body += countedCodes.length ? countedCodes.map(c => renderCountedCourse(c)).join('') : `<div class="ms-empty">No courses currently count as FREE.</div>`;
+                body += `</div></div>`;
+                continue;
+            }
+
+            if (overflowHere.length) {
+                body += `<div class="ms-subheader">Overflow counting here</div>`;
+                body += `<div class="ms-list">`;
+                body += overflowHere.map(c => renderCountedCourse(c)).join('');
+                body += `</div>`;
+            }
+
+            body += `<div class="ms-subheader">Course pool</div>`;
+            body += `<div class="ms-list">`;
+            body += poolCodes.length
+                ? orderPoolCodes(poolCodes, cat).map(code => renderPoolCourse(code, cat)).join('')
+                : `<div class="ms-empty">No courses listed in this pool.</div>`;
+            body += `</div></div>`;
+        }
+
+        body += `</div>`;
+
+        const availableViews = [];
+        availableViews.push({ key: 'main', label: (majorNames[major_chosen_by_user] || major_chosen_by_user || 'Main major') });
+        if (curriculum.doubleMajor) availableViews.push({ key: 'dm', label: (majorNames[curriculum.doubleMajor] || curriculum.doubleMajor) });
+
+        majorPanelEl.innerHTML = `
+          <div class="summary_minor_panel_header">
+            <button class="btn btn-secondary summary_back_btn" type="button">Back to summary</button>
+            <div class="summary_minor_panel_title">${esc(title)}</div>
+          </div>
+          <div class="summary_minor_switch_row">
+            ${availableViews.map(v => {
+                const active = v.key === view ? 'is-active' : '';
+                return `<button type="button" class="btn btn-secondary summary_minor_switch_btn ${active}" data-major-view="${esc(v.key)}">${esc(v.label)}</button>`;
+            }).join('')}
+          </div>
+          <div class="summary_minor_panel_body">${body}</div>
+        `;
+
+        try {
+            const backBtn = majorPanelEl.querySelector('.summary_back_btn');
+            if (backBtn) {
+                backBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    showOverview();
+                });
+            }
+            majorPanelEl.querySelectorAll('.summary_minor_switch_btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const next = btn.getAttribute('data-major-view') || '';
+                    if (next) showMajorSummary(next);
+                });
+            });
+        } catch (_) {}
+
+        try {
+            majorPanelEl.classList.remove('is-hidden');
+            minorPanelEl.classList.add('is-hidden');
+            cardsRowEl.classList.add('is-hidden');
+            headerRowEl.classList.add('is-hidden');
+        } catch (_) {}
+    };
+
     // Helper to build a summary modal for a given set of totals and limits.
-    function buildSummaryModal(totals, limits, gpa, majorCode) {
+    function buildSummaryModal(totals, limits, gpa, majorCode, view) {
         const modal = document.createElement('div');
         modal.classList.add('summary_modal');
         cardsRowEl.appendChild(modal);
@@ -591,6 +1040,21 @@ function displaySummary(curriculum, major_chosen_by_user) {
                 child.innerHTML = '<p>' + labels[i] + total_values[i] + ' / ' + limits[i] + '</p>';
             }
             modal.appendChild(child);
+        }
+        if (view === 'main' || view === 'dm') {
+            const btnWrap = document.createElement('div');
+            btnWrap.style.marginTop = '6px';
+            const detailsBtn = document.createElement('button');
+            detailsBtn.className = 'btn btn-secondary summary_detail_btn';
+            detailsBtn.type = 'button';
+            detailsBtn.textContent = 'View detailed summary';
+            detailsBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                showMajorSummary(view);
+            });
+            btnWrap.appendChild(detailsBtn);
+            modal.appendChild(btnWrap);
         }
         return modal;
     }
@@ -647,7 +1111,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
         String(reqMain.engineering || 0)
     ];
     // Build primary summary modal
-    buildSummaryModal(totalsMain, limitsMain, gpaMain, major_chosen_by_user);
+    buildSummaryModal(totalsMain, limitsMain, gpaMain, major_chosen_by_user, 'main');
     // If a double major exists, compute totals for DM and show a second modal
     if (curriculum.doubleMajor) {
         let totalsDM = {
@@ -692,7 +1156,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
             String(dmReq.science || 0),
             String(dmReq.engineering || 0)
         ];
-        buildSummaryModal(totalsDM, limitsDM, gpaDM, curriculum.doubleMajor);
+        buildSummaryModal(totalsDM, limitsDM, gpaDM, curriculum.doubleMajor, 'dm');
     }
 }
 

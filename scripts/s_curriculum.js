@@ -1074,6 +1074,12 @@ function s_curriculum()
                         const typeElem = courseElem.querySelector('.course_type');
                         if (typeElem) {
                             typeElem.textContent = effectiveType.toUpperCase();
+                            try {
+                                const base = (staticType || '').toLowerCase();
+                                const eff = (effectiveType || '').toLowerCase();
+                                const movedDown = !!(base && eff && base !== eff && eff !== 'none');
+                                typeElem.classList.toggle('is-overflow-type', movedDown);
+                            } catch (_) {}
                         }
                     }
                 } catch (err) {
@@ -1323,6 +1329,12 @@ function s_curriculum()
                         const typeElem = courseElem.querySelector('.course_type');
                         if (typeElem && course.effective_type) {
                             typeElem.textContent = course.effective_type.toUpperCase();
+                            try {
+                                const base = (course.category || '').toString().toLowerCase();
+                                const eff = (course.effective_type || '').toString().toLowerCase();
+                                const movedDown = !!(base && eff && base !== eff && eff !== 'none');
+                                typeElem.classList.toggle('is-overflow-type', movedDown);
+                            } catch (_) {}
                         }
                     }
                 }
@@ -1486,6 +1498,12 @@ function s_curriculum()
                         const typeElem = courseElem.querySelector('.course_type');
                         if (typeElem && course.effective_type) {
                             typeElem.textContent = course.effective_type.toUpperCase();
+                            try {
+                                const base = (course.category || '').toString().toLowerCase();
+                                const eff = (course.effective_type || '').toString().toLowerCase();
+                                const movedDown = !!(base && eff && base !== eff && eff !== 'none');
+                                typeElem.classList.toggle('is-overflow-type', movedDown);
+                            } catch (_) {}
                         }
                     }
                 }
@@ -1514,6 +1532,9 @@ function s_curriculum()
                         const span = containerElem.querySelector('.total_credit_text span');
                         if (span) {
                             span.innerHTML = 'Total: ' + sem.totalCredit + ' credits';
+                            try {
+                                span.classList.toggle('is-overlimit', (sem.totalCredit || 0) > 20);
+                            } catch (_) {}
                         }
                     }
                 }
@@ -2092,11 +2113,32 @@ function s_curriculum()
                         // Compose both types, capitalize each
                         const mt = (mainType === 'none' ? 'N/A' : (mainType || '').toString().toUpperCase());
                         const dt = (dmTypeLabel === 'none' ? 'N/A' : dmTypeLabel.toUpperCase());
-                        typeSpan.textContent = mt + ' / ' + dt;
+                        try {
+                            const baseMain = (course.category || '').toString().toLowerCase();
+                            const effMain = (course.effective_type || '').toString().toLowerCase();
+                            const movedDownMain = !!(baseMain && effMain && baseMain !== effMain && effMain !== 'none');
+                            const baseDM = (course.categoryDM || '').toString().toLowerCase();
+                            const effDM = (course.effective_type_dm || '').toString().toLowerCase();
+                            const movedDownDM = !!(baseDM && effDM && baseDM !== effDM && effDM !== 'none');
+
+                            const mainCls = movedDownMain ? 'is-overflow-type' : '';
+                            const dmCls = movedDownDM ? 'is-overflow-type' : '';
+                            // Types are controlled values (CORE/AREA/FREE/etc.). Render as spans so
+                            // overflow coloring can be applied per-major independently.
+                            typeSpan.innerHTML =
+                                `<span class="course_type_part ct-main ${mainCls}">${mt}</span>` +
+                                `<span class="ct-sep"> / </span>` +
+                                `<span class="course_type_part ct-dm ${dmCls}">${dt}</span>`;
+                        } catch (_) {
+                            typeSpan.textContent = mt + ' / ' + dt;
+                        }
                     } else {
                         // Only main type
                         typeSpan.textContent = (mainType === 'none' ? 'N/A' : (mainType || '').toString().toUpperCase());
                     }
+                    // When showing combined main/DM types we color per-part; do not
+                    // apply a single overflow class to the whole label.
+                    try { typeSpan.classList.remove('is-overflow-type'); } catch (_) {}
                 }
             }
         } catch (err) {

@@ -288,20 +288,41 @@ function SUrriculum(major_chosen_by_user) {
             if (names.length) minorEntryTerms = names;
         }
     } catch (_) {}
-    let entryTermMinorName = planGetItem('entryTermMinor') || entryTermName;
-    if (!entryTermMinorName || (Array.isArray(minorEntryTerms) && minorEntryTerms.length && !minorEntryTerms.includes(entryTermMinorName))) {
-        if (Array.isArray(minorEntryTerms) && minorEntryTerms.includes(entryTermName)) entryTermMinorName = entryTermName;
-        else entryTermMinorName = minorEntryTerms[0] || entryTermName;
-    }
+
+    const pickValidMinorTermName = (candidate, fallback) => {
+        const c = String(candidate || '').trim();
+        if (!c) return fallback;
+        if (Array.isArray(minorEntryTerms) && minorEntryTerms.length && !minorEntryTerms.includes(c)) return fallback;
+        return c;
+    };
+    const minorDefaultTermName = (() => {
+        if (Array.isArray(minorEntryTerms) && minorEntryTerms.length) {
+            if (minorEntryTerms.includes(entryTermName)) return entryTermName;
+            return minorEntryTerms[0];
+        }
+        return entryTermName;
+    })();
+    const legacyMinorTermName = planGetItem('entryTermMinor') || '';
+    const entryTermMinor1Name = pickValidMinorTermName(planGetItem('entryTermMinor1') || legacyMinorTermName, minorDefaultTermName);
+    const entryTermMinor2Name = pickValidMinorTermName(planGetItem('entryTermMinor2') || legacyMinorTermName, minorDefaultTermName);
+    const entryTermMinor3Name = pickValidMinorTermName(planGetItem('entryTermMinor3') || legacyMinorTermName, minorDefaultTermName);
     try {
         if (!planGetItem('major')) planSetItem('major', major_chosen_by_user);
         if (!planGetItem('entryTerm')) planSetItem('entryTerm', entryTermName);
         if (!planGetItem('entryTermDM')) planSetItem('entryTermDM', entryTermDMName);
-        if (!planGetItem('entryTermMinor')) planSetItem('entryTermMinor', entryTermMinorName);
+        if (!planGetItem('entryTermMinor1')) planSetItem('entryTermMinor1', entryTermMinor1Name);
+        if (!planGetItem('entryTermMinor2')) planSetItem('entryTermMinor2', entryTermMinor2Name);
+        if (!planGetItem('entryTermMinor3')) planSetItem('entryTermMinor3', entryTermMinor3Name);
+        // Keep the legacy key in sync (older exports/backwards compatibility).
+        if (!planGetItem('entryTermMinor') || planGetItem('entryTermMinor') !== entryTermMinor1Name) {
+            planSetItem('entryTermMinor', entryTermMinor1Name);
+        }
     } catch (_) {}
     const entryTermCode = termNameToCode(entryTermName);
     const entryTermDMCode = termNameToCode(entryTermDMName);
-    const entryTermMinorCode = termNameToCode(entryTermMinorName);
+    const entryTermMinor1Code = termNameToCode(entryTermMinor1Name);
+    const entryTermMinor2Code = termNameToCode(entryTermMinor2Name);
+    const entryTermMinor3Code = termNameToCode(entryTermMinor3Name);
 
     // Storage for the double major's course data.  It will be populated when
     // the user selects a double major via setDoubleMajor().
@@ -322,7 +343,9 @@ function SUrriculum(major_chosen_by_user) {
         let change_major_element = document.querySelector('.change_major');
         let etElem = document.querySelector('.entryTerm');
         let etDmElem = document.querySelector('.entryTermDM');
-        let etMinorElem = document.querySelector('.entryTermMinor');
+        const etMinor1Elem = document.getElementById('minorTerm1');
+        const etMinor2Elem = document.getElementById('minorTerm2');
+        const etMinor3Elem = document.getElementById('minorTerm3');
         let dmElem = document.querySelector('.doubleMajor');
         const dmControlsRow = document.getElementById('doubleMajorControlsRow');
         const dmButtonRow = document.getElementById('doubleMajorButtonRow');
@@ -330,7 +353,6 @@ function SUrriculum(major_chosen_by_user) {
         const minor1Row = document.getElementById('minor1Row');
         const minor2Row = document.getElementById('minor2Row');
         const minor3Row = document.getElementById('minor3Row');
-        const minorTermRow = document.getElementById('minorTermRow');
         const addMinorRow = document.getElementById('addMinorRow');
         const addMinorBtn = document.getElementById('addMinorBtn');
         const minor1Select = document.getElementById('minor1');
@@ -399,14 +421,20 @@ function SUrriculum(major_chosen_by_user) {
                 location.reload();
             });
         }
-        if (etMinorElem && etMinorElem.tagName === 'SELECT') {
-            etMinorElem.innerHTML = (minorEntryTerms || []).map(t => `<option value="${t}">${t}</option>`).join('');
-            etMinorElem.value = entryTermMinorName;
-            etMinorElem.addEventListener('change', function(e) {
-                planSetItem('entryTermMinor', e.target.value);
+        const bindMinorTermSelect = (elem, key, value) => {
+            if (!elem || elem.tagName !== 'SELECT') return;
+            elem.innerHTML = (minorEntryTerms || []).map(t => `<option value="${t}">${t}</option>`).join('');
+            elem.value = value || '';
+            elem.addEventListener('change', function(e) {
+                planSetItem(key, e.target.value);
+                // Keep legacy key aligned to the first minor term.
+                if (key === 'entryTermMinor1') planSetItem('entryTermMinor', e.target.value);
                 location.reload();
             });
-        }
+        };
+        bindMinorTermSelect(etMinor1Elem, 'entryTermMinor1', entryTermMinor1Name);
+        bindMinorTermSelect(etMinor2Elem, 'entryTermMinor2', entryTermMinor2Name);
+        bindMinorTermSelect(etMinor3Elem, 'entryTermMinor3', entryTermMinor3Name);
 
         // Double major UI: show dropdowns by default on first visit, but allow
         // collapsing them into a single "Add Double Major" button when the DM
@@ -437,8 +465,9 @@ function SUrriculum(major_chosen_by_user) {
         try {
             // Load term-specific minor requirements if available.
             try {
-                if (typeof window !== 'undefined' && typeof window.loadMinorRequirementsForTerm === 'function' && entryTermMinorCode) {
-                    window.minorRequirements = window.loadMinorRequirementsForTerm(entryTermMinorCode) || {};
+                // Use the first minor term as the default catalog view for the dropdowns.
+                if (typeof window !== 'undefined' && typeof window.loadMinorRequirementsForTerm === 'function' && entryTermMinor1Code) {
+                    window.minorRequirements = window.loadMinorRequirementsForTerm(entryTermMinor1Code) || {};
                 }
             } catch (_) {}
             const minorReq = (typeof window !== 'undefined' && window.minorRequirements) ? window.minorRequirements : {};
@@ -447,8 +476,30 @@ function SUrriculum(major_chosen_by_user) {
                 const bn = String(b.name || b.minor || '');
                 return an.localeCompare(bn);
             });
+            const shortenMinorLabel = (fullName) => {
+                const raw = String(fullName || '').trim();
+                if (!raw) return '';
+                const MAX = 44;
+                if (raw.length <= MAX) return raw;
+                let s = raw;
+                s = s.replace(/\bMinor Program\b/ig, '').replace(/\bProgram\b/ig, '').replace(/\bMinor\b/ig, '');
+                s = s.replace(/\bin\b/ig, ' ').replace(/\s{2,}/g, ' ').trim();
+                s = s.replace(/\band\b/ig, '&');
+                if (s.length <= MAX) return s;
+                if (s.includes('(')) {
+                    const before = s.split('(')[0].trim();
+                    if (before.length >= 10 && before.length < s.length) s = before;
+                }
+                if (s.length <= MAX) return s;
+                return s.slice(0, MAX - 3).trimEnd() + '...';
+            };
+
             const optionsHtml = ['<option value=\"\">None</option>'].concat(
-                minorList.map(rec => `<option value=\"${escapeHtml(rec.minor)}\">${escapeHtml(rec.name || rec.minor)}</option>`)
+                minorList.map(rec => {
+                    const full = String(rec.name || rec.minor || '').trim() || String(rec.minor || '');
+                    const short = shortenMinorLabel(full) || full;
+                    return `<option value=\"${escapeHtml(rec.minor)}\" title=\"${escapeHtml(full)}\">${escapeHtml(short)}</option>`;
+                })
             ).join('');
 
             const getMinor = (k) => {
@@ -459,6 +510,24 @@ function SUrriculum(major_chosen_by_user) {
                 try {
                     if (v) planSetItem(k, v);
                     else planRemoveItem(k);
+                } catch (_) {}
+            };
+            const getMinorTerm = (slot) => {
+                try {
+                    const k = `entryTermMinor${slot}`;
+                    const v = planGetItem(k) || '';
+                    if (v) return v;
+                } catch (_) {}
+                if (slot === 1) return entryTermMinor1Name;
+                if (slot === 2) return entryTermMinor2Name;
+                if (slot === 3) return entryTermMinor3Name;
+                return minorDefaultTermName;
+            };
+            const setMinorTerm = (slot, value) => {
+                try {
+                    const k = `entryTermMinor${slot}`;
+                    planSetItem(k, value || minorDefaultTermName);
+                    if (slot === 1) planSetItem('entryTermMinor', value || minorDefaultTermName);
                 } catch (_) {}
             };
 
@@ -488,12 +557,10 @@ function SUrriculum(major_chosen_by_user) {
                 setMinorRowVisible(minor1Row, false);
                 setMinorRowVisible(minor2Row, false);
                 setMinorRowVisible(minor3Row, false);
-                setMinorRowVisible(minorTermRow, false);
             } else {
                 setMinorRowVisible(minor1Row, true);
                 setMinorRowVisible(minor2Row, !!saved2);
                 setMinorRowVisible(minor3Row, !!saved3);
-                setMinorRowVisible(minorTermRow, true);
             }
 
             const updateAddMinorBtn = () => {
@@ -523,6 +590,9 @@ function SUrriculum(major_chosen_by_user) {
                         setMinor('minor1', next1);
                         setMinor('minor2', next2);
                         setMinor('minor3', '');
+                        setMinorTerm(1, getMinorTerm(2));
+                        setMinorTerm(2, getMinorTerm(3));
+                        setMinorTerm(3, minorDefaultTermName);
                         const stillHasAny = !!(next1 || next2);
                         try { localStorage.setItem('showMinorControls', stillHasAny ? 'true' : 'false'); } catch (_) {}
                     } else {
@@ -533,6 +603,8 @@ function SUrriculum(major_chosen_by_user) {
                     if (!v) {
                         setMinor('minor2', saved3 || '');
                         setMinor('minor3', '');
+                        setMinorTerm(2, getMinorTerm(3));
+                        setMinorTerm(3, minorDefaultTermName);
                     } else {
                         setMinor('minor2', v);
                     }
@@ -563,7 +635,6 @@ function SUrriculum(major_chosen_by_user) {
                     if (minor1Row && minor1Row.classList.contains('is-hidden')) setMinorRowVisible(minor1Row, true);
                     else if (minor2Row && minor2Row.classList.contains('is-hidden')) setMinorRowVisible(minor2Row, true);
                     else if (minor3Row && minor3Row.classList.contains('is-hidden')) setMinorRowVisible(minor3Row, true);
-                    if (minorTermRow && minorTermRow.classList.contains('is-hidden')) setMinorRowVisible(minorTermRow, true);
                     updateAddMinorBtn();
                     try {
                         if (minor1Row && !minor1Row.classList.contains('is-hidden') && minor1Select && !minor1Select.value) minor1Select.focus();
@@ -657,19 +728,32 @@ function SUrriculum(major_chosen_by_user) {
     }
 
     const minorProgramsSet = new Set();
+    const minorTermsByCode = {};
     try {
         const m1 = planGetItem('minor1') || '';
         const m2 = planGetItem('minor2') || '';
         const m3 = planGetItem('minor3') || '';
-        if (m1) minorProgramsSet.add(m1);
-        if (m2) minorProgramsSet.add(m2);
-        if (m3) minorProgramsSet.add(m3);
+        const t1 = termNameToCode(planGetItem('entryTermMinor1') || entryTermMinor1Name) || entryTermMinor1Code;
+        const t2 = termNameToCode(planGetItem('entryTermMinor2') || entryTermMinor2Name) || entryTermMinor2Code;
+        const t3 = termNameToCode(planGetItem('entryTermMinor3') || entryTermMinor3Name) || entryTermMinor3Code;
+        if (m1) {
+            minorProgramsSet.add(m1);
+            if (!minorTermsByCode[m1]) minorTermsByCode[m1] = t1;
+        }
+        if (m2) {
+            minorProgramsSet.add(m2);
+            if (!minorTermsByCode[m2]) minorTermsByCode[m2] = t2;
+        }
+        if (m3) {
+            minorProgramsSet.add(m3);
+            if (!minorTermsByCode[m3]) minorTermsByCode[m3] = t3;
+        }
     } catch (_) {}
     const minorPrograms = Array.from(minorProgramsSet);
     const minorCourseDataByCode = {};
     try {
         for (const mp of minorPrograms) {
-            const data = fetchMinorCourseData(mp, entryTermMinorCode);
+            const data = fetchMinorCourseData(mp, minorTermsByCode[mp] || entryTermMinor1Code);
             if (Array.isArray(data) && data.length) {
                 minorCourseDataByCode[mp] = data.slice();
             } else {
@@ -681,7 +765,8 @@ function SUrriculum(major_chosen_by_user) {
     curriculum.major = major_chosen_by_user;
     curriculum.entryTerm = entryTermCode;
     curriculum.entryTermDM = entryTermDMCode;
-    curriculum.entryTermMinor = entryTermMinorCode;
+    // Backward-compatible field: use Minor 1 term as a "default minor term".
+    curriculum.entryTermMinor = entryTermMinor1Code;
     if (savedDMPref) {
         curriculum.doubleMajorCourseData = doubleMajorCourseData;
         curriculum.doubleMajor = savedDMPref;
@@ -690,9 +775,11 @@ function SUrriculum(major_chosen_by_user) {
     if (minorPrograms.length) {
         curriculum.minors = minorPrograms.slice();
         curriculum.minorCourseDataByCode = { ...minorCourseDataByCode };
+        curriculum.minorTermsByCode = { ...minorTermsByCode };
     } else {
         curriculum.minors = [];
         curriculum.minorCourseDataByCode = {};
+        curriculum.minorTermsByCode = {};
     }
 
     // Expose the curriculum object globally so that helper functions
@@ -802,7 +889,8 @@ function SUrriculum(major_chosen_by_user) {
                 if (summaryOverlay) {
                     const insideCard = e.target.closest('.summary_modal');
                     const insideMinorPanel = e.target.closest('.summary_minor_panel');
-                    if (!insideCard && !insideMinorPanel) {
+                    const insideMajorPanel = e.target.closest('.summary_major_panel');
+                    if (!insideCard && !insideMinorPanel && !insideMajorPanel) {
                         try { document.querySelectorAll('.summary_modal').forEach(function(mod){ mod.remove(); }); } catch {}
                         try { document.querySelectorAll('.summary_modal_overlay').forEach(function(ov){ ov.remove(); }); } catch {}
                     }

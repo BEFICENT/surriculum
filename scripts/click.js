@@ -41,6 +41,27 @@ function dynamic_click(e, curriculum, course_data)
     //CLICKED "+ Add Course":
     if(e.target.classList.contains("addCourse"))
     {
+        const semesterContainer = (() => {
+            try { return e.target.closest('.container_semester'); } catch (_) { return null; }
+        })();
+        const getSemesterTermName = () => {
+            try {
+                const p = semesterContainer ? semesterContainer.querySelector('.date p') : null;
+                return p ? String(p.textContent || '').trim() : '';
+            } catch (_) {
+                return '';
+            }
+        };
+        const isCurrentTermSemester = () => {
+            try {
+                const ct = (typeof window !== 'undefined' && window.currentTermName) ? String(window.currentTermName) : '';
+                if (!ct) return false;
+                return getSemesterTermName() === ct;
+            } catch (_) {
+                return false;
+            }
+        };
+
         let input_container =  document.createElement("div");
         input_container.classList.add("input_container");
 
@@ -95,7 +116,10 @@ function dynamic_click(e, curriculum, course_data)
                 const textMatch = codeName.includes(normalized) || codeNameNoSpace.includes(normalizedNoSpace);
                 if (!textMatch) return false;
                 try {
-                    if (typeof window !== 'undefined' && window.offeredThisTermOnly) {
+                    // Only apply "offered this term" filtering when the user is adding
+                    // courses to the CURRENT TERM semester. Other semesters should not
+                    // be constrained by current offerings.
+                    if (typeof window !== 'undefined' && window.offeredThisTermOnly && isCurrentTermSemester()) {
                         // Trigger lazy load if needed.
                         if (!window.courseOfferingsByCode && typeof window.loadCourseOfferingsIndex === 'function') {
                             window.loadCourseOfferingsIndex().then(() => {
@@ -313,6 +337,9 @@ function dynamic_click(e, curriculum, course_data)
             // changing total credits element in DOM:
             let dom_tc = e.target.parentNode.parentNode.parentNode.querySelector('span');
             dom_tc.innerHTML = 'Total: ' + sem.totalCredit + ' credits';
+            try {
+                dom_tc.classList.toggle('is-overlimit', (sem.totalCredit || 0) > 20);
+            } catch (_) {}
             // Remove input container after adding course
             e.target.parentNode.remove();
             // Recalculate categories for main (and DM via recalc) after adding
@@ -382,6 +409,9 @@ function dynamic_click(e, curriculum, course_data)
         //changing total credits element in dom:
         let dom_tc = e.target.parentNode.parentNode.parentNode.parentNode.parentNode.parentNode.querySelector('span');
         dom_tc.innerHTML = 'Total: ' + semObj.totalCredit + ' credits';
+        try {
+            dom_tc.classList.toggle('is-overlimit', (semObj.totalCredit || 0) > 20);
+        } catch (_) {}
 
         const gradeValue = letter_grades_global_dic[grade];
         if (gradeValue !== undefined) {
