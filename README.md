@@ -1,88 +1,226 @@
-# [Surriculum v2.6](https://beficent.github.io/surriculum/)
+# [SUrriculum v3.0 (Beta)](https://beficent.github.io/surriculum/)
 
-Surriculum is an interactive graduation planner for Sabanci University undergraduate programs. The entire application runs in the browser using plain HTML, CSS and JavaScript. It lets you build a semester-by-semester plan, track program requirements and check whether you are on course to graduate.
+SUrriculum is a fully client-side curriculum planner for Sabancı University undergraduate programs. It runs entirely in your browser (plain HTML/CSS/JS) and helps you:
 
-A live instance is available at [beficent.github.io/surriculum](https://beficent.github.io/surriculum/).
+- Build and maintain a semester-by-semester plan
+- Track major / double major / minor requirements
+- Import your transcript (Academic Records Summary) to prefill taken courses
+- Use a current-term scheduler (SUchedule-style) to build a weekly timetable and sync it back into your plan
 
-## Using the tool
+Live version: https://beficent.github.io/surriculum/
 
-Clone this repository or download the source and open `index.html` in a modern web browser. No build step or server is required.
+> Beta note: the tool is feature-rich, but still evolving. Always verify graduation requirements using official sources.
 
-The interface allows you to:
+## Quick start
 
-- Select your major, optional double major, and up to 3 minors
-- Keep multiple saved plans (up to 10) and switch between them from the header
-- Add semesters and drag courses from the catalog
-- Import your Academic Records Summary (HTML or PDF) to prefill taken courses (or import your YÖK Transcript PDF)
-- Add custom courses manually
-- Check graduation status and view a summary of remaining requirements for each major
-- Toggle between light and dark themes or follow your system preference
-- Collapse the sidebar to maximize planning space
-- On touch devices, swipe from the left edge to open the sidebar
-- Insert new semesters and courses using "+ New Semester" and "+ Add course" ghosts
-- Show additional course details using the "Show Course Details" toggle
-- Hide courses you've already added from the "Add course" dropdown list using the "Hide Taken Courses" toggle
-- Optionally filter the "Add course" dropdown to only show courses offered in the current term (based on scraped coursepage info)
+1. Clone/download this repository.
+2. Open `index.html` in a modern browser (Chrome / Edge / Firefox).
+3. Pick your program(s) + admit term(s) from the sidebar and start planning.
 
-Always verify graduation requirements yourself. For issues or suggestions, contact [bilal.gebenoglu@sabanciuniv.edu](mailto:bilal.gebenoglu@sabanciuniv.edu), or start a discussion/issue on the repository.
+No build step, server, or database is required.
 
-## Updates in v2.6
+## What you can do (feature overview)
 
-- **JSONL storage**: course catalogs, requirements, and coursepage scrape outputs are stored as `.jsonl` (app still supports legacy `.json` as a fallback).
-- **Multiple plans**: save up to 10 plans, reorder via drag-and-drop, rename, export, import, and delete (while keeping at least 1 plan).
-- **Minors (early support)**: select up to 3 minors; minor courses appear in the course dropdown; a minor completion summary is shown in the graduation modal.
-- **Less “browser-y” UX**: replaced default browser popups with custom modals for import/plan flows.
-- **Current-term awareness**: current term is highlighted; admit term max is derived dynamically; optional filtering by “offered this term” uses `courses/all_coursepage_info.jsonl`.
+- **Programs**: select a main major, optional double major, and up to **3 minors**.
+- **Admit terms**:
+  - Main major and double major each have an admit term selector.
+  - Each minor slot (`Minor 1/2/3`) has its own admit term selector.
+- **Plans**: keep up to **10 saved plans**, reorder via drag-and-drop, rename, export, import, and delete (while keeping at least 1 plan).
+- **Planner board**: add semesters, add/remove courses, drag courses between semesters, and see per-semester totals.
+- **Course details**: open a details view for planned courses using the course row actions.
+- **Import transcript**: import **Academic Records Summary** (HTML/PDF) or a **YÖK transcript PDF** (not preferred).
+- **Graduation + summaries**: check requirement progress and open detailed summaries for majors and minors.
+- **Current-term tools**:
+  - Current term highlight
+  - Optional “only show offered courses” filter for the current term
+  - **Current Term Scheduler** for picking sections and building a weekly timetable
+- **Quality of life**: dark/light theme, collapsible sidebar, touch-friendly behavior, custom modals (no default browser prompts).
 
-## Known limitations (v2.6)
+If you hit a bug or want to improve the tool, open an issue/discussion or contact: [bilal.gebenoglu@sabanciuniv.edu](mailto:bilal.gebenoglu@sabanciuniv.edu)
 
-- **Minor term mismatch**: the bundled minor catalogs/requirements are currently scraped from **Spring 2025-2026** (`requirements/minors.jsonl`). They are not yet stored per admit term, so they may not match your actual admit term.
-- **Minors are informational**: minor status is currently shown as a “completion summary” and does not affect the main graduation pass/fail result.
-- **Minor rule parsing is partial**: only simple equivalence rules are auto-detected (e.g. “take one of X or Y”) plus the “all courses below are required” phrase.
-- **Academic Records import edge case**: PDFs created via **Microsoft Print to PDF** may not be detected reliably. Prefer “Save as PDF” or the HTML export.
-- **Wrong HTML save mode**: if you save SIS pages as “HTML only” instead of “Webpage, complete”, imports can fail (the app warns for the known “no permission” HTML content).
-- **Course offering filter quality**: the “offered in current term” toggle depends on scraped coursepage history; it can be incomplete/out-of-date if the scraper hasn’t been run recently.
+## Planner basics
 
-## Updating course data
+### Programs + admit terms
 
-Course catalogs and requirements are stored as JSONL files (`.jsonl`) under `courses/` and `requirements/`. The app and scrapers still support legacy `.json` as a fallback.
+1. Choose your **main major** (required).
+2. Optionally choose a **double major**.
+3. Add up to **3 minors** using the “Add minor” flow.
+4. Set admit terms for each selected program.
 
-0. Install scraper dependencies: `pip install -r requirements.txt`
-1. Edit `fetch_courses.py` if the university site changes and run `python fetch_courses.py` to regenerate the JSONL files. The scraper downloads data for every term starting from Fall 2019 and stores them under `courses/<TERM>/`. A `terms.jsonl` file indicates which majors are available for each term. By default it also updates **minor** catalogs/requirements for the newest term (use `--skip-minors` to disable).
-2. Run `scrape_coursepages.py` to populate `Basic_Science` and `Engineering` values by scraping each course page (the old CSV-based `update_credits.py` is deprecated).
-3. Run `python fetch_requirements.py` to scrape updated graduation rules into the JSONL files under `requirements/`. By default it also updates **minor** catalogs/requirements for the same term set (use `--skip-minors` to disable). Update matching messages in `main.js` if necessary.
-4. Run `python fetch_minors.py --terms <TERM>` to scrape minor catalogs and requirements for a specific admit term into `courses/minors/<TERM>/*.jsonl` and `requirements/minors/<TERM>.jsonl` (use multiple comma-separated terms to add more).
+Course catalogs and requirement rules are loaded based on these selections.
 
-To migrate existing pretty-printed `.json` files in-place, use `python migrate_to_jsonl.py` (add `--delete-json` to remove the legacy files after conversion).
+### Adding semesters and courses
 
-When using the planner, select your major and specify the entry term for both your main major and optional double major. Course lists and graduation requirements adjust automatically based on the selected terms.
+- Use **“+ New Semester”** to add a term to your plan.
+- Use **“+ Add course”** in a semester to pick a course from the catalog.
+- Drag and drop courses between semesters to reorganize your plan.
+- Use per-course buttons (next to delete) to open **details** and other actions.
 
-After updating data, manually test with various course combinations to ensure the graduation checker behaves correctly.
+### Custom courses
 
-### Coursepage outputs
+If a course is missing from the catalog (or you want placeholders), you can add a **custom course** and set its credits (including `.5`).
 
-`scrape_coursepages.py` also maintains two cumulative files:
+## Sidebar options (course dropdown behavior)
 
-- `courses/basic_science_credits.jsonl`: per-course ECTS breakdown (engineering/basic science) scraped from course pages
-- `courses/all_coursepage_info.jsonl`: full per-course coursepage info (description, prerequisites, etc.) for all courses ever recorded by this repo
+The “Add course” dropdown has several optional helpers:
 
-Tip: if scraping is slow, use `python scrape_coursepages.py --workers 8 --max-inflight 4`.
-Tip: if course fetching is slow, use `python fetch_courses.py --workers 8 --max-inflight 6` (or `--skip-coursepages` to only refresh catalogs).
+- **Hide taken courses**: hides courses you’ve already taken/added (and also respects currently selected sections in the scheduler for the current term).
+- **Only show offered courses in …**: filters the dropdown only for the **current term** (using `courses/all_coursepage_info.jsonl` coursepage history).
+- **Sort based on score**: sorts the dropdown by a per-course “suggestion score” (highest first).
 
-## Future plans (v3.0)
+### How “Sort based on score” works
 
-- **Course details actions**: per-course “details” buttons that open an in-app panel and/or link out to the official SU course pages.
-- **Built-in “SUchedule”**: a current-semester schedule builder with time-conflict detection, making it easy to create weekly timetables for upcoming registration.
-- **Term-aware minors**: store minor catalogs/requirements by admit term (like majors) and support year-based differences.
-- **UI polish**: small layout improvements, fewer reloads, and more consistent micro-interactions.
-- **Warnings/notifiers**: lightweight notifications for common pitfalls (bad export formats, missing data files, etc.).
-- **Fun + helpful extras**: curriculum trivia, course recommendations, and quality-of-life planning tools.
+Each course is scored based on how helpful it is for your selected programs, then the dropdown is sorted by that score.
+
+Base points (by course type, per program):
+
+- `University`: 36
+- `Required`: 28
+- `Core`: 18
+- `Area`: 12
+- `Free`: 0
+
+Extra points:
+
+- `+ 0.1 × (SU credits)` per course
+- For **engineering majors only** (Data Science is not treated as engineering):
+  - `+ 2 × (Basic Science credits)` only if your Basic Science requirement is **not fulfilled yet**
+  - `+ 1 × (Engineering credits)` only if your Engineering requirement is **not fulfilled yet**
+- `University` and `Required` points stop contributing once the relevant requirement is already fulfilled (per program).
+
+Program weighting:
+
+- Main major: `× 1.0`
+- Double major: `× 0.8`
+- Each minor: `× 0.5` (minors contribute at half weight)
+
+Equivalences:
+
+- `CS 210` / `DSA 210` are treated as the same course for scoring/suggestions (canonicalized as `DSA210`).
+
+## Importing Academic Records (Transcript)
+
+Open **Import Records** in the header and upload one of:
+
+- **Academic Records Summary HTML** (preferred): save as **“Webpage, Complete”**
+- **Academic Records Summary PDF**: use your browser/system **Save as PDF**
+- **YÖK transcript PDF** (not preferred): supported as an alternative import
+
+Important notes:
+
+- If you upload a **Degree Evaluation** document, SUrriculum rejects it and shows a dedicated warning explaining how to export the correct file.
+- If you saved SIS pages as **HTML only** (instead of **Webpage, Complete**) and the file contains the known “no permission” page HTML, SUrriculum warns you to re-save correctly.
+- If import fails or imports **0 courses**, SUrriculum shows a generic troubleshooting modal. One common cause is generating PDFs using **Microsoft Print to PDF**; prefer a real “Save as PDF”.
+
+## Graduation and summaries
+
+From the graduation/summary UI you can:
+
+- Check graduation progress for your main major (and double major if selected).
+- Open **detailed summaries** for majors and minors showing:
+  - Which courses are taken (highlighted)
+  - Which requirements are satisfied or missing
+  - How overflow (upper → lower pool) courses are counted (color-coded)
+
+Minors also enforce a CGPA rule:
+
+- Minimum CGPA **2.72** for most minors
+- Minimum CGPA **2.50** for the **Entrepreneurship** minor
+
+## Current Term Scheduler (weekly timetable)
+
+Open **Current Term Scheduler** from the sidebar. It is a SUchedule-style weekly grid for the current term.
+
+Key features:
+
+- **Search + browse** courses for the current term
+- **Pick section** and place it on a weekly grid (Mon–Fri, 08:40–19:30)
+- **Corequisite bundling**: courses with labs/recitations are treated as a bundle so you don’t “lose” the lab/recitation separately
+- **Time conflicts**: overlapping classes render side-by-side instead of blocking each other
+- **Copy CRNs**: copies the selected CRNs
+- **Update current-term plan**: replaces the courses in your planner’s current-term semester with the scheduler’s selected main courses (labs/recitations are not added to the planner semester)
+- **Block hours**:
+  - Enable block mode and click-drag to block time slots
+  - Courses that can’t fit around blocked hours can be filtered out, or optionally shown in red
+- Optional helpers (toggles):
+  - Hide taken courses
+  - Show course details in the list (credits/type)
+  - Sort based on score (same scoring as the main planner)
+  - Hover preview (shows a translucent preview of how a course would look if added)
+  - Availability highlighting (taken / conflict-free / conflict-prone indicators)
+
+Schedule data files:
+
+- The scheduler reads from `courses/schedule/<TERM>.jsonl`.
+- Generate/update these files using `python fetch_schedule.py`.
+
+Mobile note:
+
+- The scheduler is usable on mobile, but works best in **landscape**.
+- Some header actions collapse into a **“…”** menu on smaller widths.
+
+## Updating data (for maintainers)
+
+Data is stored as `.jsonl` under `courses/` and `requirements/`.
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Update course catalogs:
+
+```bash
+python fetch_courses.py
+```
+
+Update requirement rules:
+
+```bash
+python fetch_requirements.py
+```
+
+Scrape course pages for metadata (including Basic Science/Engineering credit breakdowns and “offered term” history):
+
+```bash
+python scrape_coursepages.py
+```
+
+Update current-term schedule data:
+
+```bash
+python fetch_schedule.py
+```
+
+Legacy JSON → JSONL migration (only needed if you still have `.json` files):
+
+```bash
+python migrate_to_jsonl.py --delete-json
+```
+
+## Known limitations (v3.0 Beta)
+
+- **Graduation logic is complex**: requirements are scraped and normalized, but edge cases exist. Always confirm with official program rules.
+- **Scheduler scraping reliability**: the university schedule endpoints can occasionally return server errors; re-run later or with delays.
+- **Course offering filter quality**: “Only show offered courses in …” depends on `courses/all_coursepage_info.jsonl` and may be incomplete if the scraper hasn’t been run recently.
+- **Minor rule parsing**: minor pages vary; some rules are simplified into structured checks and may miss special cases.
+
+## Roadmap (post v3.0 Beta)
+
+- More robust schedule scraping and section metadata (and smarter conflict-free suggestions).
+- Richer course detail views (prerequisite parsing, nicer formatting, quick links).
+- More term/year-aware rules for minors and program changes.
+- Additional planner UX polish and small guidance popups.
+- Optional recommendations and planning helpers.
 
 ## Credits
 
-This repository started as a fork of the original Surriculum project (https://github.com/melih-kiziltoprak/surriculum) and is maintained by **BEFICENT (Bilal M. G.)**. Major additions include double major support, Data Science and Analytics and several FASS programs, UI overhaul, updated course lists and improved requirement checks.
+This repository started as a fork of the original Surriculum project: https://github.com/melih-kiziltoprak/surriculum
+
+Maintained by **BEFICENT (Bilal M. G.)** with major additions including double major support, Data Science and Analytics and several FASS programs, a large UI overhaul, updated course lists, improved requirement checks, multi-plan support, minor support, and the current-term scheduler.
 
 ## License
 
 This project is licensed under the GNU General Public License v3.0 (GPL-3.0).  
-See the [LICENSE](./LICENSE) file for more information.
+See `LICENSE`.

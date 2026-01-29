@@ -1,0 +1,87 @@
+name: Daily data refresh
+
+on:
+  schedule:
+    # Runs daily (cron is UTC). Adjust as desired.
+    - cron: "20 3 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: daily-data-refresh
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Refresh course catalogs (and minors)
+        run: |
+          python fetch_courses.py --workers 1 --max-inflight 1 --skip-coursepages
+
+      - name: Refresh requirement rules
+        run: |
+          python fetch_requirements.py --skip-minors
+
+      - name: Refresh course page info (credits + offered-term history)
+        run: |
+          python scrape_coursepages.py --workers 1 --max-inflight 1
+
+      - name: Refresh schedule data (best-effort)
+        run: |
+          python fetch_schedule.py
+        continue-on-error: true
+
+      - name: Normalize known-order JSONL files
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          def normalize_terms_jsonl(path: Path) -> None:
+            if not path.exists():
+              return
+            rows = []
+            for line in path.read_text(encoding="utf-8").splitlines():
+              line = line.strip()
+              if not line:
+                continue
+              rec = json.loads(line)
+              majors = rec.get("majors")
+              if isinstance(majors, list):
+                rec["majors"] = sorted(set(map(str, majors)))
+              rows.append(rec)
+            rows.sort(key=lambda r: str(r.get("term", "")))
+            path.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n", encoding="utf-8")
+
+          normalize_terms_jsonl(Path("courses/terms.jsonl"))
+          PY
+
+      - name: Create pull request if anything changed
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: bot/daily-data-refresh
+          delete-branch: true
+          commit-message: "chore(data): daily refresh"
+          title: "chore(data): daily refresh"
+          body: |
+            Automated daily refresh of scraped data (catalogs, requirements, coursepage info, schedule).
+
+            Note: schedule scraping is best-effort; if the university endpoint errors, this workflow still completes.
+          labels: data

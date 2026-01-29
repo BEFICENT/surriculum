@@ -1,8 +1,8 @@
 # Mark specific file as generated
-Academic\ Records\ Summary_ex.html linguist-generated=true
+Academic\040Records\040Summary_ex.html linguist-generated=true
 
 # Mark entire directories as generated
-Degree\ Detail\ Pages\ \(for\ inspect\)/* linguist-generated=true
-Pre-Conversion\ Files/* linguist-generated=true
+Degree\040Detail\040Pages\040(for\040inspect)/* linguist-generated=true
+Pre-Conversion\040Files/* linguist-generated=true
 minor_htmls/* linguist-generated=true
 updated_htmls/* linguist-generated=true

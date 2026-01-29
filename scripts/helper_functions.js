@@ -401,6 +401,246 @@ function getCoursesList(course_data) {
     });
 }
 
+// Score courses for "sort based on score" suggestions. This mirrors the model
+// used in scripts/click.js so both the planner dropdown and scheduler can sort
+// consistently.
+function computeCourseSuggestionScore(courseCode) {
+    try {
+        if (typeof window === 'undefined') return 0;
+        const cur = window.curriculum || null;
+        const normalize = (v) => String(v || '').toUpperCase().replace(/\s+/g, '');
+        const canonicalize = (v) => {
+            const n = normalize(v);
+            if (n === 'CS210' || n === 'DSA210') return 'DSA210';
+            return n;
+        };
+        const code = canonicalize(courseCode);
+        if (!code) return 0;
+
+        const parseNum = (v) => {
+            const n = parseFloat(v || '0');
+            return isFinite(n) ? n : 0;
+        };
+        const typeScore = { university: 36, required: 28, core: 18, area: 12, free: 0 };
+
+        const lookupReq = (majorCode, termCode) => {
+            const allReq = (typeof globalThis !== 'undefined' && globalThis.requirements)
+                ? globalThis.requirements
+                : (window.requirements ? window.requirements : {});
+            if (!majorCode) return {};
+            if (allReq && allReq[majorCode]) return allReq[majorCode];
+            if (termCode && allReq && allReq[termCode] && allReq[termCode][majorCode]) return allReq[termCode][majorCode];
+            try {
+                for (const t of Object.keys(allReq || {})) {
+                    if (allReq[t] && allReq[t][majorCode]) return allReq[t][majorCode];
+                }
+            } catch (_) {}
+            return {};
+        };
+        const isEngineeringMajor = (majorCode, termCode) => {
+            const req = lookupReq(majorCode, termCode) || {};
+            return parseNum(req.engineering) > 0;
+        };
+
+        const currentSciEng = (() => {
+            let sci = 0;
+            let eng = 0;
+            try {
+                if (cur && Array.isArray(cur.semesters)) {
+                    for (let i = 0; i < cur.semesters.length; i++) {
+                        const sem = cur.semesters[i];
+                        sci += parseNum(sem && sem.totalScience);
+                        eng += parseNum(sem && sem.totalEngineering);
+                    }
+                }
+            } catch (_) {}
+            return { sci, eng };
+        })();
+
+        const currentMajReqUni = (which) => {
+            let uni = 0;
+            let req = 0;
+            try {
+                if (!cur || !Array.isArray(cur.semesters)) return { uni: 0, req: 0 };
+                for (let i = 0; i < cur.semesters.length; i++) {
+                    const sem = cur.semesters[i];
+                    if (!sem) continue;
+                    if (which === 'dm') {
+                        uni += parseNum(sem.totalUniversityDM);
+                        req += parseNum(sem.totalRequiredDM);
+                    } else {
+                        uni += parseNum(sem.totalUniversity);
+                        req += parseNum(sem.totalRequired);
+                    }
+                }
+            } catch (_) {}
+            return { uni, req };
+        };
+
+        // Cache contexts + maps based on current program config and progress so
+        // we can score hundreds of courses quickly.
+        const cacheKey = (() => {
+            const main = cur ? String(cur.major || '') : '';
+            const mainTerm = cur ? String(cur.entryTerm || '') : '';
+            const dm = cur ? String(cur.doubleMajor || '') : '';
+            const dmTerm = cur ? String(cur.entryTermDM || '') : '';
+            const minors = (cur && Array.isArray(cur.minors)) ? cur.minors.slice().sort().join(',') : '';
+            const lens = [
+                Array.isArray(course_data) ? course_data.length : 0,
+                (cur && Array.isArray(cur.doubleMajorCourseData)) ? cur.doubleMajorCourseData.length : 0,
+            ];
+            const minorLens = [];
+            try {
+                if (cur && Array.isArray(cur.minors) && cur.minorCourseDataByCode) {
+                    cur.minors.slice().sort().forEach(m => {
+                        const list = cur.minorCourseDataByCode[m];
+                        minorLens.push(Array.isArray(list) ? list.length : 0);
+                    });
+                }
+            } catch (_) {}
+            const progMain = currentMajReqUni('main');
+            const progDm = currentMajReqUni('dm');
+            return [
+                main, mainTerm, dm, dmTerm, minors,
+                lens.join(':'), minorLens.join(':'),
+                Math.round(currentSciEng.sci * 10) / 10,
+                Math.round(currentSciEng.eng * 10) / 10,
+                Math.round(progMain.uni * 10) / 10,
+                Math.round(progMain.req * 10) / 10,
+                Math.round(progDm.uni * 10) / 10,
+                Math.round(progDm.req * 10) / 10,
+            ].join('|');
+        })();
+
+        if (!window.__courseSuggestionScoreCache || window.__courseSuggestionScoreCache.key !== cacheKey) {
+            const buildMap = (arr) => {
+                const m = new Map();
+                if (!Array.isArray(arr)) return m;
+                for (let i = 0; i < arr.length; i++) {
+                    const r = arr[i];
+                    if (!r) continue;
+                    const c = canonicalize((r.Major || '') + (r.Code || ''));
+                    if (!c) continue;
+                    if (!m.has(c)) m.set(c, r);
+                }
+                return m;
+            };
+
+            const contexts = [];
+            try {
+                // Main major
+                if (cur && cur.major) {
+                    const term = String(cur.entryTerm || '');
+                    const req = lookupReq(cur.major, term) || {};
+                    const isEng = isEngineeringMajor(cur.major, term);
+                    const prog = currentMajReqUni('main');
+                    const reqUni = parseNum(req.university);
+                    const reqReq = parseNum(req.required);
+                    contexts.push({
+                        weight: 1.2,
+                        includeBsWeights: isEng && currentSciEng.sci < parseNum(req.science),
+                        includeEngWeights: isEng && currentSciEng.eng < parseNum(req.engineering),
+                        includeUniversityWeights: (reqUni > 0) ? (prog.uni < reqUni) : true,
+                        includeRequiredWeights: (reqReq > 0) ? (prog.req < reqReq) : true,
+                        map: buildMap(course_data),
+                    });
+                } else {
+                    contexts.push({
+                        weight: 1.0,
+                        includeBsWeights: false,
+                        includeEngWeights: false,
+                        includeUniversityWeights: true,
+                        includeRequiredWeights: true,
+                        map: buildMap(course_data),
+                    });
+                }
+
+                // Double major
+                if (cur && cur.doubleMajor && Array.isArray(cur.doubleMajorCourseData)) {
+                    const term = String(cur.entryTermDM || '');
+                    const req = lookupReq(cur.doubleMajor, term) || {};
+                    const isEng = isEngineeringMajor(cur.doubleMajor, term);
+                    const prog = currentMajReqUni('dm');
+                    const reqUni = parseNum(req.university);
+                    const reqReq = parseNum(req.required);
+                    contexts.push({
+                        weight: 0.8,
+                        includeBsWeights: isEng && currentSciEng.sci < parseNum(req.science),
+                        includeEngWeights: isEng && currentSciEng.eng < parseNum(req.engineering),
+                        includeUniversityWeights: (reqUni > 0) ? (prog.uni < reqUni) : true,
+                        includeRequiredWeights: (reqReq > 0) ? (prog.req < reqReq) : true,
+                        map: buildMap(cur.doubleMajorCourseData),
+                    });
+                }
+
+                // Minors (half weight)
+                if (cur && Array.isArray(cur.minors) && cur.minors.length && cur.minorCourseDataByCode) {
+                    cur.minors.forEach((minorCode) => {
+                        const list = cur.minorCourseDataByCode[minorCode];
+                        if (!Array.isArray(list) || !list.length) return;
+                        contexts.push({
+                            weight: 0.5,
+                            includeBsWeights: false,
+                            includeEngWeights: false,
+                            includeUniversityWeights: true,
+                            includeRequiredWeights: true,
+                            map: buildMap(list),
+                        });
+                    });
+                }
+            } catch (_) {}
+
+            window.__courseSuggestionScoreCache = { key: cacheKey, contexts };
+        }
+
+        const ctxs = window.__courseSuggestionScoreCache ? window.__courseSuggestionScoreCache.contexts : [];
+
+        const scoreFromRecord = (rec, ctx) => {
+            if (!rec) return 0;
+            const baseType = String(rec.EL_Type || '').toLowerCase();
+            const su = parseNum(rec.SU_credit);
+            const bs = parseNum(rec.Basic_Science);
+            const eng = parseNum(rec.Engineering);
+            let s = 0;
+            if (baseType === 'university') {
+                if (ctx && ctx.includeUniversityWeights === false) {
+                    // do not reward university courses once the requirement is met
+                } else {
+                    s += (typeScore[baseType] || 0);
+                }
+            } else if (baseType === 'required') {
+                if (ctx && ctx.includeRequiredWeights === false) {
+                    // do not reward required courses once the requirement is met
+                } else {
+                    s += (typeScore[baseType] || 0);
+                }
+            } else {
+                s += (typeScore[baseType] || 0);
+            }
+            s += su * 0.1;
+            if (ctx && ctx.includeBsWeights) s += bs * 2;
+            if (ctx && ctx.includeEngWeights) s += eng * 1;
+            return s;
+        };
+
+        let total = 0;
+        for (let i = 0; i < ctxs.length; i++) {
+            const ctx = ctxs[i];
+            if (!ctx || !ctx.map) continue;
+            const rec = ctx.map.get(code);
+            if (!rec) continue;
+            total += (ctx.weight || 1) * scoreFromRecord(rec, ctx);
+        }
+        return Math.round(total * 1000) / 1000;
+    } catch (_) {
+        return 0;
+    }
+}
+
+if (typeof window !== 'undefined') {
+    window.computeCourseSuggestionScore = computeCourseSuggestionScore;
+}
+
 // Lazy-load the course page scrape index so we can check whether a course has
 // been offered in the current term. This is used for optional filtering in the
 // course dropdown (Add Course).

@@ -92,7 +92,11 @@
         cleanupAndResolve({ action: 'cancel', value: null });
       });
 
-      document.body.appendChild(overlay);
+      // If the user is currently in browser fullscreen (e.g., the scheduler),
+      // DOM elements outside the fullscreen element may appear behind it.
+      // Attach modals to the fullscreen root so they always render on top.
+      const root = document.fullscreenElement || document.body;
+      root.appendChild(overlay);
 
       setTimeout(() => {
         try {

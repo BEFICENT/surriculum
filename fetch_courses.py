@@ -12,6 +12,8 @@ import random
 import threading
 import time
 
+from term_utils import generate_terms
+
 COURSES_DIR = 'courses'
 
 BASE = 'https://suis.sabanciuniv.edu/prod/'
@@ -437,16 +439,9 @@ def main():
     if args.terms.strip():
         terms = [t.strip() for t in args.terms.split(",") if t.strip()]
     else:
-        # Generate term codes from Fall 2019 until Spring 2025 only. Terms follow the
-        # pattern YYYY01 (Fall), YYYY02 (Spring) and YYYY03 (Summer). Do not
-        # generate any terms beyond 2025 Spring to keep the dataset bounded.
-        terms = []
-        for year in range(2019, 2026):
-            suffixes = ('01', '02', '03')
-            if year == 2025:
-                suffixes = ('01', '02')  # stop at Spring 2025
-            for suf in suffixes:
-                terms.append(f"{year}{suf}")
+        # Generate terms dynamically (same date rules as the web app) so we do
+        # not have to bump a hard-coded year cap each year.
+        terms = generate_terms(start_year=2019)
 
     if args.max_terms and args.max_terms > 0:
         terms = terms[: int(args.max_terms)]
@@ -486,7 +481,8 @@ def main():
                 print(f"Updated {fname} for term {term} with {len(data)} records")
 
             if majors_found:
-                majors_by_term[term] = majors_found
+                # Keep deterministic output regardless of thread completion order.
+                majors_by_term[term] = sorted(set(majors_found))
 
     # Write mapping of majors per term
     with open(os.path.join(COURSES_DIR, 'terms.jsonl'), 'w', encoding='utf-8') as f:

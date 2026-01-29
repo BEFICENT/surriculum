@@ -7,6 +7,8 @@ import re
 import argparse
 import subprocess
 
+from term_utils import generate_terms
+
 REQUIREMENTS_DIR = 'requirements'
 BASE = 'https://suis.sabanciuniv.edu/prod/'
 # Local directory with saved degree detail pages for testing without network
@@ -145,14 +147,9 @@ def main():
     if args.terms.strip():
         terms = [t.strip() for t in args.terms.split(",") if t.strip()]
     else:
-        # Generate term codes starting from 2019 up to Spring 2025 only.
-        terms = []
-        for year in range(2019, 2026):
-            suffixes = ('01', '02', '03')
-            if year == 2025:
-                suffixes = ('01', '02')  # stop at Spring 2025
-            for suf in suffixes:
-                terms.append(f"{year}{suf}")
+        # Generate terms dynamically (same date rules as the web app) so we do
+        # not have to bump a hard-coded year cap each year.
+        terms = generate_terms(start_year=2019)
 
     if args.max_terms and args.max_terms > 0:
         terms = terms[: int(args.max_terms)]

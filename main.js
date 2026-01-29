@@ -2218,3 +2218,40 @@ function SUrriculum(major_chosen_by_user) {
 let major_existing = planGetItem("major");
 if (major_existing) {SUrriculum(major_existing);}
 else {SUrriculum(initial_major_chosen);}
+
+// Mobile UX helper: show a small banner in portrait mode on small screens.
+(() => {
+    const notice = document.getElementById('mobileNotice');
+    const dismiss = document.getElementById('mobileNoticeDismiss');
+    if (!notice || !dismiss) return;
+
+    const KEY = 'mobileNoticeDismissed';
+    const shouldShow = () => {
+        try {
+            if (localStorage.getItem(KEY) === 'true') return false;
+        } catch (_) {}
+        try {
+            const mq = window.matchMedia('(max-width: 820px) and (orientation: portrait)');
+            return !!mq.matches;
+        } catch (_) {
+            return (window.innerWidth || 9999) <= 820 && (window.innerHeight || 0) > (window.innerWidth || 0);
+        }
+    };
+
+    const apply = () => {
+        try { notice.classList.toggle('is-hidden', !shouldShow()); } catch (_) {}
+    };
+
+    dismiss.addEventListener('click', () => {
+        try { localStorage.setItem(KEY, 'true'); } catch (_) {}
+        try { notice.classList.add('is-hidden'); } catch (_) {}
+    });
+
+    try {
+        const mq = window.matchMedia('(max-width: 820px) and (orientation: portrait)');
+        if (mq && typeof mq.addEventListener === 'function') mq.addEventListener('change', apply);
+    } catch (_) {}
+    window.addEventListener('resize', apply, { passive: true });
+    window.addEventListener('orientationchange', apply, { passive: true });
+    apply();
+})();
