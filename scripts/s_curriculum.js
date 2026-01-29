@@ -81,11 +81,19 @@ function s_curriculum()
     }
     this.hasCourse = function(course)
     {
+        const normalize = (c) => String(c || '').toUpperCase().replace(/\s+/g, '');
+        const canonicalize = (c) => {
+            const n = normalize(c);
+            // CS210 was renamed to DSA210; treat them as the same course.
+            if (n === 'CS210' || n === 'DSA210') return 'DSA210';
+            return n;
+        };
+        const target = canonicalize(course);
         for(let i = 0; i < this.semesters.length; i++)
         {
             for(let a = 0; a < this.semesters[i].courses.length; a++)
             {
-                if(this.semesters[i].courses[a].code == course)
+                if(canonicalize(this.semesters[i].courses[a].code) === target)
                 {return true;}
             }
         }
@@ -226,7 +234,9 @@ function s_curriculum()
                         let course = this.semesters[i].courses[a];
                         // Check if it's a 400-level EE course in core electives
                         if(course.code.startsWith("EE4") && course.category === "Core") {
-                            ee400LevelCredits += (parseInt(course.SU_credit || '0') || 0);
+                            ee400LevelCredits += (typeof parseCreditValue === 'function')
+                                ? parseCreditValue(course.SU_credit || '0')
+                                : (parseFloat(course.SU_credit || '0') || 0);
                         }
                     }
                 }
@@ -480,7 +490,9 @@ function s_curriculum()
                         const course = this.semesters[i].courses[a];
                         const eff = (course.effective_type || (course.category && course.category.toLowerCase()) || '').toLowerCase();
                         if (eff === 'free') {
-                            const c = parseInt(course.SU_credit || '0') || 0;
+                            const c = (typeof parseCreditValue === 'function')
+                                ? parseCreditValue(course.SU_credit || '0')
+                                : (parseFloat(course.SU_credit || '0') || 0);
                             freeElectivesCount += c;
                             if (course.Faculty_Course === 'FASS' || course.Faculty_Course === 'FENS') {
                                 fassFensCredits += c;
@@ -544,7 +556,9 @@ function s_curriculum()
                         const course = this.semesters[i].courses[a];
                         const courseCode = course.code || ((course.Major || '') + (course.Code || ''));
                         if (coreElectivesIPool.includes(courseCode)) {
-                            coreElectivesICount += (parseInt(course.SU_credit || '0') || 0);
+                            coreElectivesICount += (typeof parseCreditValue === 'function')
+                                ? parseCreditValue(course.SU_credit || '0')
+                                : (parseFloat(course.SU_credit || '0') || 0);
                         }
                     }
                 }
@@ -558,7 +572,9 @@ function s_curriculum()
                         const course = this.semesters[i].courses[a];
                         const courseCode = course.code || ((course.Major || '') + (course.Code || ''));
                         if (coreElectivesIIPool.includes(courseCode)) {
-                            coreElectivesIICount += (parseInt(course.SU_credit || '0') || 0);
+                            coreElectivesIICount += (typeof parseCreditValue === 'function')
+                                ? parseCreditValue(course.SU_credit || '0')
+                                : (parseFloat(course.SU_credit || '0') || 0);
                         }
                     }
                 }
@@ -655,7 +671,9 @@ function s_curriculum()
                         const courseCode = course.code || ((course.Major || '') + (course.Code || ''));
                         const eff = (course.effective_type || (course.category && course.category.toLowerCase()) || '').toLowerCase();
                         if (eff === 'core' && coreElectivesIPool.includes(courseCode)) {
-                            coreElectivesICount += (parseInt(course.SU_credit || '0') || 0);
+                            coreElectivesICount += (typeof parseCreditValue === 'function')
+                                ? parseCreditValue(course.SU_credit || '0')
+                                : (parseFloat(course.SU_credit || '0') || 0);
                         }
                     }
                 }
@@ -682,7 +700,9 @@ function s_curriculum()
                                 if (seenPairKeys.has(pairKey)) continue;
                                 seenPairKeys.add(pairKey);
                             }
-                            coreElectivesIICount += (parseInt(course.SU_credit || '0') || 0);
+                            coreElectivesIICount += (typeof parseCreditValue === 'function')
+                                ? parseCreditValue(course.SU_credit || '0')
+                                : (parseFloat(course.SU_credit || '0') || 0);
                         }
                     }
                 }
@@ -937,12 +957,16 @@ function s_curriculum()
                     engVal = 0;
                     ectsVal = 0;
                     if (dmInfo) {
-                        credit = parseInt(dmInfo['SU_credit'] || '0');
+                        credit = (typeof parseCreditValue === 'function')
+                            ? parseCreditValue(dmInfo['SU_credit'] || '0')
+                            : (parseFloat(dmInfo['SU_credit'] || '0') || 0);
                         scienceVal = parseFloat(dmInfo['Basic_Science'] || '0');
                         engVal = parseFloat(dmInfo['Engineering'] || '0');
                         ectsVal = parseFloat(dmInfo['ECTS'] || '0');
                     } else {
-                        credit = parseInt(course.SU_credit || course.SU_credit || '0');
+                        credit = (typeof parseCreditValue === 'function')
+                            ? parseCreditValue(course.SU_credit || course.SU_credit || '0')
+                            : (parseFloat(course.SU_credit || course.SU_credit || '0') || 0);
                         scienceVal = parseFloat(course.Basic_Science || '0');
                         engVal = parseFloat(course.Engineering || '0');
                         ectsVal = parseFloat(course.ECTS || '0');
@@ -973,7 +997,9 @@ function s_curriculum()
                 }
                 // Use information from the main major catalog
                 staticType = (infoMain['EL_Type'] || '').toLowerCase();
-                credit = parseInt(infoMain['SU_credit'] || '0');
+                credit = (typeof parseCreditValue === 'function')
+                    ? parseCreditValue(infoMain['SU_credit'] || '0')
+                    : (parseFloat(infoMain['SU_credit'] || '0') || 0);
                 scienceVal = parseFloat(infoMain['Basic_Science'] || '0');
                 engVal = parseFloat(infoMain['Engineering'] || '0');
                 ectsVal = parseFloat(infoMain['ECTS'] || '0');
@@ -1192,8 +1218,9 @@ function s_curriculum()
             }
 
             function creditOf(course) {
-                const c = parseInt(course.SU_credit || '0');
-                return isNaN(c) ? 0 : c;
+                return (typeof parseCreditValue === 'function')
+                    ? parseCreditValue(course.SU_credit || '0')
+                    : (parseFloat(course.SU_credit || '0') || 0);
             }
 
             // Choose a single course from each required pair to count as required.
@@ -1372,7 +1399,9 @@ function s_curriculum()
                     if (!course || !course.id) continue;
                     if (course.effective_type === 'none') continue;
                     if (course.category !== 'Core' && course.category !== 'Area') continue;
-                    const credit = parseInt(course.SU_credit || '0');
+                    const credit = (typeof parseCreditValue === 'function')
+                        ? parseCreditValue(course.SU_credit || '0')
+                        : (parseFloat(course.SU_credit || '0') || 0);
                     electiveItems.push({
                         id: course.id,
                         code: course.code,
@@ -1476,8 +1505,9 @@ function s_curriculum()
                     if (!course) continue;
                     const et = course.effective_type;
                     if (!et || et === 'none') continue;
-                    const credit = parseInt(course.SU_credit || '0');
-                    const c = isNaN(credit) ? 0 : credit;
+                    const c = (typeof parseCreditValue === 'function')
+                        ? parseCreditValue(course.SU_credit || '0')
+                        : (parseFloat(course.SU_credit || '0') || 0);
                     if (et === 'core') sem.totalCore += c;
                     else if (et === 'area') sem.totalArea += c;
                     else if (et === 'free') sem.totalFree += c;
@@ -1697,7 +1727,9 @@ function s_curriculum()
                     if (dmStaticType) {
                         course.categoryDM = dmStaticType.charAt(0).toUpperCase() + dmStaticType.slice(1);
                     }
-                    credit = parseInt(info['SU_credit'] || '0');
+                    credit = (typeof parseCreditValue === 'function')
+                        ? parseCreditValue(info['SU_credit'] || '0')
+                        : (parseFloat(info['SU_credit'] || '0') || 0);
                     dmType = dmStaticType;
                     if (dmForceCSCore && course.code === 'CS201') {
                         dmType = 'core';
@@ -1742,7 +1774,9 @@ function s_curriculum()
                     // Unknown course in the double major catalog: do not
                     // allocate it to any DM category. Still count its credit
                     // values for science/engineering/ECTS tracking.
-                    credit = parseInt(course.SU_credit || course.SU_credit || '0');
+                    credit = (typeof parseCreditValue === 'function')
+                        ? parseCreditValue(course.SU_credit || course.SU_credit || '0')
+                        : (parseFloat(course.SU_credit || course.SU_credit || '0') || 0);
                     dmType = 'none';
                     dmStaticType = 'none';
                     delete course.categoryDM;
@@ -1799,7 +1833,9 @@ function s_curriculum()
                     if (!course || !course.id) continue;
                     if (course.effective_type_dm === 'none') continue;
                     if (course.categoryDM !== 'Core' && course.categoryDM !== 'Area') continue;
-                    const credit = parseInt(course.SU_credit || '0');
+                    const credit = (typeof parseCreditValue === 'function')
+                        ? parseCreditValue(course.SU_credit || '0')
+                        : (parseFloat(course.SU_credit || '0') || 0);
                     dmElectiveItems.push({
                         id: course.id,
                         code: course.code,
@@ -1891,8 +1927,9 @@ function s_curriculum()
                     if (!course) continue;
                     const et = course.effective_type_dm;
                     if (!et || et === 'none') continue;
-                    const credit = parseInt(course.SU_credit || '0');
-                    const c = isNaN(credit) ? 0 : credit;
+                    const c = (typeof parseCreditValue === 'function')
+                        ? parseCreditValue(course.SU_credit || '0')
+                        : (parseFloat(course.SU_credit || '0') || 0);
                     if (et === 'core') sem.totalCoreDM += c;
                     else if (et === 'area') sem.totalAreaDM += c;
                     else if (et === 'free') sem.totalFreeDM += c;
@@ -1909,13 +1946,15 @@ function s_curriculum()
             const entryDM = parseInt(this.entryTermDM || '0', 10);
             const is2025PlusDM = !isNaN(entryDM) && entryDM >= 202501;
 
-            const parseInt0 = (v) => {
-                const n = parseInt(v || '0', 10);
+            const parseCredit0 = (v) => {
+                const n = (typeof parseCreditValue === 'function')
+                    ? parseCreditValue(v || '0')
+                    : (parseFloat(v || '0') || 0);
                 return isNaN(n) ? 0 : n;
             };
             const excludeCourseDM = (sem, course) => {
                 if (!sem || !course) return;
-                const credit = parseInt0(course.SU_credit);
+                const credit = parseCredit0(course.SU_credit);
                 const et = course.effective_type_dm;
                 if (et === 'core') sem.totalCoreDM = Math.max(0, sem.totalCoreDM - credit);
                 else if (et === 'area') sem.totalAreaDM = Math.max(0, sem.totalAreaDM - credit);
@@ -1976,8 +2015,9 @@ function s_curriculum()
                 corePairKeyByCode[corePool2Pairs[i][1]] = key;
             }
             function creditOf(course) {
-                const c = parseInt(course.SU_credit || '0');
-                return isNaN(c) ? 0 : c;
+                return (typeof parseCreditValue === 'function')
+                    ? parseCreditValue(course.SU_credit || '0')
+                    : (parseFloat(course.SU_credit || '0') || 0);
             }
 
             // Required pairs: only one counts as required. Extras become free.
@@ -2265,7 +2305,9 @@ function s_curriculum()
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
                         if (course.code.startsWith('EE4') && course.categoryDM === 'Core') {
-                            ee400LevelCredits += (parseInt(course.SU_credit || '0') || 0);
+                            ee400LevelCredits += (typeof parseCreditValue === 'function')
+                                ? parseCreditValue(course.SU_credit || '0')
+                                : (parseFloat(course.SU_credit || '0') || 0);
                         }
                     }
                 }
@@ -2435,7 +2477,9 @@ function s_curriculum()
                         const course = this.semesters[i].courses[a];
                         const eff = (course.effective_type_dm || (course.categoryDM && course.categoryDM.toLowerCase()) || '').toLowerCase();
                         if (eff === 'free') {
-                            const c = parseInt(course.SU_credit || '0') || 0;
+                            const c = (typeof parseCreditValue === 'function')
+                                ? parseCreditValue(course.SU_credit || '0')
+                                : (parseFloat(course.SU_credit || '0') || 0);
                             freeElectivesCount += c;
                             if (course.Faculty_Course === 'FASS' || course.Faculty_Course === 'FENS') {
                                 fassFensCredits += c;
@@ -2486,7 +2530,9 @@ function s_curriculum()
                         const course = this.semesters[i].courses[a];
                         const courseCode = course.code || ((course.Major || '') + (course.Code || ''));
                         if (coreElectivesIPool.includes(courseCode)) {
-                            coreElectivesICount += (parseInt(course.SU_credit || '0') || 0);
+                            coreElectivesICount += (typeof parseCreditValue === 'function')
+                                ? parseCreditValue(course.SU_credit || '0')
+                                : (parseFloat(course.SU_credit || '0') || 0);
                         }
                     }
                 }
@@ -2500,7 +2546,9 @@ function s_curriculum()
                         const course = this.semesters[i].courses[a];
                         const courseCode = course.code || ((course.Major || '') + (course.Code || ''));
                         if (coreElectivesIIPool.includes(courseCode)) {
-                            coreElectivesIICount += (parseInt(course.SU_credit || '0') || 0);
+                            coreElectivesIICount += (typeof parseCreditValue === 'function')
+                                ? parseCreditValue(course.SU_credit || '0')
+                                : (parseFloat(course.SU_credit || '0') || 0);
                         }
                     }
                 }
@@ -2580,7 +2628,9 @@ function s_curriculum()
                         const courseCode = course.code || ((course.Major || '') + (course.Code || ''));
                         const eff = (course.effective_type_dm || (course.categoryDM && course.categoryDM.toLowerCase()) || '').toLowerCase();
                         if (eff === 'core' && coreElectivesIPool.includes(courseCode)) {
-                            coreElectivesICount += (parseInt(course.SU_credit || '0') || 0);
+                            coreElectivesICount += (typeof parseCreditValue === 'function')
+                                ? parseCreditValue(course.SU_credit || '0')
+                                : (parseFloat(course.SU_credit || '0') || 0);
                         }
                     }
                 }
@@ -2607,7 +2657,9 @@ function s_curriculum()
                                 if (seenPairKeys.has(pairKey)) continue;
                                 seenPairKeys.add(pairKey);
                             }
-                            coreElectivesIICount += (parseInt(course.SU_credit || '0') || 0);
+                            coreElectivesIICount += (typeof parseCreditValue === 'function')
+                                ? parseCreditValue(course.SU_credit || '0')
+                                : (parseFloat(course.SU_credit || '0') || 0);
                         }
                     }
                 }
@@ -2656,7 +2708,9 @@ function s_curriculum()
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
                         if (course.categoryDM === 'Core') {
-                            coreSUCredits += (parseInt(course.SU_credit || '0') || 0);
+                            coreSUCredits += (typeof parseCreditValue === 'function')
+                                ? parseCreditValue(course.SU_credit || '0')
+                                : (parseFloat(course.SU_credit || '0') || 0);
                         }
                     }
                 }

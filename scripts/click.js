@@ -87,6 +87,203 @@ function dynamic_click(e, curriculum, course_data)
         // Build array of course options for filtering
         let options = getCoursesList(course_data);
 
+        // Optional scoring model for sorting course suggestions.
+        const scoreOptions = (() => {
+            const cur = (typeof window !== 'undefined') ? window.curriculum : null;
+            const typeScore = { university: 36, required: 28, core: 18, area: 12, free: 0 };
+            const parseNum = (v) => {
+                const n = parseFloat(v || '0');
+                return isFinite(n) ? n : 0;
+            };
+            const normalizeCode = (v) => String(v || '').toUpperCase().replace(/\s+/g, '');
+            const buildMap = (arr) => {
+                const m = new Map();
+                if (!Array.isArray(arr)) return m;
+                for (let i = 0; i < arr.length; i++) {
+                    const r = arr[i];
+                    if (!r) continue;
+                    const code = normalizeCode((r.Major || '') + (r.Code || ''));
+                    if (!code) continue;
+                    if (!m.has(code)) m.set(code, r);
+                }
+                return m;
+            };
+            const lookupReq = (majorCode, termCode) => {
+                const allReq = (typeof globalThis !== 'undefined' && globalThis.requirements)
+                    ? globalThis.requirements
+                    : ((typeof window !== 'undefined' && window.requirements) ? window.requirements : {});
+                if (!majorCode) return {};
+                if (allReq && allReq[majorCode]) return allReq[majorCode];
+                if (termCode && allReq && allReq[termCode] && allReq[termCode][majorCode]) return allReq[termCode][majorCode];
+                try {
+                    for (const t of Object.keys(allReq || {})) {
+                        if (allReq[t] && allReq[t][majorCode]) return allReq[t][majorCode];
+                    }
+                } catch (_) {}
+                return {};
+            };
+            const isEngineeringMajor = (majorCode, termCode) => {
+                const req = lookupReq(majorCode, termCode) || {};
+                return parseNum(req.engineering) > 0;
+            };
+
+            const currentSciEng = (() => {
+                let sci = 0;
+                let eng = 0;
+                try {
+                    if (cur && Array.isArray(cur.semesters)) {
+                        for (let i = 0; i < cur.semesters.length; i++) {
+                            const sem = cur.semesters[i];
+                            sci += parseNum(sem && sem.totalScience);
+                            eng += parseNum(sem && sem.totalEngineering);
+                        }
+                    }
+                } catch (_) {}
+                return { sci, eng };
+            })();
+
+            const currentMajReqUni = (which) => {
+                let uni = 0;
+                let req = 0;
+                try {
+                    if (!cur || !Array.isArray(cur.semesters)) return { uni: 0, req: 0 };
+                    for (let i = 0; i < cur.semesters.length; i++) {
+                        const sem = cur.semesters[i];
+                        if (!sem) continue;
+                        if (which === 'dm') {
+                            uni += parseNum(sem.totalUniversityDM);
+                            req += parseNum(sem.totalRequiredDM);
+                        } else {
+                            uni += parseNum(sem.totalUniversity);
+                            req += parseNum(sem.totalRequired);
+                        }
+                    }
+                } catch (_) {}
+                return { uni, req };
+            };
+
+            const contexts = [];
+            try {
+                // Main major
+                if (cur && cur.major) {
+                    const term = String(cur.entryTerm || '');
+                    const req = lookupReq(cur.major, term) || {};
+                    const isEng = isEngineeringMajor(cur.major, term);
+                    const prog = currentMajReqUni('main');
+                    const reqUni = parseNum(req.university);
+                    const reqReq = parseNum(req.required);
+                    contexts.push({
+                        weight: 1.2,
+                        includeBsWeights: isEng && currentSciEng.sci < parseNum(req.science),
+                        includeEngWeights: isEng && currentSciEng.eng < parseNum(req.engineering),
+                        includeUniversityWeights: (reqUni > 0) ? (prog.uni < reqUni) : true,
+                        includeRequiredWeights: (reqReq > 0) ? (prog.req < reqReq) : true,
+                        map: buildMap(course_data),
+                    });
+                } else {
+                    contexts.push({
+                        weight: 1.0,
+                        includeBsWeights: false,
+                        includeEngWeights: false,
+                        includeUniversityWeights: true,
+                        includeRequiredWeights: true,
+                        map: buildMap(course_data),
+                    });
+                }
+                // Double major
+                if (cur && cur.doubleMajor && Array.isArray(cur.doubleMajorCourseData)) {
+                    const term = String(cur.entryTermDM || '');
+                    const req = lookupReq(cur.doubleMajor, term) || {};
+                    const isEng = isEngineeringMajor(cur.doubleMajor, term);
+                    const prog = currentMajReqUni('dm');
+                    const reqUni = parseNum(req.university);
+                    const reqReq = parseNum(req.required);
+                    contexts.push({
+                        weight: 0.8,
+                        includeBsWeights: isEng && currentSciEng.sci < parseNum(req.science),
+                        includeEngWeights: isEng && currentSciEng.eng < parseNum(req.engineering),
+                        includeUniversityWeights: (reqUni > 0) ? (prog.uni < reqUni) : true,
+                        includeRequiredWeights: (reqReq > 0) ? (prog.req < reqReq) : true,
+                        map: buildMap(cur.doubleMajorCourseData),
+                    });
+                }
+                // Minors (half weight)
+                if (cur && Array.isArray(cur.minors) && cur.minors.length && cur.minorCourseDataByCode) {
+                    cur.minors.forEach((minorCode) => {
+                        const list = cur.minorCourseDataByCode[minorCode];
+                        if (!Array.isArray(list) || !list.length) return;
+                        contexts.push({
+                            weight: 0.5,
+                            includeBsWeights: false,
+                            includeEngWeights: false,
+                            includeUniversityWeights: true,
+                            includeRequiredWeights: true,
+                            map: buildMap(list),
+                        });
+                    });
+                }
+            } catch (_) {}
+
+            const scoreFromRecord = (rec, ctx) => {
+                if (!rec) return 0;
+                const baseType = String(rec.EL_Type || '').toLowerCase();
+                const su = parseNum(rec.SU_credit);
+                const bs = parseNum(rec.Basic_Science);
+                const eng = parseNum(rec.Engineering);
+                let s = 0;
+                if (baseType === 'university') {
+                    if (ctx && ctx.includeUniversityWeights === false) {
+                        // do not reward university courses once the requirement is met
+                    } else {
+                        s += (typeScore[baseType] || 0);
+                    }
+                } else if (baseType === 'required') {
+                    if (ctx && ctx.includeRequiredWeights === false) {
+                        // do not reward required courses once the requirement is met
+                    } else {
+                        s += (typeScore[baseType] || 0);
+                    }
+                } else {
+                    s += (typeScore[baseType] || 0);
+                }
+                s += su * 0.1;
+                if (ctx && ctx.includeBsWeights) {
+                    s += bs * 2;
+                }
+                if (ctx && ctx.includeEngWeights) {
+                    s += eng * 1;
+                }
+                return s;
+            };
+
+            const computeScore = (courseCode) => {
+                const code = normalizeCode(courseCode);
+                let total = 0;
+                for (let i = 0; i < contexts.length; i++) {
+                    const ctx = contexts[i];
+                    if (!ctx || !ctx.map) continue;
+                    const rec = ctx.map.get(code);
+                    if (!rec) continue;
+                    total += (ctx.weight || 1) * scoreFromRecord(rec, ctx);
+                }
+                // Round for stable sorting (avoids tiny float differences).
+                return Math.round(total * 1000) / 1000;
+            };
+
+            const apply = () => {
+                try {
+                    for (let i = 0; i < options.length; i++) {
+                        const o = options[i];
+                        if (!o || !o.code) continue;
+                        o.score = computeScore(o.code);
+                    }
+                } catch (_) {}
+            };
+
+            return { apply };
+        })();
+        try { scoreOptions.apply(); } catch (_) {}
+
         function capitalizeFirst(str) {
             return str.charAt(0).toUpperCase() + str.slice(1);
         }
@@ -135,6 +332,18 @@ function dynamic_click(e, curriculum, course_data)
                 } catch (_) {}
                 return true;
             });
+            try {
+                if (typeof window !== 'undefined' && window.sortBasedOnScore) {
+                    filtered.sort((a, b) => {
+                        const as = (a && typeof a.score === 'number') ? a.score : 0;
+                        const bs = (b && typeof b.score === 'number') ? b.score : 0;
+                        if (bs !== as) return bs - as;
+                        const ac = (a && a.code) ? String(a.code) : '';
+                        const bc = (b && b.code) ? String(b.code) : '';
+                        return ac.localeCompare(bc);
+                    });
+                }
+            } catch (_) {}
             filtered.forEach(data => {
                 const opt = document.createElement('div');
                 opt.classList.add('course-option');
@@ -189,9 +398,13 @@ function dynamic_click(e, curriculum, course_data)
         document.addEventListener('hideTakenCoursesToggleChanged', () => {
             options = getCoursesList(course_data);
             datalist.innerHTML = getCoursesDataList(course_data);
+            try { scoreOptions.apply(); } catch (_) {}
             renderOptions(input.value);
         });
         document.addEventListener('offeredThisTermToggleChanged', () => {
+            renderOptions(input.value);
+        });
+        document.addEventListener('sortByScoreToggleChanged', () => {
             renderOptions(input.value);
         });
 
@@ -215,6 +428,11 @@ function dynamic_click(e, curriculum, course_data)
     //CLICKED "OK" (for entering course input):
     else if(e.target.classList.contains("enter"))
     {
+        const canonicalizeCourseCode = (c) => {
+            const n = String(c || '').toUpperCase().replace(/\s+/g, '');
+            if (n === 'CS210' || n === 'DSA210') return 'DSA210';
+            return n;
+        };
         // Retrieve the user's input and attempt to determine the course code.
         // Users may type either the full code+name (e.g., "CS101 Intro"), just
         // the course code, or the course name. We first take the first
@@ -230,6 +448,7 @@ function dynamic_click(e, curriculum, course_data)
         }
         tentativeCode = tentativeCode.toUpperCase();
         let courseCode = tentativeCode;
+        let originalCourseCode = courseCode;
         let courseObj = new s_course(courseCode, '');
         // Helper to search course by name in course_data and DM data
         function findCourseByName(name) {
@@ -260,11 +479,17 @@ function dynamic_click(e, curriculum, course_data)
             if (found) {
                 // Derive code from found course
                 courseCode = found.Major + found.Code;
+                originalCourseCode = courseCode;
                 courseObj = new s_course(courseCode, '');
             }
         }
-        // If still invalid after name search, show error
-        if (!isCourseValid(courseObj, course_data)) {
+        // Accept either the original code or the canonical code (CS210 -> DSA210).
+        const canonicalCourseCode = canonicalizeCourseCode(courseCode);
+        const originalValid = isCourseValid(courseObj, course_data);
+        const canonicalValid = (canonicalCourseCode !== courseCode)
+            ? isCourseValid(new s_course(canonicalCourseCode, ''), course_data)
+            : originalValid;
+        if (!originalValid && !canonicalValid) {
             try {
                 const ui = (typeof window !== 'undefined') ? window.uiModal : null;
                 const body = '<p>Course not found.</p><p>Please select a course from the dropdown list.</p>';
@@ -274,6 +499,7 @@ function dynamic_click(e, curriculum, course_data)
             e.target.parentNode.querySelector("input").value = '';
             return;
         }
+        courseCode = canonicalCourseCode;
         // Now we have a valid courseCode. Generate a unique id for the new
         // course and proceed with addition.
         curriculum.course_id = curriculum.course_id + 1;
@@ -287,10 +513,12 @@ function dynamic_click(e, curriculum, course_data)
             // engineering credits. These fields are required for proper
             // graduation logic and summary calculations, and they are
             // normally available via the info object returned by getInfo().
-            const infoAdd = getInfo(courseCode, course_data);
+            const infoAdd = getInfo(courseCode, course_data) || getInfo(originalCourseCode, course_data);
             if (infoAdd) {
                 // Course credit values
-                myCourse.SU_credit = parseInt(infoAdd['SU_credit'] || '0');
+                myCourse.SU_credit = (typeof parseCreditValue === 'function')
+                    ? parseCreditValue(infoAdd['SU_credit'] || '0')
+                    : (parseFloat(infoAdd['SU_credit'] || '0') || 0);
                 myCourse.Basic_Science = parseFloat(infoAdd['Basic_Science'] || '0');
                 myCourse.Engineering = parseFloat(infoAdd['Engineering'] || '0');
                 myCourse.ECTS = parseFloat(infoAdd['ECTS'] || '0');
@@ -308,14 +536,24 @@ function dynamic_click(e, curriculum, course_data)
             c_container.classList.add("course_container");
             let c_label = document.createElement("div");
             c_label.classList.add("course_label");
-            c_label.innerHTML = '<div>'+myCourse.code+'</div>' + '<button class="delete_course"></button>';
+            c_label.innerHTML =
+                '<div class="course_code">' + myCourse.code + '</div>' +
+                '<div class="course_actions">' +
+                '<button class="details_course" type="button" title="Details" aria-label="Course details">' +
+                '<i class="fa-solid fa-circle-info"></i>' +
+                '</button>' +
+                '<button class="delete_course" type="button" title="Delete" aria-label="Delete course"></button>' +
+                '</div>';
             let c_info = document.createElement("div");
             c_info.classList.add("course_info");
             // Use getInfo to fetch course details (works for DM-only courses)
-            const info = getInfo(courseCode, course_data);
+            const info = getInfo(courseCode, course_data) || getInfo(originalCourseCode, course_data);
             c_info.innerHTML = '<div class="course_name">'+ info['Course_Name'] +'</div>';
             c_info.innerHTML += '<div class="course_type">'+ info['EL_Type'].toUpperCase() + '</div>';
-            c_info.innerHTML += '<div class="course_credit">' + info['SU_credit']+ '.0 credits </div>';
+            const creditText = (typeof formatCreditValue === 'function')
+                ? formatCreditValue(info['SU_credit'])
+                : (Number(parseFloat(info['SU_credit'] || '0') || 0).toFixed(1));
+            c_info.innerHTML += '<div class="course_credit">' + creditText + ' credits </div>';
             const bsDiv = document.createElement('div');
             bsDiv.classList.add('course_bs_credit');
             bsDiv.textContent = 'BS: ' + (info['Basic_Science'] || '0') + ' credits';
@@ -336,7 +574,10 @@ function dynamic_click(e, curriculum, course_data)
             e.target.parentNode.parentNode.querySelector('.semester').appendChild(course);
             // changing total credits element in DOM:
             let dom_tc = e.target.parentNode.parentNode.parentNode.querySelector('span');
-            dom_tc.innerHTML = 'Total: ' + sem.totalCredit + ' credits';
+            const totalText = (typeof formatCreditValue === 'function')
+                ? formatCreditValue(sem.totalCredit)
+                : (Number(sem.totalCredit || 0).toFixed(1));
+            dom_tc.innerHTML = 'Total: ' + totalText + ' credits';
             try {
                 dom_tc.classList.toggle('is-overlimit', (sem.totalCredit || 0) > 20);
             } catch (_) {}
@@ -389,13 +630,155 @@ function dynamic_click(e, curriculum, course_data)
     }
     //CLICKED "<course delete>"
 
+    else if(
+        e.target.classList.contains("details_course") ||
+        (e.target.closest && e.target.closest("button.details_course"))
+    )
+    {
+        const btn = (() => {
+            try { return e.target.closest ? e.target.closest('button.details_course') : null; } catch (_) { return null; }
+        })() || e.target;
+        const container = (() => {
+            try { return btn.closest('.course_container'); } catch (_) { return null; }
+        })();
+        const codeEl = (() => {
+            try { return container ? container.querySelector('.course_code') : null; } catch (_) { return null; }
+        })();
+        const courseCode = codeEl ? String(codeEl.textContent || '').trim() : '';
+        if (!courseCode) return;
+
+        const buildCourseUrl = (code) => {
+            const m = String(code || '').toUpperCase().replace(/\s+/g, '').match(/^([A-Z]+)([0-9A-Z]+)$/);
+            if (!m) return '';
+            const subj = m[1];
+            const num = m[2];
+            return (
+                'https://suis.sabanciuniv.edu/prod/sabanci_www.p_get_courses' +
+                '?levl_code=UG' +
+                '&subj_code=' + encodeURIComponent(subj) +
+                '&crse_numb=' + encodeURIComponent(num) +
+                '&lang=eng'
+            );
+        };
+
+        (async () => {
+            try {
+                const ui = (typeof window !== 'undefined') ? window.uiModal : null;
+                const load = (typeof window !== 'undefined') ? window.loadCoursePageInfoIndex : null;
+                if (!ui || typeof ui.alert !== 'function') return;
+                if (typeof load !== 'function') {
+                    ui.alert('Details unavailable', '<p>Course details index is not available.</p>');
+                    return;
+                }
+
+                const idx = await load();
+                const info = idx && typeof idx.get === 'function' ? idx.get(courseCode) : null;
+                if (!info) {
+                    ui.alert(
+                        'Details unavailable',
+                        `<p>No details found for <strong>${escapeHtml(courseCode)}</strong>.</p>` +
+                        `<p>This may be a custom course, or the scrape index is missing this course.</p>`
+                    );
+                    return;
+                }
+
+                const title = info.title || info.header_text || '';
+                const su = (typeof info.su_credits !== 'undefined' && info.su_credits !== null) ? info.su_credits : info.su_credit;
+                const ects = info.ects;
+                const bs = info.basic_science;
+                const eng = info.engineering;
+                const prereq = info.prerequisites;
+                const coreq = info.corequisites;
+                const desc = (info.description || '').toString();
+                const offered = Array.isArray(info.last_offered_terms) ? info.last_offered_terms : [];
+                const url = info.source_url || buildCourseUrl(courseCode);
+
+                const fmt = (v) => {
+                    try {
+                        if (typeof window !== 'undefined' && typeof window.formatCreditValue === 'function') {
+                            return window.formatCreditValue(v);
+                        }
+                    } catch (_) {}
+                    const n = parseFloat(v || '0');
+                    return (isFinite(n) ? n : 0).toFixed(1);
+                };
+
+                const descHtml = desc
+                    ? `<div class="course-details-section"><h4>Description</h4><p>${escapeHtml(desc).replace(/\n/g, '<br>')}</p></div>`
+                    : '';
+
+                const offeredPreview = offered.slice(0, 12);
+                const offeredHtml = offeredPreview.length
+                    ? (
+                        '<div class="course-details-section">' +
+                        `<h4>Last Offered (${offered.length})</h4>` +
+                        '<ul class="course-details-list">' +
+                        offeredPreview.map(o => {
+                            const term = o && o.term ? String(o.term) : '';
+                            const name = o && o.course_name ? String(o.course_name) : '';
+                            const cr = (o && (o.su_credit ?? o.su_credits) != null) ? (o.su_credit ?? o.su_credits) : su;
+                            const label = term ? term : 'Unknown term';
+                            const suffix = name ? ` — ${name}` : '';
+                            return `<li><strong>${escapeHtml(label)}</strong>${escapeHtml(suffix)} <span class="muted">(${escapeHtml(fmt(cr))} cr)</span></li>`;
+                        }).join('') +
+                        '</ul>' +
+                        '</div>'
+                    )
+                    : '<div class="course-details-section"><h4>Last Offered</h4><p>Not available.</p></div>';
+
+                const body =
+                    '<div class="course-details">' +
+                    `<p><strong>${escapeHtml(courseCode)}</strong>${title ? ` — ${escapeHtml(title)}` : ''}</p>` +
+                    '<div class="course-details-meta">' +
+                    `<div><span class="muted">SU Credits:</span> ${escapeHtml(fmt(su))}</div>` +
+                    `<div><span class="muted">ECTS:</span> ${escapeHtml(fmt(ects))}</div>` +
+                    (bs != null ? `<div><span class="muted">Basic Science:</span> ${escapeHtml(fmt(bs))}</div>` : '') +
+                    (eng != null ? `<div><span class="muted">Engineering:</span> ${escapeHtml(fmt(eng))}</div>` : '') +
+                    '</div>' +
+                    '<div class="course-details-section"><h4>Prerequisites</h4><p>' + (prereq ? escapeHtml(prereq) : 'None') + '</p></div>' +
+                    '<div class="course-details-section"><h4>Corequisites</h4><p>' + (coreq ? escapeHtml(coreq) : 'None') + '</p></div>' +
+                    offeredHtml +
+                    descHtml +
+                    (url ? `<div class="course-details-actions"><a class="btn btn-primary" href="${escapeHtml(url)}" target="_blank" rel="noopener">Open course page</a></div>` : '') +
+                    '</div>';
+
+                ui.alert('Course Details', body);
+            } catch (err) {
+                try {
+                    const ui = (typeof window !== 'undefined') ? window.uiModal : null;
+                    if (ui && typeof ui.alert === 'function') {
+                        ui.alert('Details unavailable', '<p>Failed to load course details.</p>');
+                    }
+                } catch (_) {}
+            }
+        })();
+    }
+    //CLICKED "<course delete>"
+
     else if(e.target.classList.contains("delete_course"))
     {
-        let sem = e.target.parentNode.parentNode.parentNode.parentNode;
-        let semObj = curriculum.getSemester(sem.id);
-        let courseName = e.target.parentNode.firstChild.innerHTML;
-        let credit = parseInt(getInfo(courseName, course_data)['SU_credit']);
-        let grade = e.target.parentNode.parentNode.querySelector('.grade').innerHTML;
+        const semElem = (() => {
+            try { return e.target.closest('.semester'); } catch (_) { return null; }
+        })();
+        const courseElem = (() => {
+            try { return e.target.closest('.course'); } catch (_) { return null; }
+        })();
+        const semObj = semElem ? curriculum.getSemester(semElem.id) : null;
+        if (!semObj || !courseElem) return;
+        let courseName = '';
+        try {
+            const container = e.target.closest('.course_container');
+            const codeEl = container ? container.querySelector('.course_code') : null;
+            courseName = codeEl ? String(codeEl.textContent || '').trim() : '';
+        } catch (_) {}
+        let credit = (typeof parseCreditValue === 'function')
+            ? parseCreditValue(getInfo(courseName, course_data)['SU_credit'])
+            : (parseFloat(getInfo(courseName, course_data)['SU_credit']) || 0);
+        let grade = '';
+        try {
+            const gr = courseElem.querySelector('.grade');
+            grade = gr ? gr.innerHTML : '';
+        } catch (_) {}
 
         // If this course had grade F we previously removed its credits. Add them back before deletion
         if(grade == 'F'){
@@ -405,12 +788,26 @@ function dynamic_click(e, curriculum, course_data)
             }
         }
 
-        semObj.deleteCourse(e.target.parentNode.parentNode.parentNode.id);
+        semObj.deleteCourse(courseElem.id);
         //changing total credits element in dom:
-        let dom_tc = e.target.parentNode.parentNode.parentNode.parentNode.parentNode.parentNode.querySelector('span');
-        dom_tc.innerHTML = 'Total: ' + semObj.totalCredit + ' credits';
+        let dom_tc = null;
         try {
-            dom_tc.classList.toggle('is-overlimit', (semObj.totalCredit || 0) > 20);
+            const container = e.target.closest('.container_semester');
+            dom_tc = container ? container.querySelector('.total_credit span') : null;
+        } catch (_) {}
+        if (!dom_tc) {
+            try {
+                dom_tc = semElem ? semElem.parentNode?.parentNode?.querySelector('span') : null;
+            } catch (_) {}
+        }
+        {
+            const totalText = (typeof formatCreditValue === 'function')
+                ? formatCreditValue(semObj.totalCredit)
+                : (Number(semObj.totalCredit || 0).toFixed(1));
+            if (dom_tc) dom_tc.innerHTML = 'Total: ' + totalText + ' credits';
+        }
+        try {
+            if (dom_tc) dom_tc.classList.toggle('is-overlimit', (semObj.totalCredit || 0) > 20);
         } catch (_) {}
 
         const gradeValue = letter_grades_global_dic[grade];
@@ -422,7 +819,7 @@ function dynamic_click(e, curriculum, course_data)
         }
 
 
-        e.target.parentNode.parentNode.parentNode.remove();
+        try { courseElem.remove(); } catch (_) {}
 
         // Re-run allocation after a course deletion to update effective types
         try {
@@ -510,7 +907,9 @@ function dynamic_click(e, curriculum, course_data)
 
             let sem = e.target.parentNode.parentNode.parentNode;
             let courseName = e.target.parentNode.querySelector('.course_label').firstChild.innerHTML;
-            let credit = parseInt(getInfo(courseName, course_data)['SU_credit']);
+            let credit = (typeof parseCreditValue === 'function')
+                ? parseCreditValue(getInfo(courseName, course_data)['SU_credit'])
+                : (parseFloat(getInfo(courseName, course_data)['SU_credit']) || 0);
 
             const prevGradeValue = letter_grades_global_dic[prevGrade];
             if (prevGradeValue !== undefined) {
@@ -555,7 +954,9 @@ function dynamic_click(e, curriculum, course_data)
                 // Use stored reference instead of e.target
                 let sem = gradeElement.parentNode.parentNode.parentNode;
                 let courseName = gradeElement.parentNode.querySelector('.course_label').firstChild.innerHTML;
-                let credit = parseInt(getInfo(courseName, course_data)['SU_credit']);
+                let credit = (typeof parseCreditValue === 'function')
+                    ? parseCreditValue(getInfo(courseName, course_data)['SU_credit'])
+                    : (parseFloat(getInfo(courseName, course_data)['SU_credit']) || 0);
                 let semObj = curriculum.getSemester(sem.id);
                 const gradeValue = letter_grades_global_dic[grade];
                 if (gradeValue !== undefined) {

@@ -1,0 +1,266 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/transitional.dtd">
+<!-- saved from url=(0059)https://suis.sabanciuniv.edu/prod/bwckschd.p_disp_dyn_sched -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta http-equiv="Pragma" name="Cache-Control" content="no-cache">
+<meta http-equiv="Cache-Control" name="Cache-Control" content="no-cache">
+<link rel="stylesheet" href="./Dynamic Schedule_files/web_defaultapp.css" type="text/css">
+<link rel="stylesheet" href="./Dynamic Schedule_files/web_defaultprint.css" type="text/css" media="print">
+<title>Dynamic Schedule</title>
+<meta http-equiv="Content-Script-Type" name="Default_Script_Language" content="text/javascript">
+<script language="JavaScript" type="text/javascript">
+<!-- Hide JavaScript from older browsers 
+window.onunload = function() {submitcount=0;}
+var submitcount=0;
+function checkSubmit() {
+if (submitcount == 0)
+   {
+   try{showWarningDialog();}catch(err){}
+   submitcount++;
+   return true;
+   }
+else
+   {
+alert("Your changes have already been submitted.");
+   return false;
+   }
+}
+var maxWaitTime=185;var maxWaitTimeShow=maxWaitTime-5;maxWaitWarningShow=maxWaitTime-10;var waitingTime=0;var waitingTimer;
+function showWarningDialog() {
+  waitingTime = maxWaitTime;
+  try {
+      var div = '<div id="suSubmitContainer">    <div style="z-index: 1000; border: none; margin: 0px; padding: 0px; width: 100%; height: 100%; top: 0px; left: 0px; background-color: rgb(0, 0, 0); opacity: 0.6; cursor: wait; position: fixed;"></div>    <div style="z-index: 1011; position: fixed; padding: 15px; margin: 0px; width: 30%; top: 40%; left: 35%; text-align: center; color: rgb(255, 255, 255); border: none; background-color: rgb(0, 0, 0); cursor: wait; border-radius: 10px; opacity: 0.9;min-width: 12em;">        <div id="suWaitMsg17">Please wait ...</div>    </div></div>';
+      var tmpDiv = document.createElement("div");
+      tmpDiv.innerHTML = div;
+      elDiv = tmpDiv.childNodes[0];
+      document.body.appendChild(elDiv);
+      waitingTimer = setInterval(showWarningTick, 1000);
+  }catch(err) {}
+  return true;
+}
+function showWarningTick(){
+  waitingTime--;
+	if(waitingTime<=maxWaitWarningShow){
+      document.getElementById("suWaitMsg17").innerHTML="Please wait ("+waitingTime+") ...<div><br/><hr/>Important !<p style='text-align:left;font-size:small'><ul style='text-align:left;font-size:small'><li>Do not stop the process until it completes.</li><li>Do not use back, forward, stop and refresh buttons of your browser.</li><li>Do not use multiple tabs or pages.</li></ul><br/>These may lock or drop your session.</p></div>";
+  }else if(waitingTime <= maxWaitTimeShow){
+      document.getElementById("suWaitMsg17").innerHTML="Please wait ("+waitingTime+") ...";
+  }
+  if(waitingTime<=0){
+      var el=document.getElementById("suSubmitContainer");
+      el.parentNode.removeChild(el);
+      clearTimeout(waitingTimer);
+  }
+}
+try{window.addEventListener("unload",function(){waitingTime=0;},false);}catch(err){}
+//  End script hiding -->
+</script>
+<script language="JavaScript" type="text/javascript">
+<!-- Hide JavaScript from older browsers 
+//  Function to open a window
+function windowOpen(window_url) {
+   helpWin = window.open(window_url,'','toolbar=yes,status=no,scrollbars=yes,menubar=yes,resizable=yes,directories=no,location=no,width=350,height=400');
+   if (document.images) { 
+       if (helpWin) helpWin.focus()
+   }
+}
+//  End script hiding -->
+</script>
+</head>
+<body data-new-gr-c-s-check-loaded="14.1270.0" data-gr-ext-installed="">
+<div class="headerwrapperdiv">
+<div class="pageheaderdiv1">
+<a href="https://suis.sabanciuniv.edu/prod/bwckschd.p_disp_dyn_sched#main_content" onmouseover="window.status=&#39;Go to Main Content&#39;; return true" onmouseout="window.status=&#39;&#39;; return true" onfocus="window.status=&#39;Go to Main Content&#39;; return true" onblur="window.status=&#39;&#39;; return true" class="skiplinks">Go to Main Content</a>
+<h1>su</h1></div><div class="headerlinksdiv">
+</div>
+<table class="plaintable" summary="This table displays Menu Items and Banner Search textbox." width="100%">
+<tbody><tr>
+<td class="pldefault">
+<div class="headerlinksdiv2">
+&nbsp;
+</div>
+</td>
+<td class="pldefault"><p class="rightaligntext" p="">
+<span class="pageheaderlinks">
+|
+<a href="https://suis.sabanciuniv.edu/prod/twbkwbis.P_Logout" accesskey="3" class="submenulinktext2">EXIT</a>
+</span>
+</p></td>
+</tr>
+</tbody></table>
+</div>
+<div class="pagetitlediv">
+<table class="plaintable" summary="This table displays title and static header displays." width="100%">
+<tbody><tr>
+<td class="pldefault">
+<h2>Dynamic Schedule</h2>
+</td>
+<td class="pldefault">
+&nbsp;
+</td>
+<td class="pldefault"><p class="rightaligntext" p="">
+</p><div class="staticheaders">
+</div>
+</td>
+</tr>
+<tr>
+<td class="bg3" width="100%" colspan="3"><img src="./Dynamic Schedule_files/web_transparent.gif" alt="Transparent Image" class="headerImg" title="Transparent Image" name="web_transparent" hspace="0" vspace="0" border="0" height="3" width="10"></td>
+</tr>
+</tbody></table>
+<a name="main_content"></a>
+</div>
+<div class="pagebodydiv">
+<!--  ** END OF twbkwbis.P_OpenDoc **  -->
+
+<form action="https://suis.sabanciuniv.edu/prod/bwckgens.p_proc_term_date" method="post" onsubmit="return checkSubmit()">
+<input type="hidden" name="p_calling_proc" value="bwckschd.p_disp_dyn_sched">
+<table class="dataentrytable" summary="This layout table is used for term selection." width="100%"><caption class="captiontext">Search by Term: </caption>
+<tbody><tr>
+<td class="dedefault"><label for="term_input_id"><span class="fieldlabeltextinvisible">Term</span></label>
+<select name="p_term" size="1" id="term_input_id">
+<option value="">None</option>
+<option value="202502">Spring 2025-2026</option>
+<option value="202501">Fall 2025-2026 (View only)</option>
+<option value="202403">Summer 2024-2025 (View only)</option>
+<option value="202402">Spring 2024-2025 (View only)</option>
+<option value="202401">Fall 2024-2025 (View only)</option>
+<option value="202303">Summer 2023-2024 (View only)</option>
+<option value="202302">Spring 2023-2024 (View only)</option>
+<option value="202301">Fall 2023-2024 (View only)</option>
+<option value="202203">Summer 2022-2023 (View only)</option>
+<option value="202202">Spring 2022-2023 (View only)</option>
+<option value="202201">Fall 2022-2023 (View only)</option>
+<option value="202103">Summer 2021-2022 (View only)</option>
+<option value="202102">Spring 2021-2022 (View only)</option>
+<option value="202101">Fall 2021-2022 (View only)</option>
+<option value="202003">Summer 2020-2021 (View only)</option>
+<option value="202002">Spring 2020-2021 (View only)</option>
+<option value="202001">Fall 2020-2021 (View only)</option>
+<option value="201903">Summer 2019-2020 (View only)</option>
+<option value="201902">Spring 2019-2020 (View only)</option>
+<option value="201901">Fall 2019-2020 (View only)</option>
+<option value="201803">Summer 2018-2019 (View only)</option>
+<option value="201802">Spring 2018-2019 (View only)</option>
+<option value="201801">Fall 2018-2019 (View only)</option>
+<option value="201703">Summer 2017-2018 (View only)</option>
+<option value="201702">Spring 2017-2018 (View only)</option>
+<option value="201701">Fall 2017-2018 (View only)</option>
+<option value="201603">Summer 2016-2017 (View only)</option>
+<option value="201602">Spring 2016-2017 (View only)</option>
+<option value="201601">Fall 2016-2017 (View only)</option>
+<option value="201503">Summer 2015-2016 (View only)</option>
+<option value="201502">Spring 2015-2016 (View only)</option>
+<option value="201501">Fall 2015-2016 (View only)</option>
+<option value="201403">Summer 2014-2015 (View only)</option>
+<option value="201402">Spring 2014-2015 (View only)</option>
+<option value="201401">Fall 2014-2015 (View only)</option>
+<option value="201303">Summer 2013-2014 (View only)</option>
+<option value="201302">Spring 2013-2014 (View only)</option>
+<option value="201301">Fall 2013-2014 (View only)</option>
+<option value="201203">Summer 2012-2013 (View only)</option>
+<option value="201202">Spring 2012-2013 (View only)</option>
+<option value="201201">Fall 2012-2013 (View only)</option>
+<option value="201103">Summer 2011-2012 (View only)</option>
+<option value="201102">Spring 2011-2012 (View only)</option>
+<option value="201101">Fall 2011-2012 (View only)</option>
+<option value="201003">Summer 2010-2011 (View only)</option>
+<option value="201002">Spring 2010-2011 (View only)</option>
+<option value="201001">Fall 2010-2011 (View only)</option>
+<option value="200903">Summer 2009-2010 (View only)</option>
+<option value="200902">Spring 2009-2010 (View only)</option>
+<option value="200901">Fall 2009-2010 (View only)</option>
+<option value="200803">Summer 2008-2009 (View only)</option>
+<option value="200802">Spring 2008-2009 (View only)</option>
+<option value="200801">Fall 2008-2009 (View only)</option>
+<option value="200703">Summer 2007-2008 (View only)</option>
+<option value="200702">Spring 2007-2008 (View only)</option>
+<option value="200701">Fall 2007-2008 (View only)</option>
+<option value="200603">Summer 2006-2007 (View only)</option>
+<option value="200602">Spring 2006-2007 (View only)</option>
+<option value="200601">Fall 2006-2007 (View only)</option>
+<option value="200503">Summer 2005-2006 (View only)</option>
+<option value="200502">Spring 2005-2006 (View only)</option>
+<option value="200501">Fall 2005-2006 (View only)</option>
+<option value="200403">Summer 2004-2005 (View only)</option>
+<option value="200402">Spring 2004-2005 (View only)</option>
+<option value="200401">Fall 2004-2005 (View only)</option>
+<option value="200303">Summer 2003-2004 (View only)</option>
+<option value="200302">Spring 2003-2004 (View only)</option>
+<option value="200301">Fall 2003-2004 (View only)</option>
+<option value="200203">Summer 2002-2003 (View only)</option>
+<option value="200202">Spring 2002-2003 (View only)</option>
+<option value="200201">Fall 2002-2003 (View only)</option>
+<option value="200103">Summer 2001-2002 (View only)</option>
+<option value="200102">Spring 2001-2002 (View only)</option>
+<option value="200101">Fall 2001-2002 (View only)</option>
+<option value="200003">Summer 2000-2001 (View only)</option>
+<option value="200002">Spring 2000-2001 (View only)</option>
+<option value="200001">Fall 2000-2001 (View only)</option>
+<option value="199903">Summer 1999-2000 (View only)</option>
+<option value="199902">Spring 1999-2000 (View only)</option>
+<option value="199901">Fall 1999-2000 (View only)</option>
+</select>
+</td>
+</tr>
+</tbody></table>
+<br>
+<br>
+<input type="submit" value="Submit">
+<input type="reset" value="Reset">
+</form>
+
+<!--  ** START OF twbkwbis.P_CloseDoc **  -->
+<table class="plaintable" summary="This is table displays line separator at end of the page." width="100%" cellspacing="0" cellpadding="0" border="0"><tbody><tr><td class="bgtabon" width="100%" colspan="2"><img src="./Dynamic Schedule_files/web_transparent.gif" alt="Transparent Image" class="headerImg" title="Transparent Image" name="web_transparent" hspace="0" vspace="0" border="0" height="3" width="10"></td></tr></tbody></table>
+<a href="https://suis.sabanciuniv.edu/prod/bwckschd.p_disp_dyn_sched#top" onmouseover="window.status=&#39;Skip to top of page&#39;; return true" onmouseout="window.status=&#39;&#39;; return true" onfocus="window.status=&#39;Skip to top of page&#39;; return true" onblur="window.status=&#39;&#39;; return true" class="skiplinks">Skip to top of page</a>
+</div>
+<div class="footerbeforediv">
+
+</div>
+<div class="footerafterdiv">
+
+</div>
+<div class="globalafterdiv">
+
+</div>
+<div class="globalfooterdiv">
+
+</div>
+<div class="pagefooterdiv">
+<span class="releasetext">Release: 8.7.2</span>
+</div>
+<div class="poweredbydiv">
+</div>
+<div class="div1"></div>
+<div class="div2"></div>
+<div class="div3"></div>
+<div class="div4"></div>
+<div class="div5"></div>
+<div class="div6"></div>
+<div class="banner_copyright"></div>
+
+
+</body><contextsearch-widgets id="contextsearch-widgets" style="--cs-zoom: 2; --cs-scale: calc( 1 / var(--cs-zoom,1) * var(--cs-custom-scale,1));"><template shadowrootmode="open">
+	    
+		  <style>
+	        :host { all: initial !important; }
+	      </style>
+		<link rel="stylesheet" href="chrome-extension://ddippghibegbgpjcaaijbacfhjjeafjh/inject_widgets.css"><link rel="stylesheet" href="chrome-extension://ddippghibegbgpjcaaijbacfhjjeafjh/inject_sidebar.css"></template></contextsearch-widgets><grammarly-desktop-integration data-grammarly-shadow-root="true"><template shadowrootmode="open"><style>
+      div.grammarly-desktop-integration {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+        -moz-user-select: none;
+        -webkit-user-select: none;
+        -ms-user-select:none;
+        user-select:none;
+      }
+
+      div.grammarly-desktop-integration:before {
+        content: attr(data-content);
+      }
+    </style><div aria-label="grammarly-integration" role="group" tabindex="-1" class="grammarly-desktop-integration" data-content="{&quot;mode&quot;:&quot;full&quot;,&quot;isActive&quot;:true,&quot;isUserDisabled&quot;:false}"></div></template></grammarly-desktop-integration></html>

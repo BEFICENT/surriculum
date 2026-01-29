@@ -873,9 +873,32 @@ function SUrriculum(major_chosen_by_user) {
         const label = document.getElementById('offeredThisTermLabel');
         const ctName = (typeof window !== 'undefined' && window.currentTermName) ? window.currentTermName : '';
         if (label && ctName) {
-            label.textContent = `Only show courses offered in ${ctName}`;
+            label.textContent = `Only show offered courses in ${ctName}`;
         }
     } catch (_) {}
+
+    let sortByScore = false;
+    try {
+        const stored = localStorage.getItem('sortBasedOnScore');
+        if (stored !== null) {
+            sortByScore = stored === 'true';
+        }
+    } catch (_) {}
+    if (typeof window !== 'undefined') {
+        window.sortBasedOnScore = sortByScore;
+    }
+    const sortToggle = document.getElementById('sortByScoreToggle');
+    if (sortToggle) {
+        sortToggle.checked = sortByScore;
+        sortToggle.addEventListener('change', function(e) {
+            const enabled = e.target.checked;
+            if (typeof window !== 'undefined') {
+                window.sortBasedOnScore = enabled;
+            }
+            try { localStorage.setItem('sortBasedOnScore', enabled ? 'true' : 'false'); } catch (_) {}
+            document.dispatchEvent(new Event('sortByScoreToggleChanged'));
+        });
+    }
 
     //************************************************
 

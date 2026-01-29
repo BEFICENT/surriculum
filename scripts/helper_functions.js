@@ -96,6 +96,28 @@ function extractNumericValue(string) {
     return null; // No numeric value found
 }
 
+// Credit helpers: allow half-credits (e.g., 2.5) for custom/imported courses.
+function parseCreditValue(v) {
+    try {
+        const raw = String(v ?? '').trim();
+        if (!raw) return 0;
+        const n = parseFloat(raw.replace(',', '.'));
+        return isFinite(n) ? n : 0;
+    } catch (_) {
+        return 0;
+    }
+}
+
+function formatCreditValue(v) {
+    const n = parseCreditValue(v);
+    return n.toFixed(1);
+}
+
+if (typeof window !== 'undefined') {
+    window.parseCreditValue = parseCreditValue;
+    window.formatCreditValue = formatCreditValue;
+}
+
 // Terms list & date_list_InnerHTML:
 // Determine the current term based on the device date.
 // Rules:
@@ -289,6 +311,12 @@ function getCoursesDataList(course_data)
         if (typeof window !== 'undefined' && window.hideTakenCourses && cur && typeof cur.hasCourse === 'function') {
             combined = combined.filter(c => !cur.hasCourse(c.Major + c.Code));
         }
+        // Special-case equivalence: if DSA210 (or old CS210) is already taken,
+        // do not show CS210 in the Add Course list.
+        if (cur && typeof cur.hasCourse === 'function' && cur.hasCourse('DSA210')) {
+            const norm = (v) => String(v || '').toUpperCase().replace(/\s+/g, '');
+            combined = combined.filter(c => norm(c.Major + c.Code) !== 'CS210');
+        }
     } catch (ex) {
         // ignore any errors in DM detection or filtering
     }
@@ -342,6 +370,12 @@ function getCoursesList(course_data) {
         if (typeof window !== 'undefined' && window.hideTakenCourses && cur && typeof cur.hasCourse === 'function') {
             combined = combined.filter(c => !cur.hasCourse(c.Major + c.Code));
         }
+        // Special-case equivalence: if DSA210 (or old CS210) is already taken,
+        // do not show CS210 in the Add Course list.
+        if (cur && typeof cur.hasCourse === 'function' && cur.hasCourse('DSA210')) {
+            const norm = (v) => String(v || '').toUpperCase().replace(/\s+/g, '');
+            combined = combined.filter(c => norm(c.Major + c.Code) !== 'CS210');
+        }
     } catch (_) {}
 
     return combined.map(item => {
@@ -393,6 +427,7 @@ function loadCourseOfferingsIndex() {
             };
 
             const text = await tryReadText();
+            try { window.__courseOfferingsJsonlText = text; } catch (_) {}
             const byCode = new Map();
             if (!text) {
                 window.courseOfferingsByCode = byCode;
@@ -442,13 +477,75 @@ if (typeof window !== 'undefined') {
     };
 }
 
+// Load the full course-page scrape info (courses/all_coursepage_info.jsonl) and
+// index it by course_id. This powers the "Details" button on course cards.
+function loadCoursePageInfoIndex() {
+    try {
+        if (typeof window === 'undefined') return Promise.resolve(null);
+        if (window.__coursePageInfoPromise) return window.__coursePageInfoPromise;
+
+        window.__coursePageInfoPromise = (async () => {
+            const tryReadText = async () => {
+                try {
+                    if (window.__courseOfferingsJsonlText) return window.__courseOfferingsJsonlText;
+                } catch (_) {}
+
+                // Prefer synchronous XHR under file:// where fetch can be blocked.
+                try {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('GET', './courses/all_coursepage_info.jsonl', false);
+                    xhr.overrideMimeType('application/json');
+                    xhr.send(null);
+                    if (xhr.status === 200 || xhr.status === 0) return xhr.responseText;
+                } catch (_) {}
+
+                try {
+                    const res = await fetch('./courses/all_coursepage_info.jsonl');
+                    if (res.ok) return await res.text();
+                } catch (_) {}
+                return '';
+            };
+
+            const text = await tryReadText();
+            const byCode = new Map();
+            if (!text) {
+                window.coursePageInfoByCode = byCode;
+                return byCode;
+            }
+            const lines = text.split(/\r?\n/);
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i] && lines[i].trim();
+                if (!line) continue;
+                try {
+                    const obj = JSON.parse(line);
+                    const id = obj && obj.course_id ? String(obj.course_id) : '';
+                    if (!id) continue;
+                    if (!byCode.has(id)) byCode.set(id, obj);
+                } catch (_) {
+                    // ignore malformed line
+                }
+            }
+            window.coursePageInfoByCode = byCode;
+            return byCode;
+        })();
+
+        return window.__coursePageInfoPromise;
+    } catch (_) {
+        return Promise.resolve(null);
+    }
+}
+
+if (typeof window !== 'undefined') {
+    window.loadCoursePageInfoIndex = loadCoursePageInfoIndex;
+}
+
 // Adjust semester totals by adding or subtracting the specified course's
 // credit, science/engineering values and category totals. `multiplier`
 // should be +1 to add credits or -1 to remove them.
 function adjustSemesterTotals(semesterObj, courseInfo, multiplier) {
     if (!semesterObj || !courseInfo) return;
     multiplier = multiplier || 1;
-    const credit = parseInt(courseInfo['SU_credit'] || '0');
+    const credit = parseCreditValue(courseInfo['SU_credit'] || '0');
     const bs = parseFloat(courseInfo['Basic_Science'] || '0');
     const eng = parseFloat(courseInfo['Engineering'] || '0');
     const ects = parseFloat(courseInfo['ECTS'] || '0');

@@ -1664,20 +1664,47 @@ html, body {
 }
 
 /* Bottom row in left column - delete button */
-.course_label .delete_course {
+.course_label .course_actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    align-self: flex-start;
+}
+
+.course_label .course_actions button {
     width: 18px;
     height: 18px;
     border: none;
-    background: url('assets/closedb.png') center/contain no-repeat;
+    background: transparent;
     cursor: pointer;
-    opacity: 0.5;
+    opacity: 0.55;
     transition: opacity 0.15s ease;
-    align-self: flex-start;
-    filter: brightness(var(--brightness-rate))
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
-.course_label .delete_course:hover {
+.course_label .course_actions button:hover {
     opacity: 1;
+}
+
+.course_label .course_actions .delete_course {
+    background: url('assets/closedb.png') center/contain no-repeat;
+    filter: brightness(var(--brightness-rate));
+}
+
+.course_label .course_actions .details_course {
+    color: var(--text-secondary);
+}
+
+.course_label .course_actions .details_course i {
+    font-size: 0.95rem;
+    pointer-events: none;
+}
+
+.course_label .course_actions .details_course:hover {
+    color: var(--text-primary);
 }
 /* MIDDLE COLUMN - Course info */
 .course_info {
@@ -1708,6 +1735,39 @@ html, body {
 .course_info .course_type .course_type_part.is-overflow-type {
     color: #F59E0B;
     font-weight: 700;
+}
+
+/* Course details modal content */
+.muted {
+    color: var(--text-secondary);
+}
+
+.course-details-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 12px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-surface);
+    margin: 10px 0 12px;
+}
+
+.course-details-section h4 {
+    margin: 0 0 6px 0;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+}
+
+.course-details-list {
+    margin: 0;
+    padding-left: 18px;
+}
+
+.course-details-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 12px;
 }
 
 .course_info .course_type .ct-sep {

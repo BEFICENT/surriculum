@@ -201,7 +201,9 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
         }
         if(!curriculum.hasCourse(myCourse.code)) 
         {
-            let courseCredit = parseInt(getInfo(courseCode, course_data)['SU_credit']);
+            let courseCredit = (typeof parseCreditValue === 'function')
+                ? parseCreditValue(getInfo(courseCode, course_data)['SU_credit'])
+                : (parseFloat(getInfo(courseCode, course_data)['SU_credit']) || 0);
             curriculum.getSemester(semester.id).addCourse(myCourse);
             let dom_course = document.createElement('div');
             dom_course.classList.add('course');
@@ -215,7 +217,14 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
             c_container.classList.add("course_container");
             let c_label = document.createElement("div");
             c_label.classList.add("course_label");
-            c_label.innerHTML = '<div>'+courseList[i]+'</div>' + '<button class="delete_course"></button>';
+            c_label.innerHTML =
+                '<div class="course_code">' + courseList[i] + '</div>' +
+                '<div class="course_actions">' +
+                '<button class="details_course" type="button" title="Details" aria-label="Course details">' +
+                '<i class="fa-solid fa-circle-info"></i>' +
+                '</button>' +
+                '<button class="delete_course" type="button" title="Delete" aria-label="Delete course"></button>' +
+                '</div>';
             let c_info = document.createElement("div");
             c_info.classList.add("course_info");
             c_info.innerHTML = '<div class="course_name">'+ getInfo(courseCode, course_data)['Course_Name'] +'</div>';
@@ -225,7 +234,10 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
             //let gr_container = document.createElement('div');
             //gr_container.classList.add('grade_container');
 
-            c_info.innerHTML += '<div class="course_credit">' +courseCredit+ '.0 credits </div>';
+            const creditText = (typeof formatCreditValue === 'function')
+                ? formatCreditValue(courseCredit)
+                : (Number(courseCredit).toFixed(1));
+            c_info.innerHTML += '<div class="course_credit">' + creditText + ' credits </div>';
             const bsDiv = document.createElement('div');
             bsDiv.classList.add('course_bs_credit');
             bsDiv.textContent = 'BS: ' + (getInfo(courseCode, course_data)['Basic_Science'] || '0') + ' credits';
@@ -271,7 +283,10 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
             dom_semester.insertBefore(dom_course, dom_semester.querySelector(".addCourse"));
 
             let dom_tc = dom_course.parentNode.parentNode.parentNode.querySelector('span');
-            dom_tc.innerHTML = 'Total: ' + curriculum.getSemester(semester.id).totalCredit + ' credits';
+            const totalText = (typeof formatCreditValue === 'function')
+                ? formatCreditValue(curriculum.getSemester(semester.id).totalCredit)
+                : (Number(curriculum.getSemester(semester.id).totalCredit || 0).toFixed(1));
+            dom_tc.innerHTML = 'Total: ' + totalText + ' credits';
             try {
                 const tc = curriculum.getSemester(semester.id).totalCredit || 0;
                 dom_tc.classList.toggle('is-overlimit', tc > 20);

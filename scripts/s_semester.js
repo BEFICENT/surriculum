@@ -21,14 +21,16 @@ function s_semester(id, course_data)
     this.termIndex = null;
 
     this.totalGPA = 0.0;
-    this.totalGPACredits = 0;
+    this.totalGPACredits = 0.0;
     this.addCourse = function(course)
     {
         for(let i = 0; i < course_data.length; i++)
         {
             if (( (course_data[i]['Major'] + course_data[i]['Code']) == course.code ))
             {
-                let credit = parseInt(course_data[i]['SU_credit']);
+                let credit = (typeof parseCreditValue === 'function')
+                    ? parseCreditValue(course_data[i]['SU_credit'])
+                    : (parseFloat(course_data[i]['SU_credit']) || 0);
                 this.totalCredit += credit;
                 this.totalEngineering += parseFloat(course_data[i]['Engineering']);
                 this.totalScience += parseFloat(course_data[i]['Basic_Science']);
@@ -68,7 +70,9 @@ function s_semester(id, course_data)
                     science = parseFloat(info['Basic_Science'] || 0);
                     engineering = parseFloat(info['Engineering'] || 0);
                     ects = parseFloat(info['ECTS'] || 0);
-                    credit = parseInt(info['SU_credit'] || 0);
+                    credit = (typeof parseCreditValue === 'function')
+                        ? parseCreditValue(info['SU_credit'] || 0)
+                        : (parseFloat(info['SU_credit'] || 0) || 0);
                     if (info['EL_Type'] == "free") {this.totalFree -= credit;}
                     else if (info['EL_Type'] == "area") {this.totalArea -= credit;}
                     else if (info['EL_Type'] == "core") {this.totalCore -= credit;}
@@ -81,7 +85,9 @@ function s_semester(id, course_data)
                     science = parseFloat(course.Basic_Science || 0);
                     engineering = parseFloat(course.Engineering || 0);
                     ects = parseFloat(course.ECTS || 0);
-                    credit = parseInt(course.SU_credit || 0);
+                    credit = (typeof parseCreditValue === 'function')
+                        ? parseCreditValue(course.SU_credit || 0)
+                        : (parseFloat(course.SU_credit || 0) || 0);
                     if (course.effective_type == "free") {this.totalFree -= credit;}
                     else if (course.effective_type == "area") {this.totalArea -= credit;}
                     else if (course.effective_type == "core") {this.totalCore -= credit;}
