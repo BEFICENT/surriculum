@@ -2,7 +2,7 @@ Example Files/Academic Records Summary_ex.html
 .idea/
 surriculum.code-workspace
 courses/coursepage_html_cache/
-courses/schedule/
 __pycache__/
 *.pyc
 tmp_*.html
+courses/schedule/202502_from_saved.jsonl
