@@ -1,11 +1,11 @@
 {"Major": "ECON", "Code": "201", "Course_Name": "Games and Strategies", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "required", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "201", "Course_Name": "Mind and Behavior", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "required", "Faculty_Course": "No"}
 {"Major": "CONF", "Code": "300", "Course_Name": "Conflict Analysis and Resolution", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
-{"Major": "CS", "Code": "404", "Course_Name": "Artificial Intelligence", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "No"}
-{"Major": "CS", "Code": "412", "Course_Name": "Machine Learning", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "CS", "Code": "404", "Course_Name": "Artificial Intelligence", "ECTS": "6", "Engineering": 4.0, "Basic_Science": 2.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "CS", "Code": "412", "Course_Name": "Machine Learning", "ECTS": "6", "Engineering": 4.0, "Basic_Science": 2.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "ECON", "Code": "312", "Course_Name": "Behavioral Economics", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "ECON", "Code": "495", "Course_Name": "Machine Learning for Policy Evaluation", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
-{"Major": "IE", "Code": "405", "Course_Name": "Decision Analysis", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "IE", "Code": "405", "Course_Name": "Decision Analysis", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "MGMT", "Code": "414", "Course_Name": "Negotiation Skills", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "MKTG", "Code": "301", "Course_Name": "Introduction to Marketing", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "MKTG", "Code": "402", "Course_Name": "Consumer Behavior", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "core", "Faculty_Course": "No"}
