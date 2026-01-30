@@ -393,6 +393,10 @@ function getCoursesList(course_data) {
         return {
             code: code,
             name: name,
+            // Precompute search helpers so filtering is fast (avoids per-keystroke
+            // uppercasing and concatenation across hundreds of courses).
+            searchUpper: (code + ' ' + name).toUpperCase(),
+            searchNoSpace: (code + name).toUpperCase().replace(/\s+/g, ''),
             credit: item.SU_credit || '0',
             bs: item.Basic_Science || '0',
             type: mainType,
@@ -651,16 +655,29 @@ function loadCourseOfferingsIndex() {
 
         window.__courseOfferingsPromise = (async () => {
             const tryReadText = async () => {
-                // Prefer synchronous XHR under file:// where fetch can be blocked.
-                try {
-                    const xhr = new XMLHttpRequest();
-                    xhr.open('GET', './courses/all_coursepage_info.jsonl', false);
-                    xhr.overrideMimeType('application/json');
-                    xhr.send(null);
-                    if (xhr.status === 200 || xhr.status === 0) return xhr.responseText;
-                } catch (_) {}
+                const isFile = (() => {
+                    try { return typeof location !== 'undefined' && location && location.protocol === 'file:'; } catch (_) { return false; }
+                })();
+
+                // Prefer async fetch for http/https (sync XHR blocks the UI thread).
                 try {
                     const res = await fetch('./courses/all_coursepage_info.jsonl');
+                    if (res.ok) return await res.text();
+                } catch (_) {}
+
+                // Fall back to synchronous XHR under file:// where fetch may be blocked.
+                if (isFile) {
+                    try {
+                        const xhr = new XMLHttpRequest();
+                        xhr.open('GET', './courses/all_coursepage_info.jsonl', false);
+                        xhr.overrideMimeType('application/json');
+                        xhr.send(null);
+                        if (xhr.status === 200 || xhr.status === 0) return xhr.responseText;
+                    } catch (_) {}
+                }
+                try {
+                    // One more async attempt in case the first fetch was blocked by transient errors.
+                    const res = await fetch('./courses/all_coursepage_info.jsonl', { cache: 'no-store' });
                     if (res.ok) return await res.text();
                 } catch (_) {}
                 return '';
@@ -705,12 +722,13 @@ if (typeof window !== 'undefined') {
     window.loadCourseOfferingsIndex = loadCourseOfferingsIndex;
     window.isCourseOfferedInCurrentTerm = function(code) {
         try {
-            const ct = window.currentTermName || '';
+            const ctName = window.currentTermName || '';
+            const ctCode = window.currentTermCode || '';
             const idx = window.courseOfferingsByCode;
-            if (!ct || !idx) return true; // if unknown/unloaded, don't filter out
+            if ((!ctName && !ctCode) || !idx) return true; // if unknown/unloaded, don't filter out
             const set = idx.get(String(code)) || null;
             if (!set) return true;
-            return set.has(ct);
+            return (ctCode && set.has(ctCode)) || (ctName && set.has(ctName));
         } catch (_) {
             return true;
         }

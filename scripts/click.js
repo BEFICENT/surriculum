@@ -86,6 +86,8 @@ function dynamic_click(e, curriculum, course_data)
 
         // Build array of course options for filtering
         let options = getCoursesList(course_data);
+        let optionsSortedByScore = false;
+        let offeringsLoadInFlight = false;
 
         // Floating dropdown positioning (fixed) so it can render above the input
         // without being clipped by scroll containers or hidden under headers.
@@ -149,6 +151,27 @@ function dynamic_click(e, curriculum, course_data)
         })();
         try { scoreOptions.apply(); } catch (_) {}
 
+        const ensureOptionsSortedIfNeeded = () => {
+            try {
+                if (!(typeof window !== 'undefined' && window.sortBasedOnScore)) {
+                    optionsSortedByScore = false;
+                    return;
+                }
+                if (optionsSortedByScore) return;
+                options.sort((a, b) => {
+                    const as = (a && typeof a.score === 'number') ? a.score : 0;
+                    const bs = (b && typeof b.score === 'number') ? b.score : 0;
+                    if (bs !== as) return bs - as;
+                    const ac = (a && a.code) ? String(a.code) : '';
+                    const bc = (b && b.code) ? String(b.code) : '';
+                    return ac.localeCompare(bc);
+                });
+                optionsSortedByScore = true;
+            } catch (_) {
+                optionsSortedByScore = false;
+            }
+        };
+
         function capitalizeFirst(str) {
             return str.charAt(0).toUpperCase() + str.slice(1);
         }
@@ -170,58 +193,74 @@ function dynamic_click(e, curriculum, course_data)
 
         function renderOptions(filter) {
             dropdown.innerHTML = '';
-            const normalized = filter ? filter.toUpperCase() : '';
+            const normalized = filter ? String(filter).toUpperCase() : '';
             const normalizedNoSpace = normalized.replace(/\s+/g, '');
-            const filtered = options.filter(o => {
-                const codeName = (o.code + ' ' + o.name).toUpperCase();
-                const codeNameNoSpace = (o.code + o.name).toUpperCase().replace(/\s+/g, '');
-                const textMatch = codeName.includes(normalized) || codeNameNoSpace.includes(normalizedNoSpace);
-                if (!textMatch) return false;
-                try {
-                    // Only apply "offered this term" filtering when the user is adding
-                    // courses to the CURRENT TERM semester. Other semesters should not
-                    // be constrained by current offerings.
-                    if (typeof window !== 'undefined' && window.offeredThisTermOnly && isCurrentTermSemester()) {
-                        // Trigger lazy load if needed.
-                        if (!window.courseOfferingsByCode && typeof window.loadCourseOfferingsIndex === 'function') {
-                            window.loadCourseOfferingsIndex().then(() => {
-                                try { renderOptions(filter); } catch (_) {}
-                            });
-                            // While loading, do not filter.
-                            return true;
-                        }
-                        if (typeof window.isCourseOfferedInCurrentTerm === 'function') {
-                            return window.isCourseOfferedInCurrentTerm(o.code);
-                        }
-                    }
-                } catch (_) {}
-                return true;
-            });
-            try {
-                if (typeof window !== 'undefined' && window.sortBasedOnScore) {
-                    filtered.sort((a, b) => {
-                        const as = (a && typeof a.score === 'number') ? a.score : 0;
-                        const bs = (b && typeof b.score === 'number') ? b.score : 0;
-                        if (bs !== as) return bs - as;
-                        const ac = (a && a.code) ? String(a.code) : '';
-                        const bc = (b && b.code) ? String(b.code) : '';
-                        return ac.localeCompare(bc);
-                    });
+
+            // Only apply "offered this term" filtering when the user is adding
+            // courses to the CURRENT TERM semester. Other semesters should not
+            // be constrained by current offerings.
+            const offeredFilterActive = (() => {
+                try { return (typeof window !== 'undefined' && window.offeredThisTermOnly && isCurrentTermSemester()); } catch (_) { return false; }
+            })();
+
+            if (offeredFilterActive && !window.courseOfferingsByCode && typeof window.loadCourseOfferingsIndex === 'function') {
+                // Avoid scheduling hundreds of rerenders while the offerings index loads.
+                if (!offeringsLoadInFlight) {
+                    offeringsLoadInFlight = true;
+                    window.loadCourseOfferingsIndex()
+                        .then(() => { offeringsLoadInFlight = false; try { renderOptions(input.value); } catch (_) {} })
+                        .catch(() => { offeringsLoadInFlight = false; });
                 }
-            } catch (_) {}
-            filtered.forEach(data => {
+                const loading = document.createElement('div');
+                loading.className = 'course-option';
+                loading.innerHTML = '<div class="course-option-title">Loading current-term offerings…</div>';
+                dropdown.appendChild(loading);
+                dropdown.style.display = 'block';
+                positionDropdown();
+                activeIndex = -1;
+                return;
+            }
+
+            ensureOptionsSortedIfNeeded();
+
+            const frag = document.createDocumentFragment();
+            let count = 0;
+            const maxToRender = 220;
+            let totalMatches = 0;
+
+            for (let i = 0; i < options.length; i++) {
+                const o = options[i];
+                if (!o || !o.code) continue;
+                const searchUpper = o.searchUpper || (String(o.code + ' ' + (o.name || '')).toUpperCase());
+                const searchNoSpace = o.searchNoSpace || (String(o.code + (o.name || '')).toUpperCase().replace(/\s+/g, ''));
+                const textMatch = !normalized || searchUpper.includes(normalized) || searchNoSpace.includes(normalizedNoSpace);
+                if (!textMatch) continue;
+
+                if (offeredFilterActive && typeof window.isCourseOfferedInCurrentTerm === 'function') {
+                    if (!window.isCourseOfferedInCurrentTerm(o.code)) continue;
+                }
+
+                totalMatches++;
+                if (count >= maxToRender) continue;
+
                 const opt = document.createElement('div');
-                opt.classList.add('course-option');
-                opt.dataset.code = data.code;
-                opt.dataset.name = data.name;
-                opt.innerHTML = formatOption(data);
-                opt.addEventListener('mousedown', () => {
-                    input.value = data.code + ' ' + data.name;
-                    dropdown.style.display = 'none';
-                });
-                dropdown.appendChild(opt);
-            });
-            dropdown.style.display = filtered.length ? 'block' : 'none';
+                opt.className = 'course-option';
+                opt.dataset.code = o.code;
+                opt.dataset.name = o.name || '';
+                opt.innerHTML = formatOption(o);
+                frag.appendChild(opt);
+                count++;
+            }
+
+            dropdown.appendChild(frag);
+            if (totalMatches > maxToRender) {
+                const more = document.createElement('div');
+                more.className = 'course-option';
+                more.innerHTML = `<div class="course-option-title">Showing ${maxToRender} of ${totalMatches}. Type more to narrow.</div>`;
+                dropdown.appendChild(more);
+            }
+
+            dropdown.style.display = totalMatches ? 'block' : 'none';
             positionDropdown();
             activeIndex = -1;
         }
@@ -259,7 +298,9 @@ function dynamic_click(e, curriculum, course_data)
         } catch (_) {}
 
         input.addEventListener('keydown', function(evt){
-            const items = dropdown.querySelectorAll('.course-option');
+            const items = Array.from(dropdown.querySelectorAll('.course-option')).filter(el => {
+                try { return !!(el && el.dataset && el.dataset.code); } catch (_) { return false; }
+            });
             if (evt.key === 'ArrowDown') {
                 activeIndex = Math.min(activeIndex + 1, items.length - 1);
                 updateActive(items);
@@ -283,12 +324,14 @@ function dynamic_click(e, curriculum, course_data)
             options = getCoursesList(course_data);
             datalist.innerHTML = getCoursesDataList(course_data);
             try { scoreOptions.apply(); } catch (_) {}
+            optionsSortedByScore = false;
             renderOptions(input.value);
         });
         document.addEventListener('offeredThisTermToggleChanged', () => {
             renderOptions(input.value);
         });
         document.addEventListener('sortByScoreToggleChanged', () => {
+            optionsSortedByScore = false;
             renderOptions(input.value);
         });
 
@@ -319,6 +362,19 @@ function dynamic_click(e, curriculum, course_data)
 
         // Automatically focus so the user can start typing immediately
         setTimeout(() => { input.focus(); renderOptions(''); }, 0);
+
+        // Single delegated handler instead of per-option listeners (faster to re-render).
+        try {
+            dropdown.addEventListener('mousedown', (evt) => {
+                const opt = (evt && evt.target && typeof evt.target.closest === 'function')
+                    ? evt.target.closest('.course-option')
+                    : null;
+                if (!opt || !opt.dataset || !opt.dataset.code) return;
+                input.value = String(opt.dataset.code) + ' ' + String(opt.dataset.name || '');
+                dropdown.style.display = 'none';
+                evt.preventDefault();
+            });
+        } catch (_) {}
     }
     //CLICKED "OK" (for entering course input):
     else if(e.target.classList.contains("enter"))
