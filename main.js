@@ -2176,6 +2176,44 @@ function SUrriculum(major_chosen_by_user) {
         if (dropdown) dropdown.classList.toggle('active');
     });
 
+    // Mobile header menu: collapse header actions into a single button.
+    (() => {
+        const controls = document.getElementById('headerControls');
+        const more = document.getElementById('headerMore');
+        if (!controls || !more) return;
+
+        const close = () => {
+            try { controls.classList.remove('is-open'); } catch (_) {}
+            try { more.setAttribute('aria-expanded', 'false'); } catch (_) {}
+        };
+        const toggle = (e) => {
+            try { if (e && typeof e.stopPropagation === 'function') e.stopPropagation(); } catch (_) {}
+            const isOpen = controls.classList.contains('is-open');
+            if (isOpen) close();
+            else {
+                try { controls.classList.add('is-open'); } catch (_) {}
+                try { more.setAttribute('aria-expanded', 'true'); } catch (_) {}
+            }
+        };
+
+        more.addEventListener('click', toggle);
+        document.addEventListener('click', (e) => {
+            try {
+                if (!controls.contains(e.target)) close();
+            } catch (_) {
+                close();
+            }
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e && e.key === 'Escape') close();
+        });
+        window.addEventListener('resize', () => {
+            try {
+                if ((window.innerWidth || 9999) > 640) close();
+            } catch (_) {}
+        }, { passive: true });
+    })();
+
     // Close import panel when clicking outside
     document.addEventListener('click', function(e) {
         const dropdown = document.getElementById('importDropdown');

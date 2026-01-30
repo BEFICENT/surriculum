@@ -81,7 +81,10 @@ function s_curriculum()
     }
     this.hasCourse = function(course)
     {
-        const normalize = (c) => String(c || '').toUpperCase().replace(/\s+/g, '');
+        // Use a strict normalizer (strip anything that's not A-Z/0-9). This
+        // prevents subtle mismatches from PDFs/HTMLs that may contain
+        // non-standard whitespace or punctuation in extracted course codes.
+        const normalize = (c) => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
         const canonicalize = (c) => {
             const n = normalize(c);
             // CS210 was renamed to DSA210; treat them as the same course.

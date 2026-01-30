@@ -119,6 +119,17 @@ html, body {
     display: flex;
     gap: 12px;
     align-items: center;
+    position: relative;
+}
+
+.header-more {
+    display: none;
+}
+
+.header-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
 }
 
 .mobile-notice {
@@ -143,22 +154,64 @@ html, body {
 
 @media (max-width: 640px) {
     .header {
-        height: auto;
-        padding: 10px 12px;
+        height: 56px;
+        padding: 0 12px;
+        flex-direction: row;
+        align-items: center;
+        gap: 10px;
+    }
+    .header-title {
+        font-size: 1.1rem;
+        text-align: left;
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .header-controls {
+        justify-content: flex-end;
+        gap: 8px;
+    }
+
+    .header-more {
+        display: inline-flex;
+    }
+
+    .header-actions {
+        display: none;
+        position: absolute;
+        top: calc(100% + 10px);
+        right: 0;
+        width: min(92vw, 420px);
+        padding: 12px;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-lg);
+        z-index: 120;
         flex-direction: column;
         align-items: stretch;
         gap: 10px;
     }
-    .header-title {
-        font-size: 1.25rem;
-        text-align: center;
+
+    .header-controls.is-open .header-actions {
+        display: flex;
     }
-    .header-controls {
-        flex-wrap: wrap;
+
+    .header-actions .btn {
+        width: 100%;
         justify-content: center;
     }
-    .header-controls .btn {
-        flex: 0 0 auto;
+
+    /* Keep nested dropdowns readable inside the mobile menu. */
+    .header-actions .plan-dropdown,
+    .header-actions .import-dropdown {
+        position: static;
+        width: 100%;
+        right: auto;
+        top: auto;
+        margin-top: 10px;
     }
 }
 
@@ -200,6 +253,13 @@ html, body {
     text-decoration: none;
     white-space: nowrap;
     min-height: 36px;
+}
+
+/* Ensure the mobile "Menu" button never shows on desktop (overrides .btn display). */
+@media (min-width: 641px) {
+    .header-more {
+        display: none;
+    }
 }
 
 .btn-primary {
@@ -366,6 +426,28 @@ html, body {
     gap: 12px;
     margin-bottom: 12px;
     flex-wrap: nowrap;
+}
+
+.control-row.control-row-labels {
+    margin-top: -4px;
+    margin-bottom: 8px;
+}
+
+.control-col-label {
+    flex: 1 1 0;
+    min-width: 0;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--text-secondary);
+    opacity: 0.85;
+    text-transform: none;
+}
+
+@media (max-width: 900px) {
+    .control-row.control-row-labels {
+        display: none;
+    }
 }
 
 .control-row .btn {
@@ -793,6 +875,7 @@ html, body {
     display: flex;
     gap: 12px;
     align-items: center;
+    width: 100%;
 }
 
 .import-file {
@@ -800,7 +883,9 @@ html, body {
     border-radius: var(--radius-sm);
     background: var(--bg-card);
     color: var(--text-primary);
-    max-width: 200px; /* Limit width to prevent overflow */
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none;
 }
 
 /* shared divider for dropdown panels */
@@ -1423,14 +1508,6 @@ html, body {
         width: 350px;
     }
 
-    .header {
-        padding: 0 16px;
-        height: 5%;
-    }
-
-    .header-title {
-        font-size: 1.25rem;
-    }
     .footer{
         font-size: 0.65rem;
     }
@@ -1465,14 +1542,6 @@ html, body {
         width: 300px;
     }
 
-    .header {
-        padding: 0 16px;
-        height: 5%;
-    }
-
-    .header-title {
-        font-size: 1.25rem;
-    }
     .footer{
         font-size: 0.40rem;
     }
@@ -1841,6 +1910,20 @@ html, body {
     color: var(--text-secondary);
 }
 
+.course-details-modal {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.course-details-modal > * {
+    width: 100%;
+}
+
+.course-details-modal p {
+    margin-bottom: 0;
+}
+
 .course-details-meta {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1850,6 +1933,14 @@ html, body {
     border-radius: var(--radius-md);
     background: var(--bg-surface);
     margin: 10px 0 12px;
+}
+
+.course-details-modal .course-details-meta {
+    margin: 0;
+}
+
+.course-details-section p {
+    margin: 0;
 }
 
 .course-details-section h4 {
@@ -1867,6 +1958,12 @@ html, body {
     display: flex;
     justify-content: flex-end;
     margin-top: 12px;
+}
+
+@media (max-width: 520px) {
+    .course-details-meta {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* === SCHEDULER (CURRENT TERM) === */
@@ -2103,6 +2200,15 @@ html, body {
 .scheduler-sidebar-top {
     padding: 14px;
     border-bottom: 1px solid var(--border);
+}
+
+.scheduler-schedule-row {
+    margin-bottom: 10px;
+}
+
+.scheduler-schedule-toggle {
+    width: 100%;
+    justify-content: center;
 }
 
 .scheduler-search {
@@ -2773,7 +2879,7 @@ html, body {
     gap: 8px;
     margin: 4px 0;
     flex-shrink: 0;
-    max-width: 291px;
+    max-width: 100%;
 }
 
 .input_container input,
@@ -2785,31 +2891,33 @@ html, body {
     border-radius: var(--radius-md);
     background: var(--bg-card);
     color: var(--text-primary);
-    max-width: calc(var(--semester-width) * 0.7);
+    max-width: none;
+    width: 100%;
+    min-width: 0;
 }
 
 /* Wrapper for custom course dropdown */
 .input_container .input-wrapper {
-    max-width: calc(var(--semester-width) * 0.7);
+    max-width: none;
     position: relative;
     flex: 1;
 }
 
 /* Custom dropdown for course suggestions */
 .input_container .course-dropdown {
-    position: absolute;
+    position: fixed;
     top: auto;
-    bottom: 100%;
+    bottom: auto;
     left: 0;
-    right: 0;
-    margin-bottom: 4px;
+    right: auto;
+    margin: 0;
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-md);
-    max-height: 400px;
+    max-height: 320px;
     overflow-y: auto;
-    z-index: 100;
+    z-index: 2500;
     display: none;
 }
 

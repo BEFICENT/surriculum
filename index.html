@@ -93,55 +93,61 @@
             SUrriculum v3.0 (Beta)
         </a>
 
-        <div class="header-controls">
-            <div class="plan-container">
-                <button id="planToggle" class="btn btn-secondary btn-sm plan-toggle">
-                    <i class="fa-solid fa-layer-group"></i>&nbsp;<span id="activePlanName">Default Plan</span>
-                </button>
-
-                <div class="plan-dropdown" id="planDropdown">
-                    <h3 class="plan-title">Plans</h3>
-                    <div class="plan-list" aria-label="Plans list"></div>
-                    <div class="plan-divider"></div>
-                    <div class="plan-footer">
-                        <button id="addPlanBtn" class="btn btn-primary btn-sm" type="button">
-                            <i class="fa-solid fa-plus"></i>&nbsp;New plan
-                        </button>
-                        <button id="importPlanBtn2" class="btn btn-secondary btn-sm" type="button">
-                            <i class="fa-solid fa-file-arrow-up"></i>&nbsp;Import
-                        </button>
-                        <input type="file" id="planImportInput2" accept=".json" style="display:none" />
-                    </div>
-                </div>
-            </div>
-
-            <button id="themeToggle" class="btn btn-secondary btn-sm">
-                <i class="fa-solid fa-moon"></i> Theme
+        <div class="header-controls" id="headerControls">
+            <button id="headerMore" class="btn btn-secondary btn-sm header-more" type="button" aria-haspopup="true" aria-expanded="false">
+                <i class="fa-solid fa-ellipsis-vertical"></i>&nbsp;Menu
             </button>
 
-            <div class="import-container">
-                <button class="btn btn-secondary btn-sm import-toggle">
-                    <i class="fa-solid fa-folder-open"></i>&nbsp;Import Records
+            <div class="header-actions" id="headerActions">
+                <div class="plan-container">
+                    <button id="planToggle" class="btn btn-secondary btn-sm plan-toggle">
+                        <i class="fa-solid fa-layer-group"></i>&nbsp;<span id="activePlanName">Default Plan</span>
+                    </button>
+
+                    <div class="plan-dropdown" id="planDropdown">
+                        <h3 class="plan-title">Plans</h3>
+                        <div class="plan-list" aria-label="Plans list"></div>
+                        <div class="plan-divider"></div>
+                        <div class="plan-footer">
+                            <button id="addPlanBtn" class="btn btn-primary btn-sm" type="button">
+                                <i class="fa-solid fa-plus"></i>&nbsp;New plan
+                            </button>
+                            <button id="importPlanBtn2" class="btn btn-secondary btn-sm" type="button">
+                                <i class="fa-solid fa-file-arrow-up"></i>&nbsp;Import
+                            </button>
+                            <input type="file" id="planImportInput2" accept=".json" style="display:none" />
+                        </div>
+                    </div>
+                </div>
+
+                <button id="themeToggle" class="btn btn-secondary btn-sm">
+                    <i class="fa-solid fa-moon"></i> Theme
                 </button>
 
-                <div class="import-dropdown" id="importDropdown">
-                    <h3 class="import-title">Import Academic Records</h3>
-                    <div class="import-instructions">
-                        <p>Import your courses from Academic Records Summary:</p>
-                        <ol>
-                            <li>Go to SUIS → Student → Student Records → Academic Transcript and view your Academic Records Summary</li>
-                            <li>Save the page as <strong>HTML (Webpage, Complete)</strong> (preferred) or print to <strong>PDF</strong></li>
-                            <li>Upload the saved HTML or PDF file below</li>
-                        </ol>
-                        <p>Or alternatively, upload your YÖK Transcript PDF file <strong>(not preferred)</strong></p>
+                <div class="import-container">
+                    <button class="btn btn-secondary btn-sm import-toggle">
+                        <i class="fa-solid fa-folder-open"></i>&nbsp;Import Records
+                    </button>
 
-                    </div>
-                    <div class="import-controls">
-                        <input type="file" id="academicRecordsInput" class="import-file" accept=".html,.htm,.pdf">
-                        <button id="importAcademicRecords" class="btn btn-primary btn-sm">Import</button>
-                    </div>
-                    <div id="course-import-box" style="margin-top: 12px; padding: 12px; background: var(--bg-surface); border-radius: var(--radius-sm); font-size: 0.875rem; color: var(--text-primary);">
-                        <strong>Choose your major and double major before importing</strong>
+                    <div class="import-dropdown" id="importDropdown">
+                        <h3 class="import-title">Import Academic Records</h3>
+                        <div class="import-instructions">
+                            <p>Import your courses from Academic Records Summary:</p>
+                            <ol>
+                                <li>Go to SUIS → Student → Student Records → Academic Transcript and view your Academic Records Summary</li>
+                                <li>Save the page as <strong>HTML (Webpage, Complete)</strong> (preferred) or print to <strong>PDF</strong></li>
+                                <li>Upload the saved HTML or PDF file below</li>
+                            </ol>
+                            <p>Or alternatively, upload your YÖK Transcript PDF file <strong>(not preferred)</strong></p>
+
+                        </div>
+                        <div class="import-controls">
+                            <input type="file" id="academicRecordsInput" class="import-file" accept=".html,.htm,.pdf">
+                            <button id="importAcademicRecords" class="btn btn-primary btn-sm">Import</button>
+                        </div>
+                        <div id="course-import-box" style="margin-top: 12px; padding: 12px; background: var(--bg-surface); border-radius: var(--radius-sm); font-size: 0.875rem; color: var(--text-primary);">
+                            <strong>Choose your major and double major before importing</strong>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -168,6 +174,10 @@
 
             <div class="sidebar-content">
                 <div class="control-group">
+                    <div class="control-row control-row-labels" aria-hidden="true">
+                        <div class="control-col-label">Program</div>
+                        <div class="control-col-label">Admit Term</div>
+                    </div>
                     <div class="control-row">
                         <select class="select-control change_major"></select>
                         <select class="select-control entryTerm"></select>
@@ -257,7 +267,7 @@
 
                 <div class="control-group">
                     <div class="control-row toggle-row">
-                        <span class="toggle-text" id="sortByScoreLabel">Sort based on score</span>
+                        <span class="toggle-text" id="sortByScoreLabel">Smart Sort</span>
                         <label class="toggle-switch">
                             <input type="checkbox" id="sortByScoreToggle">
                             <span class="toggle-slider"></span>
@@ -301,7 +311,7 @@
 
     <!-- Footer -->
     <footer class="footer">
-        <p>Always verify the graduation requirements yourself. For any issues you spot, send an e-mail to: bilal.gebenoglu@sabanciuniv.edu</p>
+        <p>Always verify the graduation requirements yourself. Do not forget to enter your admit term. For any issues you spot, send an e-mail to: bilal.gebenoglu@sabanciuniv.edu</p>
     </footer>
 </div>
 

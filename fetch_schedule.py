@@ -141,7 +141,9 @@ def _parse_sections_from_listing(html: str) -> List[Dict[str, Any]]:
         course_part = parts[-2]  # "CS 201" or "CS 201R"
         crn = parts[-3]
         title = " - ".join(parts[:-3]).strip()
-        m = re.match(r"^([A-Z0-9]+)\s+([0-9]{3}[A-Z0-9]?)$", course_part.strip().upper())
+        # Course numbers are usually 3 digits (e.g., CS 201 / CS 201R) but some
+        # programs use 4–5 digits (e.g., CS 48004 in the dynamic schedule).
+        m = re.match(r"^([A-Z0-9]+)\s+([0-9]{3,5}[A-Z0-9]?)$", course_part.strip().upper())
         if not m:
             return None
         course_id = _norm_course_id(m.group(1), m.group(2))

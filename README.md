@@ -66,9 +66,9 @@ The “Add course” dropdown has several optional helpers:
 
 - **Hide taken courses**: hides courses you’ve already taken/added (and also respects currently selected sections in the scheduler for the current term).
 - **Only show offered courses in …**: filters the dropdown only for the **current term** (using `courses/all_coursepage_info.jsonl` coursepage history).
-- **Sort based on score**: sorts the dropdown by a per-course “suggestion score” (highest first).
+- **Smart Sort**: sorts the dropdown by a per-course “suggestion score” (highest first).
 
-### How “Sort based on score” works
+### How “Smart Sort” works
 
 Each course is scored based on how helpful it is for your selected programs, then the dropdown is sorted by that score.
 
@@ -145,7 +145,7 @@ Key features:
 - Optional helpers (toggles):
   - Hide taken courses
   - Show course details in the list (credits/type)
-  - Sort based on score (same scoring as the main planner)
+- Smart Sort (same scoring as the main planner)
   - Hover preview (shows a translucent preview of how a course would look if added)
   - Availability highlighting (taken / conflict-free / conflict-prone indicators)
 

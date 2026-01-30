@@ -63,7 +63,7 @@
   }
 
   function normalizeCourseId(code) {
-    return String(code || '').toUpperCase().replace(/\s+/g, '');
+    return String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   }
 
   function parseDaysToKeys(days) {
@@ -297,7 +297,15 @@
       (buttons || []).forEach((b) => {
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'btn ' + (b.variant === 'primary' ? 'btn-primary' : 'btn-secondary') + ' btn-sm';
+        const variant = (b && b.variant) ? String(b.variant) : 'secondary';
+        const cls = (variant === 'primary')
+          ? 'btn-primary'
+          : (variant === 'danger')
+            ? 'btn-danger'
+            : (variant === 'warning')
+              ? 'btn-warning'
+              : 'btn-secondary';
+        btn.className = 'btn ' + cls + ' btn-sm';
         btn.textContent = b.label;
         btn.addEventListener('click', () => cleanup({ action: b.action, value: b.value }));
         footer.appendChild(btn);
@@ -321,11 +329,132 @@
     });
   }
 
+  function createTextInputModal({ title, bodyHtml, initialValue, placeholder, okLabel }) {
+    return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay scheduler-picker-overlay';
+      overlay.setAttribute('role', 'dialog');
+      overlay.setAttribute('aria-modal', 'true');
+
+      const modal = document.createElement('div');
+      modal.className = 'modal app-modal scheduler-picker-modal';
+      modal.addEventListener('click', (e) => e.stopPropagation());
+
+      const header = document.createElement('div');
+      header.className = 'app-modal-header';
+
+      const h = document.createElement('h3');
+      h.className = 'app-modal-title';
+      h.textContent = title || '';
+
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.className = 'app-modal-close';
+      close.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+
+      const body = document.createElement('div');
+      body.className = 'app-modal-body';
+      body.innerHTML = bodyHtml || '';
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'select-control';
+      input.placeholder = placeholder || '';
+      input.value = String(initialValue || '');
+      input.style.width = '100%';
+      input.style.marginTop = bodyHtml ? '10px' : '0';
+      body.appendChild(input);
+
+      const footer = document.createElement('div');
+      footer.className = 'app-modal-footer';
+
+      const cleanup = (payload) => {
+        try { document.removeEventListener('keydown', onKeyDown); } catch (_) {}
+        try { overlay.remove(); } catch (_) {}
+        resolve(payload);
+      };
+
+      const okBtn = document.createElement('button');
+      okBtn.type = 'button';
+      okBtn.className = 'btn btn-primary btn-sm';
+      okBtn.textContent = okLabel || 'OK';
+      okBtn.addEventListener('click', () => cleanup({ action: 'ok', value: input.value }));
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.type = 'button';
+      cancelBtn.className = 'btn btn-secondary btn-sm';
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.addEventListener('click', () => cleanup({ action: 'cancel' }));
+
+      close.addEventListener('click', () => cleanup({ action: 'close' }));
+      overlay.addEventListener('click', () => cleanup({ action: 'cancel' }));
+
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          okBtn.click();
+        }
+      });
+
+      header.appendChild(h);
+      header.appendChild(close);
+      footer.appendChild(cancelBtn);
+      footer.appendChild(okBtn);
+      modal.appendChild(header);
+      modal.appendChild(body);
+      modal.appendChild(footer);
+      overlay.appendChild(modal);
+
+      try {
+        const root = document.fullscreenElement || document.body;
+        root.appendChild(overlay);
+      } catch (_) {
+        document.body.appendChild(overlay);
+      }
+
+      const onKeyDown = (e) => {
+        if (e.key === 'Escape') cleanup({ action: 'cancel' });
+      };
+      document.addEventListener('keydown', onKeyDown);
+
+      try { setTimeout(() => input.focus(), 0); } catch (_) {}
+    });
+  }
+
   function saveSchedulerState(termCode, state) {
     const key = `schedulerState_${termCode}`;
     try {
       const prev = loadSchedulerState(termCode);
-      const next = Object.assign({}, prev || {}, state || {});
+      const patch = (state && typeof state === 'object') ? state : {};
+      const next = Object.assign({}, prev || {}, patch || {});
+
+      // If we're using multi-schedule storage, store common patches onto the
+      // active schedule entry.
+      try {
+        const schedules = next.schedules && typeof next.schedules === 'object' ? next.schedules : null;
+        const items = schedules && schedules.items && typeof schedules.items === 'object' ? schedules.items : null;
+        const activeId = schedules && schedules.activeId ? String(schedules.activeId) : '';
+        const active = items && activeId && items[activeId] && typeof items[activeId] === 'object' ? items[activeId] : null;
+        if (active) {
+          if (Object.prototype.hasOwnProperty.call(patch, 'selected')) active.selected = patch.selected;
+          if (Object.prototype.hasOwnProperty.call(patch, 'blocked')) active.blocked = patch.blocked;
+          if (Object.prototype.hasOwnProperty.call(patch, 'ui')) active.ui = patch.ui;
+        }
+      } catch (_) {}
+
+      // Keep legacy top-level fields in sync for backwards compatibility.
+      try {
+        const schedules = next.schedules && typeof next.schedules === 'object' ? next.schedules : null;
+        const items = schedules && schedules.items && typeof schedules.items === 'object' ? schedules.items : null;
+        const activeId = schedules && schedules.activeId ? String(schedules.activeId) : '';
+        const active = items && activeId && items[activeId] && typeof items[activeId] === 'object' ? items[activeId] : null;
+        if (active) {
+          next.selected = active.selected || {};
+          next.blocked = Array.isArray(active.blocked) ? active.blocked : [];
+          next.ui = active.ui && typeof active.ui === 'object' ? active.ui : {};
+        }
+      } catch (_) {}
+
       planSetItem(key, JSON.stringify(next));
       return;
     } catch (_) {}
@@ -334,12 +463,75 @@
 
   function loadSchedulerState(termCode) {
     const key = `schedulerState_${termCode}`;
+    const ensure = (raw) => {
+      const base = (raw && typeof raw === 'object') ? Object.assign({}, raw) : {};
+      const legacySelected = (base.selected && typeof base.selected === 'object') ? base.selected : {};
+      const legacyBlocked = Array.isArray(base.blocked) ? base.blocked : [];
+      const legacyUi = (base.ui && typeof base.ui === 'object') ? base.ui : {};
+
+      const schedules = (base.schedules && typeof base.schedules === 'object') ? base.schedules : null;
+      if (!schedules || !schedules.items || typeof schedules.items !== 'object' || !Array.isArray(schedules.order) || !schedules.order.length) {
+        const id = 'default';
+        base.schedules = {
+          activeId: id,
+          order: [id],
+          items: {
+            [id]: { id, name: 'Default schedule', selected: legacySelected, blocked: legacyBlocked, ui: legacyUi },
+          },
+        };
+      } else {
+        // Ensure active exists and all entries have required fields.
+        try {
+          const items = base.schedules.items;
+          base.schedules.order = base.schedules.order.map(String).filter((x) => items[x]);
+          if (!base.schedules.order.length) {
+            const id = 'default';
+            base.schedules.order = [id];
+            items[id] = { id, name: 'Default schedule', selected: legacySelected, blocked: legacyBlocked, ui: legacyUi };
+          }
+          if (!base.schedules.activeId || !items[String(base.schedules.activeId)]) {
+            base.schedules.activeId = base.schedules.order[0];
+          }
+          for (let i = 0; i < base.schedules.order.length; i++) {
+            const sid = base.schedules.order[i];
+            const it = items[sid] && typeof items[sid] === 'object' ? items[sid] : (items[sid] = { id: sid });
+            if (!it.id) it.id = sid;
+            if (!it.name) it.name = sid === 'default' ? 'Default schedule' : 'Schedule';
+            if (!it.selected || typeof it.selected !== 'object') it.selected = {};
+            if (!Array.isArray(it.blocked)) it.blocked = [];
+            if (!it.ui || typeof it.ui !== 'object') it.ui = {};
+          }
+        } catch (_) {}
+      }
+
+      // Mirror active schedule back to legacy fields for existing code paths.
+      try {
+        const s = base.schedules;
+        const items = s.items;
+        const a = items[String(s.activeId)];
+        base.selected = a && a.selected && typeof a.selected === 'object' ? a.selected : {};
+        base.blocked = a && Array.isArray(a.blocked) ? a.blocked : [];
+        base.ui = a && a.ui && typeof a.ui === 'object' ? a.ui : {};
+      } catch (_) {
+        base.selected = legacySelected;
+        base.blocked = legacyBlocked;
+        base.ui = legacyUi;
+      }
+
+      return base;
+    };
     try {
       const raw = planGetItem(key);
       const parsed = raw ? JSON.parse(raw) : null;
-      if (parsed && typeof parsed === 'object') return parsed;
+      if (parsed && typeof parsed === 'object') {
+        const ensured = ensure(parsed);
+        try {
+          if (!parsed.schedules) planSetItem(key, JSON.stringify(ensured));
+        } catch (_) {}
+        return ensured;
+      }
     } catch (_) {}
-    return { selected: {}, blocked: [] }; // selected[course_id] = { course_id, crn }
+    return ensure({ selected: {}, blocked: [] }); // selected[course_id] = { course_id, crn }
   }
 
   function openSchedulerModal() {
@@ -559,34 +751,45 @@
       `<div class="scheduler-layout">` +
       `  <div class="scheduler-sidebar">` +
       `    <div class="scheduler-sidebar-top">` +
+      `      <div class="scheduler-schedule-row">` +
+      `        <button type="button" class="btn btn-secondary btn-sm scheduler-schedule-toggle" title="Switch schedule"><i class="fa-solid fa-layer-group"></i>&nbsp;<span class="scheduler-schedule-name">Default schedule</span></button>` +
+      `      </div>` +
       `      <div class="scheduler-search-row">` +
       `        <input class="scheduler-search" type="text" placeholder="Search courses (e.g., CS 201, programming)..." />` +
       `      </div>` +
       `      <div class="scheduler-hint">Adds sections with lecture/recitation/lab meeting times. Conflicts are highlighted.</div>` +
-      `      <div class="scheduler-controls">` +
-      `        <div class="scheduler-control control-row toggle-row">` +
-      `          <div class="toggle-text">Hide taken courses</div>` +
-      `          <label class="toggle-switch"><input class="scheduler-toggle-hide-taken" type="checkbox" /><span class="toggle-slider"></span></label>` +
-      `        </div>` +
-      `        <div class="scheduler-control control-row toggle-row">` +
-      `          <div class="toggle-text">Show course details</div>` +
-      `          <label class="toggle-switch"><input class="scheduler-toggle-details" type="checkbox" /><span class="toggle-slider"></span></label>` +
-      `        </div>` +
-      `        <div class="scheduler-control control-row toggle-row">` +
-      `          <div class="toggle-text">Sort based on score</div>` +
-      `          <label class="toggle-switch"><input class="scheduler-toggle-score" type="checkbox" /><span class="toggle-slider"></span></label>` +
-      `        </div>` +
-      `        <div class="scheduler-control control-row toggle-row">` +
-      `          <div class="toggle-text">Hover preview</div>` +
-      `          <label class="toggle-switch"><input class="scheduler-toggle-hover-preview" type="checkbox" /><span class="toggle-slider"></span></label>` +
-      `        </div>` +
-      `        <div class="scheduler-control control-row toggle-row">` +
-      `          <div class="toggle-text">Highlight course availability</div>` +
-      `          <label class="toggle-switch"><input class="scheduler-toggle-highlight" type="checkbox" /><span class="toggle-slider"></span></label>` +
-      `        </div>` +
-      `        <div class="scheduler-control control-row toggle-row">` +
-      `          <div class="toggle-text">Show blocked courses</div>` +
-      `          <label class="toggle-switch"><input class="scheduler-toggle-show-blocked" type="checkbox" /><span class="toggle-slider"></span></label>` +
+      `    </div>` +
+      `    <div class="scheduler-sidebar-section scheduler-collapsible" data-collapsible="options">` +
+      `      <button type="button" class="scheduler-collapsible-header">` +
+      `        <span>Options</span>` +
+      `        <i class="fa-solid fa-chevron-down"></i>` +
+      `      </button>` +
+      `      <div class="scheduler-collapsible-body">` +
+      `        <div class="scheduler-controls">` +
+      `          <div class="scheduler-control control-row toggle-row">` +
+      `            <div class="toggle-text">Hide taken courses</div>` +
+      `            <label class="toggle-switch"><input class="scheduler-toggle-hide-taken" type="checkbox" /><span class="toggle-slider"></span></label>` +
+      `          </div>` +
+      `          <div class="scheduler-control control-row toggle-row">` +
+      `            <div class="toggle-text">Show course details</div>` +
+      `            <label class="toggle-switch"><input class="scheduler-toggle-details" type="checkbox" /><span class="toggle-slider"></span></label>` +
+      `          </div>` +
+      `          <div class="scheduler-control control-row toggle-row">` +
+      `            <div class="toggle-text">Smart Sort</div>` +
+      `            <label class="toggle-switch"><input class="scheduler-toggle-score" type="checkbox" /><span class="toggle-slider"></span></label>` +
+      `          </div>` +
+      `          <div class="scheduler-control control-row toggle-row">` +
+      `            <div class="toggle-text">Hover preview</div>` +
+      `            <label class="toggle-switch"><input class="scheduler-toggle-hover-preview" type="checkbox" /><span class="toggle-slider"></span></label>` +
+      `          </div>` +
+      `          <div class="scheduler-control control-row toggle-row">` +
+      `            <div class="toggle-text">Highlight course availability</div>` +
+      `            <label class="toggle-switch"><input class="scheduler-toggle-highlight" type="checkbox" /><span class="toggle-slider"></span></label>` +
+      `          </div>` +
+      `          <div class="scheduler-control control-row toggle-row">` +
+      `            <div class="toggle-text">Show blocked courses</div>` +
+      `            <label class="toggle-switch"><input class="scheduler-toggle-show-blocked" type="checkbox" /><span class="toggle-slider"></span></label>` +
+      `          </div>` +
       `        </div>` +
       `      </div>` +
       `    </div>` +
@@ -879,8 +1082,8 @@
     onDocMouseUp = (e) => finishBlockDrag(e);
     document.addEventListener('mouseup', onDocMouseUp);
 
-    const state = loadSchedulerState(termCode);
-    const selected = state.selected && typeof state.selected === 'object' ? state.selected : {};
+    let state = loadSchedulerState(termCode);
+    let selected = state.selected && typeof state.selected === 'object' ? state.selected : {};
     let blocked = Array.isArray(state.blocked) ? state.blocked : [];
     let scheduleIndex = null;
     let coursePageInfoMap = null;
@@ -888,18 +1091,54 @@
     let orphanByCourse = {};  // course_id -> [base course_ids that require this course as coreq]
     let reverseCoreqIndex = null; // Map(coreq -> Set(baseCourse))
 
+    const scheduleBtn = body.querySelector('.scheduler-schedule-toggle');
+    const scheduleNameEl = body.querySelector('.scheduler-schedule-name');
+
+    const getActiveSchedule = (root) => {
+      try {
+        const s = root && root.schedules && typeof root.schedules === 'object' ? root.schedules : null;
+        const items = s && s.items && typeof s.items === 'object' ? s.items : null;
+        const activeId = s && s.activeId ? String(s.activeId) : '';
+        const it = items && activeId && items[activeId] ? items[activeId] : null;
+        if (it && typeof it === 'object') return it;
+      } catch (_) {}
+      return { id: 'default', name: 'Default schedule', selected: {}, blocked: [], ui: {} };
+    };
+
+    const saveSchedulerRoot = (root) => {
+      try {
+        const key = `schedulerState_${termCode}`;
+        planSetItem(key, JSON.stringify(root || {}));
+      } catch (_) {}
+    };
+
+    const refreshScheduleLabel = () => {
+      try {
+        if (!scheduleNameEl) return;
+        const active = getActiveSchedule(state);
+        scheduleNameEl.textContent = String(active && active.name ? active.name : 'Schedule');
+      } catch (_) {}
+    };
+    refreshScheduleLabel();
+
     // Collapsible sidebar sections (Current Term Plan / Selected Sections)
     const applyCollapse = (key, collapsed) => {
       const sec = body.querySelector(`.scheduler-collapsible[data-collapsible="${key}"]`);
       if (!sec) return;
       sec.classList.toggle('is-collapsed', !!collapsed);
     };
-    try {
-      const uiState = state.ui && typeof state.ui === 'object' ? state.ui : {};
-      applyCollapse('plan', !!uiState.planCollapsed);
-      applyCollapse('selected', !!uiState.selectedCollapsed);
-      applyCollapse('blocked', !!uiState.blockedCollapsed);
-    } catch (_) {}
+    const applyScheduleUi = () => {
+      try {
+        const root = state || loadSchedulerState(termCode);
+        const active = getActiveSchedule(root);
+        const uiState = active.ui && typeof active.ui === 'object' ? active.ui : {};
+        applyCollapse('options', !!uiState.optionsCollapsed);
+        applyCollapse('plan', !!uiState.planCollapsed);
+        applyCollapse('selected', !!uiState.selectedCollapsed);
+        applyCollapse('blocked', !!uiState.blockedCollapsed);
+      } catch (_) {}
+    };
+    applyScheduleUi();
 
     body.querySelectorAll('.scheduler-collapsible-header').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -907,12 +1146,15 @@
         if (!sec) return;
         sec.classList.toggle('is-collapsed');
         const key = sec.getAttribute('data-collapsible') || '';
-        const nextState = loadSchedulerState(termCode);
-        nextState.ui = nextState.ui && typeof nextState.ui === 'object' ? nextState.ui : {};
-        if (key === 'plan') nextState.ui.planCollapsed = sec.classList.contains('is-collapsed');
-        if (key === 'selected') nextState.ui.selectedCollapsed = sec.classList.contains('is-collapsed');
-        if (key === 'blocked') nextState.ui.blockedCollapsed = sec.classList.contains('is-collapsed');
-        saveSchedulerState(termCode, nextState);
+        const root = loadSchedulerState(termCode);
+        const active = getActiveSchedule(root);
+        active.ui = active.ui && typeof active.ui === 'object' ? active.ui : {};
+        if (key === 'options') active.ui.optionsCollapsed = sec.classList.contains('is-collapsed');
+        if (key === 'plan') active.ui.planCollapsed = sec.classList.contains('is-collapsed');
+        if (key === 'selected') active.ui.selectedCollapsed = sec.classList.contains('is-collapsed');
+        if (key === 'blocked') active.ui.blockedCollapsed = sec.classList.contains('is-collapsed');
+        // Persist only UI state (stored on the active schedule).
+        saveSchedulerState(termCode, { ui: active.ui });
       });
     });
 
@@ -1381,11 +1623,38 @@
       }
     };
 
-    const isTakenCourse = (courseId) => {
+    // In the scheduler, "taken" is treated as "already present anywhere in the
+    // user's plan". We keep current-term planned/selected courses visible via
+    // keepVisible so users can still schedule them.
+    let takenAnySet = null; // Set(courseId) populated per renderResults
+    const computeTakenAnySet = () => {
       try {
         const cur = (typeof window !== 'undefined') ? window.curriculum : null;
+        if (!cur || !Array.isArray(cur.semesters)) return null;
+        const out = new Set();
+        for (let i = 0; i < cur.semesters.length; i++) {
+          const sem = cur.semesters[i];
+          if (!sem || !Array.isArray(sem.courses)) continue;
+          for (let j = 0; j < sem.courses.length; j++) {
+            const cc = sem.courses[j];
+            const cid = normalizeCourseId(cc && cc.code);
+            if (cid) out.add(cid);
+          }
+        }
+        return out;
+      } catch (_) {
+        return null;
+      }
+    };
+
+    const isTakenCourse = (courseId) => {
+      try {
+        const cid = normalizeCourseId(courseId);
+        if (!cid) return false;
+        if (takenAnySet instanceof Set) return takenAnySet.has(cid);
+        const cur = (typeof window !== 'undefined') ? window.curriculum : null;
         if (!cur || typeof cur.hasCourse !== 'function') return false;
-        return !!cur.hasCourse(courseId);
+        return !!cur.hasCourse(cid);
       } catch (_) {
         return false;
       }
@@ -1538,7 +1807,6 @@
           for (let si = 0; si < secs.length; si++) {
             const sec = secs[si];
             const intervals = getSectionIntervals(sec);
-            if (!intervals.length) continue;
             let extra = 0;
             const addedByDay = {};
             for (let j = 0; j < intervals.length; j++) {
@@ -1750,8 +2018,8 @@
                 `<div class="scheduler-coreq-row${missing ? ' is-missing' : ''}">` +
                 `<div class="scheduler-coreq-label">${missing ? '<span class="scheduler-coreq-badge">Required</span>' : ''}${escapeHtml(meta)}</div>` +
                 `<div class="scheduler-coreq-actions">` +
-                `<button class="btn btn-secondary btn-sm scheduler-pick" type="button" data-course="${escapeHtml(cid)}">${btnText}</button>` +
                 `<button class="btn btn-secondary btn-sm scheduler-open-section" type="button" data-course="${escapeHtml(cid)}"${sel && sel.crn ? ` data-crn="${escapeHtml(sel.crn)}"` : ''}>Open</button>` +
+                `<button class="btn btn-secondary btn-sm scheduler-pick" type="button" data-course="${escapeHtml(cid)}">${btnText}</button>` +
                 (sel ? `<button class="scheduler-remove btn btn-secondary btn-sm" type="button" data-course="${escapeHtml(cid)}">Remove</button>` : '') +
                 `</div>` +
                 `</div>`
@@ -1764,17 +2032,17 @@
         return (
           `<div class="scheduler-selected-item${(miss.length || orphan.length) ? ' is-missing-coreq' : ''}" data-course="${escapeHtml(courseId)}">` +
           `<div class="scheduler-selected-label"><span class="scheduler-color-dot" style="background:${escapeHtml(hslFromString(courseId))}"></span>${escapeHtml(label)}</div>` +
-          `<div class="scheduler-selected-actions-row">` +
-          `<button type="button" class="btn btn-secondary btn-sm scheduler-pick" data-course="${escapeHtml(courseId)}">Change</button>` +
-          (url ? `<button type="button" class="btn btn-secondary btn-sm scheduler-open-section" data-crn="${escapeHtml(s && s.crn ? s.crn : '')}">Open</button>` : '') +
-          ((miss.length || orphan.length) ? `<button type="button" class="btn btn-warning btn-sm scheduler-fix-coreq" data-course="${escapeHtml(courseId)}">Fix</button>` : '') +
-          `<button type="button" class="scheduler-remove btn btn-secondary btn-sm" data-course="${escapeHtml(courseId)}">Remove</button>` +
-          `</div>` +
           (instr ? `<div class="scheduler-selected-meta"><span class="muted">Instructor:</span> ${escapeHtml(instr)}</div>` : '') +
           detailLine +
           (miss.length ? `<div class="scheduler-selected-warning"><span class="muted">Missing coreq:</span> ${escapeHtml(miss.join(', '))}</div>` : '') +
           (orphan.length ? `<div class="scheduler-selected-warning"><span class="muted">Looks like a coreq for:</span> ${escapeHtml(orphan.join(', '))}</div>` : '') +
           coreqHtml +
+          `<div class="scheduler-selected-actions-row">` +
+          `<button type="button" class="btn btn-secondary btn-sm scheduler-open-section" data-course="${escapeHtml(courseId)}"${s && s.crn ? ` data-crn="${escapeHtml(s.crn)}"` : ''}>Open</button>` +
+          `<button type="button" class="btn btn-secondary btn-sm scheduler-pick" data-course="${escapeHtml(courseId)}">Change</button>` +
+          ((miss.length || orphan.length) ? `<button type="button" class="btn btn-warning btn-sm scheduler-fix-coreq" data-course="${escapeHtml(courseId)}">Fix</button>` : '') +
+          `<button type="button" class="scheduler-remove btn btn-secondary btn-sm" data-course="${escapeHtml(courseId)}">Remove</button>` +
+          `</div>` +
           `</div>`
         );
       }).join('');
@@ -2082,8 +2350,41 @@
     };
 
     const renderResults = (scheduleIndex, query) => {
-      const q = String(query || '').toLowerCase().trim();
+      const qRaw = String(query || '').trim();
+      const q = qRaw.toLowerCase();
       lastQuery = q;
+
+      // Smarter search: detect when the user is typing a course code/subject
+      // and avoid matching substrings in titles (e.g., "cs" shouldn't match
+      // "statistiCS").
+      const queryMode = (() => {
+        try {
+          const raw = qRaw;
+          const code = normalizeCourseId(raw); // upper alnum
+          if (!raw || !code) return { mode: 'text', subject: '', codePrefix: '', extra: '' };
+
+          // Try to detect patterns like "CS", "CS 301", "CS301", "CS-301", or
+          // "CS 301 intro".
+          const m = raw.match(/^\s*([A-Za-z]{2,5})\s*[-]?\s*([0-9]{1,5}[A-Za-z0-9]?)?(.*)$/);
+          const subj = m ? String(m[1] || '').toUpperCase() : '';
+          const numb = m && m[2] ? String(m[2] || '').toUpperCase() : '';
+          const rest = m ? String(m[3] || '').trim().toLowerCase() : '';
+
+          if (subj && !numb && /^[A-Z]{2,5}$/.test(subj) && /^[A-Za-z\\s-]+$/.test(raw)) {
+            return { mode: 'subject', subject: subj, codePrefix: subj, extra: '' };
+          }
+          if (subj && numb && /^[A-Z]{2,5}$/.test(subj) && /^[0-9]{1,5}[A-Z0-9]?$/.test(numb)) {
+            return { mode: 'code', subject: subj, codePrefix: subj + numb, extra: rest };
+          }
+          return { mode: 'text', subject: '', codePrefix: '', extra: '' };
+        } catch (_) {
+          return { mode: 'text', subject: '', codePrefix: '', extra: '' };
+        }
+      })();
+
+      // Recompute taken courses set for this render pass so filtering and
+      // availability highlighting stays accurate as the user edits the plan.
+      try { takenAnySet = computeTakenAnySet(); } catch (_) { takenAnySet = null; }
 
       // Ensure we have a reverse-coreq index so we can group recitations/labs
       // under their main course cards and avoid listing them separately.
@@ -2131,6 +2432,11 @@
           if (!entry || !entry.course_id) return;
           const id = normalizeCourseId(entry.course_id);
           if (!id) return;
+          try {
+            if (shouldHideTaken()) {
+              if (isTakenCourse(id) && !keepVisible.has(id)) return;
+            }
+          } catch (_) {}
           if (!itemsById.has(id)) itemsById.set(id, entry);
         } catch (_) {}
       };
@@ -2138,8 +2444,22 @@
       for (const entry of scheduleIndex.values()) {
         const id = entry.course_id;
         const title = entry.title || '';
-        const hay = (id + ' ' + title).toLowerCase();
-        if (q && !hay.includes(q)) continue;
+
+        if (q) {
+          const cid = normalizeCourseId(id);
+          if (queryMode.mode === 'subject') {
+            if (!cid || !cid.startsWith(queryMode.codePrefix)) continue;
+          } else if (queryMode.mode === 'code') {
+            if (!cid || !cid.startsWith(queryMode.codePrefix)) continue;
+            if (queryMode.extra) {
+              const t = String(title || '').toLowerCase();
+              if (!t.includes(queryMode.extra)) continue;
+            }
+          } else {
+            const hay = (id + ' ' + title).toLowerCase();
+            if (!hay.includes(q)) continue;
+          }
+        }
 
         // Reduce clutter: never list corequisite-only courses as their own
         // cards. Instead, if the user searches for them, show their parent
@@ -2163,8 +2483,8 @@
 
         try {
           if (shouldHideTaken()) {
-            const cur = (typeof window !== 'undefined') ? window.curriculum : null;
-            if (cur && typeof cur.hasCourse === 'function' && cur.hasCourse(id) && !keepVisible.has(normalizeCourseId(id))) continue;
+            const cid = normalizeCourseId(id);
+            if (isTakenCourse(cid) && !keepVisible.has(cid)) continue;
           }
         } catch (_) {}
 
@@ -2259,8 +2579,8 @@
                   `<div class="scheduler-coreq-row${missing ? ' is-missing' : ''}">` +
                   `<div class="scheduler-coreq-label">${missing ? '<span class="scheduler-coreq-badge">Required</span>' : ''}${escapeHtml(meta)}</div>` +
                   `<div class="scheduler-coreq-actions">` +
-                  `<button class="btn btn-secondary btn-sm scheduler-pick" type="button" data-course="${escapeHtml(cid)}">${btnText}</button>` +
                   `<button class="btn btn-secondary btn-sm scheduler-open-section" type="button" data-course="${escapeHtml(cid)}"${sel && sel.crn ? ` data-crn="${escapeHtml(sel.crn)}"` : ''}>Open</button>` +
+                  `<button class="btn btn-secondary btn-sm scheduler-pick" type="button" data-course="${escapeHtml(cid)}">${btnText}</button>` +
                   `</div>` +
                   `</div>`
                 );
@@ -2315,8 +2635,8 @@
               )
               : '') +
             `<div class="scheduler-course-actions">` +
+            `<button class="btn btn-secondary btn-sm scheduler-open-section" type="button" data-course="${escapeHtml(e.course_id)}"${pick && pick.crn ? ` data-crn="${escapeHtml(pick.crn)}"` : ''}>Open</button>` +
             `<button class="btn btn-secondary btn-sm scheduler-pick" type="button" data-course="${escapeHtml(e.course_id)}">${already ? 'Change section' : 'Pick section'}</button>` +
-            `<button class="btn btn-secondary btn-sm scheduler-open-section" type="button" data-course="${escapeHtml(e.course_id)}"${url ? ` data-crn="${escapeHtml(pick.crn)}"` : ''}>Open</button>` +
             `</div>` +
             coreqHtml +
             `</div>`
@@ -2965,6 +3285,149 @@
         const enabled = !!showBlockedToggle.checked;
         try { localStorage.setItem('schedulerShowBlockedCourses', enabled ? 'true' : 'false'); } catch (_) {}
         try { if (scheduleIndex) renderResults(scheduleIndex, lastQuery); } catch (_) {}
+      });
+    }
+
+    // Multiple schedules (within the current term, per saved plan).
+    const newScheduleId = () => `sched_${Date.now().toString(16)}_${Math.random().toString(16).slice(2)}`;
+    const maxSchedules = 10;
+
+    const applyActiveScheduleFromRoot = async (root) => {
+      state = root || loadSchedulerState(termCode);
+      const active = getActiveSchedule(state);
+      selected = active.selected && typeof active.selected === 'object' ? active.selected : {};
+      blocked = Array.isArray(active.blocked) ? active.blocked : [];
+
+      // Mirror to legacy fields for other code paths.
+      try { state.selected = selected; } catch (_) {}
+      try { state.blocked = blocked; } catch (_) {}
+      try { state.ui = active.ui && typeof active.ui === 'object' ? active.ui : {}; } catch (_) {}
+      saveSchedulerRoot(state);
+
+      refreshScheduleLabel();
+      applyScheduleUi();
+      try { renderBlocked(); } catch (_) {}
+      try { await recomputeMissingCoreqs(); } catch (_) {}
+      try { renderSelected(); } catch (_) {}
+      try {
+        if (scheduleIndex) {
+          renderGrid(scheduleIndex);
+          renderResults(scheduleIndex, lastQuery);
+        }
+      } catch (_) {}
+    };
+
+    const openScheduleManager = async () => {
+      const ui = (typeof window !== 'undefined') ? window.uiModal : null;
+      while (true) {
+        const root = loadSchedulerState(termCode);
+        const schedules = root.schedules && typeof root.schedules === 'object' ? root.schedules : null;
+        const items = schedules && schedules.items && typeof schedules.items === 'object' ? schedules.items : {};
+        const order = Array.isArray(schedules && schedules.order) ? schedules.order.slice() : [];
+        const activeId = schedules && schedules.activeId ? String(schedules.activeId) : (order[0] || 'default');
+        const active = items[activeId] || getActiveSchedule(root);
+
+        const listItems = order.map((sid) => {
+          const it = items[sid] || {};
+          const selCount = it && it.selected && typeof it.selected === 'object' ? Object.keys(it.selected).length : 0;
+          const blkCount = Array.isArray(it.blocked) ? it.blocked.length : 0;
+          const meta = [];
+          if (selCount) meta.push(`${selCount} selected`);
+          if (blkCount) meta.push(`${blkCount} blocked`);
+          if (String(sid) === activeId) meta.unshift('Active');
+          return { action: 'switch', value: String(sid), label: String(it.name || sid), subLabel: meta.length ? meta.join(' • ') : '' };
+        });
+
+        const res = await createPickerModal({
+          title: 'Schedules',
+          bodyHtml: '<p>Save multiple scheduler setups for this term (different section combinations / blocked hours).</p>',
+          listItems,
+          buttons: [
+            { action: 'new', label: 'New', variant: 'primary' },
+            { action: 'dup', label: 'Duplicate', variant: 'secondary' },
+            { action: 'rename', label: 'Rename', variant: 'secondary' },
+            { action: 'delete', label: 'Delete', variant: 'danger' },
+            { action: 'close', label: 'Close', variant: 'secondary' },
+          ],
+        });
+
+        if (!res || !res.action || res.action === 'close' || res.action === 'cancel') return;
+
+        if (res.action === 'switch') {
+          const targetId = String(res.value || '');
+          if (!targetId || !items[targetId]) continue;
+          try { root.schedules.activeId = targetId; } catch (_) {}
+          await applyActiveScheduleFromRoot(root);
+          continue;
+        }
+
+        if (res.action === 'new' || res.action === 'dup') {
+          if (order.length >= maxSchedules) {
+            if (ui && typeof ui.alert === 'function') {
+              ui.alert('Schedule limit', `<p>You can have up to <strong>${maxSchedules}</strong> schedules per term.</p>`);
+            }
+            continue;
+          }
+          const id = newScheduleId();
+          const copy = (res.action === 'dup');
+          const next = {
+            id,
+            name: copy ? `${String(active && active.name ? active.name : 'Schedule')} (copy)` : 'New schedule',
+            selected: copy && active && active.selected ? JSON.parse(JSON.stringify(active.selected)) : {},
+            blocked: copy && Array.isArray(active && active.blocked) ? JSON.parse(JSON.stringify(active.blocked)) : [],
+            ui: copy && active && active.ui ? JSON.parse(JSON.stringify(active.ui)) : (active && active.ui ? JSON.parse(JSON.stringify(active.ui)) : {}),
+          };
+          try { items[id] = next; } catch (_) {}
+          try { root.schedules.order.push(id); } catch (_) {}
+          try { root.schedules.activeId = id; } catch (_) {}
+          await applyActiveScheduleFromRoot(root);
+          continue;
+        }
+
+        if (res.action === 'rename') {
+          const promptRes = await createTextInputModal({
+            title: 'Rename schedule',
+            bodyHtml: '<p>Choose a name for this schedule.</p>',
+            initialValue: String(active && active.name ? active.name : ''),
+            placeholder: 'Schedule name',
+            okLabel: 'Rename',
+          });
+          const name = (promptRes && promptRes.action === 'ok') ? String(promptRes.value || '').trim() : '';
+          if (!name) continue;
+          try { items[activeId].name = name; } catch (_) {}
+          saveSchedulerRoot(root);
+          refreshScheduleLabel();
+          continue;
+        }
+
+        if (res.action === 'delete') {
+          if (order.length <= 1) {
+            if (ui && typeof ui.alert === 'function') {
+              ui.alert('Cannot delete', '<p>You must keep at least one schedule.</p>');
+            }
+            continue;
+          }
+          const ok = await createPickerModal({
+            title: 'Delete schedule',
+            bodyHtml: `<p>Delete <strong>${escapeHtml(String(active && active.name ? active.name : 'this schedule'))}</strong>?</p>`,
+            buttons: [
+              { action: 'cancel', label: 'Cancel', variant: 'secondary' },
+              { action: 'delete', label: 'Delete', variant: 'danger' },
+            ],
+          });
+          if (!ok || ok.action !== 'delete') continue;
+          try { delete items[activeId]; } catch (_) {}
+          try { root.schedules.order = order.filter(x => String(x) !== String(activeId)); } catch (_) {}
+          try { root.schedules.activeId = String(root.schedules.order[0] || 'default'); } catch (_) {}
+          await applyActiveScheduleFromRoot(root);
+          continue;
+        }
+      }
+    };
+
+    if (scheduleBtn) {
+      scheduleBtn.addEventListener('click', async () => {
+        try { await openScheduleManager(); } catch (_) {}
       });
     }
 

@@ -87,6 +87,50 @@ function dynamic_click(e, curriculum, course_data)
         // Build array of course options for filtering
         let options = getCoursesList(course_data);
 
+        // Floating dropdown positioning (fixed) so it can render above the input
+        // without being clipped by scroll containers or hidden under headers.
+        const positionDropdown = () => {
+            try {
+                if (!dropdown || dropdown.style.display === 'none') return;
+                const r = input.getBoundingClientRect();
+                const margin = 6;
+                const viewportW = window.innerWidth || document.documentElement.clientWidth || 0;
+                const viewportH = window.innerHeight || document.documentElement.clientHeight || 0;
+
+                const width = Math.max(160, Math.round(r.width || 0));
+                const left = Math.max(8, Math.min(Math.round(r.left || 0), Math.max(8, viewportW - width - 8)));
+
+                // Always prefer above (as requested).
+                const spaceAbove = Math.max(0, Math.round(r.top || 0) - margin);
+                const maxH = Math.max(120, Math.min(320, spaceAbove));
+
+                dropdown.style.left = left + 'px';
+                dropdown.style.width = width + 'px';
+                dropdown.style.right = 'auto';
+                dropdown.style.top = 'auto';
+                dropdown.style.bottom = Math.max(8, Math.round(viewportH - (r.top || 0) + margin)) + 'px';
+                dropdown.style.maxHeight = maxH + 'px';
+            } catch (_) {}
+        };
+
+        const cleanupDropdown = (() => {
+            const ac = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+            const on = (target, evt, fn, opts) => {
+                try {
+                    if (ac && ac.signal) {
+                        target.addEventListener(evt, fn, Object.assign({}, opts || {}, { signal: ac.signal }));
+                    } else {
+                        target.addEventListener(evt, fn, opts || false);
+                    }
+                } catch (_) {}
+            };
+            const cleanup = () => {
+                try { dropdown.style.display = 'none'; } catch (_) {}
+                try { if (ac) ac.abort(); } catch (_) {}
+            };
+            return { on, cleanup };
+        })();
+
         // Optional scoring model for sorting course suggestions.
         // Uses the shared helper so the scheduler and planner stay in sync.
         const scoreOptions = (() => {
@@ -178,6 +222,7 @@ function dynamic_click(e, curriculum, course_data)
                 dropdown.appendChild(opt);
             });
             dropdown.style.display = filtered.length ? 'block' : 'none';
+            positionDropdown();
             activeIndex = -1;
         }
 
@@ -194,6 +239,24 @@ function dynamic_click(e, curriculum, course_data)
         input.addEventListener('blur', () => {
             setTimeout(() => { dropdown.style.display = 'none'; }, 100);
         });
+
+        // Keep dropdown anchored while the user scrolls/resizes (including
+        // horizontal scrolling of the board).
+        try {
+            const scrollParent = input.closest('.semester') || null;
+            const boardScrollParent = (semesterContainer && semesterContainer.closest)
+                ? semesterContainer.closest('.board')
+                : (input.closest ? input.closest('.board') : null);
+            const extraBoard = (!boardScrollParent && typeof document !== 'undefined')
+                ? document.querySelector('.board')
+                : null;
+            const handler = () => { try { positionDropdown(); } catch (_) {} };
+            cleanupDropdown.on(window, 'resize', handler);
+            cleanupDropdown.on(window, 'scroll', handler, { passive: true });
+            if (scrollParent) cleanupDropdown.on(scrollParent, 'scroll', handler, { passive: true });
+            if (boardScrollParent) cleanupDropdown.on(boardScrollParent, 'scroll', handler, { passive: true });
+            if (extraBoard) cleanupDropdown.on(extraBoard, 'scroll', handler, { passive: true });
+        } catch (_) {}
 
         input.addEventListener('keydown', function(evt){
             const items = dropdown.querySelectorAll('.course-option');
@@ -233,6 +296,17 @@ function dynamic_click(e, curriculum, course_data)
         enter.classList.add("enter");
         let delete_ac = document.createElement("div");
         delete_ac.classList.add("delete_add_course");
+
+        // Ensure we remove the floating dropdown listeners even if the global
+        // click handler removes the input container.
+        try { cleanupDropdown.on(enter, 'click', () => cleanupDropdown.cleanup()); } catch (_) {}
+        try {
+            delete_ac.addEventListener('click', (evt) => {
+                try { cleanupDropdown.cleanup(); } catch (_) {}
+                try { input_container.remove(); } catch (_) {}
+                evt.stopPropagation();
+            });
+        } catch (_) {}
 
         wrapper.appendChild(input);
         wrapper.appendChild(dropdown);
@@ -547,21 +621,21 @@ function dynamic_click(e, curriculum, course_data)
                     )
                     : '<div class="course-details-section"><h4>Last Offered</h4><p>Not available.</p></div>';
 
-                const body =
-                    '<div class="course-details">' +
-                    `<p><strong>${escapeHtml(courseCode)}</strong>${title ? ` — ${escapeHtml(title)}` : ''}</p>` +
-                    '<div class="course-details-meta">' +
-                    `<div><span class="muted">SU Credits:</span> ${escapeHtml(fmt(su))}</div>` +
-                    `<div><span class="muted">ECTS:</span> ${escapeHtml(fmt(ects))}</div>` +
-                    (bs != null ? `<div><span class="muted">Basic Science:</span> ${escapeHtml(fmt(bs))}</div>` : '') +
-                    (eng != null ? `<div><span class="muted">Engineering:</span> ${escapeHtml(fmt(eng))}</div>` : '') +
-                    '</div>' +
-                    '<div class="course-details-section"><h4>Prerequisites</h4><p>' + (prereq ? escapeHtml(prereq) : 'None') + '</p></div>' +
-                    '<div class="course-details-section"><h4>Corequisites</h4><p>' + (coreq ? escapeHtml(coreq) : 'None') + '</p></div>' +
-                    offeredHtml +
-                    descHtml +
-                    (url ? `<div class="course-details-actions"><a class="btn btn-primary" href="${escapeHtml(url)}" target="_blank" rel="noopener">Open course page</a></div>` : '') +
-                    '</div>';
+                 const body =
+                     '<div class="course-details-modal">' +
+                     `<p><strong>${escapeHtml(courseCode)}</strong>${title ? ` — ${escapeHtml(title)}` : ''}</p>` +
+                     '<div class="course-details-meta">' +
+                     `<div><span class="muted">SU Credits:</span> ${escapeHtml(fmt(su))}</div>` +
+                     `<div><span class="muted">ECTS:</span> ${escapeHtml(fmt(ects))}</div>` +
+                     (bs != null ? `<div><span class="muted">Basic Science:</span> ${escapeHtml(fmt(bs))}</div>` : '') +
+                     (eng != null ? `<div><span class="muted">Engineering:</span> ${escapeHtml(fmt(eng))}</div>` : '') +
+                     '</div>' +
+                     '<div class="course-details-section"><h4>Prerequisites</h4><p>' + (prereq ? escapeHtml(prereq) : 'None') + '</p></div>' +
+                     '<div class="course-details-section"><h4>Corequisites</h4><p>' + (coreq ? escapeHtml(coreq) : 'None') + '</p></div>' +
+                     offeredHtml +
+                     descHtml +
+                     (url ? `<div class="course-details-actions"><a class="btn btn-primary" href="${escapeHtml(url)}" target="_blank" rel="noopener">Open course page</a></div>` : '') +
+                     '</div>';
 
                 ui.alert('Course Details', body);
             } catch (err) {
