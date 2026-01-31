@@ -2036,13 +2036,13 @@
           detailLine +
           (miss.length ? `<div class="scheduler-selected-warning"><span class="muted">Missing coreq:</span> ${escapeHtml(miss.join(', '))}</div>` : '') +
           (orphan.length ? `<div class="scheduler-selected-warning"><span class="muted">Looks like a coreq for:</span> ${escapeHtml(orphan.join(', '))}</div>` : '') +
-          coreqHtml +
           `<div class="scheduler-selected-actions-row">` +
           `<button type="button" class="btn btn-secondary btn-sm scheduler-open-section" data-course="${escapeHtml(courseId)}"${s && s.crn ? ` data-crn="${escapeHtml(s.crn)}"` : ''}>Open</button>` +
           `<button type="button" class="btn btn-secondary btn-sm scheduler-pick" data-course="${escapeHtml(courseId)}">Change</button>` +
           ((miss.length || orphan.length) ? `<button type="button" class="btn btn-warning btn-sm scheduler-fix-coreq" data-course="${escapeHtml(courseId)}">Fix</button>` : '') +
           `<button type="button" class="scheduler-remove btn btn-secondary btn-sm" data-course="${escapeHtml(courseId)}">Remove</button>` +
           `</div>` +
+          coreqHtml +
           `</div>`
         );
       }).join('');

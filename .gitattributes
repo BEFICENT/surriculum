@@ -1,8 +1,14 @@
-# Mark specific file as generated
-Academic\040Records\040Summary_ex.html linguist-generated=true
+# NOTE: `.gitattributes` does NOT stop git from tracking files.
+# It only affects attributes (e.g., GitHub Linguist language stats / generated files).
 
-# Mark entire directories as generated
-Degree\040Detail\040Pages\040(for\040inspect)/* linguist-generated=true
-Pre-Conversion\040Files/* linguist-generated=true
-minor_htmls/* linguist-generated=true
-updated_htmls/* linguist-generated=true
+# Mark example/scraped HTML artifacts as generated so GitHub:
+# - excludes them from language stats
+# - collapses them in PR diffs (generated files can be hidden)
+
+Academic*Records*Summary_ex.html linguist-generated=true
+
+Degree*Detail*Pages*inspect*/** linguist-generated=true
+Pre-Conversion*Files/** linguist-generated=true
+Example*Files/** linguist-generated=true
+minor_htmls/** linguist-generated=true
+updated_htmls/** linguist-generated=true
