@@ -105,6 +105,7 @@
 {"Major": "BIO", "Code": "446", "Course_Name": "Biology of Aging", "ECTS": "6", "Engineering": 1.0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "447", "Course_Name": "Plant Breeding", "ECTS": "5", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "452", "Course_Name": "Immunology", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
+{"Major": "BIO", "Code": "460", "Course_Name": "Evolution", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "467", "Course_Name": "Signal Transduction", "ECTS": "6", "Engineering": 1.0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "48006", "Course_Name": "Special Topics in BIO: Gene Regulation and Disease", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "CHEM", "Code": "301", "Course_Name": "Inorganic Chemistry", "ECTS": "6", "Engineering": 1.0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
@@ -324,7 +325,6 @@
 {"Major": "ANTH", "Code": "468", "Course_Name": "Ethnography: Fieldwork and Writing in Antropology", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "308", "Course_Name": "Plant Physiology", "ECTS": "7", "Engineering": 0, "Basic_Science": 7.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "436", "Course_Name": "Cancer Biology", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "BIO", "Code": "460", "Course_Name": "Evolution", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "468", "Course_Name": "Gene Regulation & Diseases", "ECTS": "6", "Engineering": 2.0, "Basic_Science": 4.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CHEM", "Code": "212", "Course_Name": "General Chemistry for Engineers", "ECTS": "7", "Engineering": 0, "Basic_Science": 7.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CONF", "Code": "300", "Course_Name": "Conflict Analysis and Resolution", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
@@ -526,6 +526,7 @@
 {"Major": "MGMT", "Code": "307", "Course_Name": "MIT Sloan Seminars in Management I", "ECTS": "1", "Engineering": 0, "Basic_Science": 0, "SU_credit": "1", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "MGMT", "Code": "308", "Course_Name": "MIT Sloan Seminars in Management II", "ECTS": "1", "Engineering": 0, "Basic_Science": 0, "SU_credit": "1", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "MGMT", "Code": "309", "Course_Name": "NGO Management and Impact: Organizational Design, Positioning, and Sustainable Futures", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
+{"Major": "MGMT", "Code": "310", "Course_Name": "Humanitarian Management and Sustainability: Civil Society, Crisis, and the Economies of Aid", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "MGMT", "Code": "333", "Course_Name": "Business Ethics and Social Sustainability", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "MGMT", "Code": "401", "Course_Name": "Business Strategy", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "MGMT", "Code": "402", "Course_Name": "Entrepreneurship", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "SBS"}
