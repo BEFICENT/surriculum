@@ -329,6 +329,87 @@
     });
   }
 
+  function createInfoModal({ title, bodyHtml, buttons, onMount }) {
+    return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay scheduler-picker-overlay';
+      overlay.setAttribute('role', 'dialog');
+      overlay.setAttribute('aria-modal', 'true');
+
+      const modal = document.createElement('div');
+      modal.className = 'modal app-modal scheduler-picker-modal scheduler-details-modal';
+      modal.addEventListener('click', (e) => e.stopPropagation());
+
+      const header = document.createElement('div');
+      header.className = 'app-modal-header';
+
+      const h = document.createElement('h3');
+      h.className = 'app-modal-title';
+      h.textContent = title || '';
+
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.className = 'app-modal-close';
+      close.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+
+      const body = document.createElement('div');
+      body.className = 'app-modal-body';
+      body.innerHTML = bodyHtml || '';
+
+      const footer = document.createElement('div');
+      footer.className = 'app-modal-footer';
+
+      const cleanup = (payload) => {
+        try { document.removeEventListener('keydown', onKeyDown); } catch (_) {}
+        try { overlay.remove(); } catch (_) {}
+        resolve(payload);
+      };
+
+      close.addEventListener('click', () => cleanup({ action: 'close' }));
+      overlay.addEventListener('click', () => cleanup({ action: 'cancel' }));
+
+      header.appendChild(h);
+      header.appendChild(close);
+
+      (buttons || []).forEach((b) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        const variant = (b && b.variant) ? String(b.variant) : 'secondary';
+        const cls = (variant === 'primary')
+          ? 'btn-primary'
+          : (variant === 'danger')
+            ? 'btn-danger'
+            : (variant === 'warning')
+              ? 'btn-warning'
+              : 'btn-secondary';
+        btn.className = 'btn ' + cls + ' btn-sm';
+        btn.textContent = b.label;
+        btn.addEventListener('click', () => cleanup({ action: b.action, value: b.value }));
+        footer.appendChild(btn);
+      });
+
+      modal.appendChild(header);
+      modal.appendChild(body);
+      modal.appendChild(footer);
+      overlay.appendChild(modal);
+      try {
+        const root = document.fullscreenElement || document.body;
+        root.appendChild(overlay);
+      } catch (_) {
+        document.body.appendChild(overlay);
+      }
+
+      try {
+        if (typeof onMount === 'function') onMount({ overlay, modal, body, close: () => cleanup({ action: 'close' }) });
+      } catch (_) {}
+
+      const onKeyDown = (e) => {
+        if (e.key === 'Escape') cleanup({ action: 'cancel' });
+      };
+      document.addEventListener('keydown', onKeyDown);
+    });
+  }
+
   function createTextInputModal({ title, bodyHtml, initialValue, placeholder, okLabel }) {
     return new Promise((resolve) => {
       const overlay = document.createElement('div');
@@ -590,6 +671,54 @@
       return `https://suis.sabanciuniv.edu/prod/bwckschd.p_disp_detail_sched?term_in=${encodeURIComponent(termCode)}&crn_in=${encodeURIComponent(c)}`;
     };
 
+    const sectionMeetingPreview = (sec, maxMeetings = 3) => {
+      try {
+        const meetings = (sec && Array.isArray(sec.meetings)) ? sec.meetings : [];
+        return meetings.slice(0, maxMeetings).map(m => {
+          const days = (m && m.days ? String(m.days) : '').trim();
+          const tr = (m && m.time ? String(m.time) : '').trim();
+          const where = (m && m.where ? String(m.where) : '').trim();
+          const base = `${days} ${tr}`.trim();
+          return where ? `${base} @ ${where}` : base;
+        }).filter(Boolean).join(' • ');
+      } catch (_) {
+        return '';
+      }
+    };
+
+    // Stable key for "same timing" comparisons (ignores classroom/instructor).
+    // Expands multi-day strings ("MW") into per-day slots so equivalent schedules
+    // normalize the same even if meetings are represented differently.
+    const sectionTimeKey = (sec) => {
+      try {
+        const comp = String(sec && sec.component ? sec.component : '').trim().toLowerCase();
+        const parts = [];
+        const meetings = (sec && Array.isArray(sec.meetings)) ? sec.meetings : [];
+        for (let i = 0; i < meetings.length; i++) {
+          const m = meetings[i] || {};
+          const daysArr = parseDaysToKeys(m.days || m.Days || '');
+          if (!daysArr.length) continue;
+          let start = m.start_min;
+          let end = m.end_min;
+          if (start == null || end == null) {
+            const tr = parseTimeRangeToMinutes(m.time || m.Time || '');
+            if (tr) {
+              start = tr.start;
+              end = tr.end;
+            }
+          }
+          if (start == null || end == null) continue;
+          for (let di = 0; di < daysArr.length; di++) {
+            parts.push(`${daysArr[di]}|${start}|${end}`);
+          }
+        }
+        parts.sort();
+        return `${comp}|${parts.length ? parts.join('||') : 'TBA'}`;
+      } catch (_) {
+        return 'tba|TBA';
+      }
+    };
+
     const openDetailPickerForCourse = async (courseId) => {
       try {
         const cid = normalizeCourseId(courseId);
@@ -612,11 +741,7 @@
           title: `Open section — ${cid}`,
           bodyHtml: `<p>${escapeHtml(entry.title || '')}</p><p>Select a section to open its detail page:</p>`,
           listItems: sections.slice(0, 140).map(sec => {
-            const meetingSummary = (sec.meetings || []).slice(0, 3).map(m => {
-              const days = (m.days || '').toString();
-              const tr = (m.time || '').toString();
-              return `${days} ${tr}`.trim();
-            }).filter(Boolean).join(' • ');
+            const meetingSummary = sectionMeetingPreview(sec, 3);
             const instr = sectionInstructorPreview(sec);
             const sub = [meetingSummary, instr ? `Instructor: ${instr}` : ''].filter(Boolean).join(' — ');
             const label = `${cid}${sec.section ? `-${sec.section}` : ''}${sec.component ? ` • ${sec.component}` : ''}${sec.crn ? ` (CRN ${sec.crn})` : ''}`;
@@ -630,6 +755,234 @@
             try { window.open(url, '_blank', 'noopener'); } catch (_) {}
           }
         }
+      } catch (_) {}
+    };
+
+    const openCourseDetailsModal = async (courseId) => {
+      try {
+        const cid = normalizeCourseId(courseId);
+        if (!cid) return;
+        const idx = scheduleIndex || await loadTermScheduleIndex(termCode);
+        if (!idx) return;
+        scheduleIndex = idx;
+        const entry = idx.get(cid);
+        if (!entry) return;
+
+        // Load course-page (catalog) info if available so we can show additional
+        // details such as description/prereqs/last-offered terms.
+        try {
+          const loadInfo = (typeof window !== 'undefined') ? window.loadCoursePageInfoIndex : null;
+          if (!coursePageInfoMap && typeof loadInfo === 'function') {
+            coursePageInfoMap = await loadInfo();
+          }
+        } catch (_) {}
+        const pi = (() => {
+          try { return coursePageInfoMap && typeof coursePageInfoMap.get === 'function' ? coursePageInfoMap.get(cid) : null; } catch (_) { return null; }
+        })();
+
+        const pick = selected && selected[cid] ? selected[cid] : null;
+        const pickCrn = pick && pick.crn ? String(pick.crn) : '';
+        const selectedSec = (pickCrn && Array.isArray(entry.sections))
+          ? (entry.sections.find(s => String(s && s.crn ? s.crn : '') === pickCrn) || null)
+          : null;
+
+        const renderMeetingRows = (sec) => {
+          const ms = (sec && Array.isArray(sec.meetings)) ? sec.meetings : [];
+          if (!ms.length) return '<div class="scheduler-details-muted">No meeting times listed.</div>';
+          return ms.map(m => {
+            const days = (m && m.days ? String(m.days) : '').trim();
+            const tr = (m && m.time ? String(m.time) : '').trim();
+            const where = (m && m.where ? String(m.where) : '').trim();
+            const dr = (m && m.date_range ? String(m.date_range) : '').trim();
+            const instr = (m && m.instructors ? String(m.instructors) : '').trim();
+            const left = [days, tr].filter(Boolean).join(' ');
+            const right = [where, dr].filter(Boolean).join(' — ');
+            const iLine = instr ? `<div class="scheduler-details-meeting-instr"><span class="muted">Instructor:</span> ${escapeHtml(instr)}</div>` : '';
+            return (
+              `<div class="scheduler-details-meeting">` +
+              `<div class="scheduler-details-meeting-top">` +
+              `<div class="scheduler-details-meeting-when">${escapeHtml(left || 'TBA')}</div>` +
+              (right ? `<div class="scheduler-details-meeting-where">${escapeHtml(right)}</div>` : '') +
+              `</div>` +
+              iLine +
+              `</div>`
+            );
+          }).join('');
+        };
+
+        const coursePageUrl = (() => {
+          try {
+            const u = pi && pi.source_url ? String(pi.source_url) : '';
+            return u;
+          } catch (_) {
+            return '';
+          }
+        })();
+
+        const actionRow = (() => {
+          const openSuisBtn = pickCrn
+            ? `<button type="button" class="btn btn-primary btn-sm scheduler-details-open" data-crn="${escapeHtml(pickCrn)}">Open selected on SUIS</button>`
+            : `<button type="button" class="btn btn-primary btn-sm scheduler-details-open-picker" data-course="${escapeHtml(cid)}">Open a section on SUIS</button>`;
+          const openCoursePageBtn = coursePageUrl
+            ? `<a class="btn btn-secondary btn-sm" href="${escapeHtml(coursePageUrl)}" target="_blank" rel="noopener">Open course page</a>`
+            : '';
+          return `<div class="scheduler-details-actions">${openCoursePageBtn}${openSuisBtn}</div>`;
+        })();
+
+        const fmtNum = (v) => {
+          const n = Number(v);
+          if (!Number.isFinite(n)) return '';
+          return (Math.round(n * 10) / 10).toFixed(1);
+        };
+
+        const catalogCard = (() => {
+          if (!pi) {
+            return (
+              `<div class="scheduler-details-card">` +
+              `<div class="scheduler-details-card-title">Catalog info</div>` +
+              `<div class="scheduler-details-muted">Catalog details are not available for this course.</div>` +
+              `</div>`
+            );
+          }
+          const su = (pi.su_credits != null) ? fmtNum(pi.su_credits) : '';
+          const ects = (pi.ects != null) ? fmtNum(pi.ects) : '';
+          const bs = (pi.basic_science != null) ? fmtNum(pi.basic_science) : '';
+          const eng = (pi.engineering != null) ? fmtNum(pi.engineering) : '';
+          const prereq = (pi.prerequisites != null) ? String(pi.prerequisites) : '';
+          const coreq = (pi.corequisites != null) ? String(pi.corequisites) : '';
+          const desc = (pi.description != null) ? String(pi.description) : '';
+          const offered = Array.isArray(pi.last_offered_terms) ? pi.last_offered_terms : [];
+
+          const metaParts = [];
+          if (su) metaParts.push(`<div><span class="muted">SU:</span> ${escapeHtml(su)}</div>`);
+          if (ects) metaParts.push(`<div><span class="muted">ECTS:</span> ${escapeHtml(ects)}</div>`);
+          if (bs && bs !== '0.0') metaParts.push(`<div><span class="muted">BS:</span> ${escapeHtml(bs)}</div>`);
+          if (eng && eng !== '0.0') metaParts.push(`<div><span class="muted">ENG:</span> ${escapeHtml(eng)}</div>`);
+
+          const offeredPreview = offered.slice(0, 12).map(o => {
+            const t = o && o.term ? String(o.term) : '';
+            const n = o && o.course_name ? String(o.course_name) : '';
+            const c = (o && o.su_credit != null) ? fmtNum(o.su_credit) : '';
+            const label = t || 'Unknown term';
+            const suffix = n ? ` — ${n}` : '';
+            const cr = c ? ` <span class="muted">(${escapeHtml(c)} cr)</span>` : '';
+            return `<li><strong>${escapeHtml(label)}</strong>${escapeHtml(suffix)}${cr}</li>`;
+          }).join('');
+          const offeredHtml = offered.length
+            ? (
+              `<div class="scheduler-details-subsection">` +
+              `<div class="scheduler-details-subtitle">Last Offered (${offered.length})</div>` +
+              `<ul class="scheduler-details-list">${offeredPreview}</ul>` +
+              `</div>`
+            )
+            : '';
+
+          const descHtml = desc
+            ? (
+              `<div class="scheduler-details-subsection">` +
+              `<div class="scheduler-details-subtitle">Description</div>` +
+              `<div class="scheduler-details-paragraph">${escapeHtml(desc).replace(/\\n/g, '<br>')}</div>` +
+              `</div>`
+            )
+            : '';
+
+          return (
+            `<div class="scheduler-details-card">` +
+            `<div class="scheduler-details-card-title">Catalog info</div>` +
+            (metaParts.length ? `<div class="scheduler-details-meta">${metaParts.join('')}</div>` : '') +
+            `<div class="scheduler-details-subsection">` +
+            `<div class="scheduler-details-subtitle">Prerequisites</div>` +
+            `<div class="scheduler-details-paragraph">${prereq ? escapeHtml(prereq) : 'None'}</div>` +
+            `</div>` +
+            `<div class="scheduler-details-subsection">` +
+            `<div class="scheduler-details-subtitle">Corequisites</div>` +
+            `<div class="scheduler-details-paragraph">${coreq ? escapeHtml(coreq) : 'None'}</div>` +
+            `</div>` +
+            offeredHtml +
+            descHtml +
+            `</div>`
+          );
+        })();
+
+        const secRows = (() => {
+          const list = Array.isArray(entry.sections) ? entry.sections.slice() : [];
+          list.sort((a, b) => {
+            const aL = /lec/i.test(a.component || '') ? 0 : 1;
+            const bL = /lec/i.test(b.component || '') ? 0 : 1;
+            if (aL !== bL) return aL - bL;
+            return (String(a.section || '')).localeCompare(String(b.section || ''));
+          });
+          const limited = list.slice(0, 120);
+          const rows = limited.map(sec => {
+            const crn = sec && sec.crn ? String(sec.crn) : '';
+            const label = `${cid}${sec.section ? `-${sec.section}` : ''}${sec.component ? ` • ${sec.component}` : ''}${crn ? ` (CRN ${crn})` : ''}`;
+            const meetingSummary = sectionMeetingPreview(sec, 3);
+            const instr = sectionInstructorPreview(sec);
+            const meta = [meetingSummary, instr ? `Instructor: ${instr}` : ''].filter(Boolean).join(' — ');
+            const selectedBadge = (pickCrn && crn === pickCrn) ? `<span class="scheduler-details-badge">Selected</span>` : '';
+            const openBtn = crn
+              ? `<button type="button" class="btn btn-secondary btn-sm scheduler-details-open" data-crn="${escapeHtml(crn)}">Open</button>`
+              : '';
+            return (
+              `<div class="scheduler-details-section-row">` +
+              `<div class="scheduler-details-section-main">` +
+              `<div class="scheduler-details-section-title">${escapeHtml(label)} ${selectedBadge}</div>` +
+              (meta ? `<div class="scheduler-details-section-meta">${escapeHtml(meta)}</div>` : '') +
+              `</div>` +
+              `<div class="scheduler-details-section-actions">${openBtn}</div>` +
+              `</div>`
+            );
+          }).join('');
+          const note = list.length > limited.length
+            ? `<div class="scheduler-details-muted">Showing ${limited.length} of ${list.length} sections.</div>`
+            : '';
+          return `<div class="scheduler-details-sections">${rows}${note}</div>`;
+        })();
+
+        const bodyHtml =
+          `<div class="scheduler-details">` +
+          `<div class="scheduler-details-title"><strong>${escapeHtml(cid)}</strong>${entry.title ? ` — ${escapeHtml(entry.title)}` : ''}</div>` +
+          actionRow +
+          catalogCard +
+          (selectedSec
+            ? (
+              `<div class="scheduler-details-card">` +
+              `<div class="scheduler-details-card-title">Selected section</div>` +
+              `<div class="scheduler-details-meetings">${renderMeetingRows(selectedSec)}</div>` +
+              `</div>`
+            )
+            : '') +
+          `<div class="scheduler-details-card">` +
+          `<div class="scheduler-details-card-title">All sections</div>` +
+          secRows +
+          `</div>` +
+          `</div>`;
+
+        await createInfoModal({
+          title: `Details — ${cid}`,
+          bodyHtml,
+          buttons: [{ action: 'close', label: 'Close', variant: 'secondary' }],
+          onMount: ({ modal }) => {
+            modal.addEventListener('click', async (e) => {
+              const openBtn = e.target && e.target.closest ? e.target.closest('.scheduler-details-open') : null;
+              if (openBtn) {
+                const crn = String(openBtn.getAttribute('data-crn') || '').trim();
+                if (crn) {
+                  const url = buildDetailUrl(crn);
+                  if (url) {
+                    try { window.open(url, '_blank', 'noopener'); } catch (_) {}
+                  }
+                }
+                return;
+              }
+              const openPicker = e.target && e.target.closest ? e.target.closest('.scheduler-details-open-picker') : null;
+              if (openPicker) {
+                const c = normalizeCourseId(openPicker.getAttribute('data-course') || '');
+                if (c) await openDetailPickerForCourse(c);
+              }
+            });
+          },
+        });
       } catch (_) {}
     };
 
@@ -699,21 +1052,88 @@
       try {
         const rawState = loadSchedulerState(termCode);
         const sel = rawState.selected && typeof rawState.selected === 'object' ? rawState.selected : {};
-        const crns = Object.values(sel).map(v => (v && v.crn ? String(v.crn).trim() : '')).filter(Boolean);
-        if (!crns.length) {
+        const selectedPairs = Object.entries(sel)
+          .map(([k, v]) => ({ courseId: normalizeCourseId(k), crn: (v && v.crn ? String(v.crn).trim() : '') }))
+          .filter(x => x.courseId && x.crn);
+        if (!selectedPairs.length) {
           if (ui && typeof ui.alert === 'function') ui.alert('No CRNs', '<p>No sections selected yet.</p>');
           return;
         }
-        const text = crns.join('\n');
+
+        const idx = scheduleIndex || await loadTermScheduleIndex(termCode);
+        if (idx) scheduleIndex = idx;
+
+        selectedPairs.sort((a, b) => {
+          const c = a.courseId.localeCompare(b.courseId);
+          if (c) return c;
+          return a.crn.localeCompare(b.crn);
+        });
+
+        const rows = selectedPairs.map(({ courseId, crn }) => {
+          let label = courseId;
+          let altText = '';
+          try {
+            const entry = idx ? idx.get(courseId) : null;
+            const sec = entry && Array.isArray(entry.sections)
+              ? (entry.sections.find(s => String(s && s.crn ? s.crn : '') === crn) || null)
+              : null;
+            const secLabel = sec && sec.section ? `-${String(sec.section)}` : '';
+            const comp = sec && sec.component ? String(sec.component) : '';
+            label = `${courseId}${secLabel}${comp ? ` ${comp}` : ''}`.trim();
+
+            // Alternative CRNs for the same component with identical timing.
+            // Common case: same hours, different CRN/classroom.
+            if (entry && sec && Array.isArray(entry.sections) && entry.sections.length) {
+              const key = sectionTimeKey(sec);
+              const alt = [];
+              for (let i = 0; i < entry.sections.length; i++) {
+                const s = entry.sections[i];
+                if (!s) continue;
+                const sCrn = String(s.crn || '').trim();
+                if (!sCrn || sCrn === crn) continue;
+                if (sectionTimeKey(s) !== key) continue;
+                const sSec = String(s.section || '').trim();
+                alt.push(sSec ? `${sCrn}(${sSec})` : sCrn);
+              }
+              alt.sort();
+              if (alt.length) {
+                const shown = alt.slice(0, 5);
+                altText = `Alt: ${shown.join(', ')}${alt.length > shown.length ? ', …' : ''}`;
+              }
+            }
+          } catch (_) {}
+          return { label, crn, altText };
+        });
+
+        const maxLabelLen = rows.reduce((m, r) => Math.max(m, String(r.label || '').length), 0);
+        const maxCrnLen = rows.reduce((m, r) => Math.max(m, String(r.crn || '').length), 0);
+        const pad = (s, n) => {
+          const str = String(s || '');
+          if (str.length >= n) return str;
+          return str + ' '.repeat(n - str.length);
+        };
+        const padLeft = (s, n) => {
+          const str = String(s || '');
+          if (str.length >= n) return str;
+          return ' '.repeat(n - str.length) + str;
+        };
+
+        const lines = rows.map(r => {
+          const left = pad(String(r.label || ''), maxLabelLen);
+          const mid = padLeft(String(r.crn || ''), maxCrnLen);
+          const right = String(r.altText || '');
+          return right ? `${left}  ${mid}  ${right}` : `${left}  ${mid}`;
+        });
+        const text = lines.join('\n');
         try {
           if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
             await navigator.clipboard.writeText(text);
-            if (ui && typeof ui.alert === 'function') ui.alert('Copied', `<p>Copied ${crns.length} CRN(s) to clipboard.</p>`);
+            if (ui && typeof ui.alert === 'function') ui.alert('Copied', `<p>Copied ${selectedPairs.length} selected section(s) to clipboard.</p>`);
             return;
           }
         } catch (_) {}
         if (ui && typeof ui.alert === 'function') {
-          ui.alert('Copy CRNs', `<p>Copy the CRNs below:</p><pre style="white-space:pre-wrap">${escapeHtml(text)}</pre>`);
+          ui.alert('Copy CRNs', `<p>Copy the sections below:</p><pre style="white-space:pre-wrap">${escapeHtml(text)}</pre>`);
         }
       } catch (_) {}
     });
@@ -725,7 +1145,7 @@
           title: 'Scheduler actions',
           bodyHtml: '<p>Choose an action:</p>',
           listItems: [
-            { action: 'copy', label: 'Copy CRNs', subLabel: 'Copy all selected section CRNs to clipboard.' },
+            { action: 'copy', label: 'Copy CRNs', subLabel: 'Copy CRNs with course/section labels to clipboard.' },
             { action: 'block', label: blockMode ? 'Exit block mode' : 'Block hours', subLabel: blockMode ? 'Stop blocking time on the grid.' : 'Click+drag on the grid to block time.' },
             { action: 'fs', label: inFs ? 'Exit fullscreen' : 'Fullscreen', subLabel: 'Toggle fullscreen for the scheduler.' },
           ],
@@ -753,9 +1173,6 @@
       `    <div class="scheduler-sidebar-top">` +
       `      <div class="scheduler-schedule-row">` +
       `        <button type="button" class="btn btn-secondary btn-sm scheduler-schedule-toggle" title="Switch schedule"><i class="fa-solid fa-layer-group"></i>&nbsp;<span class="scheduler-schedule-name">Default schedule</span></button>` +
-      `      </div>` +
-      `      <div class="scheduler-search-row">` +
-      `        <input class="scheduler-search" type="text" placeholder="Search courses (e.g., CS 201, programming)..." />` +
       `      </div>` +
       `      <div class="scheduler-hint">Adds sections with lecture/recitation/lab meeting times. Conflicts are highlighted.</div>` +
       `    </div>` +
@@ -789,6 +1206,63 @@
       `          <div class="scheduler-control control-row toggle-row">` +
       `            <div class="toggle-text">Show blocked courses</div>` +
       `            <label class="toggle-switch"><input class="scheduler-toggle-show-blocked" type="checkbox" /><span class="toggle-slider"></span></label>` +
+      `          </div>` +
+      `          <div class="scheduler-control control-row toggle-row">` +
+      `            <div class="toggle-text">Check prerequisites</div>` +
+      `            <label class="toggle-switch"><input class="scheduler-toggle-prereq" type="checkbox" /><span class="toggle-slider"></span></label>` +
+      `          </div>` +
+      `          <div class="scheduler-control control-row toggle-row">` +
+      `            <div class="toggle-text">Show unmet prerequisites</div>` +
+      `            <label class="toggle-switch"><input class="scheduler-toggle-show-unmet-prereq" type="checkbox" /><span class="toggle-slider"></span></label>` +
+      `          </div>` +
+      `          <div class="scheduler-control scheduler-filter-row">` +
+      `            <div class="scheduler-filter-label">Min SU credits</div>` +
+      `            <input class="select-control scheduler-filter-min-su" type="number" min="0" step="0.5" placeholder="0" />` +
+      `          </div>` +
+      `          <div class="scheduler-control scheduler-filter-row">` +
+      `            <div class="scheduler-filter-label">Min ECTS</div>` +
+      `            <input class="select-control scheduler-filter-min-ects" type="number" min="0" step="1" placeholder="0" />` +
+      `          </div>` +
+      `          <div class="scheduler-control scheduler-filter-row">` +
+      `            <div class="scheduler-filter-label">Min Basic Science</div>` +
+      `            <input class="select-control scheduler-filter-min-bs" type="number" min="0" step="0.5" placeholder="0" />` +
+      `          </div>` +
+      `          <div class="scheduler-control scheduler-filter-row">` +
+      `            <div class="scheduler-filter-label">Min Engineering</div>` +
+      `            <input class="select-control scheduler-filter-min-eng" type="number" min="0" step="0.5" placeholder="0" />` +
+      `          </div>` +
+      `          <div class="scheduler-control scheduler-filter-row">` +
+      `            <div class="scheduler-filter-label">Min Major type</div>` +
+      `            <select class="select-control scheduler-filter-min-main">` +
+      `              <option value="">Any</option>` +
+      `              <option value="free">Free</option>` +
+      `              <option value="area">Area</option>` +
+      `              <option value="core">Core</option>` +
+      `              <option value="university">University</option>` +
+      `              <option value="required">Required</option>` +
+      `            </select>` +
+      `          </div>` +
+      `          <div class="scheduler-control scheduler-filter-row">` +
+      `            <div class="scheduler-filter-label">Min Double Major type</div>` +
+      `            <select class="select-control scheduler-filter-min-dm">` +
+      `              <option value="">Any</option>` +
+      `              <option value="free">Free</option>` +
+      `              <option value="area">Area</option>` +
+      `              <option value="core">Core</option>` +
+      `              <option value="university">University</option>` +
+      `              <option value="required">Required</option>` +
+      `            </select>` +
+      `          </div>` +
+      `          <div class="scheduler-control scheduler-filter-row">` +
+      `            <div class="scheduler-filter-label">Min Minor type</div>` +
+      `            <select class="select-control scheduler-filter-min-minor">` +
+      `              <option value="">Any</option>` +
+      `              <option value="free">Free</option>` +
+      `              <option value="area">Area</option>` +
+      `              <option value="core">Core</option>` +
+      `              <option value="university">University</option>` +
+      `              <option value="required">Required</option>` +
+      `            </select>` +
       `          </div>` +
       `        </div>` +
       `      </div>` +
@@ -830,7 +1304,10 @@
       `      </div>` +
       `    </div>` +
       `    <div class="scheduler-sidebar-section scheduler-results-section">` +
-      `      <div class="scheduler-section-title">Courses</div>` +
+      `      <div class="scheduler-results-head">` +
+      `        <div class="scheduler-section-title">Courses</div>` +
+      `        <input class="scheduler-search" type="text" placeholder="Search courses (e.g., CS 201, programming)..." />` +
+      `      </div>` +
       `      <div class="scheduler-results"></div>` +
       `      <div class="scheduler-results-actions">` +
       `        <button class="btn btn-secondary btn-sm scheduler-load-more" type="button" style="width:100%; display:none;">Load more</button>` +
@@ -839,7 +1316,9 @@
       `  </div>` +
       `  <div class="scheduler-grid-wrap">` +
       `    <div class="scheduler-grid-header">` +
-      `      <div class="scheduler-grid-corner"></div>` +
+      `      <div class="scheduler-grid-corner">` +
+      `        <button type="button" class="scheduler-corner-btn scheduler-sidebar-toggle" title="Toggle sidebar" aria-label="Toggle sidebar"><i class="fa-solid fa-angles-left"></i></button>` +
+      `      </div>` +
       DAYS.map(d => `<div class="scheduler-grid-day">${escapeHtml(d.label)}</div>`).join('') +
       `    </div>` +
       `    <div class="scheduler-grid">` +
@@ -855,6 +1334,7 @@
     document.body.appendChild(overlay);
 
     const schedulerGridEl = body.querySelector('.scheduler-grid');
+    const sidebarToggleBtn = body.querySelector('.scheduler-sidebar-toggle');
     const updateScrollbarCompensation = () => {
       try {
         if (!schedulerGridEl) return;
@@ -1136,9 +1616,42 @@
         applyCollapse('plan', !!uiState.planCollapsed);
         applyCollapse('selected', !!uiState.selectedCollapsed);
         applyCollapse('blocked', !!uiState.blockedCollapsed);
+        body.classList.toggle('is-sidebar-collapsed', !!uiState.sidebarCollapsed);
+        try {
+          const icon = sidebarToggleBtn ? sidebarToggleBtn.querySelector('i') : null;
+          if (icon) {
+            icon.className = body.classList.contains('is-sidebar-collapsed')
+              ? 'fa-solid fa-angles-right'
+              : 'fa-solid fa-angles-left';
+          }
+        } catch (_) {}
+        try { updateScrollbarCompensation(); } catch (_) {}
       } catch (_) {}
     };
     applyScheduleUi();
+
+    if (sidebarToggleBtn) {
+      sidebarToggleBtn.addEventListener('click', () => {
+        body.classList.toggle('is-sidebar-collapsed');
+        const root = loadSchedulerState(termCode);
+        const active = getActiveSchedule(root);
+        active.ui = active.ui && typeof active.ui === 'object' ? active.ui : {};
+        active.ui.sidebarCollapsed = body.classList.contains('is-sidebar-collapsed');
+        saveSchedulerState(termCode, { ui: active.ui });
+        try {
+          const icon = sidebarToggleBtn.querySelector('i');
+          if (icon) {
+            icon.className = active.ui.sidebarCollapsed
+              ? 'fa-solid fa-angles-right'
+              : 'fa-solid fa-angles-left';
+          }
+        } catch (_) {}
+        try {
+          updateScrollbarCompensation();
+          requestAnimationFrame(() => updateScrollbarCompensation());
+        } catch (_) {}
+      });
+    }
 
     body.querySelectorAll('.scheduler-collapsible-header').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -1183,6 +1696,15 @@
     const hoverPreviewToggle = body.querySelector('.scheduler-toggle-hover-preview');
     const highlightToggle = body.querySelector('.scheduler-toggle-highlight');
     const showBlockedToggle = body.querySelector('.scheduler-toggle-show-blocked');
+    const minMainTypeSelect = body.querySelector('.scheduler-filter-min-main');
+    const minDmTypeSelect = body.querySelector('.scheduler-filter-min-dm');
+    const minMinorTypeSelect = body.querySelector('.scheduler-filter-min-minor');
+    const minSuInput = body.querySelector('.scheduler-filter-min-su');
+    const minEctsInput = body.querySelector('.scheduler-filter-min-ects');
+    const minBsInput = body.querySelector('.scheduler-filter-min-bs');
+    const minEngInput = body.querySelector('.scheduler-filter-min-eng');
+    const prereqToggle = body.querySelector('.scheduler-toggle-prereq');
+    const showUnmetPrereqToggle = body.querySelector('.scheduler-toggle-show-unmet-prereq');
 
     // Scheduler controls mirror the main app's settings (sidebar toggles).
     const readBoolLS = (key, fallback) => {
@@ -1190,6 +1712,15 @@
         const v = localStorage.getItem(key);
         if (v === null) return fallback;
         return v === 'true';
+      } catch (_) {
+        return fallback;
+      }
+    };
+    const readStrLS = (key, fallback) => {
+      try {
+        const v = localStorage.getItem(key);
+        if (v === null) return fallback;
+        return String(v);
       } catch (_) {
         return fallback;
       }
@@ -1227,6 +1758,24 @@
     try {
       if (showBlockedToggle) showBlockedToggle.checked = readBoolLS('schedulerShowBlockedCourses', false);
     } catch (_) {}
+    try { if (minMainTypeSelect) minMainTypeSelect.value = readStrLS('schedulerMinMajorType', ''); } catch (_) {}
+    try { if (minDmTypeSelect) minDmTypeSelect.value = readStrLS('schedulerMinDmType', ''); } catch (_) {}
+    try { if (minMinorTypeSelect) minMinorTypeSelect.value = readStrLS('schedulerMinMinorType', ''); } catch (_) {}
+    try { if (minSuInput) minSuInput.value = readStrLS('schedulerMinSuCredits', ''); } catch (_) {}
+    try { if (minEctsInput) minEctsInput.value = readStrLS('schedulerMinEcts', ''); } catch (_) {}
+    try { if (minBsInput) minBsInput.value = readStrLS('schedulerMinBasicScience', ''); } catch (_) {}
+    try { if (minEngInput) minEngInput.value = readStrLS('schedulerMinEngineering', ''); } catch (_) {}
+    try { if (prereqToggle) prereqToggle.checked = readBoolLS('schedulerCheckPrereqs', false); } catch (_) {}
+    try { if (showUnmetPrereqToggle) showUnmetPrereqToggle.checked = readBoolLS('schedulerShowUnmetPrereqs', false); } catch (_) {}
+
+    const syncPrereqUi = () => {
+      try {
+        if (!showUnmetPrereqToggle) return;
+        const enabled = !!(prereqToggle && prereqToggle.checked);
+        showUnmetPrereqToggle.disabled = !enabled;
+      } catch (_) {}
+    };
+    syncPrereqUi();
 
     const scheduleLoadingEl = document.createElement('div');
     scheduleLoadingEl.className = 'scheduler-muted';
@@ -1238,7 +1787,8 @@
         const set = new Set();
         const meetings = Array.isArray(sec && sec.meetings) ? sec.meetings : [];
         for (let i = 0; i < meetings.length; i++) {
-          const s = String(meetings[i] && meetings[i].instructors ? meetings[i].instructors : '').trim();
+          const mi = meetings[i] || {};
+          const s = String(mi.instructors || mi.Instructors || mi.instructor || mi.Instructor || '').trim();
           if (s) set.add(s.replace(/\s+/g, ' '));
         }
         const arr = Array.from(set);
@@ -1246,6 +1796,109 @@
       } catch (_) {
         return '';
       }
+    };
+
+    const snapshotForSection = (sec) => {
+      try {
+        const meetings = (sec && Array.isArray(sec.meetings)) ? sec.meetings : [];
+        const meetingBits = [];
+        const instrSet = new Set();
+        for (let i = 0; i < meetings.length; i++) {
+          const m = meetings[i] || {};
+          const days = String(m.days || m.Days || '').toUpperCase().replace(/\s+/g, '');
+          let start = m.start_min;
+          let end = m.end_min;
+          if (start == null || end == null) {
+            const tr = parseTimeRangeToMinutes(m.time || m.Time || '');
+            if (tr) {
+              start = tr.start;
+              end = tr.end;
+            }
+          }
+          const where = String(m.where || m.Where || '').trim();
+          if (days && start != null && end != null) {
+            meetingBits.push(`${days}|${start}|${end}|${where}`);
+          }
+          const instr = String(m.instructors || m.Instructors || m.instructor || m.Instructor || '').trim();
+          if (instr) instrSet.add(instr.replace(/\s+/g, ' '));
+        }
+        meetingBits.sort();
+        const meetingKey = meetingBits.length ? meetingBits.join('||') : 'TBA';
+        const instrKey = Array.from(instrSet).sort().join('|');
+        const meetingSummary = sectionMeetingPreview(sec, 10) || '';
+        const instrSummary = sectionInstructorPreview(sec) || '';
+        return { meetingKey, instrKey, meetingSummary, instrSummary };
+      } catch (_) {
+        return { meetingKey: 'TBA', instrKey: '', meetingSummary: '', instrSummary: '' };
+      }
+    };
+
+    const computeSelectedSectionChangeReport = (idx, root) => {
+      const changes = [];
+      const seen = {};
+      try {
+        if (!idx || !root) return { changes, seen };
+        const prevSeen = (root.lastSeenScheduleSnapshots && typeof root.lastSeenScheduleSnapshots === 'object')
+          ? root.lastSeenScheduleSnapshots
+          : {};
+        const schedules = root.schedules && typeof root.schedules === 'object' ? root.schedules : null;
+        const order = Array.isArray(schedules && schedules.order) ? schedules.order.map(String) : [];
+        const items = schedules && schedules.items && typeof schedules.items === 'object' ? schedules.items : {};
+
+        for (let si = 0; si < order.length; si++) {
+          const sid = order[si];
+          const sch = items[sid] || {};
+          const schName = String(sch.name || (sid === 'default' ? 'Default schedule' : 'Schedule'));
+          const selectedMap = (sch.selected && typeof sch.selected === 'object') ? sch.selected : {};
+          const prevForSchedule = (prevSeen && prevSeen[sid] && typeof prevSeen[sid] === 'object') ? prevSeen[sid] : {};
+          const nextForSchedule = {};
+
+          for (const courseIdRaw of Object.keys(selectedMap)) {
+            const courseId = normalizeCourseId(courseIdRaw);
+            if (!courseId) continue;
+            const pick = selectedMap[courseIdRaw] || selectedMap[courseId] || {};
+            const crn = String(pick && pick.crn ? pick.crn : '').trim();
+            if (!crn) continue;
+            const entry = idx.get(courseId);
+            if (!entry || !Array.isArray(entry.sections)) continue;
+            const sec = entry.sections.find(s => String(s && s.crn ? s.crn : '') === crn) || null;
+            if (!sec) continue;
+
+            const snap = snapshotForSection(sec);
+            nextForSchedule[courseId] = Object.assign({ crn }, snap);
+
+            const prev = prevForSchedule && prevForSchedule[courseId] ? prevForSchedule[courseId] : null;
+            if (!prev) continue; // first time seeing this selection: don't notify
+            if (String(prev.crn || '') !== crn) continue; // user changed CRN: don't notify as "update"
+
+            const hoursChanged = String(prev.meetingKey || '') !== String(snap.meetingKey || '');
+            const instrChanged = String(prev.instrKey || '') !== String(snap.instrKey || '');
+            if (!hoursChanged && !instrChanged) continue;
+
+            changes.push({
+              scheduleId: sid,
+              scheduleName: schName,
+              courseId,
+              crn,
+              hoursChanged,
+              instrChanged,
+              prev: {
+                meetingSummary: String(prev.meetingSummary || ''),
+                instrSummary: String(prev.instrSummary || ''),
+              },
+              cur: {
+                meetingSummary: String(snap.meetingSummary || ''),
+                instrSummary: String(snap.instrSummary || ''),
+              },
+            });
+          }
+
+          if (Object.keys(nextForSchedule).length) {
+            seen[sid] = nextForSchedule;
+          }
+        }
+      } catch (_) {}
+      return { changes, seen };
     };
 
     const getSelectedSection = (courseId) => {
@@ -1418,7 +2071,7 @@
 
     const getCourseDetails = (courseId) => {
       const cid = normalizePlannerCode(courseId);
-      const out = { title: '', su: 0, bs: 0, eng: 0, mainType: '', dmType: '', minorTypes: [] };
+      const out = { title: '', su: 0, ects: 0, bs: 0, eng: 0, mainType: '', dmType: '', minorTypes: [] };
       try {
         const info = getPlannerInfo(cid);
         if (info) {
@@ -1426,17 +2079,19 @@
           out.su = (typeof window !== 'undefined' && typeof window.parseCreditValue === 'function')
             ? window.parseCreditValue(info.SU_credit || '0')
             : (parseFloat(info.SU_credit || '0') || 0);
+          out.ects = parseFloat(info.ECTS || '0') || 0;
           out.bs = parseFloat(info.Basic_Science || '0') || 0;
           out.eng = parseFloat(info.Engineering || '0') || 0;
           out.mainType = String(info.EL_Type || '').toLowerCase();
         }
       } catch (_) {}
       try {
-        if ((!out.title || !out.su) && coursePageInfoMap && typeof coursePageInfoMap.get === 'function') {
+        if ((!out.title || !out.su || !out.ects) && coursePageInfoMap && typeof coursePageInfoMap.get === 'function') {
           const pi = coursePageInfoMap.get(cid);
           if (pi) {
             if (!out.title) out.title = String(pi.title || pi.header_text || '').trim();
             if (!out.su && pi.su_credits != null) out.su = parseFloat(pi.su_credits) || 0;
+            if (!out.ects && pi.ects != null) out.ects = parseFloat(pi.ects) || 0;
             if (!out.bs && pi.basic_science != null) out.bs = parseFloat(pi.basic_science) || 0;
             if (!out.eng && pi.engineering != null) out.eng = parseFloat(pi.engineering) || 0;
           }
@@ -1646,6 +2301,39 @@
         return null;
       }
     };
+
+    // Taken courses from previous terms only (used for prereq checking).
+    const computeTakenBeforeCurrentTermSet = () => {
+      try {
+        const cur = (typeof window !== 'undefined') ? window.curriculum : null;
+        if (!cur) return null;
+        const curCode = parseInt(String(termCode || ''), 10) || 0;
+        if (!curCode) return null;
+        const out = new Set();
+        const containers = document.querySelectorAll('.container_semester');
+        for (let i = 0; i < containers.length; i++) {
+          const c = containers[i];
+          const p = c ? c.querySelector('.date p') : null;
+          const name = p ? String(p.textContent || '').trim() : '';
+          const code = parseInt(String(termNameToCodeSafe(name) || ''), 10) || 0;
+          if (!code || code >= curCode) continue;
+          const semEl = c ? c.querySelector('.semester') : null;
+          if (!semEl) continue;
+          const semObj = (cur && typeof cur.getSemester === 'function') ? cur.getSemester(semEl.id) : null;
+          if (!semObj || !Array.isArray(semObj.courses)) continue;
+          for (let j = 0; j < semObj.courses.length; j++) {
+            const cc = semObj.courses[j];
+            const cid = normalizeCourseId(cc && cc.code);
+            if (cid) out.add(cid);
+          }
+        }
+        return out;
+      } catch (_) {
+        return null;
+      }
+    };
+
+    const prereqCheckCache = { sig: '', map: new Map() }; // course_id -> {mode, missing} | null
 
     const isTakenCourse = (courseId) => {
       try {
@@ -2018,7 +2706,7 @@
                 `<div class="scheduler-coreq-row${missing ? ' is-missing' : ''}">` +
                 `<div class="scheduler-coreq-label">${missing ? '<span class="scheduler-coreq-badge">Required</span>' : ''}${escapeHtml(meta)}</div>` +
                 `<div class="scheduler-coreq-actions">` +
-                `<button class="btn btn-secondary btn-sm scheduler-open-section" type="button" data-course="${escapeHtml(cid)}"${sel && sel.crn ? ` data-crn="${escapeHtml(sel.crn)}"` : ''}>Open</button>` +
+                `<button class="btn btn-secondary btn-sm scheduler-details" type="button" data-course="${escapeHtml(cid)}">Details</button>` +
                 `<button class="btn btn-secondary btn-sm scheduler-pick" type="button" data-course="${escapeHtml(cid)}">${btnText}</button>` +
                 (sel ? `<button class="scheduler-remove btn btn-secondary btn-sm" type="button" data-course="${escapeHtml(cid)}">Remove</button>` : '') +
                 `</div>` +
@@ -2037,7 +2725,7 @@
           (miss.length ? `<div class="scheduler-selected-warning"><span class="muted">Missing coreq:</span> ${escapeHtml(miss.join(', '))}</div>` : '') +
           (orphan.length ? `<div class="scheduler-selected-warning"><span class="muted">Looks like a coreq for:</span> ${escapeHtml(orphan.join(', '))}</div>` : '') +
           `<div class="scheduler-selected-actions-row">` +
-          `<button type="button" class="btn btn-secondary btn-sm scheduler-open-section" data-course="${escapeHtml(courseId)}"${s && s.crn ? ` data-crn="${escapeHtml(s.crn)}"` : ''}>Open</button>` +
+          `<button type="button" class="btn btn-secondary btn-sm scheduler-details" data-course="${escapeHtml(courseId)}">Details</button>` +
           `<button type="button" class="btn btn-secondary btn-sm scheduler-pick" data-course="${escapeHtml(courseId)}">Change</button>` +
           ((miss.length || orphan.length) ? `<button type="button" class="btn btn-warning btn-sm scheduler-fix-coreq" data-course="${escapeHtml(courseId)}">Fix</button>` : '') +
           `<button type="button" class="scheduler-remove btn btn-secondary btn-sm" data-course="${escapeHtml(courseId)}">Remove</button>` +
@@ -2354,6 +3042,45 @@
       const q = qRaw.toLowerCase();
       lastQuery = q;
 
+      const entryInstructorHay = (entry) => {
+        try {
+          if (!entry) return '';
+          if (typeof entry.__instrHay === 'string') return entry.__instrHay;
+          const set = new Set();
+          const secs = Array.isArray(entry.sections) ? entry.sections : [];
+          for (let i = 0; i < secs.length; i++) {
+            const meetings = Array.isArray(secs[i] && secs[i].meetings) ? secs[i].meetings : [];
+            for (let j = 0; j < meetings.length; j++) {
+              const mj = meetings[j] || {};
+              const s = String(mj.instructors || mj.Instructors || mj.instructor || mj.Instructor || '').trim();
+              if (s) set.add(s.replace(/\s+/g, ' '));
+            }
+          }
+          const out = Array.from(set).join(' ').toLowerCase();
+          entry.__instrHay = out;
+          return out;
+        } catch (_) {
+          return '';
+        }
+      };
+
+      const getSubjectSet = (idx) => {
+        try {
+          if (!idx) return new Set();
+          if (idx.__subjectSet instanceof Set) return idx.__subjectSet;
+          const set = new Set();
+          for (const cid of idx.keys()) {
+            const m = String(cid || '').match(/^([A-Z]{2,5})\d/);
+            if (m && m[1]) set.add(String(m[1]).toUpperCase());
+          }
+          idx.__subjectSet = set;
+          return set;
+        } catch (_) {
+          return new Set();
+        }
+      };
+      const subjectSet = getSubjectSet(scheduleIndex);
+
       // Smarter search: detect when the user is typing a course code/subject
       // and avoid matching substrings in titles (e.g., "cs" shouldn't match
       // "statistiCS").
@@ -2370,10 +3097,14 @@
           const numb = m && m[2] ? String(m[2] || '').toUpperCase() : '';
           const rest = m ? String(m[3] || '').trim().toLowerCase() : '';
 
-          if (subj && !numb && /^[A-Z]{2,5}$/.test(subj) && /^[A-Za-z\\s-]+$/.test(raw)) {
-            return { mode: 'subject', subject: subj, codePrefix: subj, extra: '' };
+          // Only treat "CS" as a subject search if it matches a known subject
+          // code in this term; otherwise treat it as a text query so instructor
+          // names like "Ali" or "Eken" still work.
+          if (subj && !numb && /^[A-Z]{2,5}$/.test(subj) && subjectSet && subjectSet.has(subj)) {
+            if (!rest) return { mode: 'subject', subject: subj, codePrefix: subj, extra: '' };
+            return { mode: 'subjectText', subject: subj, codePrefix: subj, extra: rest };
           }
-          if (subj && numb && /^[A-Z]{2,5}$/.test(subj) && /^[0-9]{1,5}[A-Z0-9]?$/.test(numb)) {
+          if (subj && numb && /^[A-Z]{2,5}$/.test(subj) && /^[0-9]{1,5}[A-Z0-9]?$/.test(numb) && subjectSet && subjectSet.has(subj)) {
             return { mode: 'code', subject: subj, codePrefix: subj + numb, extra: rest };
           }
           return { mode: 'text', subject: '', codePrefix: '', extra: '' };
@@ -2426,6 +3157,147 @@
         }
       } catch (_) {}
 
+      const typeRank = { free: 0, area: 1, core: 2, university: 3, required: 4 };
+      const typeToRank = (t) => {
+        try {
+          const s = String(t || '').toLowerCase().trim();
+          return Object.prototype.hasOwnProperty.call(typeRank, s) ? typeRank[s] : -1;
+        } catch (_) {
+          return -1;
+        }
+      };
+      const thresholdRank = (value) => {
+        try {
+          const s = String(value || '').toLowerCase().trim();
+          if (!s) return null;
+          return Object.prototype.hasOwnProperty.call(typeRank, s) ? typeRank[s] : null;
+        } catch (_) {
+          return null;
+        }
+      };
+
+      const minMainRank = thresholdRank(minMainTypeSelect && minMainTypeSelect.value);
+      const minDmRank = thresholdRank(minDmTypeSelect && minDmTypeSelect.value);
+      const minMinorRank = thresholdRank(minMinorTypeSelect && minMinorTypeSelect.value);
+      const minSu = (() => {
+        try {
+          const v = parseFloat(String(minSuInput && minSuInput.value != null ? minSuInput.value : '').trim());
+          return Number.isFinite(v) && v > 0 ? v : null;
+        } catch (_) {
+          return null;
+        }
+      })();
+      const minEcts = (() => {
+        try {
+          const v = parseFloat(String(minEctsInput && minEctsInput.value != null ? minEctsInput.value : '').trim());
+          return Number.isFinite(v) && v > 0 ? v : null;
+        } catch (_) {
+          return null;
+        }
+      })();
+      const minBs = (() => {
+        try {
+          const v = parseFloat(String(minBsInput && minBsInput.value != null ? minBsInput.value : '').trim());
+          return Number.isFinite(v) && v > 0 ? v : null;
+        } catch (_) {
+          return null;
+        }
+      })();
+      const minEng = (() => {
+        try {
+          const v = parseFloat(String(minEngInput && minEngInput.value != null ? minEngInput.value : '').trim());
+          return Number.isFinite(v) && v > 0 ? v : null;
+        } catch (_) {
+          return null;
+        }
+      })();
+
+      const hasDm = (() => {
+        try {
+          const cur = (typeof window !== 'undefined') ? window.curriculum : null;
+          const dm = cur ? String(cur.doubleMajor || '') : '';
+          return !!(dm && dm !== 'None');
+        } catch (_) {
+          return false;
+        }
+      })();
+      const hasMinors = (() => {
+        try {
+          const cur = (typeof window !== 'undefined') ? window.curriculum : null;
+          return !!(cur && Array.isArray(cur.minors) && cur.minors.length);
+        } catch (_) {
+          return false;
+        }
+      })();
+
+      const checkPrereqs = !!(prereqToggle && prereqToggle.checked);
+      const showUnmetPrereqs = checkPrereqs && !!(showUnmetPrereqToggle && showUnmetPrereqToggle.checked);
+      const unmetPrereqById = new Map(); // course_id -> { mode, missing }
+      const takenBeforeSet = checkPrereqs ? (computeTakenBeforeCurrentTermSet() || new Set()) : null;
+      const takenBeforeSig = (() => {
+        try {
+          if (!checkPrereqs || !takenBeforeSet || !(takenBeforeSet instanceof Set)) return '';
+          return Array.from(takenBeforeSet).sort().join('|');
+        } catch (_) {
+          return '';
+        }
+      })();
+      try {
+        if (checkPrereqs && prereqCheckCache.sig !== takenBeforeSig) {
+          prereqCheckCache.sig = takenBeforeSig;
+          prereqCheckCache.map = new Map();
+        }
+      } catch (_) {}
+
+      const detailsCache = new Map(); // course_id -> getCourseDetails()
+      const getDetailsCached = (courseId) => {
+        const cid = normalizeCourseId(courseId);
+        if (!cid) return null;
+        if (detailsCache.has(cid)) return detailsCache.get(cid);
+        const d = getCourseDetails(cid);
+        detailsCache.set(cid, d);
+        return d;
+      };
+
+      const getUnmetPrereqs = (courseId) => {
+        try {
+          if (!checkPrereqs || !takenBeforeSet || !(takenBeforeSet instanceof Set)) return null;
+          if (!coursePageInfoMap) return null;
+          const cid = normalizeCourseId(courseId);
+          if (!cid) return null;
+          try {
+            if (prereqCheckCache && prereqCheckCache.map && prereqCheckCache.map.has(cid)) {
+              return prereqCheckCache.map.get(cid);
+            }
+          } catch (_) {}
+          const info = coursePageInfoMap.get(cid);
+          const text = info && info.prerequisites ? String(info.prerequisites || '') : '';
+          if (!text) return null;
+          const prereqIds = extractCoreqCourseIdsFromCoursePageInfoField(text)
+            .map(c => normalizeCourseId(c))
+            .filter(Boolean);
+          if (!prereqIds.length) return null;
+
+          const hasOr = /\bor\b/i.test(text);
+          const hasAnd = /\band\b/i.test(text);
+          const mode = (hasOr && !hasAnd) ? 'or' : 'and';
+
+          if (mode === 'or') {
+            const ok = prereqIds.some(p => takenBeforeSet.has(p));
+            const res = ok ? null : { mode, missing: prereqIds };
+            try { if (prereqCheckCache && prereqCheckCache.map) prereqCheckCache.map.set(cid, res); } catch (_) {}
+            return res;
+          }
+
+          const missing = prereqIds.filter(p => !takenBeforeSet.has(p));
+          const res = missing.length ? { mode, missing } : null;
+          try { if (prereqCheckCache && prereqCheckCache.map) prereqCheckCache.map.set(cid, res); } catch (_) {}
+          return res;
+        } catch (_) {
+          return null;
+        }
+      };
+
       const itemsById = new Map(); // course_id -> entry
       const addEntry = (entry) => {
         try {
@@ -2449,14 +3321,22 @@
           const cid = normalizeCourseId(id);
           if (queryMode.mode === 'subject') {
             if (!cid || !cid.startsWith(queryMode.codePrefix)) continue;
+          } else if (queryMode.mode === 'subjectText') {
+            if (!cid || !cid.startsWith(queryMode.codePrefix)) continue;
+            if (queryMode.extra) {
+              const t = String(title || '').toLowerCase();
+              const ih = entryInstructorHay(entry);
+              if (!t.includes(queryMode.extra) && !ih.includes(queryMode.extra)) continue;
+            }
           } else if (queryMode.mode === 'code') {
             if (!cid || !cid.startsWith(queryMode.codePrefix)) continue;
             if (queryMode.extra) {
               const t = String(title || '').toLowerCase();
-              if (!t.includes(queryMode.extra)) continue;
+              const ih = entryInstructorHay(entry);
+              if (!t.includes(queryMode.extra) && !ih.includes(queryMode.extra)) continue;
             }
           } else {
-            const hay = (id + ' ' + title).toLowerCase();
+            const hay = (id + ' ' + title + ' ' + entryInstructorHay(entry)).toLowerCase();
             if (!hay.includes(q)) continue;
           }
         }
@@ -2496,6 +3376,58 @@
             if (cid && !keepVisible.has(cid)) {
               const ok = canFitWithBlockedHours(scheduleIndex, cid);
               if (!ok && !shouldShowBlockedCourses()) continue;
+            }
+          }
+        } catch (_) {}
+
+        // Minimum course-type filters (major / DM / minors).
+        try {
+          const cid = normalizeCourseId(id);
+          if (cid) {
+            if (minSu != null || minEcts != null || minBs != null || minEng != null) {
+              const d = getDetailsCached(cid);
+              if (d) {
+                if (minSu != null && (Number(d.su) || 0) < minSu) continue;
+                if (minEcts != null && (Number(d.ects) || 0) < minEcts) continue;
+                if (minBs != null && (Number(d.bs) || 0) < minBs) continue;
+                if (minEng != null && (Number(d.eng) || 0) < minEng) continue;
+              } else {
+                continue;
+              }
+            }
+            if (minMainRank != null) {
+              const d = getDetailsCached(cid);
+              if (!d || typeToRank(d.mainType) < minMainRank) continue;
+            }
+            if (hasDm && minDmRank != null) {
+              const d = getDetailsCached(cid);
+              if (!d || typeToRank(d.dmType) < minDmRank) continue;
+            }
+            if (hasMinors && minMinorRank != null) {
+              const d = getDetailsCached(cid);
+              let best = -1;
+              if (d && Array.isArray(d.minorTypes)) {
+                for (let mi = 0; mi < d.minorTypes.length; mi++) {
+                  const mt = d.minorTypes[mi];
+                  if (!mt || !mt.type) continue;
+                  best = Math.max(best, typeToRank(mt.type));
+                }
+              }
+              if (best < minMinorRank) continue;
+            }
+          }
+        } catch (_) {}
+
+        // Prerequisite checking: only consider courses taken in previous terms.
+        try {
+          if (checkPrereqs) {
+            const cid = normalizeCourseId(id);
+            if (cid) {
+              const unmet = getUnmetPrereqs(cid);
+              if (unmet && Array.isArray(unmet.missing) && unmet.missing.length) {
+                unmetPrereqById.set(cid, unmet);
+                if (!showUnmetPrereqs && !keepVisible.has(cid)) continue;
+              }
             }
           }
         } catch (_) {}
@@ -2540,6 +3472,15 @@
           const url = pick && pick.crn ? buildDetailUrl(pick.crn) : '';
           const showDetails = shouldShowDetails();
           const d = showDetails ? getCourseDetails(e.course_id) : null;
+          const unmetPrereq = (() => {
+            try {
+              const cid = normalizeCourseId(e.course_id);
+              return cid ? unmetPrereqById.get(cid) : null;
+            } catch (_) {
+              return null;
+            }
+          })();
+          const unmetList = (unmetPrereq && Array.isArray(unmetPrereq.missing)) ? unmetPrereq.missing.slice() : [];
           const typeParts = [];
           try {
             if (d && d.mainType) typeParts.push(`Major: ${String(d.mainType).toUpperCase()}`);
@@ -2579,7 +3520,7 @@
                   `<div class="scheduler-coreq-row${missing ? ' is-missing' : ''}">` +
                   `<div class="scheduler-coreq-label">${missing ? '<span class="scheduler-coreq-badge">Required</span>' : ''}${escapeHtml(meta)}</div>` +
                   `<div class="scheduler-coreq-actions">` +
-                  `<button class="btn btn-secondary btn-sm scheduler-open-section" type="button" data-course="${escapeHtml(cid)}"${sel && sel.crn ? ` data-crn="${escapeHtml(sel.crn)}"` : ''}>Open</button>` +
+                  `<button class="btn btn-secondary btn-sm scheduler-details" type="button" data-course="${escapeHtml(cid)}">Details</button>` +
                   `<button class="btn btn-secondary btn-sm scheduler-pick" type="button" data-course="${escapeHtml(cid)}">${btnText}</button>` +
                   `</div>` +
                   `</div>`
@@ -2592,6 +3533,7 @@
             (() => {
               const classes = ['scheduler-course'];
               if (miss.length) classes.push('is-missing-coreq');
+              if (unmetList.length) classes.push('is-unmet-prereq');
               try {
                 if (shouldHighlightAvailability()) {
                   if (isTakenCourse(e.course_id)) {
@@ -2614,12 +3556,24 @@
                   }
                 }
               } catch (_) {}
+              const prereqHtml = (() => {
+                try {
+                  if (!unmetList.length) return '';
+                  const mode = unmetPrereq && unmetPrereq.mode ? String(unmetPrereq.mode) : 'and';
+                  const label = mode === 'or' ? 'Needs one of:' : 'Missing:';
+                  const missing = unmetList.slice(0, 6).join(', ') + (unmetList.length > 6 ? '…' : '');
+                  return `<div class="scheduler-course-meta"><span class="scheduler-badge-prereq">Prereq</span> ${escapeHtml(label)} ${escapeHtml(missing)}</div>`;
+                } catch (_) {
+                  return '';
+                }
+              })();
               return (
                 `<div class="${classes.join(' ')}" data-course="${escapeHtml(e.course_id)}">` +
             `<div class="scheduler-course-head">` +
             `<div class="scheduler-course-id">${escapeHtml(e.course_id)}</div>` +
             `<div class="scheduler-course-title">${escapeHtml(e.title || '')}</div>` +
             `</div>` +
+            prereqHtml +
             (classes.includes('is-blocked-hours') ? `<div class="scheduler-course-meta"><span class="scheduler-badge-blocked">Blocked hours</span> No section combination fits your blocked time.</div>` : '') +
             (instr ? `<div class="scheduler-course-meta"><span class="muted">Instructor:</span> ${escapeHtml(instr)}</div>` : '') +
             (showDetails && d
@@ -2635,7 +3589,7 @@
               )
               : '') +
             `<div class="scheduler-course-actions">` +
-            `<button class="btn btn-secondary btn-sm scheduler-open-section" type="button" data-course="${escapeHtml(e.course_id)}"${pick && pick.crn ? ` data-crn="${escapeHtml(pick.crn)}"` : ''}>Open</button>` +
+            `<button class="btn btn-secondary btn-sm scheduler-details" type="button" data-course="${escapeHtml(e.course_id)}">Details</button>` +
             `<button class="btn btn-secondary btn-sm scheduler-pick" type="button" data-course="${escapeHtml(e.course_id)}">${already ? 'Change section' : 'Pick section'}</button>` +
             `</div>` +
             coreqHtml +
@@ -2739,11 +3693,7 @@
             title: `Select corequisite for ${baseCourseId}`,
             bodyHtml: `<p><strong>${escapeHtml(baseCourseId)}</strong> requires <strong>${escapeHtml(cid)}</strong>.</p><p>Select a section to add:</p>`,
             listItems: entry.sections.slice(0, 80).map(sec => {
-              const meetingSummary = (sec.meetings || []).slice(0, 3).map(m => {
-                const days = (m.days || '').toString();
-                const tr = (m.time || '').toString();
-                return `${days} ${tr}`.trim();
-              }).filter(Boolean).join(' • ');
+              const meetingSummary = sectionMeetingPreview(sec, 3);
               const instr = sectionInstructorPreview(sec);
               const sub = [meetingSummary, instr ? `Instructor: ${instr}` : ''].filter(Boolean).join(' — ');
               const label = `${cid}${sec.section ? `-${sec.section}` : ''}${sec.component ? ` • ${sec.component}` : ''}${sec.crn ? ` (CRN ${sec.crn})` : ''}`;
@@ -2780,11 +3730,7 @@
         title: `Pick a section — ${courseId}`,
         bodyHtml: `<p>${escapeHtml(entry.title || '')}</p>`,
         listItems: sections.slice(0, 120).map(sec => {
-          const meetingSummary = (sec.meetings || []).slice(0, 3).map(m => {
-            const days = (m.days || '').toString();
-            const tr = (m.time || '').toString();
-            return `${days} ${tr}`.trim();
-          }).filter(Boolean).join(' • ');
+          const meetingSummary = sectionMeetingPreview(sec, 3);
           const instr = sectionInstructorPreview(sec);
           const sub = [meetingSummary, instr ? `Instructor: ${instr}` : ''].filter(Boolean).join(' — ');
           const label = `${courseId}${sec.section ? `-${sec.section}` : ''}${sec.component ? ` • ${sec.component}` : ''}${sec.crn ? ` (CRN ${sec.crn})` : ''}`;
@@ -3091,20 +4037,10 @@
       const btn = e.target && e.target.closest ? e.target.closest('.scheduler-remove') : null;
       const pick = e.target && e.target.closest ? e.target.closest('.scheduler-pick') : null;
       const fix = e.target && e.target.closest ? e.target.closest('.scheduler-fix-coreq') : null;
-      const open = e.target && e.target.closest ? e.target.closest('.scheduler-open-section') : null;
-      if (open) {
-        const crn = String(open.getAttribute('data-crn') || '').trim();
-        if (crn) {
-          const url = buildDetailUrl(crn);
-          if (url) {
-            try { window.open(url, '_blank', 'noopener'); } catch (_) {}
-          }
-          return;
-        }
-        const courseId = normalizeCourseId(open.getAttribute('data-course') || '');
-        if (courseId) {
-          await openDetailPickerForCourse(courseId);
-        }
+      const details = e.target && e.target.closest ? e.target.closest('.scheduler-details') : null;
+      if (details) {
+        const courseId = normalizeCourseId(details.getAttribute('data-course') || '');
+        if (courseId) await openCourseDetailsModal(courseId);
         return;
       }
       if (pick) {
@@ -3208,20 +4144,10 @@
 
     resultsEl.addEventListener('click', async (e) => {
       const btn = e.target && e.target.closest ? e.target.closest('.scheduler-pick') : null;
-      const open = e.target && e.target.closest ? e.target.closest('.scheduler-open-section') : null;
-      if (open) {
-        const crn = String(open.getAttribute('data-crn') || '').trim();
-        if (crn) {
-          const url = buildDetailUrl(crn);
-          if (url) {
-            try { window.open(url, '_blank', 'noopener'); } catch (_) {}
-          }
-          return;
-        }
-        const courseId = normalizeCourseId(open.getAttribute('data-course') || '');
-        if (courseId) {
-          await openDetailPickerForCourse(courseId);
-        }
+      const details = e.target && e.target.closest ? e.target.closest('.scheduler-details') : null;
+      if (details) {
+        const courseId = normalizeCourseId(details.getAttribute('data-course') || '');
+        if (courseId) await openCourseDetailsModal(courseId);
         return;
       }
       if (!btn) return;
@@ -3285,6 +4211,53 @@
         const enabled = !!showBlockedToggle.checked;
         try { localStorage.setItem('schedulerShowBlockedCourses', enabled ? 'true' : 'false'); } catch (_) {}
         try { if (scheduleIndex) renderResults(scheduleIndex, lastQuery); } catch (_) {}
+      });
+    }
+    const rerenderResultsSafe = () => {
+      try { if (scheduleIndex) renderResults(scheduleIndex, lastQuery); } catch (_) {}
+    };
+    const onMinTypeChange = (key, el) => {
+      if (!el) return;
+      el.addEventListener('change', () => {
+        try { localStorage.setItem(key, String(el.value || '')); } catch (_) {}
+        rerenderResultsSafe();
+      });
+    };
+    onMinTypeChange('schedulerMinMajorType', minMainTypeSelect);
+    onMinTypeChange('schedulerMinDmType', minDmTypeSelect);
+    onMinTypeChange('schedulerMinMinorType', minMinorTypeSelect);
+
+    const onMinNumberInput = (key, el) => {
+      if (!el) return;
+      let t = null;
+      const flush = () => {
+        try { localStorage.setItem(key, String(el.value || '')); } catch (_) {}
+        rerenderResultsSafe();
+      };
+      el.addEventListener('input', () => {
+        if (t) clearTimeout(t);
+        t = setTimeout(flush, 120);
+      });
+      el.addEventListener('change', flush);
+    };
+    onMinNumberInput('schedulerMinSuCredits', minSuInput);
+    onMinNumberInput('schedulerMinEcts', minEctsInput);
+    onMinNumberInput('schedulerMinBasicScience', minBsInput);
+    onMinNumberInput('schedulerMinEngineering', minEngInput);
+
+    if (prereqToggle) {
+      prereqToggle.addEventListener('change', () => {
+        const enabled = !!prereqToggle.checked;
+        try { localStorage.setItem('schedulerCheckPrereqs', enabled ? 'true' : 'false'); } catch (_) {}
+        syncPrereqUi();
+        rerenderResultsSafe();
+      });
+    }
+    if (showUnmetPrereqToggle) {
+      showUnmetPrereqToggle.addEventListener('change', () => {
+        const enabled = !!showUnmetPrereqToggle.checked;
+        try { localStorage.setItem('schedulerShowUnmetPrereqs', enabled ? 'true' : 'false'); } catch (_) {}
+        rerenderResultsSafe();
       });
     }
 
@@ -3584,6 +4557,66 @@
       renderSelected();
       renderResults(idx, '');
       renderGrid(idx);
+
+      // Notify once if the schedule data has changed for any previously-seen
+      // selected sections (hours/instructors), then refresh the "last seen"
+      // baseline so the user isn't spammed repeatedly.
+      try {
+        const root = loadSchedulerState(termCode);
+        const report = computeSelectedSectionChangeReport(idx, root);
+        const changes = Array.isArray(report && report.changes) ? report.changes : [];
+        const seen = (report && report.seen && typeof report.seen === 'object') ? report.seen : {};
+
+        // Update baseline regardless of whether we show a popup.
+        saveSchedulerState(termCode, { lastSeenScheduleSnapshots: seen });
+
+        if (changes.length) {
+          const ui = (typeof window !== 'undefined') ? window.uiModal : null;
+          if (ui && typeof ui.alert === 'function') {
+            const bySched = {};
+            changes.forEach(ch => {
+              const k = String(ch.scheduleName || ch.scheduleId || 'Schedule');
+              bySched[k] = bySched[k] || [];
+              bySched[k].push(ch);
+            });
+
+            const blocks = Object.keys(bySched).sort().map((name) => {
+              const list = bySched[name] || [];
+              const items = list.map(ch => {
+                const what = [ch.hoursChanged ? 'Hours' : '', ch.instrChanged ? 'Instructor' : ''].filter(Boolean).join(' + ');
+                const prevMeet = ch.prev && ch.prev.meetingSummary ? ch.prev.meetingSummary : '';
+                const curMeet = ch.cur && ch.cur.meetingSummary ? ch.cur.meetingSummary : '';
+                const prevInstr = ch.prev && ch.prev.instrSummary ? ch.prev.instrSummary : '';
+                const curInstr = ch.cur && ch.cur.instrSummary ? ch.cur.instrSummary : '';
+                const lines = [];
+                if (ch.hoursChanged) lines.push(`<div class="scheduler-details-muted"><span class="muted">Hours:</span> ${escapeHtml(prevMeet || 'TBA')} → <strong>${escapeHtml(curMeet || 'TBA')}</strong></div>`);
+                if (ch.instrChanged) lines.push(`<div class="scheduler-details-muted"><span class="muted">Instructor:</span> ${escapeHtml(prevInstr || '—')} → <strong>${escapeHtml(curInstr || '—')}</strong></div>`);
+                return (
+                  `<div class="scheduler-details-card">` +
+                  `<div class="scheduler-details-card-title">${escapeHtml(ch.courseId)} <span class="muted">(CRN ${escapeHtml(ch.crn)})</span></div>` +
+                  `<div class="scheduler-details-paragraph"><span class="muted">Changed:</span> ${escapeHtml(what || 'Schedule')}</div>` +
+                  lines.join('') +
+                  `</div>`
+                );
+              }).join('');
+              return (
+                `<div class="scheduler-details-subsection">` +
+                `<div class="scheduler-details-subtitle">${escapeHtml(name)}</div>` +
+                items +
+                `</div>`
+              );
+            }).join('');
+
+            ui.alert(
+              'Schedule updated',
+              `<div class="scheduler-details">` +
+              `<div class="scheduler-details-paragraph">Some of your selected sections have changed since the last time you opened the scheduler.</div>` +
+              blocks +
+              `</div>`
+            );
+          }
+        }
+      } catch (_) {}
 
       planListEl.addEventListener('click', async (e) => {
         const btn = e.target && e.target.closest ? e.target.closest('.scheduler-plan-pick') : null;

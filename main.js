@@ -2152,6 +2152,21 @@ function SUrriculum(major_chosen_by_user) {
             if (ui && typeof ui.alert === 'function') await ui.alert('Import complete', messageHtml);
             else await uiAlert('Import complete', messageHtml);
 
+            // Reminder: program/admit-term selections are not inferred from the transcript.
+            try {
+                const reminderTitle = 'Reminder: choose your programs & admit terms';
+                const reminderBody =
+                    '<p>SUrriculum does <strong>not</strong> automatically detect your <strong>major</strong>, <strong>double major</strong>, <strong>minor(s)</strong>, or their <strong>admit terms</strong> from the imported file.</p>' +
+                    '<p>Please double-check the sidebar selections so the requirements match your catalog:</p>' +
+                    '<ul>' +
+                    '<li><strong>Major / Minor admit term:</strong> usually your <strong>first term at Sabancı</strong> (your initial entry term), even if you declared the major later or had a prep/English year.</li>' +
+                    '<li><strong>Double Major admit term:</strong> usually the <strong>first term after</strong> your double major application was accepted.</li>' +
+                    '</ul>' +
+                    '<p>If these are wrong, your graduation/summary results can look incorrect.</p>';
+                if (ui && typeof ui.alert === 'function') await ui.alert(reminderTitle, reminderBody);
+                else await uiAlert(reminderTitle, reminderBody);
+            } catch (_) {}
+
             // If there are pending custom courses, process them
             if (pendingList.length > 0) {
                 const queue = pendingList.slice();
