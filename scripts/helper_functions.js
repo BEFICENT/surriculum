@@ -408,7 +408,7 @@ function getCoursesList(course_data) {
 // Score courses for "sort based on score" suggestions. This mirrors the model
 // used in scripts/click.js so both the planner dropdown and scheduler can sort
 // consistently.
-function computeCourseSuggestionScore(courseCode) {
+function computeCourseSuggestionScore(courseCode, opts) {
     try {
         if (typeof window === 'undefined') return 0;
         const cur = window.curriculum || null;
@@ -446,6 +446,46 @@ function computeCourseSuggestionScore(courseCode) {
             return parseNum(req.engineering) > 0;
         };
 
+        const previousOnly = !!(opts && typeof opts === 'object' && opts.schedulerPreviousOnly);
+        const currentTermCode = (() => {
+            try {
+                const tc = window.currentTermCode || '';
+                const n = parseInt(String(tc), 10);
+                return isFinite(n) ? n : 0;
+            } catch (_) {
+                return 0;
+            }
+        })();
+        const semesterIdToTermCode = (() => {
+            const map = new Map();
+            try {
+                if (!previousOnly || !currentTermCode) return map;
+                const containers = document.querySelectorAll('.container_semester');
+                for (let i = 0; i < containers.length; i++) {
+                    const c = containers[i];
+                    const p = c ? c.querySelector('.date p') : null;
+                    const name = p ? String(p.textContent || '').trim() : '';
+                    const code = window.termNameToCode ? window.termNameToCode(name) : '';
+                    const codeN = parseInt(String(code || ''), 10) || 0;
+                    const semEl = c ? c.querySelector('.semester') : null;
+                    const id = semEl ? String(semEl.id || '') : '';
+                    if (id && codeN) map.set(id, codeN);
+                }
+            } catch (_) {}
+            return map;
+        })();
+        const includeSemester = (sem) => {
+            try {
+                if (!previousOnly || !currentTermCode) return true;
+                const id = sem && sem.id ? String(sem.id) : '';
+                const code = id && semesterIdToTermCode.has(id) ? semesterIdToTermCode.get(id) : 0;
+                if (!code) return true; // if unknown, don't undercount
+                return code < currentTermCode;
+            } catch (_) {
+                return true;
+            }
+        };
+
         const currentSciEng = (() => {
             let sci = 0;
             let eng = 0;
@@ -453,6 +493,7 @@ function computeCourseSuggestionScore(courseCode) {
                 if (cur && Array.isArray(cur.semesters)) {
                     for (let i = 0; i < cur.semesters.length; i++) {
                         const sem = cur.semesters[i];
+                        if (!includeSemester(sem)) continue;
                         sci += parseNum(sem && sem.totalScience);
                         eng += parseNum(sem && sem.totalEngineering);
                     }
@@ -469,6 +510,7 @@ function computeCourseSuggestionScore(courseCode) {
                 for (let i = 0; i < cur.semesters.length; i++) {
                     const sem = cur.semesters[i];
                     if (!sem) continue;
+                    if (!includeSemester(sem)) continue;
                     if (which === 'dm') {
                         uni += parseNum(sem.totalUniversityDM);
                         req += parseNum(sem.totalRequiredDM);

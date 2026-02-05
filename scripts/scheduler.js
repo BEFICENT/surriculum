@@ -671,10 +671,19 @@
       return `https://suis.sabanciuniv.edu/prod/bwckschd.p_disp_detail_sched?term_in=${encodeURIComponent(termCode)}&crn_in=${encodeURIComponent(c)}`;
     };
 
-    const buildSyllabusUrl = (crn) => {
-      const c = String(crn || '').trim();
-      if (!c) return '';
-      return `https://apps.sabanciuniv.edu/courses/syllabus/view.php?term=${encodeURIComponent(termCode)}&crn=${encodeURIComponent(c)}&origin=www_syllabus`;
+    const buildSyllabusUrl = (courseId, section) => {
+      try {
+        const cid = normalizeCourseId(courseId);
+        const sec = String(section || '').trim();
+        if (!cid || !sec) return '';
+        const m = cid.match(/^([A-Z]{2,5})([0-9]+)/);
+        const sc = m ? String(m[1] || '').toUpperCase() : '';
+        const cn = m ? String(m[2] || '') : '';
+        if (!sc || !cn) return '';
+        return `https://apps.sabanciuniv.edu/courses/syllabus/view.php?term=${encodeURIComponent(termCode)}&sc=${encodeURIComponent(sc)}&cn=${encodeURIComponent(cn)}&section=${encodeURIComponent(sec)}&view=su`;
+      } catch (_) {
+        return '';
+      }
     };
 
     const sectionMeetingPreview = (sec, maxMeetings = 3) => {
@@ -790,12 +799,12 @@
             const instr = sectionInstructorPreview(sec);
             const sub = [meetingSummary, instr ? `Instructor: ${instr}` : ''].filter(Boolean).join(' — ');
             const label = `${cid}${sec.section ? `-${sec.section}` : ''}${sec.component ? ` • ${sec.component}` : ''}${sec.crn ? ` (CRN ${sec.crn})` : ''}`;
-            return { action: 'open', label, subLabel: sub, value: { crn: String(sec.crn || '') } };
+            return { action: 'open', label, subLabel: sub, value: { courseId: cid, section: String(sec.section || '') } };
           }),
           buttons: [{ action: 'cancel', label: 'Close', variant: 'secondary' }],
         });
-        if (res && res.action === 'open' && res.value && res.value.crn) {
-          const url = buildSyllabusUrl(res.value.crn);
+        if (res && res.action === 'open' && res.value && res.value.courseId && res.value.section) {
+          const url = buildSyllabusUrl(res.value.courseId, res.value.section);
           if (url) {
             try { window.open(url, '_blank', 'noopener'); } catch (_) {}
           }
@@ -882,8 +891,8 @@
           const syllabusBtn = isCoreqOnly
             ? ''
             : (
-              pickCrn
-                ? `<button type="button" class="btn btn-secondary btn-sm scheduler-details-syllabus" data-crn="${escapeHtml(pickCrn)}">Syllabus</button>`
+              (selectedSec && selectedSec.section)
+                ? `<button type="button" class="btn btn-secondary btn-sm scheduler-details-syllabus" data-course="${escapeHtml(cid)}" data-section="${escapeHtml(String(selectedSec.section))}">Syllabus</button>`
                 : `<button type="button" class="btn btn-secondary btn-sm scheduler-details-syllabus-picker" data-course="${escapeHtml(cid)}">Syllabus</button>`
             );
           const openCoursePageBtn = coursePageUrl
@@ -986,8 +995,8 @@
             const openBtn = crn
               ? `<button type="button" class="btn btn-secondary btn-sm scheduler-details-open" data-crn="${escapeHtml(crn)}">Open</button>`
               : '';
-            const syllabusBtn = (!isCoreqOnly && crn)
-              ? `<button type="button" class="btn btn-secondary btn-sm scheduler-details-syllabus" data-crn="${escapeHtml(crn)}">Syllabus</button>`
+            const syllabusBtn = (!isCoreqOnly && sec && sec.section)
+              ? `<button type="button" class="btn btn-secondary btn-sm scheduler-details-syllabus" data-course="${escapeHtml(cid)}" data-section="${escapeHtml(String(sec.section))}">Syllabus</button>`
               : '';
             return (
               `<div class="scheduler-details-section-row">` +
@@ -1043,9 +1052,10 @@
               }
               const syllabusBtn = e.target && e.target.closest ? e.target.closest('.scheduler-details-syllabus') : null;
               if (syllabusBtn) {
-                const crn = String(syllabusBtn.getAttribute('data-crn') || '').trim();
-                if (crn) {
-                  const url = buildSyllabusUrl(crn);
+                const c = normalizeCourseId(syllabusBtn.getAttribute('data-course') || '');
+                const sec = String(syllabusBtn.getAttribute('data-section') || '').trim();
+                if (c && sec) {
+                  const url = buildSyllabusUrl(c, sec);
                   if (url) {
                     try { window.open(url, '_blank', 'noopener'); } catch (_) {}
                   }
@@ -2365,6 +2375,7 @@
     // user's plan". We keep current-term planned/selected courses visible via
     // keepVisible so users can still schedule them.
     let takenAnySet = null; // Set(courseId) populated per renderResults
+    let takenBeforeCurrentSet = null; // Set(courseId) populated per renderResults (previous terms only)
     const computeTakenAnySet = () => {
       try {
         const cur = (typeof window !== 'undefined') ? window.curriculum : null;
@@ -2634,7 +2645,12 @@
         if (!shouldHoverPreview()) return;
         const cid = normalizeCourseId(baseCourseId);
         if (!cid) return;
-        if (isTakenCourse(cid)) return;
+        try {
+          // For hover previews, only treat "taken" as "completed in previous terms".
+          // Courses that are just in the current-term plan should still preview.
+          if (!(takenBeforeCurrentSet instanceof Set)) takenBeforeCurrentSet = computeTakenBeforeCurrentTermSet();
+          if (takenBeforeCurrentSet instanceof Set && takenBeforeCurrentSet.has(cid)) return;
+        } catch (_) {}
         if (selected[cid]) return;
 
         const bundle = getRequiredBundleCourseIds(idx, cid);
@@ -2681,7 +2697,7 @@
     const computeScore = (courseId) => {
       try {
         const fn = (typeof window !== 'undefined') ? window.computeCourseSuggestionScore : null;
-        if (typeof fn === 'function') return fn(courseId) || 0;
+        if (typeof fn === 'function') return fn(courseId, { schedulerPreviousOnly: true }) || 0;
       } catch (_) {}
       return 0;
     };
@@ -3218,6 +3234,20 @@
       // Recompute taken courses set for this render pass so filtering and
       // availability highlighting stays accurate as the user edits the plan.
       try { takenAnySet = computeTakenAnySet(); } catch (_) { takenAnySet = null; }
+      try { takenBeforeCurrentSet = computeTakenBeforeCurrentTermSet(); } catch (_) { takenBeforeCurrentSet = null; }
+
+      // For availability highlighting, treat "taken" as "completed in previous terms".
+      // Courses in the current-term plan should still be schedulable (green/yellow)
+      // unless the user has already selected a section for them.
+      let takenBeforeSetForHighlight = null;
+      try {
+        if (shouldHighlightAvailability()) {
+          takenBeforeSetForHighlight = computeTakenBeforeCurrentTermSet();
+          if (!(takenBeforeSetForHighlight instanceof Set)) takenBeforeSetForHighlight = null;
+        }
+      } catch (_) {
+        takenBeforeSetForHighlight = null;
+      }
 
       // Ensure we have a reverse-coreq index so we can group recitations/labs
       // under their main course cards and avoid listing them separately.
@@ -3798,7 +3828,9 @@
               if (hasUnmetPrereq) classes.push('is-unmet-prereq');
               try {
                 if (shouldHighlightAvailability()) {
-                  if (isTakenCourse(e.course_id)) {
+                  const cid = normalizeCourseId(e.course_id);
+                  const isCompleted = !!(cid && takenBeforeSetForHighlight instanceof Set && takenBeforeSetForHighlight.has(cid));
+                  if (isCompleted) {
                     classes.push('is-taken');
                   } else if (!already) {
                     const bundle = getRequiredBundleCourseIds(scheduleIndex, e.course_id);
