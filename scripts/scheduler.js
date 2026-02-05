@@ -671,6 +671,12 @@
       return `https://suis.sabanciuniv.edu/prod/bwckschd.p_disp_detail_sched?term_in=${encodeURIComponent(termCode)}&crn_in=${encodeURIComponent(c)}`;
     };
 
+    const buildSyllabusUrl = (crn) => {
+      const c = String(crn || '').trim();
+      if (!c) return '';
+      return `https://apps.sabanciuniv.edu/courses/syllabus/view.php?term=${encodeURIComponent(termCode)}&crn=${encodeURIComponent(c)}&origin=www_syllabus`;
+    };
+
     const sectionMeetingPreview = (sec, maxMeetings = 3) => {
       try {
         const meetings = (sec && Array.isArray(sec.meetings)) ? sec.meetings : [];
@@ -758,6 +764,45 @@
       } catch (_) {}
     };
 
+    const openSyllabusPickerForCourse = async (courseId) => {
+      try {
+        const cid = normalizeCourseId(courseId);
+        if (!cid) return;
+        const idx = scheduleIndex || await loadTermScheduleIndex(termCode);
+        if (!idx) return;
+        scheduleIndex = idx;
+        const entry = idx.get(cid);
+        if (!entry || !Array.isArray(entry.sections) || !entry.sections.length) return;
+
+        const sections = entry.sections.slice();
+        sections.sort((a, b) => {
+          const aL = /lec/i.test(a.component || '') ? 0 : 1;
+          const bL = /lec/i.test(b.component || '') ? 0 : 1;
+          if (aL !== bL) return aL - bL;
+          return (String(a.section || '')).localeCompare(String(b.section || ''));
+        });
+
+        const res = await createPickerModal({
+          title: `Open syllabus — ${cid}`,
+          bodyHtml: `<p>${escapeHtml(entry.title || '')}</p><p>Select a section to open its syllabus:</p>`,
+          listItems: sections.slice(0, 140).map(sec => {
+            const meetingSummary = sectionMeetingPreview(sec, 3);
+            const instr = sectionInstructorPreview(sec);
+            const sub = [meetingSummary, instr ? `Instructor: ${instr}` : ''].filter(Boolean).join(' — ');
+            const label = `${cid}${sec.section ? `-${sec.section}` : ''}${sec.component ? ` • ${sec.component}` : ''}${sec.crn ? ` (CRN ${sec.crn})` : ''}`;
+            return { action: 'open', label, subLabel: sub, value: { crn: String(sec.crn || '') } };
+          }),
+          buttons: [{ action: 'cancel', label: 'Close', variant: 'secondary' }],
+        });
+        if (res && res.action === 'open' && res.value && res.value.crn) {
+          const url = buildSyllabusUrl(res.value.crn);
+          if (url) {
+            try { window.open(url, '_blank', 'noopener'); } catch (_) {}
+          }
+        }
+      } catch (_) {}
+    };
+
     const openCourseDetailsModal = async (courseId) => {
       try {
         const cid = normalizeCourseId(courseId);
@@ -779,6 +824,17 @@
         const pi = (() => {
           try { return coursePageInfoMap && typeof coursePageInfoMap.get === 'function' ? coursePageInfoMap.get(cid) : null; } catch (_) { return null; }
         })();
+
+        // If this course is a linked recitation/lab (coreq-only), don't show
+        // syllabus buttons (syllabi are for the main course).
+        let isCoreqOnly = false;
+        try {
+          if (!reverseCoreqIndex && coursePageInfoMap) {
+            reverseCoreqIndex = buildReverseCoreqIndex(idx);
+          }
+          const parents = reverseCoreqIndex ? reverseCoreqIndex.get(cid) : null;
+          isCoreqOnly = !!(parents && parents.size);
+        } catch (_) {}
 
         const pick = selected && selected[cid] ? selected[cid] : null;
         const pickCrn = pick && pick.crn ? String(pick.crn) : '';
@@ -823,10 +879,17 @@
           const openSuisBtn = pickCrn
             ? `<button type="button" class="btn btn-primary btn-sm scheduler-details-open" data-crn="${escapeHtml(pickCrn)}">Open selected on SUIS</button>`
             : `<button type="button" class="btn btn-primary btn-sm scheduler-details-open-picker" data-course="${escapeHtml(cid)}">Open a section on SUIS</button>`;
+          const syllabusBtn = isCoreqOnly
+            ? ''
+            : (
+              pickCrn
+                ? `<button type="button" class="btn btn-secondary btn-sm scheduler-details-syllabus" data-crn="${escapeHtml(pickCrn)}">Syllabus</button>`
+                : `<button type="button" class="btn btn-secondary btn-sm scheduler-details-syllabus-picker" data-course="${escapeHtml(cid)}">Syllabus</button>`
+            );
           const openCoursePageBtn = coursePageUrl
             ? `<a class="btn btn-secondary btn-sm" href="${escapeHtml(coursePageUrl)}" target="_blank" rel="noopener">Open course page</a>`
             : '';
-          return `<div class="scheduler-details-actions">${openCoursePageBtn}${openSuisBtn}</div>`;
+          return `<div class="scheduler-details-actions">${openCoursePageBtn}${syllabusBtn}${openSuisBtn}</div>`;
         })();
 
         const fmtNum = (v) => {
@@ -923,13 +986,16 @@
             const openBtn = crn
               ? `<button type="button" class="btn btn-secondary btn-sm scheduler-details-open" data-crn="${escapeHtml(crn)}">Open</button>`
               : '';
+            const syllabusBtn = (!isCoreqOnly && crn)
+              ? `<button type="button" class="btn btn-secondary btn-sm scheduler-details-syllabus" data-crn="${escapeHtml(crn)}">Syllabus</button>`
+              : '';
             return (
               `<div class="scheduler-details-section-row">` +
               `<div class="scheduler-details-section-main">` +
               `<div class="scheduler-details-section-title">${escapeHtml(label)} ${selectedBadge}</div>` +
               (meta ? `<div class="scheduler-details-section-meta">${escapeHtml(meta)}</div>` : '') +
               `</div>` +
-              `<div class="scheduler-details-section-actions">${openBtn}</div>` +
+              `<div class="scheduler-details-section-actions">${syllabusBtn}${openBtn}</div>` +
               `</div>`
             );
           }).join('');
@@ -975,10 +1041,27 @@
                 }
                 return;
               }
+              const syllabusBtn = e.target && e.target.closest ? e.target.closest('.scheduler-details-syllabus') : null;
+              if (syllabusBtn) {
+                const crn = String(syllabusBtn.getAttribute('data-crn') || '').trim();
+                if (crn) {
+                  const url = buildSyllabusUrl(crn);
+                  if (url) {
+                    try { window.open(url, '_blank', 'noopener'); } catch (_) {}
+                  }
+                }
+                return;
+              }
               const openPicker = e.target && e.target.closest ? e.target.closest('.scheduler-details-open-picker') : null;
               if (openPicker) {
                 const c = normalizeCourseId(openPicker.getAttribute('data-course') || '');
                 if (c) await openDetailPickerForCourse(c);
+                return;
+              }
+              const syllabusPicker = e.target && e.target.closest ? e.target.closest('.scheduler-details-syllabus-picker') : null;
+              if (syllabusPicker) {
+                const c = normalizeCourseId(syllabusPicker.getAttribute('data-course') || '');
+                if (c) await openSyllabusPickerForCourse(c);
               }
             });
           },
