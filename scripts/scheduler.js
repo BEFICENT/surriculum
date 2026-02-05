@@ -2334,6 +2334,7 @@
     };
 
     const prereqCheckCache = { sig: '', map: new Map() }; // course_id -> {mode, missing} | null
+    const prereqAstCache = new Map(); // course_id -> parsed AST | null
 
     const isTakenCourse = (courseId) => {
       try {
@@ -3285,24 +3286,165 @@
           const info = coursePageInfoMap.get(cid);
           const text = info && info.prerequisites ? String(info.prerequisites || '') : '';
           if (!text) return null;
-          const prereqIds = extractCoreqCourseIdsFromCoursePageInfoField(text)
-            .map(c => normalizeCourseId(c))
-            .filter(Boolean);
-          if (!prereqIds.length) return null;
 
-          const hasOr = /\bor\b/i.test(text);
-          const hasAnd = /\band\b/i.test(text);
-          const mode = (hasOr && !hasAnd) ? 'or' : 'and';
+          const tokenizePrereq = (s) => {
+            const out = [];
+            try {
+              const re = /([A-Z]{2,5})\s*([0-9]{3}[A-Z0-9]?)|(\()|(\))|\b(and|or)\b/ig;
+              let m;
+              while ((m = re.exec(String(s || ''))) !== null) {
+                if (m[1] && m[2]) {
+                  out.push({ t: 'course', v: (m[1] + m[2]).toUpperCase() });
+                  continue;
+                }
+                if (m[3]) { out.push({ t: 'lp' }); continue; }
+                if (m[4]) { out.push({ t: 'rp' }); continue; }
+                if (m[5]) {
+                  const op = String(m[5]).toLowerCase();
+                  out.push({ t: 'op', v: op });
+                }
+              }
+            } catch (_) {}
+            return out;
+          };
 
-          if (mode === 'or') {
-            const ok = prereqIds.some(p => takenBeforeSet.has(p));
-            const res = ok ? null : { mode, missing: prereqIds };
-            try { if (prereqCheckCache && prereqCheckCache.map) prereqCheckCache.map.set(cid, res); } catch (_) {}
-            return res;
-          }
+          const parsePrereqAst = (s) => {
+            const tokens = tokenizePrereq(s);
+            if (!tokens.length) return null;
 
-          const missing = prereqIds.filter(p => !takenBeforeSet.has(p));
-          const res = missing.length ? { mode, missing } : null;
+            const prec = { or: 1, and: 2 };
+            const output = [];
+            const ops = [];
+            for (let i = 0; i < tokens.length; i++) {
+              const tok = tokens[i];
+              if (!tok) continue;
+              if (tok.t === 'course') {
+                output.push(tok);
+                continue;
+              }
+              if (tok.t === 'lp') { ops.push(tok); continue; }
+              if (tok.t === 'rp') {
+                while (ops.length && ops[ops.length - 1].t !== 'lp') output.push(ops.pop());
+                if (ops.length && ops[ops.length - 1].t === 'lp') ops.pop();
+                continue;
+              }
+              if (tok.t === 'op') {
+                while (ops.length) {
+                  const top = ops[ops.length - 1];
+                  if (!top || top.t !== 'op') break;
+                  const pTop = prec[top.v] || 0;
+                  const pTok = prec[tok.v] || 0;
+                  if (pTop >= pTok) output.push(ops.pop());
+                  else break;
+                }
+                ops.push(tok);
+              }
+            }
+            while (ops.length) {
+              const op = ops.pop();
+              if (op && op.t === 'op') output.push(op);
+            }
+
+            const stack = [];
+            const asNode = (x) => x;
+            const makeFlat = (type, a, b) => {
+              const items = [];
+              const add = (n) => {
+                if (!n) return;
+                if (n.type === type && Array.isArray(n.items)) items.push(...n.items);
+                else items.push(n);
+              };
+              add(a);
+              add(b);
+              return { type, items };
+            };
+            for (let i = 0; i < output.length; i++) {
+              const tok = output[i];
+              if (!tok) continue;
+              if (tok.t === 'course') {
+                stack.push({ type: 'course', id: tok.v });
+                continue;
+              }
+              if (tok.t === 'op') {
+                const b = stack.pop();
+                const a = stack.pop();
+                if (!a || !b) continue;
+                if (tok.v === 'and') stack.push(makeFlat('and', asNode(a), asNode(b)));
+                else if (tok.v === 'or') stack.push(makeFlat('or', asNode(a), asNode(b)));
+              }
+            }
+            return stack.length ? stack[stack.length - 1] : null;
+          };
+
+          const ast = (() => {
+            try {
+              if (prereqAstCache.has(cid)) return prereqAstCache.get(cid);
+              const a = parsePrereqAst(text);
+              prereqAstCache.set(cid, a);
+              return a;
+            } catch (_) {
+              return null;
+            }
+          })();
+          if (!ast) return null;
+
+          const evalExpr = (node) => {
+            const normalize = (arr) => Array.from(new Set(arr.filter(Boolean)));
+            const reqMissing = new Set();
+            const oneOf = [];
+
+            const optionLabel = (n) => {
+              try {
+                if (!n) return '';
+                if (n.type === 'course') return String(n.id || '');
+                if (n.type === 'and') {
+                  const parts = (Array.isArray(n.items) ? n.items : []).map(optionLabel).filter(Boolean);
+                  return parts.length > 1 ? parts.join(' + ') : (parts[0] || '');
+                }
+                if (n.type === 'or') {
+                  const parts = (Array.isArray(n.items) ? n.items : []).map(optionLabel).filter(Boolean);
+                  return parts.length > 1 ? `(${parts.join(' / ')})` : (parts[0] || '');
+                }
+              } catch (_) {}
+              return '';
+            };
+
+            const helper = (n, context) => {
+              if (!n) return true;
+              if (n.type === 'course') {
+                const id = normalizeCourseId(n.id);
+                const ok = !!(id && takenBeforeSet.has(id));
+                if (!ok && context === 'and') reqMissing.add(id);
+                return ok;
+              }
+              if (n.type === 'and') {
+                const items = Array.isArray(n.items) ? n.items : [];
+                let ok = true;
+                for (let i = 0; i < items.length; i++) {
+                  const childOk = helper(items[i], context);
+                  ok = ok && childOk;
+                }
+                return ok;
+              }
+              if (n.type === 'or') {
+                const items = Array.isArray(n.items) ? n.items : [];
+                for (let i = 0; i < items.length; i++) {
+                  if (helper(items[i], 'or')) return true;
+                }
+                // None satisfied -> record this as a "one of" group.
+                const opts = items.map(optionLabel).map(s => String(s || '').trim()).filter(Boolean);
+                if (opts.length) oneOf.push(opts);
+                return false;
+              }
+              return true;
+            };
+
+            const ok = helper(node, 'and');
+            return { ok, required: normalize(Array.from(reqMissing)), oneOf };
+          };
+
+          const ev = evalExpr(ast);
+          const res = (ev && ev.ok) ? null : { mode: 'expr', required: (ev && ev.required) ? ev.required : [], oneOf: (ev && ev.oneOf) ? ev.oneOf : [] };
           try { if (prereqCheckCache && prereqCheckCache.map) prereqCheckCache.map.set(cid, res); } catch (_) {}
           return res;
         } catch (_) {
@@ -3436,7 +3578,20 @@
             const cid = normalizeCourseId(id);
             if (cid) {
               const unmet = getUnmetPrereqs(cid);
-              if (unmet && Array.isArray(unmet.missing) && unmet.missing.length) {
+              const hasUnmet = (() => {
+                try {
+                  if (!unmet) return false;
+                  if (unmet.mode === 'expr') {
+                    const req = Array.isArray(unmet.required) ? unmet.required.length : 0;
+                    const groups = Array.isArray(unmet.oneOf) ? unmet.oneOf.length : 0;
+                    return req > 0 || groups > 0;
+                  }
+                  return Array.isArray(unmet.missing) && unmet.missing.length > 0;
+                } catch (_) {
+                  return false;
+                }
+              })();
+              if (hasUnmet) {
                 unmetPrereqById.set(cid, unmet);
                 if (!showUnmetPrereqs && !keepVisible.has(cid)) continue;
               }
@@ -3492,7 +3647,13 @@
               return null;
             }
           })();
+          const unmetRequired = (unmetPrereq && unmetPrereq.mode === 'expr' && Array.isArray(unmetPrereq.required)) ? unmetPrereq.required.slice() : [];
+          const unmetOneOf = (unmetPrereq && unmetPrereq.mode === 'expr' && Array.isArray(unmetPrereq.oneOf)) ? unmetPrereq.oneOf.slice() : [];
           const unmetList = (unmetPrereq && Array.isArray(unmetPrereq.missing)) ? unmetPrereq.missing.slice() : [];
+          const hasUnmetPrereq = !!(
+            (unmetPrereq && unmetPrereq.mode === 'expr' && (unmetRequired.length || unmetOneOf.length)) ||
+            (unmetList && unmetList.length)
+          );
           const typeParts = [];
           try {
             if (d && d.mainType) typeParts.push(`Major: ${String(d.mainType).toUpperCase()}`);
@@ -3545,7 +3706,7 @@
             (() => {
               const classes = ['scheduler-course'];
               if (miss.length) classes.push('is-missing-coreq');
-              if (unmetList.length) classes.push('is-unmet-prereq');
+              if (hasUnmetPrereq) classes.push('is-unmet-prereq');
               try {
                 if (shouldHighlightAvailability()) {
                   if (isTakenCourse(e.course_id)) {
@@ -3570,7 +3731,21 @@
               } catch (_) {}
               const prereqHtml = (() => {
                 try {
-                  if (!unmetList.length) return '';
+                  if (!hasUnmetPrereq) return '';
+                  const lines = [];
+                  if (unmetPrereq && unmetPrereq.mode === 'expr') {
+                    if (unmetRequired.length) {
+                      const missing = unmetRequired.slice(0, 6).join(', ') + (unmetRequired.length > 6 ? '…' : '');
+                      lines.push(`<div class="scheduler-course-meta"><span class="scheduler-badge-prereq">Prereq</span> Missing: ${escapeHtml(missing)}</div>`);
+                    }
+                    (unmetOneOf || []).slice(0, 2).forEach((opts) => {
+                      const arr = Array.isArray(opts) ? opts : [];
+                      const text = arr.slice(0, 6).join(' / ') + (arr.length > 6 ? ' / …' : '');
+                      if (text) lines.push(`<div class="scheduler-course-meta"><span class="scheduler-badge-prereq">Prereq</span> Needs one of: ${escapeHtml(text)}</div>`);
+                    });
+                    return lines.join('');
+                  }
+
                   const mode = unmetPrereq && unmetPrereq.mode ? String(unmetPrereq.mode) : 'and';
                   const label = mode === 'or' ? 'Needs one of:' : 'Missing:';
                   const missing = unmetList.slice(0, 6).join(', ') + (unmetList.length > 6 ? '…' : '');
