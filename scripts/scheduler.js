@@ -3025,10 +3025,16 @@
               (meta && meta.instructors ? `<p><span class="muted">Instructors:</span> ${escapeHtml(meta.instructors)}</p>` : ''),
             buttons: [
               { action: 'close', label: 'Close', variant: 'secondary' },
+              { action: 'details', label: 'Details', variant: 'secondary', value: meta && meta.course_id ? meta.course_id : null },
               { action: 'change', label: 'Change section', variant: 'secondary', value: meta && meta.course_id ? meta.course_id : null },
               { action: 'remove', label: 'Remove section', variant: 'primary', value: meta && meta.course_id ? meta.course_id : null },
             ],
           });
+          if (res.action === 'details' && res.value) {
+            const courseId = normalizeCourseId(res.value);
+            if (!courseId) return;
+            try { await openCourseDetailsModal(courseId); } catch (_) {}
+          }
           if (res.action === 'change' && res.value) {
             const courseId = normalizeCourseId(res.value);
             if (!courseId) return;
