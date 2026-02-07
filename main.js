@@ -1584,6 +1584,92 @@ function SUrriculum(major_chosen_by_user) {
             });
         }
 
+        function _creditNumber(value) {
+            const raw = (value === null || value === undefined) ? '' : String(value).trim();
+            if (!raw) return 0;
+            const n = parseFloat(raw.replace(',', '.'));
+            return Number.isFinite(n) ? n : 0;
+        }
+
+        function _hasAnyNonZeroCredits(course) {
+            if (!course || typeof course !== 'object') return false;
+            return (
+                _creditNumber(course.ECTS) !== 0 ||
+                _creditNumber(course.SU_credit) !== 0 ||
+                _creditNumber(course.Engineering) !== 0 ||
+                _creditNumber(course.Basic_Science) !== 0
+            );
+        }
+
+        function _fillCreditsFromSource(target, source) {
+            if (!target || typeof target !== 'object' || !source || typeof source !== 'object') return false;
+            let changed = false;
+
+            const srcECTS = _creditNumber(source.ECTS);
+            const srcSU = _creditNumber(source.SU_credit);
+            const srcENG = _creditNumber(source.Engineering);
+            const srcBS = _creditNumber(source.Basic_Science);
+
+            if (_creditNumber(target.ECTS) === 0 && srcECTS !== 0) {
+                target.ECTS = String(source.ECTS ?? '0');
+                changed = true;
+            }
+            if (_creditNumber(target.SU_credit) === 0 && srcSU !== 0) {
+                target.SU_credit = String(source.SU_credit ?? '0');
+                changed = true;
+            }
+            if (_creditNumber(target.Engineering) === 0 && srcENG !== 0) {
+                target.Engineering = srcENG;
+                changed = true;
+            }
+            if (_creditNumber(target.Basic_Science) === 0 && srcBS !== 0) {
+                target.Basic_Science = srcBS;
+                changed = true;
+            }
+
+            return changed;
+        }
+
+        function _findCourseByCombinedCodeInList(list, combinedCode) {
+            try {
+                if (!combinedCode || !Array.isArray(list)) return null;
+                for (let i = 0; i < list.length; i++) {
+                    const c = list[i];
+                    if (c && (c.Major + c.Code) === combinedCode) return c;
+                }
+            } catch (_) {}
+            return null;
+        }
+
+        function _findCourseCreditsSourceByCombinedCode(combinedCode, dmBaseList) {
+            return (
+                _findCourseByCombinedCodeInList(course_data, combinedCode) ||
+                _findCourseByCombinedCodeInList(dmBaseList, combinedCode) ||
+                null
+            );
+        }
+
+        function _repairDmCustomCoursesCredits(dmCode, dmCustomCourses, dmBaseList) {
+            if (!dmCode || !Array.isArray(dmCustomCourses) || dmCustomCourses.length === 0) return 0;
+            let changedCount = 0;
+            for (let i = 0; i < dmCustomCourses.length; i++) {
+                const dmCourse = dmCustomCourses[i];
+                if (!dmCourse || typeof dmCourse !== 'object') continue;
+                const combined = (dmCourse.Major || '') + (dmCourse.Code || '');
+                if (!combined) continue;
+                const source = _findCourseCreditsSourceByCombinedCode(combined, dmBaseList);
+                if (!source || !_hasAnyNonZeroCredits(source)) continue;
+                if (_fillCreditsFromSource(dmCourse, source)) changedCount++;
+            }
+            if (changedCount > 0) {
+                try {
+                    const keyDM = 'customCourses_' + dmCode;
+                    planSetItem(keyDM, JSON.stringify(dmCustomCourses));
+                } catch (_) {}
+            }
+            return changedCount;
+        }
+
         /**
          * Process a queue of courses that are missing a double major category.
          * For each course code in the list, we prompt the user to select
@@ -1607,21 +1693,22 @@ function SUrriculum(major_chosen_by_user) {
                 updateDatalistForDoubleMajor();
                 return;
             }
-            const item = list.shift();
-            showCourseTypeFormDM(item.code, item.title, function(selectedType) {
-                if (selectedType) {
+             const item = list.shift();
+             showCourseTypeFormDM(item.code, item.title, function(selectedType) {
+                 if (selectedType) {
                     // Parse major prefix and code number
                     const match = item.code.match(/^([A-Z]+)(\d+)/);
                     const maj = match ? match[1] : item.code.replace(/\d+.*/, '');
                     const num = match ? match[2] : item.code.replace(/[A-Z]+/, '');
+                    const source = _findCourseCreditsSourceByCombinedCode(item.code, doubleMajorCourseData);
                     const newCourseDM = {
                         Major: maj,
                         Code: num,
                         Course_Name: item.title || item.code,
-                        ECTS: '0',
-                        Engineering: 0,
-                        Basic_Science: 0,
-                        SU_credit: '0',
+                        ECTS: source ? String(source.ECTS ?? '0') : '0',
+                        Engineering: source ? _creditNumber(source.Engineering) : 0,
+                        Basic_Science: source ? _creditNumber(source.Basic_Science) : 0,
+                        SU_credit: source ? String(source.SU_credit ?? '0') : '0',
                         Faculty: '',
                         EL_Type: selectedType,
                         Faculty_Course: 'No'
@@ -1719,21 +1806,49 @@ function SUrriculum(major_chosen_by_user) {
                         `<p>No course data available for <strong>${escapeHtml(dm)}</strong> in <strong>${escapeHtml(termCodeToName(entryTermDMCode))}</strong>.</p>`
                     );
                 }
-                doubleMajorCourseData = jsonDM || [];
+                // Important: keep `doubleMajorCourseData` as a single shared
+                // array reference. Some UIs (e.g., detailed summaries) read
+                // from `curriculum.doubleMajorCourseData`, so reassigning via
+                // `.concat()` would desync that reference and hide custom DM
+                // courses in lists while totals still compute correctly.
+                doubleMajorCourseData = Array.isArray(jsonDM) ? jsonDM : [];
                 // Save DM course data on the curriculum instance so
                 // recalcEffectiveTypes() can trigger DM recalculation.
                 curriculum.doubleMajorCourseData = doubleMajorCourseData;
                 // Load custom courses for second major
+                let dmCustomCourses = [];
                 try {
                     const keyDM = 'customCourses_' + dm;
                     const storedDM = planGetItem(keyDM);
                     if (storedDM) {
                         const parsedDM = JSON.parse(storedDM);
                         if (Array.isArray(parsedDM)) {
-                            doubleMajorCourseData = doubleMajorCourseData.concat(parsedDM);
+                            dmCustomCourses = parsedDM;
                         }
                     }
                 } catch (ex) {}
+
+                // Repair legacy DM custom courses that were saved with missing
+                // credits (ECTS / SU / ENG / BS) by copying credits from the
+                // main course definition when available.
+                const repaired = _repairDmCustomCoursesCredits(dm, dmCustomCourses, doubleMajorCourseData);
+                if (repaired > 0) {
+                    try {
+                        const shownKey = 'dmCustomCoursesCreditsRepairShown_' + dm;
+                        if (!planGetItem(shownKey)) {
+                            planSetItem(shownKey, '1');
+                            uiAlert(
+                                'Repaired double major credits',
+                                `<p>Fixed missing credit values for <strong>${repaired}</strong> saved double major course${repaired === 1 ? '' : 's'} (ECTS / SU / ENG / BS).</p>`
+                            );
+                        }
+                    } catch (_) {}
+                }
+                if (dmCustomCourses && dmCustomCourses.length) {
+                    for (let i = 0; i < dmCustomCourses.length; i++) {
+                        doubleMajorCourseData.push(dmCustomCourses[i]);
+                    }
+                }
                 // Recalc categories for DM
                 curriculum.recalcEffectiveTypesDouble(doubleMajorCourseData);
                 // Determine pending courses that need classification for DM
