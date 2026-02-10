@@ -1,4 +1,4 @@
-# [SUrriculum v3.0 (Beta)](https://beficent.github.io/surriculum/)
+# [SUrriculum v3.0](https://beficent.github.io/surriculum/)
 
 SUrriculum is a fully client-side curriculum planner for Sabancı University undergraduate programs. It runs entirely in your browser (plain HTML/CSS/JS) and helps you:
 
@@ -9,7 +9,7 @@ SUrriculum is a fully client-side curriculum planner for Sabancı University und
 
 Live version: https://beficent.github.io/surriculum/
 
-> Beta note: the tool is feature-rich, but still evolving. Always verify graduation requirements using official sources.
+> Note: Always verify graduation requirements using official sources.
 
 ## Quick start
 
@@ -18,6 +18,8 @@ Live version: https://beficent.github.io/surriculum/
 3. Pick your program(s) + admit term(s) from the sidebar and start planning.
 
 No build step, server, or database is required.
+
+All plans and progress are stored locally in your browser (via `localStorage`). Use the plan **Export/Import** flow to back up or move data between devices.
 
 ## What you can do (feature overview)
 
@@ -199,14 +201,14 @@ Legacy JSON → JSONL migration (only needed if you still have `.json` files):
 python migrate_to_jsonl.py --delete-json
 ```
 
-## Known limitations (v3.0 Beta)
+## Known limitations (v3.0)
 
 - **Graduation logic is complex**: requirements are scraped and normalized, but edge cases exist. Always confirm with official program rules.
 - **Scheduler scraping reliability**: the university schedule endpoints can occasionally return server errors; re-run later or with delays.
 - **Course offering filter quality**: “Only show offered courses in …” depends on `courses/all_coursepage_info.jsonl` and may be incomplete if the scraper hasn’t been run recently.
 - **Minor rule parsing**: minor pages vary; some rules are simplified into structured checks and may miss special cases.
 
-## Roadmap (post v3.0 Beta)
+## Roadmap
 
 - More robust schedule scraping and section metadata (and smarter conflict-free suggestions).
 - Richer course detail views (prerequisite parsing, nicer formatting, quick links).
