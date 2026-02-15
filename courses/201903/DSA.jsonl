@@ -76,6 +76,7 @@
 {"Major": "ECON", "Code": "321", "Course_Name": "Education Economics and Policy", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "ECON", "Code": "323", "Course_Name": "Energy and Environmental Economics", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "ECON", "Code": "430", "Course_Name": "Labor Economics", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
+{"Major": "ECON", "Code": "435", "Course_Name": "Discrete Choice Methods", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "EE", "Code": "410", "Course_Name": "Information and Coding Theory", "ECTS": "6", "Engineering": 5.0, "Basic_Science": 1.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "EE", "Code": "48009", "Course_Name": "Special Topics in EE: Machine Learning for Communication Systems", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "FIN", "Code": "301", "Course_Name": "Financial Management", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "area", "Faculty_Course": "SBS"}
@@ -240,7 +241,6 @@
 {"Major": "ECON", "Code": "414", "Course_Name": "Applied Macroeconomics", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ECON", "Code": "415", "Course_Name": "Advanced Industrial Organization", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ECON", "Code": "420", "Course_Name": "Growth and Development", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "ECON", "Code": "435", "Course_Name": "Discrete Choice Methods", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ECON", "Code": "440", "Course_Name": "Topics in Economics of Globalization and Development", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ECON", "Code": "481", "Course_Name": "Advanced Microeconomic Theory I", "ECTS": "7", "Engineering": 0, "Basic_Science": 0, "SU_credit": "4", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ECON", "Code": "482", "Course_Name": "Advanced Microeconomic Theory II", "ECTS": "7", "Engineering": 0, "Basic_Science": 0, "SU_credit": "4", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
