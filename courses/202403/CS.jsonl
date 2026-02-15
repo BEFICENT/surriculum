@@ -86,6 +86,7 @@
 {"Major": "DSA", "Code": "440", "Course_Name": "Data and Artificial Intelligence (AI) Ethics", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "DSA", "Code": "473", "Course_Name": "Time Series and Forecasting Models", "ECTS": "6", "Engineering": 4.0, "Basic_Science": 2.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "ECON", "Code": "201", "Course_Name": "Games and Strategies", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "FASS"}
+{"Major": "ECON", "Code": "435", "Course_Name": "Discrete Choice Methods", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "ECON", "Code": "488", "Course_Name": "Matchings and Markets", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "ECON", "Code": "494", "Course_Name": "Spatial Data Science", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "ECON", "Code": "495", "Course_Name": "Machine Learning for Policy Evaluation", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
@@ -225,7 +226,6 @@
 {"Major": "ECON", "Code": "415", "Course_Name": "Advanced Industrial Organization", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ECON", "Code": "420", "Course_Name": "Growth and Development", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ECON", "Code": "430", "Course_Name": "Labor Economics", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "ECON", "Code": "435", "Course_Name": "Discrete Choice Methods", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ECON", "Code": "481", "Course_Name": "Advanced Microeconomic Theory I", "ECTS": "7", "Engineering": 0, "Basic_Science": 0, "SU_credit": "4", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ECON", "Code": "482", "Course_Name": "Advanced Microeconomic Theory II", "ECTS": "7", "Engineering": 0, "Basic_Science": 0, "SU_credit": "4", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ECON", "Code": "483", "Course_Name": "Advanced Macroeconomic Theory I", "ECTS": "7", "Engineering": 0, "Basic_Science": 0, "SU_credit": "4", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
