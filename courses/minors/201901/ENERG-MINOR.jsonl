@@ -24,6 +24,7 @@
 {"Major": "ECON", "Code": "330", "Course_Name": "Industrial Organization", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "ECON", "Code": "340", "Course_Name": "International Economics", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "ENRG", "Code": "424", "Course_Name": "Cell Design, Modelling and Battery Pack Development", "ECTS": "6", "Engineering": 3.0, "Basic_Science": 3.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
+{"Major": "ENRG", "Code": "426", "Course_Name": "Battery Management Systems", "ECTS": "6", "Engineering": 3.0, "Basic_Science": 3.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "ENS", "Code": "301", "Course_Name": "Energy Systems and Environment", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "IE", "Code": "303", "Course_Name": "Decision Economics", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "IE", "Code": "309", "Course_Name": "Manufacturing Processes I", "ECTS": "6", "Engineering": 5.0, "Basic_Science": 1.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
