@@ -1,6 +1,7 @@
 {"Major": "MGMT", "Code": "301", "Course_Name": "Introduction to Sustainability", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "required", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "330", "Course_Name": "Environmental Plant Biology", "ECTS": "5", "Engineering": 0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "363", "Course_Name": "Ecology", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "IF", "Code": "201", "Course_Name": "Science, Engineering and Politics of Food", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "IF", "Code": "402", "Course_Name": "Sustainability and Circularity in Materials", "ECTS": "6", "Engineering": 2.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "IR", "Code": "489", "Course_Name": "Human Rights in World Affairs", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "MGMT", "Code": "302", "Course_Name": "Sustainability Assessment Methods and Tools", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "core", "Faculty_Course": "No"}

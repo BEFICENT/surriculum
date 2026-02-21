@@ -22,8 +22,9 @@
 {"Major": "HUM", "Code": "321", "Course_Name": "Major Works of Literature: The Modern World", "ECTS": "5", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "university", "Faculty_Course": "No"}
 {"Major": "HUM", "Code": "322", "Course_Name": "Major Works of Art: The World Before Modernity", "ECTS": "5", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "university", "Faculty_Course": "No"}
 {"Major": "HUM", "Code": "371", "Course_Name": "Major Works of Literature: The Islamic World", "ECTS": "5", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "university", "Faculty_Course": "No"}
-{"Major": "CHEM", "Code": "212", "Course_Name": "General Chemistry for Engineers", "ECTS": "7", "Engineering": 0, "Basic_Science": 7.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "required", "Faculty_Course": "No"}
 {"Major": "CS", "Code": "201", "Course_Name": "Programming Fundamentals", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "required", "Faculty_Course": "FENS"}
+{"Major": "CS", "Code": "404", "Course_Name": "Artificial Intelligence", "ECTS": "6", "Engineering": 4.0, "Basic_Science": 2.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "required", "Faculty_Course": "No"}
+{"Major": "CS", "Code": "412", "Course_Name": "Machine Learning", "ECTS": "6", "Engineering": 4.0, "Basic_Science": 2.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "required", "Faculty_Course": "No"}
 {"Major": "ENS", "Code": "203", "Course_Name": "Electronic Circuits I", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "required", "Faculty_Course": "FENS"}
 {"Major": "ENS", "Code": "204", "Course_Name": "Mechanics", "ECTS": "6", "Engineering": 5.0, "Basic_Science": 1.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "required", "Faculty_Course": "FENS"}
 {"Major": "ENS", "Code": "206", "Course_Name": "Systems Modeling and Control", "ECTS": "6", "Engineering": 3.0, "Basic_Science": 3.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "required", "Faculty_Course": "FENS"}
@@ -41,8 +42,6 @@
 {"Major": "PHYS", "Code": "113", "Course_Name": "Basic Concepts of Physics for Scientists and Engineers", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "required", "Faculty_Course": "No"}
 {"Major": "CS", "Code": "204", "Course_Name": "Advanced Programming", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "FENS"}
 {"Major": "CS", "Code": "303", "Course_Name": "Logic and Digital System Design", "ECTS": "7", "Engineering": 6.0, "Basic_Science": 1.0, "SU_credit": "4", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "No"}
-{"Major": "CS", "Code": "404", "Course_Name": "Artificial Intelligence", "ECTS": "6", "Engineering": 4.0, "Basic_Science": 2.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "No"}
-{"Major": "CS", "Code": "412", "Course_Name": "Machine Learning", "ECTS": "6", "Engineering": 4.0, "Basic_Science": 2.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "EE", "Code": "200", "Course_Name": "Electronic Circuit Implementations", "ECTS": "2", "Engineering": 2.0, "Basic_Science": 0, "SU_credit": "2", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "FENS"}
 {"Major": "EE", "Code": "202", "Course_Name": "Electronic Circuits II", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "FENS"}
 {"Major": "EE", "Code": "308", "Course_Name": "Microcomputer Based System Design", "ECTS": "7", "Engineering": 7.0, "Basic_Science": 0, "SU_credit": "4", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "No"}
@@ -224,6 +223,7 @@
 {"Major": "BIO", "Code": "467", "Course_Name": "Signal Transduction", "ECTS": "6", "Engineering": 1.0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "468", "Course_Name": "Gene Regulation & Diseases", "ECTS": "6", "Engineering": 2.0, "Basic_Science": 4.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CHEM", "Code": "202", "Course_Name": "Chemical Kinetics", "ECTS": "7", "Engineering": 2.0, "Basic_Science": 5.0, "SU_credit": "4", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
+{"Major": "CHEM", "Code": "212", "Course_Name": "General Chemistry for Engineers", "ECTS": "7", "Engineering": 0, "Basic_Science": 7.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CHEM", "Code": "301", "Course_Name": "Inorganic Chemistry", "ECTS": "6", "Engineering": 1.0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CHEM", "Code": "302", "Course_Name": "Analytical Chemistry", "ECTS": "7", "Engineering": 2.0, "Basic_Science": 5.0, "SU_credit": "4", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CHEM", "Code": "405", "Course_Name": "Electrochemistry", "ECTS": "6", "Engineering": 2.0, "Basic_Science": 4.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
