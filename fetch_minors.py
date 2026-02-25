@@ -8,6 +8,7 @@ import time
 import concurrent.futures
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
+from urllib.parse import parse_qs, urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -164,7 +165,103 @@ def parse_course_rows(table, category: str) -> List[Dict]:
     return rows
 
 
-def parse_minor_courses(html: str) -> List[Dict]:
+def parse_course_rows_from_html(html: str, category: str) -> List[Dict]:
+    soup = BeautifulSoup(html, "lxml")
+    out: List[Dict] = []
+    for table in soup.find_all("table"):
+        parsed = parse_course_rows(table, category)
+        if parsed:
+            out.extend(parsed)
+    return out
+
+
+def _guess_linked_category(area_code: str, link_text: str) -> Optional[str]:
+    cat = map_anchor_to_category(area_code or "")
+    if cat:
+        return cat
+    low = (link_text or "").lower()
+    if "required" in low:
+        return "required"
+    if "core" in low:
+        return "core"
+    if "area" in low:
+        return "area"
+    if "free" in low:
+        return "free"
+    return None
+
+
+def _load_linked_course_page_html(
+    href: str,
+    program: str,
+    category: str,
+    offline_dir: Optional[str],
+    timeout: float,
+) -> str:
+    if offline_dir:
+        base = (program.split("-")[0] if program else "").strip().lower()
+        area_code = ""
+        try:
+            area_code = (parse_qs(urlparse(href).query).get("P_AREA", [""])[0] or "").strip().lower()
+        except Exception:
+            area_code = ""
+        area_tail = ""
+        if "_" in area_code:
+            area_tail = area_code.rsplit("_", 1)[-1]
+
+        candidates = [
+            f"SU_DEGREE_{base}_{category}coursepage.html",
+            f"SU_DEGREE_{base}_{category}_coursepage.html",
+        ]
+        if area_tail:
+            candidates.extend(
+                [
+                    f"SU_DEGREE_{base}_{area_tail}coursepage.html",
+                    f"SU_DEGREE_{base}_{area_tail}_coursepage.html",
+                ]
+            )
+        if area_code:
+            candidates.extend(
+                [
+                    f"SU_DEGREE_{base}_{area_code}coursepage.html",
+                    f"SU_DEGREE_{base}_{area_code}_coursepage.html",
+                ]
+            )
+
+        for fname in candidates:
+            path = os.path.join(offline_dir, fname)
+            if os.path.exists(path):
+                with open(path, "r", encoding="utf-8") as f:
+                    return f.read()
+
+        # Fuzzy fallback for manually saved file names.
+        try:
+            for fname in sorted(os.listdir(offline_dir)):
+                low = fname.lower()
+                if not low.endswith(".html"):
+                    continue
+                if base and base not in low:
+                    continue
+                if "coursepage" not in low and "list_courses" not in low:
+                    continue
+                if category in low or (area_tail and area_tail in low) or (area_code and area_code in low):
+                    path = os.path.join(offline_dir, fname)
+                    with open(path, "r", encoding="utf-8") as f:
+                        return f.read()
+        except Exception:
+            pass
+        raise FileNotFoundError(f"offline linked course page not found for {program} ({category})")
+
+    full_url = href if href.lower().startswith("http") else urljoin(BASE, href)
+    return fetch_html(full_url, timeout=timeout)
+
+
+def parse_minor_courses(
+    html: str,
+    program: Optional[str] = None,
+    offline_dir: Optional[str] = None,
+    timeout: float = 30.0,
+) -> List[Dict]:
     soup = BeautifulSoup(html, "lxml")
     results: List[Dict] = []
     seen = set()
@@ -177,6 +274,46 @@ def parse_minor_courses(html: str) -> List[Dict]:
         if not table:
             continue
         for rec in parse_course_rows(table, category):
+            cid = f"{rec['Major']}{rec['Code']}"
+            if cid in seen:
+                continue
+            seen.add(cid)
+            results.append(rec)
+
+    # Some minors place category lists (currently mostly area electives) on a
+    # separate `SU_DEGREE.p_list_courses` page. Follow these links as well.
+    linked_targets: List[Tuple[str, str]] = []
+    linked_seen = set()
+    for a in soup.select('a[href*="SU_DEGREE.p_list_courses"]'):
+        href = (a.get("href") or "").strip()
+        if not href:
+            continue
+        area_code = ""
+        try:
+            area_code = (parse_qs(urlparse(href).query).get("P_AREA", [""])[0] or "").strip()
+        except Exception:
+            area_code = ""
+        category = _guess_linked_category(area_code, a.get_text(" ", strip=True))
+        if not category:
+            continue
+        key = (category, href)
+        if key in linked_seen:
+            continue
+        linked_seen.add(key)
+        linked_targets.append(key)
+
+    for category, href in linked_targets:
+        try:
+            linked_html = _load_linked_course_page_html(
+                href=href,
+                program=program or "",
+                category=category,
+                offline_dir=offline_dir,
+                timeout=timeout,
+            )
+        except Exception:
+            continue
+        for rec in parse_course_rows_from_html(linked_html, category):
             cid = f"{rec['Major']}{rec['Code']}"
             if cid in seen:
                 continue
@@ -431,7 +568,12 @@ def main():
                     "termCode": None if is_offline else term,
                     **req,
                 }
-                courses = parse_minor_courses(detail_html)
+                courses = parse_minor_courses(
+                    detail_html,
+                    program=prog.program,
+                    offline_dir=offline_dir,
+                    timeout=timeout,
+                )
                 # Pages without a real course list are usually blocked/invalid.
                 # Treat as failure so we don't overwrite existing data with empty files.
                 if not courses and not is_offline:

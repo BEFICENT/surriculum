@@ -1329,6 +1329,16 @@ html, body {
     gap: 6px;
 }
 
+.minor-summary .ms-untaken-wrap,
+.major-summary .ms-untaken-wrap {
+    margin-top: 6px;
+}
+
+.minor-summary .ms-untaken-list.is-hidden,
+.major-summary .ms-untaken-list.is-hidden {
+    display: none;
+}
+
 .minor-summary .ms-course,
 .major-summary .ms-course {
     display: flex;
@@ -2054,6 +2064,66 @@ html, body {
     align-items: stretch;
     gap: 8px;
     margin-bottom: 10px;
+    position: relative;
+}
+
+.scheduler-search-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.scheduler-search-row .scheduler-search {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.scheduler-filter-btn {
+    flex: 0 0 auto;
+}
+
+.scheduler-search-row .scheduler-search,
+.scheduler-search-row .scheduler-filter-btn {
+    height: 40px;
+    box-sizing: border-box;
+}
+
+.scheduler-search-row .scheduler-filter-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.scheduler-filter-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    padding: 10px;
+    z-index: 35;
+    max-height: min(60vh, 520px);
+    overflow: auto;
+}
+
+.scheduler-filter-menu-header {
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.scheduler-filter-menu .scheduler-controls {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
 }
 
 
@@ -2501,7 +2571,7 @@ html, body {
     font-weight: 700;
     color: var(--text-primary);
     font-size: 0.85rem;
-    margin-bottom: 8px;
+    margin-bottom: 0;
     text-transform: uppercase;
     letter-spacing: 0.02em;
 }
@@ -3351,6 +3421,8 @@ html, body {
     padding: 20px;
     min-width: 300px;
     max-width: 500px;
+    max-height: 82vh;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -3385,6 +3457,96 @@ html, body {
     justify-content: flex-end;
     gap: 10px;
     margin-top: 15px;
+}
+
+.custom_course_manage_overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+}
+
+.custom_course_manage_modal {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    padding: 20px;
+    width: min(760px, 92vw);
+    max-height: 82vh;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.custom_course_manage_modal h3 {
+    margin: 0;
+}
+
+.custom_course_manage_subtitle {
+    margin: 0 0 6px 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.custom_course_manage_list {
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-right: 4px;
+}
+
+.custom_course_manage_item {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-surface);
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.custom_course_manage_info {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.custom_course_manage_line1 {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.custom_course_manage_line2 {
+    margin-top: 2px;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.custom_course_manage_actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+}
+
+.custom_course_manage_footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 4px;
 }
 
 /* Double Major Category Modal */

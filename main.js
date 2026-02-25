@@ -404,11 +404,11 @@ function SUrriculum(major_chosen_by_user) {
                 const val = e.target.value;
                 if (val) {
                     planSetItem('doubleMajor', val);
-                    try { localStorage.setItem('showDoubleMajorControls', 'true'); } catch (_) {}
+                    planSetItem('showDoubleMajorControls', 'true');
                 } else {
                     planRemoveItem('doubleMajor');
                     // Collapse the DM controls after the user explicitly sets it to None.
-                    try { localStorage.setItem('showDoubleMajorControls', 'false'); } catch (_) {}
+                    planSetItem('showDoubleMajorControls', 'false');
                 }
                 location.reload();
             });
@@ -443,19 +443,19 @@ function SUrriculum(major_chosen_by_user) {
             const hasDM = !!(planGetItem('doubleMajor') || '');
             let showPref = false;
             try {
-                const stored = localStorage.getItem('showDoubleMajorControls');
+                const stored = planGetItem('showDoubleMajorControls');
                 if (stored !== null) showPref = stored === 'true';
             } catch (_) {}
             if (hasDM) {
                 setDmUiVisible(true);
-                try { localStorage.setItem('showDoubleMajorControls', 'true'); } catch (_) {}
+                planSetItem('showDoubleMajorControls', 'true');
             } else {
                 setDmUiVisible(showPref);
             }
             if (addDmBtn) {
                 addDmBtn.addEventListener('click', function() {
                     setDmUiVisible(true);
-                    try { localStorage.setItem('showDoubleMajorControls', 'true'); } catch (_) {}
+                    planSetItem('showDoubleMajorControls', 'true');
                     try { if (dmElem) dmElem.focus(); } catch (_) {}
                 });
             }
@@ -538,7 +538,7 @@ function SUrriculum(major_chosen_by_user) {
 
             let showPref = false; // hide minor controls on first visit
             try {
-                const stored = localStorage.getItem('showMinorControls');
+                const stored = planGetItem('showMinorControls');
                 if (stored !== null) showPref = stored === 'true';
             } catch (_) {}
 
@@ -594,10 +594,10 @@ function SUrriculum(major_chosen_by_user) {
                         setMinorTerm(2, getMinorTerm(3));
                         setMinorTerm(3, minorDefaultTermName);
                         const stillHasAny = !!(next1 || next2);
-                        try { localStorage.setItem('showMinorControls', stillHasAny ? 'true' : 'false'); } catch (_) {}
+                        planSetItem('showMinorControls', stillHasAny ? 'true' : 'false');
                     } else {
                         setMinor('minor1', v);
-                        try { localStorage.setItem('showMinorControls', 'true'); } catch (_) {}
+                        planSetItem('showMinorControls', 'true');
                     }
                 } else if (slot === 2) {
                     if (!v) {
@@ -608,11 +608,11 @@ function SUrriculum(major_chosen_by_user) {
                     } else {
                         setMinor('minor2', v);
                     }
-                    try { localStorage.setItem('showMinorControls', 'true'); } catch (_) {}
+                    planSetItem('showMinorControls', 'true');
                 } else if (slot === 3) {
                     if (!v) setMinor('minor3', '');
                     else setMinor('minor3', v);
-                    try { localStorage.setItem('showMinorControls', 'true'); } catch (_) {}
+                    planSetItem('showMinorControls', 'true');
                 }
                 location.reload();
             };
@@ -630,7 +630,7 @@ function SUrriculum(major_chosen_by_user) {
             if (addMinorBtn) {
                 addMinorBtn.addEventListener('click', (e) => {
                     e.preventDefault();
-                    try { localStorage.setItem('showMinorControls', 'true'); } catch (_) {}
+                    planSetItem('showMinorControls', 'true');
                     // Reveal the next hidden minor row.
                     if (minor1Row && minor1Row.classList.contains('is-hidden')) setMinorRowVisible(minor1Row, true);
                     else if (minor2Row && minor2Row.classList.contains('is-hidden')) setMinorRowVisible(minor2Row, true);
@@ -847,7 +847,7 @@ function SUrriculum(major_chosen_by_user) {
         });
     }
 
-    let offeredOnly = false;
+    let offeredOnly = true;
     try {
         const stored = localStorage.getItem('offeredThisTermOnly');
         if (stored !== null) {
@@ -877,7 +877,7 @@ function SUrriculum(major_chosen_by_user) {
         }
     } catch (_) {}
 
-    let sortByScore = false;
+    let sortByScore = true;
     try {
         const stored = localStorage.getItem('sortBasedOnScore');
         if (stored !== null) {
@@ -1152,6 +1152,217 @@ function SUrriculum(major_chosen_by_user) {
     // course_data. Existing datalists are updated so the new course can
     // be selected immediately. Only one custom course modal can be open
     // at a time.
+        function getCombinedCodeFromCourseObj(course) {
+            try {
+                if (!course || typeof course !== 'object') return '';
+                return String((course.Major || '') + (course.Code || '')).toUpperCase();
+            } catch (_) {
+                return '';
+            }
+        }
+
+        function loadCustomCoursesForMajor(majorCode) {
+            try {
+                const key = 'customCourses_' + String(majorCode || '').toUpperCase();
+                const parsed = JSON.parse(planGetItem(key) || '[]');
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (_) {
+                return [];
+            }
+        }
+
+        function saveCustomCoursesForMajor(majorCode, list) {
+            try {
+                const key = 'customCourses_' + String(majorCode || '').toUpperCase();
+                planSetItem(key, JSON.stringify(Array.isArray(list) ? list : []));
+            } catch (_) {}
+        }
+
+        function refreshCourseDatalistsAndTypes() {
+            try {
+                const optionsHTML = getCoursesDataList(course_data);
+                document.querySelectorAll('datalist.course_list').forEach(function(dl) {
+                    dl.innerHTML = optionsHTML;
+                });
+            } catch (_) {}
+            try {
+                if (typeof curriculum.recalcEffectiveTypes === 'function') {
+                    curriculum.recalcEffectiveTypes(course_data);
+                }
+            } catch (_) {}
+            try {
+                if (curriculum.doubleMajor && typeof curriculum.recalcEffectiveTypesDouble === 'function') {
+                    curriculum.recalcEffectiveTypesDouble(doubleMajorCourseData);
+                }
+            } catch (_) {}
+            try {
+                if (curriculum.doubleMajor && typeof updateDatalistForDoubleMajor === 'function') {
+                    updateDatalistForDoubleMajor();
+                }
+            } catch (_) {}
+        }
+
+        function removeCustomCourseByCodeFromCurrentMajor(combinedCode) {
+            const target = String(combinedCode || '').toUpperCase();
+            if (!target) return false;
+            const majorKey = String(major_chosen_by_user || '').toUpperCase();
+            const existing = loadCustomCoursesForMajor(majorKey);
+            if (!existing.length) return false;
+
+            const next = existing.filter(c => getCombinedCodeFromCourseObj(c) !== target);
+            if (next.length === existing.length) return false;
+            const removedCount = Math.max(1, existing.length - next.length);
+            saveCustomCoursesForMajor(majorKey, next);
+
+            // Remove one matching record from in-memory course_data (custom
+            // entries are appended, so delete from the tail).
+            try {
+                let remaining = removedCount;
+                for (let i = course_data.length - 1; i >= 0 && remaining > 0; i--) {
+                    if (getCombinedCodeFromCourseObj(course_data[i]) === target) {
+                        course_data.splice(i, 1);
+                        remaining--;
+                    }
+                }
+            } catch (_) {}
+
+            // Remove instances from semesters.
+            try {
+                if (curriculum && Array.isArray(curriculum.semesters)) {
+                    curriculum.semesters.forEach(function(sem) {
+                        if (!sem || !Array.isArray(sem.courses)) return;
+                        sem.courses = sem.courses.filter(function(code) {
+                            return String(code || '').toUpperCase() !== target;
+                        });
+                    });
+                }
+            } catch (_) {}
+
+            try {
+                if (typeof serializator === 'function') {
+                    planSetItem('curriculum', serializator(curriculum));
+                }
+            } catch (_) {}
+
+            refreshCourseDatalistsAndTypes();
+            return true;
+        }
+
+        function showManageCustomCoursesModal() {
+            if (document.querySelector('.custom_course_manage_overlay')) return;
+            const majorKey = String(major_chosen_by_user || '').toUpperCase();
+            const readList = () => loadCustomCoursesForMajor(majorKey);
+            if (!readList().length) {
+                uiAlert('No custom courses', '<p>There are no custom courses to manage for this program.</p>');
+                return;
+            }
+
+            const boardDom = document.body;
+            const overlay = document.createElement('div');
+            overlay.className = 'custom_course_manage_overlay';
+
+            const modal = document.createElement('div');
+            modal.className = 'custom_course_manage_modal';
+
+            const title = document.createElement('h3');
+            title.innerText = 'Manage Custom Courses';
+            modal.appendChild(title);
+
+            const subtitle = document.createElement('p');
+            subtitle.className = 'custom_course_manage_subtitle';
+            subtitle.innerText = `${majorKey} custom courses`;
+            modal.appendChild(subtitle);
+
+            const listEl = document.createElement('div');
+            listEl.className = 'custom_course_manage_list';
+            modal.appendChild(listEl);
+
+            const footer = document.createElement('div');
+            footer.className = 'custom_course_manage_footer';
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'btn btn-secondary btn-sm';
+            closeBtn.innerText = 'Close';
+            closeBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                overlay.remove();
+            });
+            footer.appendChild(closeBtn);
+            modal.appendChild(footer);
+
+            const renderList = () => {
+                const courses = readList();
+                if (!courses.length) {
+                    overlay.remove();
+                    uiAlert('No custom courses', '<p>There are no custom courses left to manage.</p>');
+                    return;
+                }
+                listEl.innerHTML = '';
+
+                courses.forEach(function(course) {
+                    const combined = getCombinedCodeFromCourseObj(course);
+                    const item = document.createElement('div');
+                    item.className = 'custom_course_manage_item';
+
+                    const info = document.createElement('div');
+                    info.className = 'custom_course_manage_info';
+
+                    const line1 = document.createElement('div');
+                    line1.className = 'custom_course_manage_line1';
+                    line1.innerHTML = `<strong>${escapeHtml(combined)}</strong> — ${escapeHtml(course.Course_Name || combined)}`;
+                    info.appendChild(line1);
+
+                    const line2 = document.createElement('div');
+                    line2.className = 'custom_course_manage_line2';
+                    line2.textContent =
+                        `SU ${course.SU_credit || '0'} • ECTS ${course.ECTS || '0'} • ` +
+                        `BS ${course.Basic_Science || 0} • ENG ${course.Engineering || 0} • ` +
+                        `Type ${String(course.EL_Type || 'none')}`;
+                    info.appendChild(line2);
+
+                    const actions = document.createElement('div');
+                    actions.className = 'custom_course_manage_actions';
+
+                    const editBtn = document.createElement('button');
+                    editBtn.className = 'btn btn-secondary btn-sm';
+                    editBtn.innerHTML = '<i class="fa-solid fa-pen"></i>&nbsp;Edit';
+                    editBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        showCustomCourseForm(null, course, function() {
+                            renderList();
+                        });
+                    });
+                    actions.appendChild(editBtn);
+
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.className = 'btn btn-danger btn-sm';
+                    deleteBtn.innerHTML = '<i class="fa-solid fa-trash"></i>&nbsp;Delete';
+                    deleteBtn.addEventListener('click', async function(e) {
+                        e.stopPropagation();
+                        const ok = await uiConfirm(
+                            'Delete custom course?',
+                            `<p>Delete <strong>${escapeHtml(combined)}</strong> from custom courses?</p><p>This cannot be undone.</p>`,
+                            { confirmText: 'Delete', danger: true }
+                        );
+                        if (!ok) return;
+                        removeCustomCourseByCodeFromCurrentMajor(combined);
+                        renderList();
+                    });
+                    actions.appendChild(deleteBtn);
+
+                    item.appendChild(info);
+                    item.appendChild(actions);
+                    listEl.appendChild(item);
+                });
+            };
+
+            renderList();
+
+            modal.addEventListener('click', function(e) { e.stopPropagation(); });
+            overlay.addEventListener('click', function(e) { e.stopPropagation(); });
+            overlay.appendChild(modal);
+            boardDom.appendChild(overlay);
+        }
+
         function showCustomCourseForm(prefill = null, courseObj = null, onSaveCallback = null) {
             // Prevent multiple modals
             if (document.querySelector('.custom_course_modal')) return;
@@ -1169,7 +1380,7 @@ function SUrriculum(major_chosen_by_user) {
 
         // Title
         const title = document.createElement('h3');
-        title.innerText = 'Add Custom Course';
+        title.innerText = courseObj ? 'Edit Custom Course' : 'Add Custom Course';
         modal.appendChild(title);
 
         // Helper to create input row
@@ -1232,13 +1443,71 @@ function SUrriculum(major_chosen_by_user) {
             typeRow.appendChild(typeSelect);
             modal.appendChild(typeRow);
 
-            // If prefill data is provided, populate the inputs and select accordingly.
-            if (prefill) {
+            // Optional DM category control (only when a DM is selected).
+            let dmTypeSelect = null;
+            const dmProgramCode = (() => {
+                try {
+                    const dm = String((curriculum && curriculum.doubleMajor) || '').trim();
+                    return dm ? dm.toUpperCase() : '';
+                } catch (_) {
+                    return '';
+                }
+            })();
+            const initialCombinedCode = (() => {
+                try {
+                    if (courseObj && courseObj.Major && courseObj.Code) return String(courseObj.Major + courseObj.Code).toUpperCase();
+                    if (prefill && prefill.code) return String(prefill.code).toUpperCase().replace(/\s+/g, '');
+                } catch (_) {}
+                return '';
+            })();
+            const findDmCustomType = (combinedCode) => {
+                try {
+                    if (!dmProgramCode || !combinedCode) return '';
+                    const keyDM = 'customCourses_' + dmProgramCode;
+                    const existingDM = JSON.parse(planGetItem(keyDM) || '[]');
+                    if (!Array.isArray(existingDM)) return '';
+                    const target = String(combinedCode).toUpperCase();
+                    for (let i = 0; i < existingDM.length; i++) {
+                        const rec = existingDM[i];
+                        if (!rec) continue;
+                        const code = getCombinedCodeFromCourseObj(rec);
+                        if (code === target) return String(rec.EL_Type || '').toLowerCase();
+                    }
+                } catch (_) {}
+                return '';
+            };
+            const initialDmType = findDmCustomType(initialCombinedCode);
+            if (dmProgramCode) {
+                const dmTypeRow = document.createElement('div');
+                dmTypeRow.classList.add('cc-row');
+                const dmTypeLabel = document.createElement('label');
+                dmTypeLabel.innerText = `Double Major Category (${dmProgramCode}):`;
+                dmTypeRow.appendChild(dmTypeLabel);
+
+                dmTypeSelect = document.createElement('select');
+                const keepOpt = document.createElement('option');
+                keepOpt.value = '';
+                keepOpt.innerText = initialDmType ? 'Keep current DM category' : 'No DM category change';
+                dmTypeSelect.appendChild(keepOpt);
+                ['core', 'area', 'university', 'free', 'required', 'none'].forEach(function(opt) {
+                    const option = document.createElement('option');
+                    option.value = opt;
+                    option.innerText = opt.charAt(0).toUpperCase() + opt.slice(1);
+                    dmTypeSelect.appendChild(option);
+                });
+                if (initialDmType) dmTypeSelect.value = initialDmType;
+                dmTypeRow.appendChild(dmTypeSelect);
+                modal.appendChild(dmTypeRow);
+            }
+
+            // If prefill data or an existing course object is provided,
+            // populate the inputs and select accordingly.
+            if (prefill || courseObj) {
                 // Code may be provided as combined string or separate parts; if we
                 // have courseObj (the actual course object), we can use its
                 // Major and Code fields to reconstruct the code. Otherwise use
                 // prefill.code.
-                if (courseObj && courseObj.Major && courseObj.Code) {
+                if (courseObj && courseObj.Major != null && courseObj.Code != null) {
                     codeInput.value = courseObj.Major + courseObj.Code;
                 } else if (prefill.code) {
                     codeInput.value = prefill.code;
@@ -1248,12 +1517,12 @@ function SUrriculum(major_chosen_by_user) {
                 } else if (prefill.name) {
                     nameInput.value = prefill.name;
                 }
-                if (courseObj && courseObj.SU_credit) {
+                if (courseObj && courseObj.SU_credit !== undefined && courseObj.SU_credit !== null) {
                     suInput.value = courseObj.SU_credit;
                 } else if (prefill.suCredits !== undefined) {
                     suInput.value = prefill.suCredits;
                 }
-                if (courseObj && courseObj.ECTS) {
+                if (courseObj && courseObj.ECTS !== undefined && courseObj.ECTS !== null) {
                     ectsInput.value = courseObj.ECTS;
                 } else if (prefill.ects !== undefined) {
                     ectsInput.value = prefill.ects;
@@ -1312,35 +1581,74 @@ function SUrriculum(major_chosen_by_user) {
                 }
                 const parsedMajor = match[1];
                 const parsedCode = match[2];
+                const originalCombinedCode = courseObj ? getCombinedCodeFromCourseObj(courseObj) : '';
+                const combinedCodeNow = (parsedMajor + parsedCode).toUpperCase();
+                const dmTypeSelected = dmTypeSelect ? String(dmTypeSelect.value || '').toLowerCase() : '';
                 // Keep a reference to the course object we create or update so
                 // that double major classification can reuse its credit values.
                 let sourceForDM = courseObj || null;
                 // Determine if we're updating an existing course or creating a new one
                 if (courseObj) {
                     // Update fields on the existing course object
-                    courseObj.Major = parsedMajor;
-                    courseObj.Code = parsedCode;
-                    courseObj.Course_Name = nameInput.value.trim() || rawCode;
-                    courseObj.ECTS = ectsInput.value.toString() || '0';
-                    courseObj.Engineering = parseInt(engInput.value || '0') || 0;
-                    courseObj.Basic_Science = parseInt(bsInput.value || '0') || 0;
-                    courseObj.SU_credit = suInput.value.toString() || '0';
-                    courseObj.EL_Type = typeSelect.value;
+                    const updatedCourse = {
+                        ...courseObj,
+                        Major: parsedMajor,
+                        Code: parsedCode,
+                        Course_Name: nameInput.value.trim() || rawCode,
+                        ECTS: ectsInput.value.toString() || '0',
+                        Engineering: parseInt(engInput.value || '0') || 0,
+                        Basic_Science: parseInt(bsInput.value || '0') || 0,
+                        SU_credit: suInput.value.toString() || '0',
+                        EL_Type: typeSelect.value
+                    };
+                    Object.assign(courseObj, updatedCourse);
+                    const newCombinedCode = getCombinedCodeFromCourseObj(updatedCourse);
                     // Persist update to localStorage
                     try {
                         const key = 'customCourses_' + major_chosen_by_user;
                         const existing = JSON.parse(planGetItem(key) || '[]');
                         // Find and update the matching course in storage
+                        let replaced = false;
                         for (let i = 0; i < existing.length; i++) {
-                            if (existing[i].Major === courseObj.Major && existing[i].Code === courseObj.Code) {
-                                existing[i] = courseObj;
+                            const thisCode = getCombinedCodeFromCourseObj(existing[i]);
+                            if (thisCode === originalCombinedCode || thisCode === newCombinedCode) {
+                                existing[i] = updatedCourse;
+                                replaced = true;
                                 break;
                             }
                         }
+                        if (!replaced) existing.push(updatedCourse);
                         planSetItem(key, JSON.stringify(existing));
                     } catch (ex) {
                         console.error('Failed to update custom course:', ex);
                     }
+                    // Keep in-memory course list in sync
+                    try {
+                        let updatedInMemory = false;
+                        for (let i = course_data.length - 1; i >= 0; i--) {
+                            const thisCode = getCombinedCodeFromCourseObj(course_data[i]);
+                            if (thisCode === originalCombinedCode || thisCode === newCombinedCode) {
+                                course_data[i] = updatedCourse;
+                                updatedInMemory = true;
+                                break;
+                            }
+                        }
+                        if (!updatedInMemory) course_data.push(updatedCourse);
+                    } catch (_) {}
+                    // If code changed, update semester references.
+                    try {
+                        if (originalCombinedCode && newCombinedCode && originalCombinedCode !== newCombinedCode) {
+                            if (curriculum && Array.isArray(curriculum.semesters)) {
+                                curriculum.semesters.forEach(function(sem) {
+                                    if (!sem || !Array.isArray(sem.courses)) return;
+                                    sem.courses = sem.courses.map(function(code) {
+                                        return String(code || '').toUpperCase() === originalCombinedCode ? newCombinedCode : code;
+                                    });
+                                });
+                            }
+                        }
+                    } catch (_) {}
+                    sourceForDM = updatedCourse;
                 } else {
                     // Build course object
                     const newCourse = {
@@ -1370,21 +1678,11 @@ function SUrriculum(major_chosen_by_user) {
                 }
                 // Update any open dropdowns so the new or updated course appears as an option
                 try {
-                    const optionsHTML = getCoursesDataList(course_data);
-                    document.querySelectorAll('datalist.course_list').forEach(function(dl) {
-                        dl.innerHTML = optionsHTML;
-                    });
-                } catch (ex) {
-                    // ignore if lists not present
-                }
-                // Recalculate effective types since new course attributes may affect totals
-                try {
-                    if (typeof curriculum.recalcEffectiveTypes === 'function') {
-                        curriculum.recalcEffectiveTypes(course_data);
+                    if (typeof serializator === 'function') {
+                        planSetItem('curriculum', serializator(curriculum));
                     }
-                } catch (err) {
-                    // ignore
-                }
+                } catch (_) {}
+                refreshCourseDatalistsAndTypes();
                 // Remove modal
                 overlay.remove();
                 // If a double major is selected, check if this course exists
@@ -1392,11 +1690,82 @@ function SUrriculum(major_chosen_by_user) {
                 // user to assign a category for the double major.
                 try {
                     if (curriculum.doubleMajor) {
-                        // Determine combined code for the saved course
-                        const combo = (courseObj ? (courseObj.Major + courseObj.Code) : (parsedMajor + parsedCode));
+                        const combo = combinedCodeNow;
+                        const dmProgram = String(curriculum.doubleMajor || '').toUpperCase();
+                        const keyDM = 'customCourses_' + dmProgram;
+                        let existingDM = [];
+                        try {
+                            const parsedDM = JSON.parse(planGetItem(keyDM) || '[]');
+                            existingDM = Array.isArray(parsedDM) ? parsedDM : [];
+                        } catch (_) { existingDM = []; }
+
+                        const lookupCodes = [combo];
+                        if (originalCombinedCode && originalCombinedCode !== combo) lookupCodes.push(originalCombinedCode);
+                        const findDmIndex = () => {
+                            for (let i = 0; i < existingDM.length; i++) {
+                                const rec = existingDM[i];
+                                const recCode = getCombinedCodeFromCourseObj(rec);
+                                if (lookupCodes.includes(recCode)) return i;
+                            }
+                            return -1;
+                        };
+                        const dmIdx = findDmIndex();
+
                         // Build a set of DM codes
                         const dmSet = new Set(doubleMajorCourseData.map(c => c.Major + c.Code));
-                        if (!dmSet.has(combo)) {
+                        const canCreateDmCustom = !dmSet.has(combo);
+                        const shouldUpsertExistingDmCustom = dmIdx >= 0;
+                        const shouldCreateDmCustom = canCreateDmCustom && !!dmTypeSelected;
+
+                        const buildDmCourse = (selectedType) => {
+                            const matchDM = combo.match(/^([A-Z]+)(\d+)/);
+                            const mDM = matchDM ? matchDM[1] : combo.replace(/\d+.*/, '');
+                            const nDM = matchDM ? matchDM[2] : combo.replace(/[A-Z]+/, '');
+                            return {
+                                Major: mDM,
+                                Code: nDM,
+                                Course_Name: courseObj ? (courseObj.Course_Name || combo) : (nameInput.value.trim() || combo),
+                                ECTS: sourceForDM ? String(sourceForDM.ECTS || '0') : '0',
+                                Engineering: sourceForDM ? parseFloat(sourceForDM.Engineering || '0') : 0,
+                                Basic_Science: sourceForDM ? parseFloat(sourceForDM.Basic_Science || '0') : 0,
+                                SU_credit: sourceForDM ? String(sourceForDM.SU_credit || '0') : '0',
+                                Faculty: '',
+                                EL_Type: selectedType || 'none',
+                                Faculty_Course: 'No'
+                            };
+                        };
+
+                        if (shouldUpsertExistingDmCustom || shouldCreateDmCustom) {
+                            const prevType = shouldUpsertExistingDmCustom ? String(existingDM[dmIdx].EL_Type || '').toLowerCase() : '';
+                            const finalType = dmTypeSelected || prevType || 'none';
+                            const dmCourse = buildDmCourse(finalType);
+
+                            if (shouldUpsertExistingDmCustom) existingDM[dmIdx] = dmCourse;
+                            else existingDM.push(dmCourse);
+                            try { planSetItem(keyDM, JSON.stringify(existingDM)); } catch (_) {}
+
+                            try {
+                                const touched = new Set([combo]);
+                                if (originalCombinedCode) touched.add(originalCombinedCode);
+                                doubleMajorCourseData = doubleMajorCourseData.filter(function(rec) {
+                                    const recCode = getCombinedCodeFromCourseObj(rec);
+                                    if (!touched.has(recCode)) return true;
+                                    // Remove likely DM custom duplicates for the same code.
+                                    const likelyCustom = String(rec.Faculty || '').trim() === '' &&
+                                        String(rec.Faculty_Course || '').toLowerCase() === 'no';
+                                    return !likelyCustom;
+                                });
+                                doubleMajorCourseData.push(dmCourse);
+                                curriculum.doubleMajorCourseData = doubleMajorCourseData;
+                            } catch (_) {}
+
+                            try {
+                                if (typeof curriculum.recalcEffectiveTypesDouble === 'function') {
+                                    curriculum.recalcEffectiveTypesDouble(doubleMajorCourseData);
+                                }
+                            } catch (_) {}
+                            refreshCourseDatalistsAndTypes();
+                        } else if (!dmSet.has(combo)) {
                             // Determine course name for prompt
                             const nameForPrompt = courseObj ? (courseObj.Course_Name || combo) : (nameInput.value.trim() || combo);
                             showCourseTypeFormDM(combo, nameForPrompt, function(selectedType) {
@@ -1466,6 +1835,12 @@ function SUrriculum(major_chosen_by_user) {
     if (customCourseBtn) {
         customCourseBtn.addEventListener('click', function() {
             showCustomCourseForm();
+        });
+    }
+    const manageCustomCoursesBtn = document.querySelector('.manageCustomCourses');
+    if (manageCustomCoursesBtn) {
+        manageCustomCoursesBtn.addEventListener('click', function() {
+            showManageCustomCoursesModal();
         });
     }
 

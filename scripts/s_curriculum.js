@@ -345,6 +345,11 @@ function s_curriculum()
         {
             // Generic checks apply
             {
+                const meEntry = parseInt(this.entryTerm || '0', 10);
+                if (!isNaN(meEntry) && meEntry >= 202501) {
+                    if (!(this.hasCourse('CS404') || this.hasCourse('CS412'))) return 2;
+                }
+
                 // Check faculty course requirements for ME (same as CS, EE, MAT, IE)
                 let facultyCoursesCount = 0;
                 let fensCoursesCount = 0;
@@ -1192,6 +1197,77 @@ function s_curriculum()
             }
         }
 
+        // Special-case ME (Fall 2025+):
+        // CS404 or CS412 is required. If both are completed, one counts as
+        // required and the other counts as core elective.
+        if (this.major === 'ME') {
+            const entry = parseInt(this.entryTerm || '0', 10);
+            const is2025Plus = !isNaN(entry) && entry >= 202501;
+            if (is2025Plus) {
+                const parseCredit0 = (v) => {
+                    const n = (typeof parseCreditValue === 'function')
+                        ? parseCreditValue(v || '0')
+                        : (parseFloat(v || '0') || 0);
+                    return isNaN(n) ? 0 : n;
+                };
+                const setCourseTypeLabel = (course) => {
+                    try {
+                        if (!course || !course.id) return;
+                        const courseElem = document.getElementById(course.id);
+                        if (!courseElem) return;
+                        const typeElem = courseElem.querySelector('.course_type');
+                        if (!typeElem) return;
+                        typeElem.textContent = String(course.effective_type || 'N/A').toUpperCase();
+                        const base = (course.category || '').toString().toLowerCase();
+                        const eff = (course.effective_type || '').toString().toLowerCase();
+                        const movedDown = !!(base && eff && base !== eff && eff !== 'none');
+                        typeElem.classList.toggle('is-overflow-type', movedDown);
+                    } catch (_) {}
+                };
+
+                let assignedRequired = false;
+                const normalizeCode = (v) => String(v || '').toUpperCase().replace(/\s+/g, '');
+                for (let i = 0; i < sortedSemesters.length; i++) {
+                    const sem = sortedSemesters[i];
+                    for (let j = 0; j < sem.courses.length; j++) {
+                        const course = sem.courses[j];
+                        if (!course || course.effective_type === 'none') continue;
+                        const code = normalizeCode(course.code);
+                        if (code !== 'CS404' && code !== 'CS412') continue;
+                        if (!assignedRequired) {
+                            course.effective_type = 'required';
+                            assignedRequired = true;
+                        } else {
+                            course.effective_type = 'core';
+                        }
+                        setCourseTypeLabel(course);
+                    }
+                }
+
+                // Recompute category totals to reflect normalized ME allocations.
+                for (let i = 0; i < this.semesters.length; i++) {
+                    const sem = this.semesters[i];
+                    sem.totalArea = 0;
+                    sem.totalCore = 0;
+                    sem.totalFree = 0;
+                    sem.totalUniversity = 0;
+                    sem.totalRequired = 0;
+                    for (let j = 0; j < sem.courses.length; j++) {
+                        const course = sem.courses[j];
+                        if (!course) continue;
+                        const et = course.effective_type;
+                        if (!et || et === 'none') continue;
+                        const c = parseCredit0(course.SU_credit || '0');
+                        if (et === 'core') sem.totalCore += c;
+                        else if (et === 'area') sem.totalArea += c;
+                        else if (et === 'free') sem.totalFree += c;
+                        else if (et === 'required') sem.totalRequired += c;
+                        else if (et === 'university') sem.totalUniversity += c;
+                    }
+                }
+            }
+        }
+
         // Special-case VACD: enforce mutually-exclusive pairs and pool spillover
         // rules. Some VACD course pools have the constraint that only one of a
         // course pair counts toward the minimum pool requirement. Extra courses
@@ -1992,6 +2068,61 @@ function s_curriculum()
             }
         }
 
+        // Special-case ME double major (Fall 2025+):
+        // CS404 or CS412 is required. If both are completed, one counts as
+        // required and the other counts as core elective.
+        if (this.doubleMajor === 'ME') {
+            const entryDM = parseInt(this.entryTermDM || '0', 10);
+            const is2025PlusDM = !isNaN(entryDM) && entryDM >= 202501;
+            if (is2025PlusDM) {
+                const parseCredit0 = (v) => {
+                    const n = (typeof parseCreditValue === 'function')
+                        ? parseCreditValue(v || '0')
+                        : (parseFloat(v || '0') || 0);
+                    return isNaN(n) ? 0 : n;
+                };
+                let assignedRequired = false;
+                const normalizeCode = (v) => String(v || '').toUpperCase().replace(/\s+/g, '');
+                for (let i = 0; i < sorted.length; i++) {
+                    const sem = sorted[i];
+                    for (let j = 0; j < sem.courses.length; j++) {
+                        const course = sem.courses[j];
+                        if (!course || course.effective_type_dm === 'none') continue;
+                        const code = normalizeCode(course.code);
+                        if (code !== 'CS404' && code !== 'CS412') continue;
+                        if (!assignedRequired) {
+                            course.effective_type_dm = 'required';
+                            assignedRequired = true;
+                        } else {
+                            course.effective_type_dm = 'core';
+                        }
+                    }
+                }
+
+                // Recompute DM category totals to reflect normalized ME allocations.
+                for (let i = 0; i < this.semesters.length; i++) {
+                    const sem = this.semesters[i];
+                    sem.totalCoreDM = 0;
+                    sem.totalAreaDM = 0;
+                    sem.totalFreeDM = 0;
+                    sem.totalRequiredDM = 0;
+                    sem.totalUniversityDM = 0;
+                    for (let j = 0; j < sem.courses.length; j++) {
+                        const course = sem.courses[j];
+                        if (!course) continue;
+                        const et = course.effective_type_dm;
+                        if (!et || et === 'none') continue;
+                        const c = parseCredit0(course.SU_credit || '0');
+                        if (et === 'core') sem.totalCoreDM += c;
+                        else if (et === 'area') sem.totalAreaDM += c;
+                        else if (et === 'free') sem.totalFreeDM += c;
+                        else if (et === 'required') sem.totalRequiredDM += c;
+                        else if (et === 'university') sem.totalUniversityDM += c;
+                    }
+                }
+            }
+        }
+
         // Special-case VACD double major: enforce mutually-exclusive pair rules
         // for required and core elective pools and spill extra pool courses into
         // area/free as specified by VACD requirements.
@@ -2370,6 +2501,11 @@ function s_curriculum()
             }
         } else if (maj === 'ME') {
             {
+                const meEntryDM = parseInt(this.entryTermDM || '0', 10);
+                if (!isNaN(meEntryDM) && meEntryDM >= 202501) {
+                    if (!(this.hasCourse('CS404') || this.hasCourse('CS412'))) return 2;
+                }
+
                 let facultyCoursesCount = 0;
                 let fensCoursesCount = 0;
                 let mathCoursesCount = 0;

@@ -615,7 +615,7 @@
             }
             return uiModal.confirm(
               'Copy semesters?',
-              '<p>Copy current semesters/courses into the new plan?</p><p><small>(Major + terms will be kept either way.)</small></p>',
+              '<p>Copy current semesters/courses into the new plan?</p><p><small>(Start empty resets major/minor/double-major and admit terms to defaults.)</small></p>',
               { confirmText: 'Copy', cancelText: 'Start empty' }
             ).then((copySemesters) => ({ baseName, copySemesters }));
           })
@@ -627,13 +627,6 @@
               newId = planStorage.duplicatePlan(currentId, baseName);
             } else {
               newId = planStorage.createPlan(baseName);
-              if (newId) {
-                const keys = ['major', 'doubleMajor', 'entryTerm', 'entryTermDM', 'entryTermMinor', 'entryTermMinor1', 'entryTermMinor2', 'entryTermMinor3'];
-                for (const k of keys) {
-                  const v = planStorage.getItem(k, currentId);
-                  if (v != null) planStorage.setItem(k, v, newId);
-                }
-              }
             }
             if (newId) {
               planStorage.setActivePlanId(newId);

@@ -1260,6 +1260,91 @@
     const body = document.createElement('div');
     body.className = 'scheduler-body';
 
+    const schedulerFilterControlsHtml =
+      `<div class="scheduler-controls">` +
+      `  <div class="scheduler-control control-row toggle-row">` +
+      `    <div class="toggle-text">Hide taken courses</div>` +
+      `    <label class="toggle-switch"><input class="scheduler-toggle-hide-taken" type="checkbox" /><span class="toggle-slider"></span></label>` +
+      `  </div>` +
+      `  <div class="scheduler-control control-row toggle-row">` +
+      `    <div class="toggle-text">Show course details</div>` +
+      `    <label class="toggle-switch"><input class="scheduler-toggle-details" type="checkbox" /><span class="toggle-slider"></span></label>` +
+      `  </div>` +
+      `  <div class="scheduler-control control-row toggle-row">` +
+      `    <div class="toggle-text">Smart Sort</div>` +
+      `    <label class="toggle-switch"><input class="scheduler-toggle-score" type="checkbox" /><span class="toggle-slider"></span></label>` +
+      `  </div>` +
+      `  <div class="scheduler-control control-row toggle-row">` +
+      `    <div class="toggle-text">Hover preview</div>` +
+      `    <label class="toggle-switch"><input class="scheduler-toggle-hover-preview" type="checkbox" /><span class="toggle-slider"></span></label>` +
+      `  </div>` +
+      `  <div class="scheduler-control control-row toggle-row">` +
+      `    <div class="toggle-text">Highlight course availability</div>` +
+      `    <label class="toggle-switch"><input class="scheduler-toggle-highlight" type="checkbox" /><span class="toggle-slider"></span></label>` +
+      `  </div>` +
+      `  <div class="scheduler-control control-row toggle-row">` +
+      `    <div class="toggle-text">Show blocked courses</div>` +
+      `    <label class="toggle-switch"><input class="scheduler-toggle-show-blocked" type="checkbox" /><span class="toggle-slider"></span></label>` +
+      `  </div>` +
+      `  <div class="scheduler-control control-row toggle-row">` +
+      `    <div class="toggle-text">Check prerequisites</div>` +
+      `    <label class="toggle-switch"><input class="scheduler-toggle-prereq" type="checkbox" /><span class="toggle-slider"></span></label>` +
+      `  </div>` +
+      `  <div class="scheduler-control control-row toggle-row">` +
+      `    <div class="toggle-text">Show unmet prerequisites</div>` +
+      `    <label class="toggle-switch"><input class="scheduler-toggle-show-unmet-prereq" type="checkbox" /><span class="toggle-slider"></span></label>` +
+      `  </div>` +
+      `  <div class="scheduler-control scheduler-filter-row">` +
+      `    <div class="scheduler-filter-label">Min SU credits</div>` +
+      `    <input class="select-control scheduler-filter-min-su" type="number" min="0" step="0.5" placeholder="0" />` +
+      `  </div>` +
+      `  <div class="scheduler-control scheduler-filter-row">` +
+      `    <div class="scheduler-filter-label">Min ECTS</div>` +
+      `    <input class="select-control scheduler-filter-min-ects" type="number" min="0" step="1" placeholder="0" />` +
+      `  </div>` +
+      `  <div class="scheduler-control scheduler-filter-row">` +
+      `    <div class="scheduler-filter-label">Min Basic Science</div>` +
+      `    <input class="select-control scheduler-filter-min-bs" type="number" min="0" step="0.5" placeholder="0" />` +
+      `  </div>` +
+      `  <div class="scheduler-control scheduler-filter-row">` +
+      `    <div class="scheduler-filter-label">Min Engineering</div>` +
+      `    <input class="select-control scheduler-filter-min-eng" type="number" min="0" step="0.5" placeholder="0" />` +
+      `  </div>` +
+      `  <div class="scheduler-control scheduler-filter-row">` +
+      `    <div class="scheduler-filter-label">Min Major type</div>` +
+      `    <select class="select-control scheduler-filter-min-main">` +
+      `      <option value="">Any</option>` +
+      `      <option value="free">Free</option>` +
+      `      <option value="area">Area</option>` +
+      `      <option value="core">Core</option>` +
+      `      <option value="university">University</option>` +
+      `      <option value="required">Required</option>` +
+      `    </select>` +
+      `  </div>` +
+      `  <div class="scheduler-control scheduler-filter-row">` +
+      `    <div class="scheduler-filter-label">Min Double Major type</div>` +
+      `    <select class="select-control scheduler-filter-min-dm">` +
+      `      <option value="">Any</option>` +
+      `      <option value="free">Free</option>` +
+      `      <option value="area">Area</option>` +
+      `      <option value="core">Core</option>` +
+      `      <option value="university">University</option>` +
+      `      <option value="required">Required</option>` +
+      `    </select>` +
+      `  </div>` +
+      `  <div class="scheduler-control scheduler-filter-row">` +
+      `    <div class="scheduler-filter-label">Min Minor type</div>` +
+      `    <select class="select-control scheduler-filter-min-minor">` +
+      `      <option value="">Any</option>` +
+      `      <option value="free">Free</option>` +
+      `      <option value="area">Area</option>` +
+      `      <option value="core">Core</option>` +
+      `      <option value="university">University</option>` +
+      `      <option value="required">Required</option>` +
+      `    </select>` +
+      `  </div>` +
+      `</div>`;
+
     body.innerHTML =
       `<div class="scheduler-layout">` +
       `  <div class="scheduler-sidebar">` +
@@ -1268,97 +1353,6 @@
       `        <button type="button" class="btn btn-secondary btn-sm scheduler-schedule-toggle" title="Switch schedule"><i class="fa-solid fa-layer-group"></i>&nbsp;<span class="scheduler-schedule-name">Default schedule</span></button>` +
       `      </div>` +
       `      <div class="scheduler-hint">Adds sections with lecture/recitation/lab meeting times. Conflicts are highlighted.</div>` +
-      `    </div>` +
-      `    <div class="scheduler-sidebar-section scheduler-collapsible" data-collapsible="options">` +
-      `      <button type="button" class="scheduler-collapsible-header">` +
-      `        <span>Options</span>` +
-      `        <i class="fa-solid fa-chevron-down"></i>` +
-      `      </button>` +
-      `      <div class="scheduler-collapsible-body">` +
-      `        <div class="scheduler-controls">` +
-      `          <div class="scheduler-control control-row toggle-row">` +
-      `            <div class="toggle-text">Hide taken courses</div>` +
-      `            <label class="toggle-switch"><input class="scheduler-toggle-hide-taken" type="checkbox" /><span class="toggle-slider"></span></label>` +
-      `          </div>` +
-      `          <div class="scheduler-control control-row toggle-row">` +
-      `            <div class="toggle-text">Show course details</div>` +
-      `            <label class="toggle-switch"><input class="scheduler-toggle-details" type="checkbox" /><span class="toggle-slider"></span></label>` +
-      `          </div>` +
-      `          <div class="scheduler-control control-row toggle-row">` +
-      `            <div class="toggle-text">Smart Sort</div>` +
-      `            <label class="toggle-switch"><input class="scheduler-toggle-score" type="checkbox" /><span class="toggle-slider"></span></label>` +
-      `          </div>` +
-      `          <div class="scheduler-control control-row toggle-row">` +
-      `            <div class="toggle-text">Hover preview</div>` +
-      `            <label class="toggle-switch"><input class="scheduler-toggle-hover-preview" type="checkbox" /><span class="toggle-slider"></span></label>` +
-      `          </div>` +
-      `          <div class="scheduler-control control-row toggle-row">` +
-      `            <div class="toggle-text">Highlight course availability</div>` +
-      `            <label class="toggle-switch"><input class="scheduler-toggle-highlight" type="checkbox" /><span class="toggle-slider"></span></label>` +
-      `          </div>` +
-      `          <div class="scheduler-control control-row toggle-row">` +
-      `            <div class="toggle-text">Show blocked courses</div>` +
-      `            <label class="toggle-switch"><input class="scheduler-toggle-show-blocked" type="checkbox" /><span class="toggle-slider"></span></label>` +
-      `          </div>` +
-      `          <div class="scheduler-control control-row toggle-row">` +
-      `            <div class="toggle-text">Check prerequisites</div>` +
-      `            <label class="toggle-switch"><input class="scheduler-toggle-prereq" type="checkbox" /><span class="toggle-slider"></span></label>` +
-      `          </div>` +
-      `          <div class="scheduler-control control-row toggle-row">` +
-      `            <div class="toggle-text">Show unmet prerequisites</div>` +
-      `            <label class="toggle-switch"><input class="scheduler-toggle-show-unmet-prereq" type="checkbox" /><span class="toggle-slider"></span></label>` +
-      `          </div>` +
-      `          <div class="scheduler-control scheduler-filter-row">` +
-      `            <div class="scheduler-filter-label">Min SU credits</div>` +
-      `            <input class="select-control scheduler-filter-min-su" type="number" min="0" step="0.5" placeholder="0" />` +
-      `          </div>` +
-      `          <div class="scheduler-control scheduler-filter-row">` +
-      `            <div class="scheduler-filter-label">Min ECTS</div>` +
-      `            <input class="select-control scheduler-filter-min-ects" type="number" min="0" step="1" placeholder="0" />` +
-      `          </div>` +
-      `          <div class="scheduler-control scheduler-filter-row">` +
-      `            <div class="scheduler-filter-label">Min Basic Science</div>` +
-      `            <input class="select-control scheduler-filter-min-bs" type="number" min="0" step="0.5" placeholder="0" />` +
-      `          </div>` +
-      `          <div class="scheduler-control scheduler-filter-row">` +
-      `            <div class="scheduler-filter-label">Min Engineering</div>` +
-      `            <input class="select-control scheduler-filter-min-eng" type="number" min="0" step="0.5" placeholder="0" />` +
-      `          </div>` +
-      `          <div class="scheduler-control scheduler-filter-row">` +
-      `            <div class="scheduler-filter-label">Min Major type</div>` +
-      `            <select class="select-control scheduler-filter-min-main">` +
-      `              <option value="">Any</option>` +
-      `              <option value="free">Free</option>` +
-      `              <option value="area">Area</option>` +
-      `              <option value="core">Core</option>` +
-      `              <option value="university">University</option>` +
-      `              <option value="required">Required</option>` +
-      `            </select>` +
-      `          </div>` +
-      `          <div class="scheduler-control scheduler-filter-row">` +
-      `            <div class="scheduler-filter-label">Min Double Major type</div>` +
-      `            <select class="select-control scheduler-filter-min-dm">` +
-      `              <option value="">Any</option>` +
-      `              <option value="free">Free</option>` +
-      `              <option value="area">Area</option>` +
-      `              <option value="core">Core</option>` +
-      `              <option value="university">University</option>` +
-      `              <option value="required">Required</option>` +
-      `            </select>` +
-      `          </div>` +
-      `          <div class="scheduler-control scheduler-filter-row">` +
-      `            <div class="scheduler-filter-label">Min Minor type</div>` +
-      `            <select class="select-control scheduler-filter-min-minor">` +
-      `              <option value="">Any</option>` +
-      `              <option value="free">Free</option>` +
-      `              <option value="area">Area</option>` +
-      `              <option value="core">Core</option>` +
-      `              <option value="university">University</option>` +
-      `              <option value="required">Required</option>` +
-      `            </select>` +
-      `          </div>` +
-      `        </div>` +
-      `      </div>` +
       `    </div>` +
       `    <div class="scheduler-sidebar-section scheduler-collapsible" data-collapsible="plan">` +
       `      <button type="button" class="scheduler-collapsible-header">` +
@@ -1399,7 +1393,14 @@
       `    <div class="scheduler-sidebar-section scheduler-results-section">` +
       `      <div class="scheduler-results-head">` +
       `        <div class="scheduler-section-title">Courses</div>` +
-      `        <input class="scheduler-search" type="text" placeholder="Search courses (e.g., CS 201, programming)..." />` +
+      `        <div class="scheduler-search-row">` +
+      `          <input class="scheduler-search" type="text" placeholder="Search courses (e.g., CS 201, programming)..." />` +
+      `          <button class="btn btn-secondary btn-sm scheduler-filter-btn" type="button" aria-expanded="false"><i class="fa-solid fa-filter"></i>&nbsp;Filters</button>` +
+      `        </div>` +
+      `        <div class="scheduler-filter-menu" hidden>` +
+      `          <div class="scheduler-filter-menu-header">Filter Options</div>` +
+      schedulerFilterControlsHtml +
+      `        </div>` +
       `      </div>` +
       `      <div class="scheduler-results"></div>` +
       `      <div class="scheduler-results-actions">` +
@@ -1705,7 +1706,6 @@
         const root = state || loadSchedulerState(termCode);
         const active = getActiveSchedule(root);
         const uiState = active.ui && typeof active.ui === 'object' ? active.ui : {};
-        applyCollapse('options', !!uiState.optionsCollapsed);
         applyCollapse('plan', !!uiState.planCollapsed);
         applyCollapse('selected', !!uiState.selectedCollapsed);
         applyCollapse('blocked', !!uiState.blockedCollapsed);
@@ -1755,7 +1755,6 @@
         const root = loadSchedulerState(termCode);
         const active = getActiveSchedule(root);
         active.ui = active.ui && typeof active.ui === 'object' ? active.ui : {};
-        if (key === 'options') active.ui.optionsCollapsed = sec.classList.contains('is-collapsed');
         if (key === 'plan') active.ui.planCollapsed = sec.classList.contains('is-collapsed');
         if (key === 'selected') active.ui.selectedCollapsed = sec.classList.contains('is-collapsed');
         if (key === 'blocked') active.ui.blockedCollapsed = sec.classList.contains('is-collapsed');
@@ -1780,6 +1779,8 @@
     const blockedToggleBtn = body.querySelector('.scheduler-blocked-toggle');
     const blockedClearBtn = body.querySelector('.scheduler-blocked-clear');
     const searchEl = body.querySelector('.scheduler-search');
+    const filterBtn = body.querySelector('.scheduler-filter-btn');
+    const filterMenuEl = body.querySelector('.scheduler-filter-menu');
     const clearBtn = body.querySelector('.scheduler-clear');
     const pickPlanBtn = body.querySelector('.scheduler-pick-plan');
     const loadMoreBtn = body.querySelector('.scheduler-load-more');
@@ -1840,7 +1841,7 @@
     try {
       if (scoreToggle) scoreToggle.checked = (typeof window !== 'undefined' && typeof window.sortBasedOnScore !== 'undefined')
         ? !!window.sortBasedOnScore
-        : readBoolLS('sortBasedOnScore', false);
+        : readBoolLS('sortBasedOnScore', true);
     } catch (_) {}
     try {
       if (hoverPreviewToggle) hoverPreviewToggle.checked = readBoolLS('schedulerHoverPreview', true);
@@ -1849,7 +1850,7 @@
       if (highlightToggle) highlightToggle.checked = readBoolLS('schedulerHighlightAvailability', true);
     } catch (_) {}
     try {
-      if (showBlockedToggle) showBlockedToggle.checked = readBoolLS('schedulerShowBlockedCourses', false);
+      if (showBlockedToggle) showBlockedToggle.checked = readBoolLS('schedulerShowBlockedCourses', true);
     } catch (_) {}
     try { if (minMainTypeSelect) minMainTypeSelect.value = readStrLS('schedulerMinMajorType', ''); } catch (_) {}
     try { if (minDmTypeSelect) minDmTypeSelect.value = readStrLS('schedulerMinDmType', ''); } catch (_) {}
@@ -1858,8 +1859,8 @@
     try { if (minEctsInput) minEctsInput.value = readStrLS('schedulerMinEcts', ''); } catch (_) {}
     try { if (minBsInput) minBsInput.value = readStrLS('schedulerMinBasicScience', ''); } catch (_) {}
     try { if (minEngInput) minEngInput.value = readStrLS('schedulerMinEngineering', ''); } catch (_) {}
-    try { if (prereqToggle) prereqToggle.checked = readBoolLS('schedulerCheckPrereqs', false); } catch (_) {}
-    try { if (showUnmetPrereqToggle) showUnmetPrereqToggle.checked = readBoolLS('schedulerShowUnmetPrereqs', false); } catch (_) {}
+    try { if (prereqToggle) prereqToggle.checked = readBoolLS('schedulerCheckPrereqs', true); } catch (_) {}
+    try { if (showUnmetPrereqToggle) showUnmetPrereqToggle.checked = readBoolLS('schedulerShowUnmetPrereqs', true); } catch (_) {}
 
     const syncPrereqUi = () => {
       try {
@@ -1869,6 +1870,39 @@
       } catch (_) {}
     };
     syncPrereqUi();
+
+    let filterMenuOpen = false;
+    const setFilterMenuOpen = (open) => {
+      try {
+        const next = !!open;
+        filterMenuOpen = next;
+        if (filterMenuEl) {
+          filterMenuEl.hidden = !next;
+          filterMenuEl.classList.toggle('is-open', next);
+        }
+        if (filterBtn) {
+          filterBtn.classList.toggle('is-active', next);
+          filterBtn.setAttribute('aria-expanded', next ? 'true' : 'false');
+        }
+      } catch (_) {}
+    };
+    setFilterMenuOpen(false);
+
+    if (filterBtn) {
+      filterBtn.addEventListener('click', (e) => {
+        try { e.preventDefault(); e.stopPropagation(); } catch (_) {}
+        setFilterMenuOpen(!filterMenuOpen);
+      });
+    }
+
+    body.addEventListener('click', (e) => {
+      if (!filterMenuOpen) return;
+      const t = e && e.target ? e.target : null;
+      if (!t) return;
+      const inMenu = !!(filterMenuEl && filterMenuEl.contains(t));
+      const onBtn = !!(filterBtn && filterBtn.contains(t));
+      if (!inMenu && !onBtn) setFilterMenuOpen(false);
+    });
 
     const scheduleLoadingEl = document.createElement('div');
     scheduleLoadingEl.className = 'scheduler-muted';
@@ -2225,16 +2259,25 @@
     };
 
     const shouldHideTaken = () => {
-      try { return !!(typeof window !== 'undefined' && window.hideTakenCourses); } catch (_) {}
-      return false;
+      try {
+        if (typeof window !== 'undefined' && typeof window.hideTakenCourses !== 'undefined') return !!window.hideTakenCourses;
+      } catch (_) {}
+      try { return readBoolLS('hideTakenCourses', true); } catch (_) {}
+      return true;
     };
     const shouldShowDetails = () => {
-      try { return !!(typeof window !== 'undefined' && window.showCourseDetails); } catch (_) {}
-      return false;
+      try {
+        if (typeof window !== 'undefined' && typeof window.showCourseDetails !== 'undefined') return !!window.showCourseDetails;
+      } catch (_) {}
+      try { return readBoolLS('showCourseDetails', true); } catch (_) {}
+      return true;
     };
     const shouldSortByScore = () => {
-      try { return !!(typeof window !== 'undefined' && window.sortBasedOnScore); } catch (_) {}
-      return false;
+      try {
+        if (typeof window !== 'undefined' && typeof window.sortBasedOnScore !== 'undefined') return !!window.sortBasedOnScore;
+      } catch (_) {}
+      try { return readBoolLS('sortBasedOnScore', true); } catch (_) {}
+      return true;
     };
     const shouldHoverPreview = () => {
       try { return readBoolLS('schedulerHoverPreview', true); } catch (_) {}
@@ -2245,8 +2288,8 @@
       return true;
     };
     const shouldShowBlockedCourses = () => {
-      try { return readBoolLS('schedulerShowBlockedCourses', false); } catch (_) {}
-      return false;
+      try { return readBoolLS('schedulerShowBlockedCourses', true); } catch (_) {}
+      return true;
     };
 
     const getBlockedByDay = () => {

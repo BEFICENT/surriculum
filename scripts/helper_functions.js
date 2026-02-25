@@ -584,6 +584,8 @@ function computeCourseSuggestionScore(courseCode, opts) {
                     const reqReq = parseNum(req.required);
                     contexts.push({
                         weight: 1.2,
+                        majorCode: String(cur.major || ''),
+                        termCode: term,
                         includeBsWeights: isEng && currentSciEng.sci < parseNum(req.science),
                         includeEngWeights: isEng && currentSciEng.eng < parseNum(req.engineering),
                         includeUniversityWeights: (reqUni > 0) ? (prog.uni < reqUni) : true,
@@ -611,6 +613,8 @@ function computeCourseSuggestionScore(courseCode, opts) {
                     const reqReq = parseNum(req.required);
                     contexts.push({
                         weight: 0.8,
+                        majorCode: String(cur.doubleMajor || ''),
+                        termCode: term,
                         includeBsWeights: isEng && currentSciEng.sci < parseNum(req.science),
                         includeEngWeights: isEng && currentSciEng.eng < parseNum(req.engineering),
                         includeUniversityWeights: (reqUni > 0) ? (prog.uni < reqUni) : true,
@@ -643,7 +647,20 @@ function computeCourseSuggestionScore(courseCode, opts) {
 
         const scoreFromRecord = (rec, ctx) => {
             if (!rec) return 0;
-            const baseType = String(rec.EL_Type || '').toLowerCase();
+            let baseType = String(rec.EL_Type || '').toLowerCase();
+            try {
+                const recCode = canonicalize((rec.Major || '') + (rec.Code || ''));
+                const majorCode = String((ctx && ctx.majorCode) || '').toUpperCase();
+                const termNum = parseInt(String((ctx && ctx.termCode) || '0'), 10);
+                if (majorCode === 'ME' && !isNaN(termNum) && termNum >= 202501) {
+                    if (recCode === 'CS404' || recCode === 'CS412') {
+                        const other = recCode === 'CS404' ? 'CS412' : 'CS404';
+                        if (cur && typeof cur.hasCourse === 'function' && cur.hasCourse(other)) {
+                            baseType = 'core';
+                        }
+                    }
+                }
+            } catch (_) {}
             const su = parseNum(rec.SU_credit);
             const bs = parseNum(rec.Basic_Science);
             const eng = parseNum(rec.Engineering);

@@ -84,4 +84,7 @@ jobs:
             Automated daily refresh of scraped data (catalogs, requirements, coursepage info, schedule).
 
             Note: schedule scraping is best-effort; if the university endpoint errors, this workflow still completes.
+            
+            cc @BEFICENT
           labels: data
+          assignees: BEFICENT

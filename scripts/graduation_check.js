@@ -565,6 +565,41 @@ function displaySummary(curriculum, major_chosen_by_user) {
                     `;
                 };
 
+                let untakenToggleCounter = 0;
+                const renderPoolWithUntakenToggle = (poolCodes, sectionCat) => {
+                    const ordered = orderPoolCodes(poolCodes, sectionCat);
+                    const takenCodes = [];
+                    const untakenCodes = [];
+                    for (let i = 0; i < ordered.length; i++) {
+                        const code = ordered[i];
+                        if (allocationByCode[code]) takenCodes.push(code);
+                        else untakenCodes.push(code);
+                    }
+
+                    if (!ordered.length) return `<div class="ms-empty">No courses listed in this pool.</div>`;
+
+                    let html = '';
+                    if (takenCodes.length) {
+                        html += takenCodes.map(code => renderPoolCourse(code, sectionCat)).join('');
+                    } else if (untakenCodes.length) {
+                        html += `<div class="ms-empty">No taken courses in this pool yet.</div>`;
+                    }
+
+                    if (untakenCodes.length) {
+                        const count = untakenCodes.length;
+                        const hid = `ms-untaken-minor-${sectionCat}-${++untakenToggleCounter}`;
+                        html += `
+                          <div class="ms-untaken-wrap">
+                            <button type="button" class="btn btn-secondary btn-sm ms-untaken-toggle" data-target="${hid}" data-count="${count}">Show untaken (${count})</button>
+                          </div>
+                          <div id="${hid}" class="ms-untaken-list is-hidden">
+                            ${untakenCodes.map(code => renderPoolCourse(code, sectionCat)).join('')}
+                          </div>
+                        `;
+                    }
+                    return html;
+                };
+
                 let body = `<div class="minor-summary">`;
                 body += `<div class="ms-subtitle">Admit term: <strong>${termName || 'Unknown'}</strong></div>`;
                 try {
@@ -616,7 +651,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
 
                     body += `<div class="ms-subheader">Course pool</div>`;
                     body += `<div class="ms-list">`;
-                    body += poolCodes.length ? orderPoolCodes(poolCodes, cat).map(code => renderPoolCourse(code, cat)).join('') : `<div class="ms-empty">No courses listed in this pool.</div>`;
+                    body += renderPoolWithUntakenToggle(poolCodes, cat);
                     body += `</div></div>`;
                 }
 
@@ -653,6 +688,19 @@ function displaySummary(curriculum, major_chosen_by_user) {
                             e.stopPropagation();
                             const code = btn.getAttribute('data-minor-code') || '';
                             if (code) showMinorSummary(code);
+                        });
+                    });
+                    minorPanelEl.querySelectorAll('.ms-untaken-toggle').forEach(btn => {
+                        btn.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const targetId = btn.getAttribute('data-target') || '';
+                            const count = btn.getAttribute('data-count') || '0';
+                            const target = targetId ? minorPanelEl.querySelector(`#${targetId}`) : null;
+                            if (!target) return;
+                            const willShow = target.classList.contains('is-hidden');
+                            target.classList.toggle('is-hidden', !willShow);
+                            btn.textContent = willShow ? `Hide untaken (${count})` : `Show untaken (${count})`;
                         });
                     });
                 } catch (_) {}
@@ -907,6 +955,41 @@ function displaySummary(curriculum, major_chosen_by_user) {
             `;
         };
 
+        let untakenToggleCounter = 0;
+        const renderPoolWithUntakenToggle = (poolCodes, sectionCat) => {
+            const ordered = orderPoolCodes(poolCodes, sectionCat);
+            const takenCodes = [];
+            const untakenCodes = [];
+            for (let i = 0; i < ordered.length; i++) {
+                const code = ordered[i];
+                if (allocationByCode[code]) takenCodes.push(code);
+                else untakenCodes.push(code);
+            }
+
+            if (!ordered.length) return `<div class="ms-empty">No courses listed in this pool.</div>`;
+
+            let html = '';
+            if (takenCodes.length) {
+                html += takenCodes.map(code => renderPoolCourse(code, sectionCat)).join('');
+            } else if (untakenCodes.length) {
+                html += `<div class="ms-empty">No taken courses in this pool yet.</div>`;
+            }
+
+            if (untakenCodes.length) {
+                const count = untakenCodes.length;
+                const hid = `ms-untaken-major-${sectionCat}-${++untakenToggleCounter}`;
+                html += `
+                  <div class="ms-untaken-wrap">
+                    <button type="button" class="btn btn-secondary btn-sm ms-untaken-toggle" data-target="${hid}" data-count="${count}">Show untaken (${count})</button>
+                  </div>
+                  <div id="${hid}" class="ms-untaken-list is-hidden">
+                    ${untakenCodes.map(code => renderPoolCourse(code, sectionCat)).join('')}
+                  </div>
+                `;
+            }
+            return html;
+        };
+
         let body = `<div class="major-summary">`;
         body += `<div class="ms-subtitle">Admit term: <strong>${esc(termName || 'Unknown')}</strong></div>`;
         body += `<div class="ms-legend">
@@ -964,9 +1047,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
 
             body += `<div class="ms-subheader">Course pool</div>`;
             body += `<div class="ms-list">`;
-            body += poolCodes.length
-                ? orderPoolCodes(poolCodes, cat).map(code => renderPoolCourse(code, cat)).join('')
-                : `<div class="ms-empty">No courses listed in this pool.</div>`;
+            body += renderPoolWithUntakenToggle(poolCodes, cat);
             body += `</div></div>`;
         }
 
@@ -1005,6 +1086,19 @@ function displaySummary(curriculum, major_chosen_by_user) {
                     e.stopPropagation();
                     const next = btn.getAttribute('data-major-view') || '';
                     if (next) showMajorSummary(next);
+                });
+            });
+            majorPanelEl.querySelectorAll('.ms-untaken-toggle').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const targetId = btn.getAttribute('data-target') || '';
+                    const count = btn.getAttribute('data-count') || '0';
+                    const target = targetId ? majorPanelEl.querySelector(`#${targetId}`) : null;
+                    if (!target) return;
+                    const willShow = target.classList.contains('is-hidden');
+                    target.classList.toggle('is-hidden', !willShow);
+                    btn.textContent = willShow ? `Hide untaken (${count})` : `Show untaken (${count})`;
                 });
             });
         } catch (_) {}
