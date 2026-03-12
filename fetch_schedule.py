@@ -1,14 +1,14 @@
 import argparse
 import json
-import os
 import re
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import requests
 from bs4 import BeautifulSoup
+
+from term_utils import term_code_from_date, today_in_tz
 
 
 BASE = "https://suis.sabanciuniv.edu/prod"
@@ -60,15 +60,53 @@ def _norm_course_id(subj: str, numb: str) -> str:
 
 
 def _extract_term_code_from_dyn_sched(html: str) -> Optional[str]:
+    codes = _extract_term_codes_from_dyn_sched(html)
+    return codes[0] if codes else None
+
+
+def _extract_term_codes_from_dyn_sched(html: str) -> List[str]:
     soup = BeautifulSoup(html, "lxml")
     sel = soup.select_one("select#term_input_id")
     if not sel:
-        return None
+        return []
+    out: List[str] = []
     for opt in sel.select("option"):
         val = (opt.get("value") or "").strip()
         if re.fullmatch(r"\d{6}", val or ""):
-            return val
-    return None
+            out.append(val)
+    return out
+
+
+def _resolve_terms_to_scrape(explicit_term: str, explicit_terms: str, *, timeout: float) -> List[str]:
+    if explicit_term:
+        return [explicit_term]
+
+    if explicit_terms:
+        out: List[str] = []
+        for part in explicit_terms.split(","):
+            code = str(part or "").strip()
+            if not code:
+                continue
+            if not re.fullmatch(r"\d{6}", code):
+                raise ValueError(f"Invalid term code: {code!r}")
+            out.append(code)
+        if not out:
+            raise ValueError("No valid term codes were provided in --terms.")
+        return out
+
+    sess = requests.Session()
+    dyn_html = _fetch_with_retry(sess, "GET", DYN_SCHED_URL, timeout=timeout)
+    available_terms = _extract_term_codes_from_dyn_sched(dyn_html)
+    if not available_terms:
+        raise RuntimeError("Could not determine available term codes from dynamic schedule page.")
+
+    current_term = term_code_from_date(today_in_tz())
+    terms = sorted((code for code in available_terms if code >= current_term), key=int)
+    if terms:
+        return terms
+
+    fallback = _extract_term_code_from_dyn_sched(dyn_html)
+    return [fallback] if fallback else []
 
 
 def _fetch_with_retry(
@@ -330,12 +368,17 @@ def parse_saved_listing_files(files: List[Path], term: Optional[str]) -> List[Di
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Fetch current term schedule meeting times and write JSONL.")
-    parser.add_argument("--term", default="", help="Term code like 202502. If omitted, tries to pick from dynamic schedule page.")
+    parser = argparse.ArgumentParser(description="Fetch schedule meeting times and write JSONL.")
+    parser.add_argument("--term", default="", help="Single term code like 202502.")
+    parser.add_argument(
+        "--terms",
+        default="",
+        help="Comma-separated explicit term codes. If omitted, scrapes all available terms from the current term onward.",
+    )
     parser.add_argument(
         "--out",
         default="",
-        help="Output JSONL path. Default: courses/schedule/<term>.jsonl",
+        help="Output JSONL path. Only valid with a single scraped term. Default: courses/schedule/<term>.jsonl",
     )
     parser.add_argument("--timeout", type=float, default=30.0, help="HTTP timeout seconds.")
     parser.add_argument("--delay", type=float, default=0.5, help="Delay between subject requests (seconds).")
@@ -349,28 +392,33 @@ def main() -> None:
     args = parser.parse_args()
 
     term = str(args.term or "").strip()
+    terms_arg = str(args.terms or "").strip()
     max_subjects = args.max_subjects if args.max_subjects and args.max_subjects > 0 else None
 
     if args.html:
-        rows = parse_saved_listing_files([Path(x) for x in args.html], term or None)
+        if terms_arg:
+            raise RuntimeError("--terms cannot be used with --html.")
+        parsed_rows = parse_saved_listing_files([Path(x) for x in args.html], term or None)
+        if not term:
+            raise RuntimeError("--html requires --term so the output term is known.")
+        terms_to_scrape = [term]
     else:
-        rows = scrape_term_schedule(term, timeout=args.timeout, delay_s=args.delay, max_subjects=max_subjects)
+        terms_to_scrape = _resolve_terms_to_scrape(term, terms_arg, timeout=args.timeout)
+        if not terms_to_scrape:
+            raise RuntimeError("Missing term code(s).")
 
-    # If the scrape returns 0 sections for the selected subjects, we still want
-    # to write an (empty) file for the resolved term.
-    if not term:
-        try:
-            sess = requests.Session()
-            dyn_html = _fetch_with_retry(sess, "GET", DYN_SCHED_URL, timeout=args.timeout)
-            term = _extract_term_code_from_dyn_sched(dyn_html) or ""
-        except Exception:
-            term = ""
-    if not term:
-        raise RuntimeError("Missing term code (use --term).")
+    if args.out and len(terms_to_scrape) != 1:
+        raise RuntimeError("--out can only be used when scraping exactly one term.")
 
-    out_path = Path(args.out) if args.out else Path("courses") / "schedule" / f"{term}.jsonl"
-    write_jsonl(out_path, rows)
-    print(f"Wrote {len(rows)} sections to {out_path}")
+    for idx, resolved_term in enumerate(terms_to_scrape, start=1):
+        if args.html:
+            rows = parsed_rows
+        else:
+            print(f"[{idx}/{len(terms_to_scrape)}] Scraping term {resolved_term}...")
+            rows = scrape_term_schedule(resolved_term, timeout=args.timeout, delay_s=args.delay, max_subjects=max_subjects)
+        out_path = Path(args.out) if args.out else Path("courses") / "schedule" / f"{resolved_term}.jsonl"
+        write_jsonl(out_path, rows)
+        print(f"Wrote {len(rows)} sections to {out_path}")
 
 
 if __name__ == "__main__":

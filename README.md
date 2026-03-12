@@ -154,7 +154,7 @@ Key features:
 Schedule data files:
 
 - The scheduler reads from `courses/schedule/<TERM>.jsonl`.
-- Generate/update these files using `python fetch_schedule.py`.
+- Generate/update these files using `python fetch_schedule.py` (defaults to all terms from the current term onward).
 
 Mobile note:
 
@@ -189,10 +189,17 @@ Scrape course pages for metadata (including Basic Science/Engineering credit bre
 python scrape_coursepages.py
 ```
 
-Update current-term schedule data:
+Update schedule data from the current term onward:
 
 ```bash
 python fetch_schedule.py
+```
+
+Scrape one specific term (or a custom list) instead:
+
+```bash
+python fetch_schedule.py --term 202502
+python fetch_schedule.py --terms 202502,202503,202601
 ```
 
 Legacy JSON → JSONL migration (only needed if you still have `.json` files):
