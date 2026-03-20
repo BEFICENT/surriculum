@@ -2650,7 +2650,7 @@ function SUrriculum(major_chosen_by_user) {
                     '<p>Please double-check the sidebar selections so the requirements match your catalog:</p>' +
                     '<ul>' +
                     '<li><strong>Major / Minor admit term:</strong> usually your <strong>first term at Sabancı</strong> (your initial entry term), even if you declared the major later or had a prep/English year.</li>' +
-                    '<li><strong>Double Major admit term:</strong> usually the <strong>first term after</strong> your double major application was accepted.</li>' +
+                    '<li><strong>Double Major admit term:</strong> if you started your double major in <strong>Fall 2026-2027 or later</strong>, use your <strong>initial university entry term</strong>. For double majors started <strong>before Fall 2026-2027</strong>, use the <strong>first term after</strong> your double major application was accepted.</li>' +
                     '</ul>' +
                     '<p>If these are wrong, your graduation/summary results can look incorrect.</p>';
                 if (ui && typeof ui.alert === 'function') await ui.alert(reminderTitle, reminderBody);
