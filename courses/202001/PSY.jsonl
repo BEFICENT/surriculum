@@ -105,8 +105,6 @@
 {"Major": "ARA", "Code": "120", "Course_Name": "Basic Arabic II", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ARA", "Code": "130", "Course_Name": "Intermediate Arabic I", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ARA", "Code": "140", "Course_Name": "Intermediate Arabic II", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "ARA", "Code": "150", "Course_Name": "Advanced Arabic I", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "ARA", "Code": "160", "Course_Name": "Advanced Arabic II", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "301", "Course_Name": "Introduction to Molecular Biology", "ECTS": "7", "Engineering": 0, "Basic_Science": 7.0, "SU_credit": "4", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "303", "Course_Name": "Genetics", "ECTS": "7", "Engineering": 2.0, "Basic_Science": 5.0, "SU_credit": "4", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "304", "Course_Name": "Biological Function and Structure", "ECTS": "6", "Engineering": 1.0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
@@ -143,10 +141,6 @@
 {"Major": "CHEM", "Code": "301", "Course_Name": "Inorganic Chemistry", "ECTS": "6", "Engineering": 1.0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CHEM", "Code": "302", "Course_Name": "Analytical Chemistry", "ECTS": "7", "Engineering": 2.0, "Basic_Science": 5.0, "SU_credit": "4", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CHEM", "Code": "405", "Course_Name": "Electrochemistry", "ECTS": "6", "Engineering": 2.0, "Basic_Science": 4.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "CHI", "Code": "110", "Course_Name": "Basic Chinese I", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "CHI", "Code": "120", "Course_Name": "Basic Chinese II", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "CHI", "Code": "130", "Course_Name": "Intermediate Chinese I", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "CHI", "Code": "140", "Course_Name": "Intermediate Chinese II", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CIP", "Code": "102", "Course_Name": "Civic Involvement Projects II", "ECTS": "2", "Engineering": 0, "Basic_Science": 0, "SU_credit": "0", "Faculty": "CIAD", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CIP", "Code": "201", "Course_Name": "Civic Involvement Projects III", "ECTS": "2", "Engineering": 0, "Basic_Science": 0, "SU_credit": "0", "Faculty": "CIAD", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CIP", "Code": "202", "Course_Name": "Civic Involvement Projects IV", "ECTS": "2", "Engineering": 0, "Basic_Science": 0, "SU_credit": "0", "Faculty": "CIAD", "EL_Type": "free", "Faculty_Course": "No"}
@@ -372,8 +366,6 @@
 {"Major": "GER", "Code": "120", "Course_Name": "Basic German II", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "GER", "Code": "130", "Course_Name": "Intermediate German I", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "GER", "Code": "140", "Course_Name": "Intermediate German II", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "GER", "Code": "150", "Course_Name": "Advanced German I", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "GREK", "Code": "110", "Course_Name": "Modern Greek Basic I", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "HART", "Code": "234", "Course_Name": "Classical Mythology in Art", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "HART", "Code": "292", "Course_Name": "From Modern to Contemporary Art", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "FASS"}
 {"Major": "HART", "Code": "293", "Course_Name": "Contemporary Art", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "FASS"}
@@ -502,28 +494,13 @@
 {"Major": "IR", "Code": "405", "Course_Name": "European Foreign Policy", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "IR", "Code": "410", "Course_Name": "International Security", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "IR", "Code": "489", "Course_Name": "Human Rights in World Affairs", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "ITA", "Code": "110", "Course_Name": "Basic Italian I", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "ITA", "Code": "120", "Course_Name": "Basic Italian II", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "ITA", "Code": "130", "Course_Name": "Intermediate Italian I", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "ITA", "Code": "140", "Course_Name": "Intermediate Italian II", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "JAP", "Code": "110", "Course_Name": "Basic Japanese I", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "JAP", "Code": "120", "Course_Name": "Basic Japanese II", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "JAP", "Code": "130", "Course_Name": "Intermediate Japanese I", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "JAP", "Code": "140", "Course_Name": "Intermediate Japanese II", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "JAP", "Code": "150", "Course_Name": "Advanced Japanese I", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "KUR", "Code": "110", "Course_Name": "Basic Kurdish I", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "KUR", "Code": "120", "Course_Name": "Basic Kurdish II", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "KUR", "Code": "130", "Course_Name": "Intermediate Kurdish I", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "KUR", "Code": "140", "Course_Name": "Intermediate Kurdish II", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "LAT", "Code": "110", "Course_Name": "Basic Latin I", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "LAT", "Code": "120", "Course_Name": "Basic Latin II", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "LAT", "Code": "130", "Course_Name": "Intermediate Latin I", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "LAT", "Code": "140", "Course_Name": "Intermediate Latin II", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "LAT", "Code": "150", "Course_Name": "Advanced Latin I", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "LAW", "Code": "311", "Course_Name": "International Law", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "LAW", "Code": "312", "Course_Name": "Comparative Constitutional Law", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "LIT", "Code": "212", "Course_Name": "Analyzing Text and Context", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "FASS"}
-{"Major": "LIT", "Code": "252", "Course_Name": "Topics in World Literature", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "LIT", "Code": "359", "Course_Name": "Literature, Ideology and  Resistance", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "FASS"}
 {"Major": "LIT", "Code": "394", "Course_Name": "Modern Turkish Literature", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "LIT", "Code": "440", "Course_Name": "Literature and Psychoanalysis", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
@@ -704,10 +681,6 @@
 {"Major": "ORG", "Code": "451", "Course_Name": "Selected Topics in Organizations II", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "PERS", "Code": "110", "Course_Name": "Basic Persian I", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "PERS", "Code": "120", "Course_Name": "Basic Persian II", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "PERS", "Code": "130", "Course_Name": "Intermediate Persian I", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "PERS", "Code": "140", "Course_Name": "Intermediate Persian II", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "PERS", "Code": "150", "Course_Name": "Advanced Persian I", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "PERS", "Code": "160", "Course_Name": "Advanced Persian II", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "PHIL", "Code": "202", "Course_Name": "Problems of Philosophy", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "FASS"}
 {"Major": "PHIL", "Code": "310", "Course_Name": "Philosophy of Mind", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "PHIL", "Code": "321", "Course_Name": "Symbolic Logic", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "FASS"}
@@ -770,10 +743,6 @@
 {"Major": "PSIR", "Code": "311", "Course_Name": "Research Methods for Political Science and International Relations I", "ECTS": "7", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "PSIR", "Code": "401", "Course_Name": "Research Methods for Political Science and International Relations II", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "203", "Course_Name": "Stress and Well-Being", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "RUS", "Code": "110", "Course_Name": "Basic Russian I", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "RUS", "Code": "120", "Course_Name": "Basic Russian II", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "RUS", "Code": "130", "Course_Name": "Intermediate Russian I", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "RUS", "Code": "140", "Course_Name": "Intermediate Russian II", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "SOC", "Code": "201", "Course_Name": "Social Theory", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "FASS"}
 {"Major": "SOC", "Code": "301", "Course_Name": "Political Sociology", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "FASS"}
 {"Major": "SOC", "Code": "313", "Course_Name": "Turkish Social Thought", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
@@ -785,10 +754,8 @@
 {"Major": "SPA", "Code": "110", "Course_Name": "Basic Spanish I", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "SPA", "Code": "120", "Course_Name": "Basic Spanish II", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "SPA", "Code": "130", "Course_Name": "Intermediate Spanish I", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "SPA", "Code": "140", "Course_Name": "Intermediate Spanish II", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "SPS", "Code": "201", "Course_Name": "Fundamentals of Scientific Inquiry and Statistical Reasoning for Social Sciences", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "SPS", "Code": "311", "Course_Name": "Research Methods I", "ECTS": "7", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "SPS", "Code": "315", "Course_Name": "Analysis of Social Networks", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "SPS", "Code": "374", "Course_Name": "Global Environmental Challenges", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "SPS", "Code": "384", "Course_Name": "Climate Change and Environmental Politics", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "SPS", "Code": "394", "Course_Name": "Political Ecology and Society", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
@@ -801,9 +768,6 @@
 {"Major": "TUR", "Code": "101", "Course_Name": "Basic Turkish I", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "TUR", "Code": "102", "Course_Name": "Basic Turkish II", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "TUR", "Code": "201", "Course_Name": "Intermediate Turkish I", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "TUR", "Code": "202", "Course_Name": "Intermediate Turkish II", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "TUR", "Code": "403", "Course_Name": "Advanced Readings in Turkish for Foreigners I", "ECTS": "10", "Engineering": 0, "Basic_Science": 0, "SU_credit": "5", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "TUR", "Code": "404", "Course_Name": "Advanced Readings in Turkish for Foreigners II", "ECTS": "10", "Engineering": 0, "Basic_Science": 0, "SU_credit": "5", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "VA", "Code": "201", "Course_Name": "Visual Language I", "ECTS": "7", "Engineering": 0, "Basic_Science": 0, "SU_credit": "4", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "FASS"}
 {"Major": "VA", "Code": "202", "Course_Name": "Visual Language II", "ECTS": "7", "Engineering": 0, "Basic_Science": 0, "SU_credit": "4", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "VA", "Code": "203", "Course_Name": "Language of Drawing I", "ECTS": "7", "Engineering": 0, "Basic_Science": 0, "SU_credit": "4", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "FASS"}
@@ -843,8 +807,6 @@
 {"Major": "VA", "Code": "437", "Course_Name": "Experimental Film and Video", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "VA", "Code": "439", "Course_Name": "Envisioning Information", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "VA", "Code": "440", "Course_Name": "Motion Graphics and Art", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "VA", "Code": "444", "Course_Name": "Interaction Design", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "VA", "Code": "445", "Course_Name": "Issues in Contemporary Performance Art", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "VA", "Code": "450", "Course_Name": "Construction/Deconstruction in 3 Dimensional Space", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "VA", "Code": "453", "Course_Name": "Design Thinking", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "VA", "Code": "455", "Course_Name": "Physical Computing", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
