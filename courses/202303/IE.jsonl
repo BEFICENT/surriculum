@@ -75,6 +75,7 @@
 {"Major": "ACC", "Code": "301", "Course_Name": "Managerial Accounting", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "310", "Course_Name": "Introduction to Bioinformatics", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "CHEM", "Code": "202", "Course_Name": "Chemical Kinetics", "ECTS": "7", "Engineering": 2.0, "Basic_Science": 5.0, "SU_credit": "4", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
+{"Major": "CHEM", "Code": "212", "Course_Name": "General Chemistry for Engineers", "ECTS": "7", "Engineering": 0, "Basic_Science": 7.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "CHEM", "Code": "301", "Course_Name": "Inorganic Chemistry", "ECTS": "6", "Engineering": 1.0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "CHEM", "Code": "302", "Course_Name": "Analytical Chemistry", "ECTS": "7", "Engineering": 2.0, "Basic_Science": 5.0, "SU_credit": "4", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "CS", "Code": "308", "Course_Name": "Software Engineering", "ECTS": "7", "Engineering": 7.0, "Basic_Science": 0, "SU_credit": "4", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
@@ -211,7 +212,6 @@
 {"Major": "BIO", "Code": "460", "Course_Name": "Evolution", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "467", "Course_Name": "Signal Transduction", "ECTS": "6", "Engineering": 1.0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "468", "Course_Name": "Gene Regulation & Diseases", "ECTS": "6", "Engineering": 2.0, "Basic_Science": 4.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "CHEM", "Code": "212", "Course_Name": "General Chemistry for Engineers", "ECTS": "7", "Engineering": 0, "Basic_Science": 7.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CHEM", "Code": "405", "Course_Name": "Electrochemistry", "ECTS": "6", "Engineering": 2.0, "Basic_Science": 4.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CONF", "Code": "300", "Course_Name": "Conflict Analysis and Resolution", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CONF", "Code": "400", "Course_Name": "International Conflict and Peace", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
@@ -328,6 +328,7 @@
 {"Major": "HART", "Code": "320", "Course_Name": "Women Artists", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "HART", "Code": "380", "Course_Name": "Bauhaus", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "HART", "Code": "413", "Course_Name": "Visual Arts in Türkiye", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
+{"Major": "HART", "Code": "425", "Course_Name": "Art & History at the Museum", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "HART", "Code": "426", "Course_Name": "Leonardo and Michelangelo: Heroes of the Renaissance", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "HART", "Code": "432", "Course_Name": "Post-1945 American Art", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "HIST", "Code": "205", "Course_Name": "History of the Twentieth Century", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "FASS"}
