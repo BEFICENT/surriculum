@@ -321,7 +321,7 @@
 {"Major": "NS", "Code": "216", "Course_Name": "Life on Earth", "ECTS": "6", "Engineering": 1.0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "FENS"}
 {"Major": "NS", "Code": "220", "Course_Name": "World Energy Outlook: The Coming Year", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "NS", "Code": "222", "Course_Name": "Planetary Systems and Extrasolar Planets", "ECTS": "5", "Engineering": 0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
-{"Major": "PHYS", "Code": "113", "Course_Name": "Basic Concepts of Physics for Scientists and Engineers", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
+{"Major": "PHYS", "Code": "113", "Course_Name": "Basic Concepts of Physics for Scientists and Engineers", "ECTS": "7", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "PHYS", "Code": "211", "Course_Name": "Modern Physics", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "FENS"}
 {"Major": "PHYS", "Code": "304", "Course_Name": "Quantum Mechanics II", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "PHYS", "Code": "313", "Course_Name": "Quantum Mechanics Laboratory", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}

@@ -205,7 +205,7 @@
 {"Major": "NS", "Code": "213", "Course_Name": "Basic Concepts of Physics for Scientists and Engineers", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "FENS"}
 {"Major": "NS", "Code": "214", "Course_Name": "Oscillations, Waves and Optics", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "FENS"}
 {"Major": "NS", "Code": "218", "Course_Name": "Fundamentals of Nanoscience", "ECTS": "6", "Engineering": 2.0, "Basic_Science": 4.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "FENS"}
-{"Major": "PHYS", "Code": "113", "Course_Name": "Basic Concepts of Physics for Scientists and Engineers", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
+{"Major": "PHYS", "Code": "113", "Course_Name": "Basic Concepts of Physics for Scientists and Engineers", "ECTS": "7", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "PHYS", "Code": "302", "Course_Name": "Solid State Physics", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "PHYS", "Code": "303", "Course_Name": "Quantum Mechanics I", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "PHYS", "Code": "304", "Course_Name": "Quantum Mechanics II", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
