@@ -342,6 +342,7 @@
 {"Major": "CS", "Code": "48006", "Course_Name": "Special Topics in CS: Decentralized Finance", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CS", "Code": "48007", "Course_Name": "Special Topics in CS: Internet of Things Sensing System", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CS", "Code": "48008", "Course_Name": "Special Topics in CS: Malware Analysis and Detection", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
+{"Major": "CS", "Code": "48012", "Course_Name": "Special Topics in CS: Agentic AI Systems: Architecture and Deployment", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CULT", "Code": "322", "Course_Name": "Youth Culture", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CULT", "Code": "355", "Course_Name": "Urban Spaces and Cultures", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CULT", "Code": "361", "Course_Name": "Oral History", "ECTS": "7", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
@@ -390,6 +391,7 @@
 {"Major": "ECON", "Code": "492", "Course_Name": "Seminar on the Turkish Economy", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ECON", "Code": "494", "Course_Name": "Spatial Data Science", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ECON", "Code": "495", "Course_Name": "Machine Learning for Policy Evaluation", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
+{"Major": "EE", "Code": "48010", "Course_Name": "Special Topics in EE: Brain-Computer Interfaces", "ECTS": "6", "Engineering": 4.0, "Basic_Science": 2.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ENT", "Code": "201", "Course_Name": "The Foundations of Entrepreneurship", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "FILM", "Code": "231", "Course_Name": "Introduction to Film Studies", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "FILM", "Code": "331", "Course_Name": "Approaches to Film Studies", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
@@ -524,6 +526,7 @@
 {"Major": "LIT", "Code": "394", "Course_Name": "Modern Turkish Literature", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "LIT", "Code": "440", "Course_Name": "Literature and Psychoanalysis", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "LIT", "Code": "445", "Course_Name": "Gender and Sexuality in Literature", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
+{"Major": "MATH", "Code": "428", "Course_Name": "Introduction to Approximation Methods", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "MGMT", "Code": "201", "Course_Name": "Introduction to Management", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "MGMT", "Code": "203", "Course_Name": "Introduction to Data Analysis and Research in Business", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "MGMT", "Code": "213", "Course_Name": "Disaster Awareness & Relief Management", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "2", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
