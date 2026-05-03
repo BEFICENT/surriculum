@@ -187,6 +187,7 @@
 {"Major": "CONF", "Code": "300", "Course_Name": "Conflict Analysis and Resolution", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CONF", "Code": "400", "Course_Name": "International Conflict and Peace", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CONF", "Code": "431", "Course_Name": "Conflict Resolution Practice", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
+{"Major": "CS", "Code": "48012", "Course_Name": "Special Topics in CS: Agentic AI Systems: Architecture and Deployment", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CULT", "Code": "322", "Course_Name": "Youth Culture", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CULT", "Code": "355", "Course_Name": "Urban Spaces and Cultures", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CULT", "Code": "361", "Course_Name": "Oral History", "ECTS": "7", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
@@ -248,6 +249,7 @@
 {"Major": "EE", "Code": "444", "Course_Name": "Optics", "ECTS": "6", "Engineering": 5.0, "Basic_Science": 1.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "EE", "Code": "473", "Course_Name": "Biomedical Instrumentation", "ECTS": "6", "Engineering": 4.0, "Basic_Science": 2.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "EE", "Code": "48009", "Course_Name": "Special Topics in EE: Machine Learning for Communication Systems", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
+{"Major": "EE", "Code": "48010", "Course_Name": "Special Topics in EE: Brain-Computer Interfaces", "ECTS": "6", "Engineering": 4.0, "Basic_Science": 2.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ENRG", "Code": "220", "Course_Name": "World Energy Outlook: The Coming Year", "ECTS": "6", "Engineering": 3.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ENRG", "Code": "301", "Course_Name": "Energy Systems and Environment", "ECTS": "6", "Engineering": 3.0, "Basic_Science": 3.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ENRG", "Code": "315", "Course_Name": "Energy", "ECTS": "5", "Engineering": 2.0, "Basic_Science": 3.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
@@ -349,6 +351,7 @@
 {"Major": "MATH", "Code": "322", "Course_Name": "Partial Differential Equations", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "MATH", "Code": "409", "Course_Name": "Proofs from the Notebook", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "MATH", "Code": "410", "Course_Name": "Introduction to Stochastic Calculus", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
+{"Major": "MATH", "Code": "428", "Course_Name": "Introduction to Approximation Methods", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "MAT", "Code": "204", "Course_Name": "Electrical, Optical and Magnetic Properties of Materials", "ECTS": "6", "Engineering": 2.0, "Basic_Science": 4.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "FENS"}
 {"Major": "MAT", "Code": "206", "Course_Name": "Kinetics of Materials", "ECTS": "6", "Engineering": 5.0, "Basic_Science": 1.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "MAT", "Code": "302", "Course_Name": "Polymer Chemistry", "ECTS": "7", "Engineering": 2.0, "Basic_Science": 5.0, "SU_credit": "4", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
