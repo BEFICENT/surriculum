@@ -20,6 +20,7 @@ COURSES_DIR = os.path.join("courses", "minors")
 REQUIREMENTS_LEGACY_PATH = os.path.join("requirements", "minors.jsonl")
 REQUIREMENTS_DIR = os.path.join("requirements", "minors")
 REQUIREMENTS_TERMS_MANIFEST = os.path.join(REQUIREMENTS_DIR, "terms.jsonl")
+COURSEPAGE_INFO_PATH = os.path.join("courses", "all_coursepage_info.jsonl")
 
 _tls = threading.local()
 _net_semaphore = None
@@ -66,6 +67,88 @@ def fetch_html(url: str, timeout: float = 30.0) -> str:
             sleep_for = float(_http_backoff_s) * (2**attempt) + random.uniform(0, 0.25)
             time.sleep(sleep_for)
     raise last_err
+
+
+def load_coursepage_credit_lookup(path: str = COURSEPAGE_INFO_PATH) -> Dict[str, Tuple[Optional[float], Optional[float]]]:
+    out: Dict[str, Tuple[Optional[float], Optional[float]]] = {}
+    if not os.path.exists(path):
+        return out
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = (line or "").strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except Exception:
+                    continue
+                course_id = str(rec.get("course_id") or "").strip().upper().replace(" ", "")
+                if not course_id:
+                    subj = str(rec.get("subj_code") or "").strip().upper()
+                    numb = str(rec.get("crse_numb") or "").strip().upper()
+                    if subj and numb:
+                        course_id = f"{subj}{numb}"
+                if not course_id:
+                    continue
+                eng = rec.get("engineering")
+                bs = rec.get("basic_science")
+                eng_val = float(eng) if isinstance(eng, (int, float)) else None
+                bs_val = float(bs) if isinstance(bs, (int, float)) else None
+                out[course_id] = (eng_val, bs_val)
+    except Exception:
+        return {}
+    return out
+
+
+def load_existing_minor_credit_lookup(path: str) -> Dict[str, Tuple[Optional[float], Optional[float]]]:
+    out: Dict[str, Tuple[Optional[float], Optional[float]]] = {}
+    if not os.path.exists(path):
+        return out
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = (line or "").strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except Exception:
+                    continue
+                course_id = f"{str(rec.get('Major') or '').strip().upper()}{str(rec.get('Code') or '').strip().upper()}"
+                if not course_id:
+                    continue
+                eng = rec.get("Engineering")
+                bs = rec.get("Basic_Science")
+                eng_val = float(eng) if isinstance(eng, (int, float)) else None
+                bs_val = float(bs) if isinstance(bs, (int, float)) else None
+                out[course_id] = (eng_val, bs_val)
+    except Exception:
+        return {}
+    return out
+
+
+def enrich_minor_course_credits(
+    courses: List[Dict],
+    *,
+    coursepage_lookup: Dict[str, Tuple[Optional[float], Optional[float]]],
+    existing_lookup: Dict[str, Tuple[Optional[float], Optional[float]]],
+) -> List[Dict]:
+    for rec in courses:
+        course_id = f"{str(rec.get('Major') or '').strip().upper()}{str(rec.get('Code') or '').strip().upper()}"
+        if not course_id:
+            continue
+        page_eng, page_bs = coursepage_lookup.get(course_id, (None, None))
+        old_eng, old_bs = existing_lookup.get(course_id, (None, None))
+        if page_eng is not None:
+            rec["Engineering"] = page_eng
+        elif old_eng is not None:
+            rec["Engineering"] = old_eng
+        if page_bs is not None:
+            rec["Basic_Science"] = page_bs
+        elif old_bs is not None:
+            rec["Basic_Science"] = old_bs
+    return courses
 
 
 def parse_minor_list(html: str) -> List[MinorProgram]:
@@ -488,6 +571,7 @@ def main():
 
     terms_arg = (args.terms or "").strip()
     terms: List[str] = []
+    coursepage_credit_lookup = load_coursepage_credit_lookup()
     if terms_arg:
         for part in terms_arg.split(","):
             p = part.strip()
@@ -646,6 +730,12 @@ def main():
                         continue
                     _rec, courses = results[m.program]
                     course_path = os.path.join(term_courses_dir, f"{m.program}.jsonl")
+                    existing_lookup = load_existing_minor_credit_lookup(course_path)
+                    courses = enrich_minor_course_credits(
+                        courses,
+                        coursepage_lookup=coursepage_credit_lookup,
+                        existing_lookup=existing_lookup,
+                    )
                     with open(course_path, "w", encoding="utf-8") as c_out:
                         for c in courses:
                             c_out.write(json.dumps(c, ensure_ascii=False) + "\n")
