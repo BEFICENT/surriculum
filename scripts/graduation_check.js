@@ -268,38 +268,78 @@ function displayGraduationResults(curriculum) {
         modal.classList.add('graduation_modal');
         overlay.appendChild(modal);
         document.body.appendChild(overlay);
-        // Compose results for primary major
-        let html = '';
+        const esc = (value) => {
+            try {
+                if (typeof escapeHtml === 'function') return escapeHtml(value);
+            } catch (_) {}
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        };
+
+        const renderMetaList = (items) => {
+            const rows = Array.isArray(items) ? items.filter(Boolean) : [];
+            if (!rows.length) return '';
+            return `<div class="graduation_meta_list">${rows.map((item) => {
+                const tone = item && item.tone ? ` graduation_meta_item--${esc(item.tone)}` : '';
+                return `<div class="graduation_meta_item${tone}">${item.html ? item.html : esc(item.text || '')}</div>`;
+            }).join('')}</div>`;
+        };
+
+        const renderStatusCard = ({ label, title, ok, message, details, compact = false }) => {
+            const stateClass = ok ? 'is-complete' : 'is-incomplete';
+            const badgeText = ok ? 'Complete' : 'Incomplete';
+            const cardClass = compact ? ' graduation_card--compact' : '';
+            return `
+                <div class="graduation_card ${stateClass}${cardClass}">
+                    <div class="graduation_card_head">
+                        <div class="graduation_card_title_wrap">
+                            <div class="graduation_card_label">${esc(label)}</div>
+                            <div class="graduation_card_title">${esc(title)}</div>
+                        </div>
+                        <div class="graduation_status_badge ${stateClass}">${badgeText}</div>
+                    </div>
+                    <div class="graduation_card_message">${esc(message)}</div>
+                    ${renderMetaList(details)}
+                </div>
+            `;
+        };
+
+        const majorCards = [];
         const flagMain = curriculum.canGraduate();
         const msgMain = buildFlagMessages(curriculum.major) || {};
-        html += '<div><strong>' + curriculum.major + ':</strong> ';
-        if (flagMain === 0) {
-            html += 'Congrats! You can graduate!!!';
-        } else {
-            const fcn = msgMain[flagMain];
-            html += 'You cannot graduate: ' + (fcn ? fcn() : `Error code ${flagMain}`);
-        }
-        html += '</div>';
-        // If double major selected, compute second major result
+        const mainMsg = flagMain === 0
+            ? 'All graduation checks pass.'
+            : ((msgMain[flagMain] ? msgMain[flagMain]() : `Error code ${flagMain}`) || 'Graduation requirements are incomplete.');
+        majorCards.push(renderStatusCard({
+            label: 'Major',
+            title: curriculum.major,
+            ok: flagMain === 0,
+            message: mainMsg,
+        }));
+
         if (curriculum.doubleMajor) {
-            // Compose results for double major
-            const flagMain = curriculum.canGraduateDouble();
-            const msgMain = buildFlagMessages(curriculum.doubleMajor) || {};
-            html += '<div><strong>' + curriculum.doubleMajor + ':</strong> ';
-            if (flagMain === 0) {
-                html += 'Congrats! You can graduate!!!';
-            } else {
-                const fcn = msgMain[flagMain];
-                html += 'You cannot graduate: ' + (fcn ? fcn() : `Error code ${flagMain}`);
-            }
+            const flagDM = curriculum.canGraduateDouble();
+            const msgDM = buildFlagMessages(curriculum.doubleMajor) || {};
+            const dmMsg = flagDM === 0
+                ? 'All graduation checks pass.'
+                : ((msgDM[flagDM] ? msgDM[flagDM]() : `Error code ${flagDM}`) || 'Graduation requirements are incomplete.');
+            majorCards.push(renderStatusCard({
+                label: 'Double Major',
+                title: curriculum.doubleMajor,
+                ok: flagDM === 0,
+                message: dmMsg,
+            }));
         }
 
         // Show minor completion status (does not affect major graduation).
         function evaluateMinor(minorCode) {
             const res = computeMinorAllocation(curriculum, minorCode);
-            if (res.error) return { ok: false, title: minorCode, lines: [res.error] };
+            if (res.error) return { ok: false, title: minorCode, message: 'Minor data is unavailable.', details: [{ text: res.error, tone: 'danger' }] };
 
-            // Keep the graduation modal compact: show only status + missing pools.
             const req = res.req || {};
             const cats = req.categories || {};
             const order = ['required', 'core', 'area', 'free'];
@@ -311,36 +351,55 @@ function displayGraduationResults(curriculum) {
                 }
             }
 
-            const lines = [];
+            const details = [];
             if (missing.length) {
-                lines.push(`Missing: ${missing.join(', ')}`);
+                details.push({ text: `Missing pools: ${missing.join(', ')}`, tone: 'danger' });
             }
             try {
                 const thr = (String(minorCode || '').toUpperCase() === 'ENTREP-MINOR') ? 2.50 : 2.72;
                 if (isFinite(res.cgpa)) {
                     const cgpaStr = Number(res.cgpa).toFixed(3);
                     const bad = res.gpaOk === false;
-                    const msg = `CGPA: ${cgpaStr} (required ≥ ${thr.toFixed(2)})`;
-                    lines.push(bad ? `<span style="color:#DC2626;font-weight:700;">${msg}</span>` : msg);
+                    details.push({ text: `CGPA: ${cgpaStr} (required ≥ ${thr.toFixed(2)})`, tone: bad ? 'danger' : 'default' });
                 } else {
-                    lines.push(`CGPA requirement: ≥ ${thr.toFixed(2)}`);
+                    details.push({ text: `CGPA requirement: ≥ ${thr.toFixed(2)}`, tone: 'muted' });
                 }
             } catch (_) {}
-            lines.push('See Summary → Minor for details.');
-            return { ok: res.ok, title: res.title || minorCode, lines };
+            details.push({ text: 'Open Summary → Minor for allocation details.', tone: 'muted' });
+            return {
+                ok: res.ok,
+                title: res.title || minorCode,
+                message: res.ok ? 'Minor requirements are satisfied.' : 'Minor requirements are not yet satisfied.',
+                details,
+            };
         }
 
+        let html = '<div class="graduation_layout">';
+        html += '<div class="graduation_section">';
+        html += '<div class="graduation_section_title">Programs</div>';
+        html += '<div class="graduation_card_list">' + majorCards.join('') + '</div>';
+        html += '</div>';
+
         if (Array.isArray(curriculum.minors) && curriculum.minors.length) {
-            html += '<hr style="margin:12px 0; border:none; border-top:1px solid rgba(0,0,0,0.15);">';
-            html += '<div><strong>Minors:</strong></div>';
-            curriculum.minors.forEach((minorCode) => {
-                const res = evaluateMinor(minorCode);
-                html += `<div style="margin-top:6px;"><strong>${minorCode}:</strong> ${res.ok ? 'Completed' : 'Not complete'}</div>`;
-                if (Array.isArray(res.lines)) {
-                    html += '<div style="margin-left:12px; font-size:0.92em;">' + res.lines.map(l => `<div>${l}</div>`).join('') + '</div>';
-                }
-            });
+            const minorCards = curriculum.minors
+                .filter(Boolean)
+                .map((minorCode) => {
+                    const res = evaluateMinor(minorCode);
+                    return renderStatusCard({
+                        label: 'Minor',
+                        title: res.title || minorCode,
+                        ok: !!res.ok,
+                        message: res.message || (res.ok ? 'Minor requirements are satisfied.' : 'Minor requirements are not yet satisfied.'),
+                        details: res.details || [],
+                        compact: true,
+                    });
+                });
+            html += '<div class="graduation_section">';
+            html += '<div class="graduation_section_title">Minors</div>';
+            html += '<div class="graduation_card_list graduation_card_list--compact">' + minorCards.join('') + '</div>';
+            html += '</div>';
         }
+        html += '</div>';
         modal.innerHTML = html;
     }
 }

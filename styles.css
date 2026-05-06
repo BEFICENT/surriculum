@@ -1149,6 +1149,132 @@ html, body {
     font-size: 1.75rem; /* Increased font size proportionally */
 }
 
+.graduation_layout {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    font-size: 1rem;
+}
+
+.graduation_section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.graduation_section_title {
+    font-size: 1.125rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    letter-spacing: 0.01em;
+}
+
+.graduation_card_list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.graduation_card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.graduation_card.is-complete {
+    border-left-color: #16A34A;
+}
+
+.graduation_card.is-incomplete {
+    border-left-color: #DC2626;
+}
+
+.graduation_card--compact {
+    gap: 8px;
+}
+
+.graduation_card_head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.graduation_card_title_wrap {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.graduation_card_label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-secondary);
+}
+
+.graduation_card_title {
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+
+.graduation_status_badge {
+    flex-shrink: 0;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    line-height: 1;
+    border: 1px solid transparent;
+}
+
+.graduation_status_badge.is-complete {
+    background: rgba(22, 163, 74, 0.12);
+    color: #166534;
+    border-color: rgba(22, 163, 74, 0.25);
+}
+
+.graduation_status_badge.is-incomplete {
+    background: rgba(220, 38, 38, 0.12);
+    color: #991B1B;
+    border-color: rgba(220, 38, 38, 0.24);
+}
+
+.graduation_card_message {
+    font-size: 0.96rem;
+    line-height: 1.45;
+    color: var(--text-primary);
+}
+
+.graduation_meta_list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.graduation_meta_item {
+    font-size: 0.88rem;
+    line-height: 1.4;
+    color: var(--text-secondary);
+}
+
+.graduation_meta_item--danger {
+    color: #B91C1C;
+    font-weight: 700;
+}
+
+.graduation_meta_item--muted {
+    color: var(--text-secondary);
+}
+
 /* Updated summary_modal to be 50% bigger */
 .summary_modal {
     width: 360px; /* Increased by 50% */
