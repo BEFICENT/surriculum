@@ -16,7 +16,7 @@
     'curriculum', 'grades', 'dates'
   ];
 
-  function createModal({ title, bodyHtml, input, buttons }) {
+  function createModal({ title, bodyHtml, input, buttons, onMount }) {
     return new Promise((resolve) => {
       const overlay = document.createElement('div');
       overlay.className = 'modal-overlay';
@@ -98,13 +98,19 @@
       const root = document.fullscreenElement || document.body;
       root.appendChild(overlay);
 
+      try {
+        if (typeof onMount === 'function') onMount({ overlay, modal, body, close });
+      } catch (_) {}
+
       setTimeout(() => {
         try {
+          if (modal) modal.scrollTop = 0;
+          if (body) body.scrollTop = 0;
           if (inputEl) {
-            inputEl.focus();
+            inputEl.focus({ preventScroll: true });
             inputEl.select();
           } else {
-            footer.querySelector('button')?.focus();
+            close.focus({ preventScroll: true });
           }
         } catch (_) {}
       }, 0);
@@ -123,8 +129,14 @@
   }
 
   const uiModal = {
-    alert(title, bodyHtml) {
-      return createModal({ title, bodyHtml, buttons: [{ action: 'ok', label: 'OK', variant: 'primary' }] });
+    alert(title, bodyHtml, options) {
+      const opts = options || {};
+      return createModal({
+        title,
+        bodyHtml,
+        onMount: opts.onMount,
+        buttons: [{ action: 'ok', label: 'OK', variant: 'primary' }],
+      });
     },
     async confirm(title, bodyHtml, options) {
       const opts = options || {};

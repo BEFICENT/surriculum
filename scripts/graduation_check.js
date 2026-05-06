@@ -280,12 +280,33 @@ function displayGraduationResults(curriculum) {
                 .replace(/'/g, '&#39;');
         };
 
+        const isDarkTheme = (() => {
+            try { return !!document.body && document.body.classList.contains('dark-theme'); } catch (_) { return false; }
+        })();
+        const PASS_COLOR = '#16A34A';
+        const FAIL_COLOR = '#DC2626';
+        const MUTED_COLOR = isDarkTheme ? '#94A3B8' : '#64748B';
+        const badgeStyleFor = (ok) => {
+            const color = ok ? PASS_COLOR : FAIL_COLOR;
+            const bg = ok ? 'rgba(22, 163, 74, 0.18)' : 'rgba(220, 38, 38, 0.18)';
+            return `color:${color};border-color:${color};background:${bg};`;
+        };
+        const messageStyleFor = (ok) => `color:${ok ? PASS_COLOR : FAIL_COLOR};font-weight:700;`;
+        const detailStyleForTone = (tone) => {
+            if (tone === 'danger') return `color:${FAIL_COLOR};font-weight:700;`;
+            if (tone === 'success') return `color:${PASS_COLOR};font-weight:700;`;
+            if (tone === 'muted') return `color:${MUTED_COLOR};`;
+            return '';
+        };
+
         const renderMetaList = (items) => {
             const rows = Array.isArray(items) ? items.filter(Boolean) : [];
             if (!rows.length) return '';
             return `<div class="graduation_meta_list">${rows.map((item) => {
                 const tone = item && item.tone ? ` graduation_meta_item--${esc(item.tone)}` : '';
-                return `<div class="graduation_meta_item${tone}">${item.html ? item.html : esc(item.text || '')}</div>`;
+                const style = detailStyleForTone(item && item.tone ? String(item.tone) : '');
+                const styleAttr = style ? ` style="${esc(style)}"` : '';
+                return `<div class="graduation_meta_item${tone}"${styleAttr}>${item.html ? item.html : esc(item.text || '')}</div>`;
             }).join('')}</div>`;
         };
 
@@ -293,6 +314,12 @@ function displayGraduationResults(curriculum) {
             const stateClass = ok ? 'is-complete' : 'is-incomplete';
             const badgeText = ok ? 'Complete' : 'Incomplete';
             const cardClass = compact ? ' graduation_card--compact' : '';
+            const messageClass = ok ? ' graduation_card_message--success' : ' graduation_card_message--danger';
+            const badgeStyle = badgeStyleFor(ok);
+            const messageStyle = messageStyleFor(ok);
+            const messageHtml = message
+                ? `<div class="graduation_card_message${messageClass}" style="${esc(messageStyle)}">${esc(message)}</div>`
+                : '';
             return `
                 <div class="graduation_card ${stateClass}${cardClass}">
                     <div class="graduation_card_head">
@@ -300,9 +327,9 @@ function displayGraduationResults(curriculum) {
                             <div class="graduation_card_label">${esc(label)}</div>
                             <div class="graduation_card_title">${esc(title)}</div>
                         </div>
-                        <div class="graduation_status_badge ${stateClass}">${badgeText}</div>
+                        <div class="graduation_status_badge ${stateClass}" style="${esc(badgeStyle)}">${badgeText}</div>
                     </div>
-                    <div class="graduation_card_message">${esc(message)}</div>
+                    ${messageHtml}
                     ${renderMetaList(details)}
                 </div>
             `;
@@ -359,13 +386,13 @@ function displayGraduationResults(curriculum) {
                 const thr = (String(minorCode || '').toUpperCase() === 'ENTREP-MINOR') ? 2.50 : 2.72;
                 if (isFinite(res.cgpa)) {
                     const cgpaStr = Number(res.cgpa).toFixed(3);
-                    const bad = res.gpaOk === false;
-                    details.push({ text: `CGPA: ${cgpaStr} (required ≥ ${thr.toFixed(2)})`, tone: bad ? 'danger' : 'default' });
+                    if (res.gpaOk === false) {
+                        details.push({ text: `CGPA: ${cgpaStr} (required ≥ ${thr.toFixed(2)})`, tone: 'danger' });
+                    }
                 } else {
-                    details.push({ text: `CGPA requirement: ≥ ${thr.toFixed(2)}`, tone: 'muted' });
+                    details.push({ text: `CGPA requirement: ≥ ${thr.toFixed(2)}`, tone: 'danger' });
                 }
             } catch (_) {}
-            details.push({ text: 'Open Summary → Minor for allocation details.', tone: 'muted' });
             return {
                 ok: res.ok,
                 title: res.title || minorCode,
@@ -389,7 +416,7 @@ function displayGraduationResults(curriculum) {
                         label: 'Minor',
                         title: res.title || minorCode,
                         ok: !!res.ok,
-                        message: res.message || (res.ok ? 'Minor requirements are satisfied.' : 'Minor requirements are not yet satisfied.'),
+                        message: '',
                         details: res.details || [],
                         compact: true,
                     });

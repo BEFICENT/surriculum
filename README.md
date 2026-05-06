@@ -154,7 +154,8 @@ Key features:
 Schedule data files:
 
 - The scheduler reads from `courses/schedule/<TERM>.jsonl`.
-- Generate/update these files using `python fetch_schedule.py` (defaults to all terms from the current term onward).
+- Course details also lazily read `courses/course_instructor_history.jsonl`, which is derived from all saved schedule files.
+- Generate/update these files using `python fetch_schedule.py` (defaults to all terms from the current term onward and rebuilds instructor history automatically).
 
 Mobile note:
 
@@ -200,6 +201,18 @@ Scrape one specific term (or a custom list) instead:
 ```bash
 python fetch_schedule.py --term 202502
 python fetch_schedule.py --terms 202502,202503,202601
+```
+
+Backfill historical schedule terms once (for example from Fall 2019 through the current term):
+
+```bash
+python fetch_schedule.py --from-term 201901
+```
+
+Rebuild instructor history from already-downloaded schedule files without making any network requests:
+
+```bash
+python build_course_instructor_history.py
 ```
 
 Legacy JSON → JSONL migration (only needed if you still have `.json` files):

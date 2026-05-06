@@ -400,6 +400,12 @@
       }
 
       try {
+        modal.scrollTop = 0;
+        body.scrollTop = 0;
+        close.focus({ preventScroll: true });
+      } catch (_) {}
+
+      try {
         if (typeof onMount === 'function') onMount({ overlay, modal, body, close: () => cleanup({ action: 'close' }) });
       } catch (_) {}
 
@@ -830,8 +836,23 @@
             coursePageInfoMap = await loadInfo();
           }
         } catch (_) {}
+        try {
+          const loadInstructorHistory = (typeof window !== 'undefined') ? window.loadCourseInstructorHistoryIndex : null;
+          if (!courseInstructorHistoryMap && typeof loadInstructorHistory === 'function') {
+            courseInstructorHistoryMap = await loadInstructorHistory();
+          }
+        } catch (_) {}
         const pi = (() => {
           try { return coursePageInfoMap && typeof coursePageInfoMap.get === 'function' ? coursePageInfoMap.get(cid) : null; } catch (_) { return null; }
+        })();
+        const instructorHistoryInfo = (() => {
+          try {
+            return courseInstructorHistoryMap && typeof courseInstructorHistoryMap.get === 'function'
+              ? courseInstructorHistoryMap.get(cid)
+              : null;
+          } catch (_) {
+            return null;
+          }
         })();
 
         // If this course is a linked recitation/lab (coreq-only), don't show
@@ -924,6 +945,17 @@
           const coreq = (pi.corequisites != null) ? String(pi.corequisites) : '';
           const desc = (pi.description != null) ? String(pi.description) : '';
           const offered = Array.isArray(pi.last_offered_terms) ? pi.last_offered_terms : [];
+          const formatDescription = (value) => {
+            const raw = String(value || '').trim();
+            if (!raw) return '';
+            return raw
+              .replace(/\r\n/g, '\n')
+              .replace(/\n{2,}/g, '\u0000')
+              .replace(/[ \t]*\n[ \t]*/g, ' ')
+              .replace(/\u0000/g, '\n\n')
+              .replace(/[ \t]{2,}/g, ' ')
+              .trim();
+          };
 
           const metaParts = [];
           if (su) metaParts.push(`<div><span class="muted">SU:</span> ${escapeHtml(su)}</div>`);
@@ -931,29 +963,67 @@
           if (bs && bs !== '0.0') metaParts.push(`<div><span class="muted">BS:</span> ${escapeHtml(bs)}</div>`);
           if (eng && eng !== '0.0') metaParts.push(`<div><span class="muted">ENG:</span> ${escapeHtml(eng)}</div>`);
 
-          const offeredPreview = offered.slice(0, 12).map(o => {
-            const t = o && o.term ? String(o.term) : '';
-            const n = o && o.course_name ? String(o.course_name) : '';
-            const c = (o && o.su_credit != null) ? fmtNum(o.su_credit) : '';
-            const label = t || 'Unknown term';
-            const suffix = n ? ` — ${n}` : '';
-            const cr = c ? ` <span class="muted">(${escapeHtml(c)} cr)</span>` : '';
-            return `<li><strong>${escapeHtml(label)}</strong>${escapeHtml(suffix)}${cr}</li>`;
-          }).join('');
-          const offeredHtml = offered.length
+          const instructorHistory = (
+            instructorHistoryInfo && Array.isArray(instructorHistoryInfo.history)
+              ? instructorHistoryInfo.history
+              : []
+          );
+          const normalizeTerm = (value) => {
+            try {
+              const fn = (typeof window !== 'undefined') ? window.normalizeTermIdentifier : null;
+              if (typeof fn === 'function') return fn(value);
+            } catch (_) {}
+            return String(value || '').trim();
+          };
+          const displayTerm = (value) => {
+            try {
+              const fn = (typeof window !== 'undefined') ? window.displayTermIdentifier : null;
+              if (typeof fn === 'function') return fn(value);
+            } catch (_) {}
+            return String(value || '').trim();
+          };
+          const termHistoryMap = new Map();
+          offered.forEach((entry) => {
+            const term = normalizeTerm(entry && entry.term ? String(entry.term) : '');
+            if (!term) return;
+            const existing = termHistoryMap.get(term) || { term, instructors: [] };
+            termHistoryMap.set(term, existing);
+          });
+          instructorHistory.forEach((entry) => {
+            const term = normalizeTerm(entry && entry.term ? String(entry.term) : '');
+            if (!term) return;
+            const existing = termHistoryMap.get(term) || { term, instructors: [] };
+            const instructors = entry && Array.isArray(entry.instructors)
+              ? entry.instructors.filter(Boolean).map(name => String(name))
+              : [];
+            existing.instructors = Array.from(new Set([...(existing.instructors || []), ...instructors])).sort();
+            termHistoryMap.set(term, existing);
+          });
+          const termHistoryRows = Array.from(termHistoryMap.values())
+            .sort((a, b) => parseInt(String(b.term || '0'), 10) - parseInt(String(a.term || '0'), 10))
+            .slice(0, 12);
+          const termHistoryHtml = termHistoryRows.length
             ? (
               `<div class="scheduler-details-subsection">` +
-              `<div class="scheduler-details-subtitle">Last Offered (${offered.length})</div>` +
-              `<ul class="scheduler-details-list">${offeredPreview}</ul>` +
+              `<div class="scheduler-details-subtitle">Offered Terms & Instructors (${termHistoryMap.size})</div>` +
+              `<div class="course-history-anchor" data-course-history-anchor="scheduler"></div>` +
               `</div>`
             )
             : '';
 
-          const descHtml = desc
+          const termHistoryRowsForDom = termHistoryRows.map(entry => ({
+            term: entry && entry.term ? displayTerm(entry.term) : 'Unknown term',
+            instructors: entry && Array.isArray(entry.instructors)
+              ? entry.instructors.filter(Boolean).map(name => String(name))
+              : [],
+          }));
+
+          const formattedDesc = formatDescription(desc);
+          const descHtml = formattedDesc
             ? (
               `<div class="scheduler-details-subsection">` +
               `<div class="scheduler-details-subtitle">Description</div>` +
-              `<div class="scheduler-details-paragraph">${escapeHtml(desc).replace(/\\n/g, '<br>')}</div>` +
+              `<div class="scheduler-details-paragraph">${escapeHtml(formattedDesc).replace(/\n\n/g, '<br><br>')}</div>` +
               `</div>`
             )
             : '';
@@ -970,8 +1040,8 @@
             `<div class="scheduler-details-subtitle">Corequisites</div>` +
             `<div class="scheduler-details-paragraph">${coreq ? escapeHtml(coreq) : 'None'}</div>` +
             `</div>` +
-            offeredHtml +
             descHtml +
+            termHistoryHtml +
             `</div>`
           );
         })();
@@ -1037,7 +1107,15 @@
           title: `Details — ${cid}`,
           bodyHtml,
           buttons: [{ action: 'close', label: 'Close', variant: 'secondary' }],
-          onMount: ({ modal }) => {
+          onMount: ({ modal, body }) => {
+            try {
+              const anchor = body ? body.querySelector('[data-course-history-anchor="scheduler"]') : null;
+              const build = (typeof window !== 'undefined') ? window.buildCourseHistoryTableElement : null;
+              if (anchor && typeof build === 'function') {
+                const node = build(termHistoryRowsForDom);
+                if (node) anchor.appendChild(node);
+              }
+            } catch (_) {}
             modal.addEventListener('click', async (e) => {
               const openBtn = e.target && e.target.closest ? e.target.closest('.scheduler-details-open') : null;
               if (openBtn) {
@@ -1661,6 +1739,7 @@
     let blocked = Array.isArray(state.blocked) ? state.blocked : [];
     let scheduleIndex = null;
     let coursePageInfoMap = null;
+    let courseInstructorHistoryMap = null;
     let missingByCourse = {}; // course_id -> [missing coreq course_id]
     let orphanByCourse = {};  // course_id -> [base course_ids that require this course as coreq]
     let reverseCoreqIndex = null; // Map(coreq -> Set(baseCourse))

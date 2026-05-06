@@ -616,6 +616,7 @@ function dynamic_click(e, curriculum, course_data)
             try {
                 const ui = (typeof window !== 'undefined') ? window.uiModal : null;
                 const load = (typeof window !== 'undefined') ? window.loadCoursePageInfoIndex : null;
+                const loadInstructorHistory = (typeof window !== 'undefined') ? window.loadCourseInstructorHistoryIndex : null;
                 if (!ui || typeof ui.alert !== 'function') return;
                 if (typeof load !== 'function') {
                     ui.alert('Details unavailable', '<p>Course details index is not available.</p>');
@@ -624,6 +625,12 @@ function dynamic_click(e, curriculum, course_data)
 
                 const idx = await load();
                 const info = idx && typeof idx.get === 'function' ? idx.get(courseCode) : null;
+                const instructorHistoryIdx = (typeof loadInstructorHistory === 'function') ? await loadInstructorHistory() : null;
+                const instructorHistoryInfo = (
+                    instructorHistoryIdx && typeof instructorHistoryIdx.get === 'function'
+                        ? instructorHistoryIdx.get(courseCode)
+                        : null
+                );
                 if (!info) {
                     ui.alert(
                         'Details unavailable',
@@ -644,6 +651,18 @@ function dynamic_click(e, curriculum, course_data)
                 const offered = Array.isArray(info.last_offered_terms) ? info.last_offered_terms : [];
                 const url = info.source_url || buildCourseUrl(courseCode);
 
+                const formatDescription = (value) => {
+                    const raw = String(value || '').trim();
+                    if (!raw) return '';
+                    return raw
+                        .replace(/\r\n/g, '\n')
+                        .replace(/\n{2,}/g, '\u0000')
+                        .replace(/[ \t]*\n[ \t]*/g, ' ')
+                        .replace(/\u0000/g, '\n\n')
+                        .replace(/[ \t]{2,}/g, ' ')
+                        .trim();
+                };
+
                 const fmt = (v) => {
                     try {
                         if (typeof window !== 'undefined' && typeof window.formatCreditValue === 'function') {
@@ -654,28 +673,65 @@ function dynamic_click(e, curriculum, course_data)
                     return (isFinite(n) ? n : 0).toFixed(1);
                 };
 
-                const descHtml = desc
-                    ? `<div class="course-details-section"><h4>Description</h4><p>${escapeHtml(desc).replace(/\n/g, '<br>')}</p></div>`
+                const formattedDesc = formatDescription(desc);
+                const descHtml = formattedDesc
+                    ? `<div class="course-details-section"><h4>Description</h4><p>${escapeHtml(formattedDesc).replace(/\n\n/g, '<br><br>')}</p></div>`
                     : '';
 
-                const offeredPreview = offered.slice(0, 12);
-                const offeredHtml = offeredPreview.length
+                const instructorHistory = (
+                    instructorHistoryInfo && Array.isArray(instructorHistoryInfo.history)
+                        ? instructorHistoryInfo.history
+                        : []
+                );
+                const normalizeTerm = (value) => {
+                    try {
+                        const fn = (typeof window !== 'undefined') ? window.normalizeTermIdentifier : null;
+                        if (typeof fn === 'function') return fn(value);
+                    } catch (_) {}
+                    return String(value || '').trim();
+                };
+                const displayTerm = (value) => {
+                    try {
+                        const fn = (typeof window !== 'undefined') ? window.displayTermIdentifier : null;
+                        if (typeof fn === 'function') return fn(value);
+                    } catch (_) {}
+                    return String(value || '').trim();
+                };
+                const termHistoryMap = new Map();
+                offered.forEach((entry) => {
+                    const term = normalizeTerm(entry && entry.term ? String(entry.term) : '');
+                    if (!term) return;
+                    const existing = termHistoryMap.get(term) || { term, instructors: [] };
+                    termHistoryMap.set(term, existing);
+                });
+                instructorHistory.forEach((entry) => {
+                    const term = normalizeTerm(entry && entry.term ? String(entry.term) : '');
+                    if (!term) return;
+                    const existing = termHistoryMap.get(term) || { term, instructors: [] };
+                    const instructors = entry && Array.isArray(entry.instructors)
+                        ? entry.instructors.filter(Boolean).map(name => String(name))
+                        : [];
+                    existing.instructors = Array.from(new Set([...(existing.instructors || []), ...instructors])).sort();
+                    termHistoryMap.set(term, existing);
+                });
+                const termHistoryRows = Array.from(termHistoryMap.values())
+                    .sort((a, b) => parseInt(String(b.term || '0'), 10) - parseInt(String(a.term || '0'), 10))
+                    .slice(0, 12);
+                const termHistoryHtml = termHistoryRows.length
                     ? (
                         '<div class="course-details-section">' +
-                        `<h4>Last Offered (${offered.length})</h4>` +
-                        '<ul class="course-details-list">' +
-                        offeredPreview.map(o => {
-                            const term = o && o.term ? String(o.term) : '';
-                            const name = o && o.course_name ? String(o.course_name) : '';
-                            const cr = (o && (o.su_credit ?? o.su_credits) != null) ? (o.su_credit ?? o.su_credits) : su;
-                            const label = term ? term : 'Unknown term';
-                            const suffix = name ? ` — ${name}` : '';
-                            return `<li><strong>${escapeHtml(label)}</strong>${escapeHtml(suffix)} <span class="muted">(${escapeHtml(fmt(cr))} cr)</span></li>`;
-                        }).join('') +
-                        '</ul>' +
+                        `<h4>Offered Terms & Instructors (${termHistoryMap.size})</h4>` +
+                        '<div class="course-history-anchor" data-course-history-anchor="planner"></div>' +
                         '</div>'
                     )
-                    : '<div class="course-details-section"><h4>Last Offered</h4><p>Not available.</p></div>';
+                    : '<div class="course-details-section"><h4>Offered Terms & Instructors</h4><p>Not available.</p></div>';
+
+                const termHistoryRowsForDom = termHistoryRows.map(entry => ({
+                    term: entry && entry.term ? displayTerm(entry.term) : 'Unknown term',
+                    instructors: entry && Array.isArray(entry.instructors)
+                        ? entry.instructors.filter(Boolean).map(name => String(name))
+                        : [],
+                }));
 
                  const body =
                      '<div class="course-details-modal">' +
@@ -688,12 +744,22 @@ function dynamic_click(e, curriculum, course_data)
                      '</div>' +
                      '<div class="course-details-section"><h4>Prerequisites</h4><p>' + (prereq ? escapeHtml(prereq) : 'None') + '</p></div>' +
                      '<div class="course-details-section"><h4>Corequisites</h4><p>' + (coreq ? escapeHtml(coreq) : 'None') + '</p></div>' +
-                     offeredHtml +
                      descHtml +
+                     termHistoryHtml +
                      (url ? `<div class="course-details-actions"><a class="btn btn-primary" href="${escapeHtml(url)}" target="_blank" rel="noopener">Open course page</a></div>` : '') +
                      '</div>';
 
-                ui.alert('Course Details', body);
+                ui.alert('Course Details', body, {
+                    onMount: ({ body }) => {
+                        try {
+                            const anchor = body ? body.querySelector('[data-course-history-anchor="planner"]') : null;
+                            const build = (typeof window !== 'undefined') ? window.buildCourseHistoryTableElement : null;
+                            if (!anchor || typeof build !== 'function') return;
+                            const node = build(termHistoryRowsForDom);
+                            if (node) anchor.appendChild(node);
+                        } catch (_) {}
+                    },
+                });
             } catch (err) {
                 try {
                     const ui = (typeof window !== 'undefined') ? window.uiModal : null;

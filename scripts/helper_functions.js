@@ -239,6 +239,93 @@ function termCodeToName(code) {
     return term + ' ' + year + '-' + nextYear;
 }
 
+function normalizeTermIdentifier(term) {
+    const raw = String(term || '').trim();
+    if (!raw) return '';
+    if (/^\d{6}$/.test(raw)) return raw;
+    const code = termNameToCode(raw);
+    return code || raw;
+}
+
+function displayTermIdentifier(term) {
+    const normalized = normalizeTermIdentifier(term);
+    if (/^\d{6}$/.test(normalized)) {
+        return termCodeToName(normalized) || normalized;
+    }
+    return normalized;
+}
+
+function buildCourseHistoryTableElement(rows) {
+    try {
+        const list = Array.isArray(rows) ? rows : [];
+        if (!list.length || typeof document === 'undefined') return null;
+
+        const wrap = document.createElement('div');
+        wrap.className = 'course-history-table-wrap';
+
+        const table = document.createElement('div');
+        table.className = 'course-history-table';
+        table.setAttribute('role', 'table');
+        table.setAttribute('aria-label', 'Offered terms and instructors');
+
+        const head = document.createElement('div');
+        head.className = 'course-history-row course-history-row--head';
+        head.setAttribute('role', 'row');
+
+        const headTerm = document.createElement('div');
+        headTerm.className = 'course-history-cell course-history-cell--term';
+        headTerm.setAttribute('role', 'columnheader');
+        headTerm.textContent = 'Term';
+
+        const headInstructor = document.createElement('div');
+        headInstructor.className = 'course-history-cell';
+        headInstructor.setAttribute('role', 'columnheader');
+        headInstructor.textContent = 'Instructor(s)';
+
+        head.appendChild(headTerm);
+        head.appendChild(headInstructor);
+        table.appendChild(head);
+
+        list.forEach((entry) => {
+            const row = document.createElement('div');
+            row.className = 'course-history-row';
+            row.setAttribute('role', 'row');
+
+            const termCell = document.createElement('div');
+            termCell.className = 'course-history-cell course-history-cell--term';
+            termCell.setAttribute('role', 'cell');
+            termCell.textContent = entry && entry.term ? String(entry.term) : 'Unknown term';
+
+            const instructorCell = document.createElement('div');
+            instructorCell.className = 'course-history-cell';
+            instructorCell.setAttribute('role', 'cell');
+
+            const instructors = entry && Array.isArray(entry.instructors) ? entry.instructors : [];
+            if (instructors.length) {
+                instructors.forEach((name) => {
+                    const line = document.createElement('div');
+                    line.textContent = String(name || '');
+                    instructorCell.appendChild(line);
+                });
+            } else {
+                const muted = document.createElement('div');
+                muted.className = 'muted';
+                muted.textContent = 'Not available';
+                instructorCell.appendChild(muted);
+            }
+
+            row.appendChild(termCell);
+            row.appendChild(instructorCell);
+            table.appendChild(row);
+        });
+
+        wrap.appendChild(table);
+        return wrap;
+    } catch (_) {
+        return null;
+    }
+}
+
 // Expose current term code once conversion helpers exist.
 try {
     if (typeof window !== 'undefined' && window.currentTermName) {
@@ -261,6 +348,11 @@ function updateCurrentTermHighlights() {
 }
 if (typeof window !== 'undefined') {
     window.updateCurrentTermHighlights = updateCurrentTermHighlights;
+    window.termNameToCode = termNameToCode;
+    window.termCodeToName = termCodeToName;
+    window.normalizeTermIdentifier = normalizeTermIdentifier;
+    window.displayTermIdentifier = displayTermIdentifier;
+    window.buildCourseHistoryTableElement = buildCourseHistoryTableElement;
 }
 
 var grade_list_InnerHTML = '';
@@ -854,6 +946,62 @@ function loadCoursePageInfoIndex() {
 
 if (typeof window !== 'undefined') {
     window.loadCoursePageInfoIndex = loadCoursePageInfoIndex;
+}
+
+// Load the derived course instructor history index
+// (courses/course_instructor_history.jsonl) lazily so it only affects course
+// details views that actually need it.
+function loadCourseInstructorHistoryIndex() {
+    try {
+        if (typeof window === 'undefined') return Promise.resolve(null);
+        if (window.__courseInstructorHistoryPromise) return window.__courseInstructorHistoryPromise;
+
+        window.__courseInstructorHistoryPromise = (async () => {
+            const tryReadText = async () => {
+                try {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('GET', './courses/course_instructor_history.jsonl', false);
+                    xhr.overrideMimeType('application/json');
+                    xhr.send(null);
+                    if (xhr.status === 200 || xhr.status === 0) return xhr.responseText;
+                } catch (_) {}
+
+                try {
+                    const res = await fetch('./courses/course_instructor_history.jsonl');
+                    if (res.ok) return await res.text();
+                } catch (_) {}
+                return '';
+            };
+
+            const text = await tryReadText();
+            const byCode = new Map();
+            if (!text) {
+                window.courseInstructorHistoryByCode = byCode;
+                return byCode;
+            }
+            const lines = text.split(/\r?\n/);
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i] && lines[i].trim();
+                if (!line) continue;
+                try {
+                    const obj = JSON.parse(line);
+                    const id = obj && obj.course_id ? String(obj.course_id) : '';
+                    if (!id) continue;
+                    if (!byCode.has(id)) byCode.set(id, obj);
+                } catch (_) {}
+            }
+            window.courseInstructorHistoryByCode = byCode;
+            return byCode;
+        })();
+
+        return window.__courseInstructorHistoryPromise;
+    } catch (_) {
+        return Promise.resolve(null);
+    }
+}
+
+if (typeof window !== 'undefined') {
+    window.loadCourseInstructorHistoryIndex = loadCourseInstructorHistoryIndex;
 }
 
 // Adjust semester totals by adding or subtracting the specified course's

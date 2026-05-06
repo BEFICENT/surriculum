@@ -1,6 +1,8 @@
 import argparse
 import json
 import re
+import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -8,7 +10,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import requests
 from bs4 import BeautifulSoup
 
-from term_utils import term_code_from_date, today_in_tz
+from term_utils import generate_terms, term_code_from_date, today_in_tz
 
 
 BASE = "https://suis.sabanciuniv.edu/prod"
@@ -77,9 +79,32 @@ def _extract_term_codes_from_dyn_sched(html: str) -> List[str]:
     return out
 
 
-def _resolve_terms_to_scrape(explicit_term: str, explicit_terms: str, *, timeout: float) -> List[str]:
+def _validate_term_code(code: str, *, arg_name: str) -> str:
+    out = str(code or "").strip()
+    if not re.fullmatch(r"\d{6}", out):
+        raise ValueError(f"Invalid term code for {arg_name}: {code!r}")
+    return out
+
+
+def _resolve_range_terms(from_term: str, through_term: str) -> List[str]:
+    start_code = _validate_term_code(from_term, arg_name="--from-term")
+    end_code = _validate_term_code(through_term, arg_name="--through-term") if through_term else term_code_from_date(today_in_tz())
+    if int(start_code) > int(end_code):
+        raise ValueError("--from-term cannot be later than --through-term.")
+    all_terms = generate_terms(start_year=int(start_code[:4]), through_term_code=end_code)
+    return [code for code in all_terms if int(code) >= int(start_code)]
+
+
+def _resolve_terms_to_scrape(
+    explicit_term: str,
+    explicit_terms: str,
+    *,
+    from_term: str,
+    through_term: str,
+    timeout: float,
+) -> List[str]:
     if explicit_term:
-        return [explicit_term]
+        return [_validate_term_code(explicit_term, arg_name="--term")]
 
     if explicit_terms:
         out: List[str] = []
@@ -87,12 +112,13 @@ def _resolve_terms_to_scrape(explicit_term: str, explicit_terms: str, *, timeout
             code = str(part or "").strip()
             if not code:
                 continue
-            if not re.fullmatch(r"\d{6}", code):
-                raise ValueError(f"Invalid term code: {code!r}")
-            out.append(code)
+            out.append(_validate_term_code(code, arg_name="--terms"))
         if not out:
             raise ValueError("No valid term codes were provided in --terms.")
         return out
+
+    if from_term:
+        return _resolve_range_terms(from_term, through_term)
 
     sess = requests.Session()
     dyn_html = _fetch_with_retry(sess, "GET", DYN_SCHED_URL, timeout=timeout)
@@ -367,6 +393,19 @@ def parse_saved_listing_files(files: List[Path], term: Optional[str]) -> List[Di
     return out
 
 
+def _is_schedule_output_path(path: Path) -> bool:
+    try:
+        rel = path.resolve().relative_to((Path.cwd() / "courses" / "schedule").resolve())
+        return rel.suffix.lower() == ".jsonl"
+    except Exception:
+        return False
+
+
+def rebuild_instructor_history() -> None:
+    script_path = Path(__file__).with_name("build_course_instructor_history.py")
+    subprocess.run([sys.executable, str(script_path)], check=True)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch schedule meeting times and write JSONL.")
     parser.add_argument("--term", default="", help="Single term code like 202502.")
@@ -374,6 +413,16 @@ def main() -> None:
         "--terms",
         default="",
         help="Comma-separated explicit term codes. If omitted, scrapes all available terms from the current term onward.",
+    )
+    parser.add_argument(
+        "--from-term",
+        default="",
+        help="Inclusive start term code for manual backfills, e.g. 201901.",
+    )
+    parser.add_argument(
+        "--through-term",
+        default="",
+        help="Inclusive end term code for manual backfills. Defaults to the current term.",
     )
     parser.add_argument(
         "--out",
@@ -389,27 +438,47 @@ def main() -> None:
         default=[],
         help="Parse saved 'Class Schedule Listing' HTML files instead of scraping.",
     )
+    parser.add_argument(
+        "--skip-instructor-history",
+        action="store_true",
+        help="Skip rebuilding courses/course_instructor_history.jsonl after schedule files are written.",
+    )
     args = parser.parse_args()
 
     term = str(args.term or "").strip()
     terms_arg = str(args.terms or "").strip()
+    from_term = str(args.from_term or "").strip()
+    through_term = str(args.through_term or "").strip()
     max_subjects = args.max_subjects if args.max_subjects and args.max_subjects > 0 else None
 
+    selection_flags = [bool(term), bool(terms_arg), bool(from_term)]
+    if sum(selection_flags) > 1:
+        raise RuntimeError("Use only one of --term, --terms, or --from-term.")
+    if through_term and not from_term:
+        raise RuntimeError("--through-term requires --from-term.")
+
     if args.html:
-        if terms_arg:
-            raise RuntimeError("--terms cannot be used with --html.")
+        if terms_arg or from_term or through_term:
+            raise RuntimeError("--terms/--from-term/--through-term cannot be used with --html.")
         parsed_rows = parse_saved_listing_files([Path(x) for x in args.html], term or None)
         if not term:
             raise RuntimeError("--html requires --term so the output term is known.")
         terms_to_scrape = [term]
     else:
-        terms_to_scrape = _resolve_terms_to_scrape(term, terms_arg, timeout=args.timeout)
+        terms_to_scrape = _resolve_terms_to_scrape(
+            term,
+            terms_arg,
+            from_term=from_term,
+            through_term=through_term,
+            timeout=args.timeout,
+        )
         if not terms_to_scrape:
             raise RuntimeError("Missing term code(s).")
 
     if args.out and len(terms_to_scrape) != 1:
         raise RuntimeError("--out can only be used when scraping exactly one term.")
 
+    written_paths: List[Path] = []
     for idx, resolved_term in enumerate(terms_to_scrape, start=1):
         if args.html:
             rows = parsed_rows
@@ -418,7 +487,15 @@ def main() -> None:
             rows = scrape_term_schedule(resolved_term, timeout=args.timeout, delay_s=args.delay, max_subjects=max_subjects)
         out_path = Path(args.out) if args.out else Path("courses") / "schedule" / f"{resolved_term}.jsonl"
         write_jsonl(out_path, rows)
+        written_paths.append(out_path)
         print(f"Wrote {len(rows)} sections to {out_path}")
+
+    should_rebuild_history = (
+        not args.skip_instructor_history and any(_is_schedule_output_path(path) for path in written_paths)
+    )
+    if should_rebuild_history:
+        print("Rebuilding course instructor history...")
+        rebuild_instructor_history()
 
 
 if __name__ == "__main__":
