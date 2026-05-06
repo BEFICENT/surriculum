@@ -928,6 +928,7 @@
           return (Math.round(n * 10) / 10).toFixed(1);
         };
 
+        let termHistoryRowsForDom = [];
         const catalogCard = (() => {
           if (!pi) {
             return (
@@ -1011,7 +1012,7 @@
             )
             : '';
 
-          const termHistoryRowsForDom = termHistoryRows.map(entry => ({
+          termHistoryRowsForDom = termHistoryRows.map(entry => ({
             term: entry && entry.term ? displayTerm(entry.term) : 'Unknown term',
             instructors: entry && Array.isArray(entry.instructors)
               ? entry.instructors.filter(Boolean).map(name => String(name))
@@ -1041,7 +1042,16 @@
             `<div class="scheduler-details-paragraph">${coreq ? escapeHtml(coreq) : 'None'}</div>` +
             `</div>` +
             descHtml +
-            termHistoryHtml +
+            (termHistoryRows.length
+              ? (
+                `<details class="scheduler-details-disclosure">` +
+                `<summary class="scheduler-details-disclosure-summary">Offered Terms & Instructors (${termHistoryMap.size})</summary>` +
+                `<div class="scheduler-details-disclosure-body">` +
+                `<div class="course-history-anchor" data-course-history-anchor="scheduler"></div>` +
+                `</div>` +
+                `</details>`
+              )
+              : termHistoryHtml) +
             `</div>`
           );
         })();

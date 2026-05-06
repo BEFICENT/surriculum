@@ -77,6 +77,15 @@
         btn.textContent = b.label || b.action;
         if (b.danger) btn.style.backgroundColor = '#DC2626';
         btn.addEventListener('click', () => {
+          try {
+            if (typeof b.onClick === 'function') b.onClick({ overlay, modal, body, button: btn });
+          } catch (_) {}
+          if (b.href) {
+            try {
+              window.open(String(b.href), b.target || '_blank', b.features || 'noopener');
+            } catch (_) {}
+          }
+          if (b.closeOnClick === false) return;
           const val = inputEl ? inputEl.value : null;
           cleanupAndResolve({ action: b.action, value: val });
         });
@@ -135,7 +144,9 @@
         title,
         bodyHtml,
         onMount: opts.onMount,
-        buttons: [{ action: 'ok', label: 'OK', variant: 'primary' }],
+        buttons: Array.isArray(opts.buttons) && opts.buttons.length
+          ? opts.buttons
+          : [{ action: 'ok', label: 'OK', variant: 'primary' }],
       });
     },
     async confirm(title, bodyHtml, options) {

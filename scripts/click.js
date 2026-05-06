@@ -746,10 +746,19 @@ function dynamic_click(e, curriculum, course_data)
                      '<div class="course-details-section"><h4>Corequisites</h4><p>' + (coreq ? escapeHtml(coreq) : 'None') + '</p></div>' +
                      descHtml +
                      termHistoryHtml +
-                     (url ? `<div class="course-details-actions"><a class="btn btn-primary" href="${escapeHtml(url)}" target="_blank" rel="noopener">Open course page</a></div>` : '') +
                      '</div>';
 
                 ui.alert('Course Details', body, {
+                    buttons: [
+                        { action: 'close', label: 'Close', variant: 'secondary' },
+                        ...(url ? [{
+                            action: 'open-course-page',
+                            label: 'Open course page',
+                            variant: 'primary',
+                            href: url,
+                            closeOnClick: false,
+                        }] : []),
+                    ],
                     onMount: ({ body }) => {
                         try {
                             const anchor = body ? body.querySelector('[data-course-history-anchor="planner"]') : null;

@@ -1035,6 +1035,9 @@ html, body {
     max-width: 92vw;
     padding: 18px 18px 14px;
     border: 1px solid var(--border);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 .app-modal-header {
@@ -1071,6 +1074,9 @@ html, body {
     color: var(--text-secondary);
     font-size: 0.9rem;
     line-height: 1.35;
+    overflow-y: auto;
+    min-height: 0;
+    padding-right: 2px;
 }
 
 .app-modal-body p {
@@ -1099,7 +1105,11 @@ html, body {
     display: flex;
     justify-content: flex-end;
     gap: 10px;
-    margin-top: 14px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-card);
+    flex-shrink: 0;
 }
 
 /* === FOOTER === */
@@ -2377,6 +2387,43 @@ html, body {
     justify-content: flex-end;
     gap: 10px;
     flex-wrap: wrap;
+}
+
+.scheduler-details-disclosure {
+    margin-top: 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    overflow: hidden;
+}
+
+.scheduler-details-disclosure-summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 10px 12px;
+    font-weight: 700;
+    color: var(--text-primary);
+    background: var(--bg-surface);
+}
+
+.scheduler-details-disclosure-summary::-webkit-details-marker {
+    display: none;
+}
+
+.scheduler-details-disclosure-summary::after {
+    content: '\f078';
+    font-family: 'Font Awesome 6 Free';
+    font-weight: 900;
+    float: right;
+    transition: transform 0.15s ease;
+}
+
+.scheduler-details-disclosure[open] .scheduler-details-disclosure-summary::after {
+    transform: rotate(180deg);
+}
+
+.scheduler-details-disclosure-body {
+    padding: 12px;
 }
 
 .scheduler-details-card {
