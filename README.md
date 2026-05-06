@@ -5,7 +5,7 @@ SUrriculum is a fully client-side curriculum planner for Sabancı University und
 - Build and maintain a semester-by-semester plan
 - Track major / double major / minor requirements
 - Import your transcript (Academic Records Summary) to prefill taken courses
-- Use a current-term scheduler (SUchedule-style) to build a weekly timetable and sync it back into your plan
+- Use a term-selectable scheduler (SUchedule-style) to build a weekly timetable and sync it back into your plan
 
 Live version: https://beficent.github.io/surriculum/
 
@@ -35,7 +35,7 @@ All plans and progress are stored locally in your browser (via `localStorage`). 
 - **Current-term tools**:
   - Current term highlight
   - Optional “only show offered courses” filter for the current term
-  - **Current Term Scheduler** for picking sections and building a weekly timetable
+  - **Scheduler** for picking sections and building weekly timetables by term
 - **Quality of life**: dark/light theme, collapsible sidebar, touch-friendly behavior, custom modals (no default browser prompts).
 
 If you hit a bug or want to improve the tool, open an issue/discussion or contact: [bilal.gebenoglu@sabanciuniv.edu](mailto:bilal.gebenoglu@sabanciuniv.edu)
@@ -129,18 +129,18 @@ Minors also enforce a CGPA rule:
 - Minimum CGPA **2.72** for most minors
 - Minimum CGPA **2.50** for the **Entrepreneurship** minor
 
-## Current Term Scheduler (weekly timetable)
+## Scheduler (weekly timetable)
 
-Open **Current Term Scheduler** from the sidebar. It is a SUchedule-style weekly grid for the current term.
+Open **Scheduler** from the sidebar. It is a SUchedule-style weekly grid that defaults to the current term and can switch between locally available schedule terms.
 
 Key features:
 
-- **Search + browse** courses for the current term
+- **Search + browse** courses for the selected scheduler term
 - **Pick section** and place it on a weekly grid (Mon–Fri, 08:40–19:30)
 - **Corequisite bundling**: courses with labs/recitations are treated as a bundle so you don’t “lose” the lab/recitation separately
 - **Time conflicts**: overlapping classes render side-by-side instead of blocking each other
 - **Copy CRNs**: copies the selected CRNs
-- **Update current-term plan**: replaces the courses in your planner’s current-term semester with the scheduler’s selected main courses (labs/recitations are not added to the planner semester)
+- **Update planner semester**: replaces the courses in the matching planner semester with the scheduler’s selected main courses (labs/recitations are not added to the planner semester)
 - **Block hours**:
   - Enable block mode and click-drag to block time slots
   - Courses that can’t fit around blocked hours can be filtered out, or optionally shown in red
@@ -240,7 +240,7 @@ python migrate_to_jsonl.py --delete-json
 
 This repository started as a fork of the original Surriculum project: https://github.com/melih-kiziltoprak/surriculum
 
-Maintained by **BEFICENT (Bilal M. G.)** with major additions including double major support, Data Science and Analytics and several FASS programs, a large UI overhaul, updated course lists, improved requirement checks, multi-plan support, minor support, and the current-term scheduler.
+Maintained by **BEFICENT (Bilal M. G.)** with major additions including double major support, Data Science and Analytics and several FASS programs, a large UI overhaul, updated course lists, improved requirement checks, multi-plan support, minor support, and the term-selectable scheduler.
 
 ## License
 

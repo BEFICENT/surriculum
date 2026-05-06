@@ -330,17 +330,29 @@ def _record_subject_manifest_entry(manifest: Dict[str, Any], term: str, subjects
     _refresh_subject_manifest_summary(manifest)
 
 
-def _resolve_subjects_for_term(term: str, manifest: Dict[str, Any]) -> Tuple[List[str], str]:
+def _resolve_subjects_for_term(term: str, manifest: Dict[str, Any], current_term_code: str = "") -> Tuple[List[str], str]:
     terms = manifest.get("terms") if isinstance(manifest.get("terms"), dict) else {}
+    is_future_term = False
+    try:
+        if current_term_code and re.fullmatch(r"\d{6}", str(current_term_code or "").strip()):
+            is_future_term = _term_sort_key(term) > _term_sort_key(current_term_code)
+    except Exception:
+        is_future_term = False
+
     exact = _normalize_subject_codes(terms.get(term, []))
-    if exact:
+    if exact and not is_future_term:
         return exact, f"manifest:{term}"
 
-    sorted_terms = sorted(
-        [code for code in terms.keys() if re.fullmatch(r"\d{6}", str(code or "").strip()) and _term_sort_key(code) < _term_sort_key(term)],
-        key=_term_sort_key,
-        reverse=True,
-    )
+    candidate_terms = []
+    for code in terms.keys():
+        if not re.fullmatch(r"\d{6}", str(code or "").strip()):
+            continue
+        if _term_sort_key(code) >= _term_sort_key(term):
+            continue
+        if is_future_term and current_term_code and _term_sort_key(code) > _term_sort_key(current_term_code):
+            continue
+        candidate_terms.append(code)
+    sorted_terms = sorted(candidate_terms, key=_term_sort_key, reverse=True)
     for code in sorted_terms:
         if _is_summer_term(code):
             continue
@@ -352,6 +364,9 @@ def _resolve_subjects_for_term(term: str, manifest: Dict[str, Any]) -> Tuple[Lis
     if latest_non_summer:
         source_term = str(manifest.get("latest_known_non_summer_term") or "latest_non_summer")
         return latest_non_summer, f"fallback:{source_term}"
+
+    if exact:
+        return exact, f"manifest:{term}"
 
     for code in sorted_terms:
         subjects = _normalize_subject_codes(terms.get(code, []))
@@ -528,7 +543,11 @@ def scrape_term_schedule(
     subject_source = "live"
     subjects = live_subjects
     if not subjects:
-        subjects, subject_source = _resolve_subjects_for_term(term, subject_manifest or {})
+        subjects, subject_source = _resolve_subjects_for_term(
+            term,
+            subject_manifest or {},
+            current_term_code=term_code_from_date(today_in_tz()),
+        )
     if not subjects:
         raise RuntimeError("Could not determine subject list from schedule search page or local manifest.")
     subject_list_was_truncated = False

@@ -2679,6 +2679,10 @@ html, body {
     font-size: 0.95rem;
 }
 
+.scheduler-term.is-current {
+    color: #16A34A;
+}
+
 .scheduler-legend {
     flex: 1 1 auto;
     display: flex;
@@ -2778,6 +2782,56 @@ html, body {
     border-bottom: 1px solid var(--border);
 }
 
+.scheduler-term-row {
+    margin-bottom: 10px;
+}
+
+.scheduler-term-label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
+.scheduler-term-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.scheduler-term-select {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.scheduler-term-select.is-current {
+    border-color: rgba(22, 163, 74, 0.65);
+    box-shadow: 0 0 0 1px rgba(22, 163, 74, 0.18);
+}
+
+.scheduler-term-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    line-height: 1;
+    border: 1px solid var(--border);
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.scheduler-term-badge.is-current {
+    background: rgba(22, 163, 74, 0.14);
+    border-color: rgba(22, 163, 74, 0.3);
+    color: #16A34A;
+}
+
 .scheduler-schedule-row {
     margin-bottom: 10px;
 }
@@ -2799,6 +2853,13 @@ html, body {
 
 .scheduler-hint {
     margin-top: 10px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    line-height: 1.3;
+}
+
+.scheduler-term-note {
+    margin-bottom: 10px;
     font-size: 0.8rem;
     color: var(--text-secondary);
     line-height: 1.3;

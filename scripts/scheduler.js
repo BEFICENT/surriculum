@@ -62,6 +62,110 @@
     return code ? String(code) : '';
   }
 
+  function displayTermNameSafe(termCode) {
+    const code = String(termCode || '').trim();
+    if (!code) return '';
+    try {
+      if (typeof window !== 'undefined' && typeof window.termCodeToName === 'function') {
+        return window.termCodeToName(code) || code;
+      }
+    } catch (_) {}
+    return code;
+  }
+
+  const SCHEDULER_TERM_MANIFEST_PATH = './courses/schedule_subjects.json';
+  const FUTURE_TERM_WARNING_KEY_PREFIX = 'surriculum.schedulerFutureTermWarning.';
+
+  async function loadSchedulerTermManifest() {
+    try {
+      if (window.__schedulerTermManifestPromise) return window.__schedulerTermManifestPromise;
+    } catch (_) {}
+
+    const tryReadText = async (path) => {
+      try {
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', path, false);
+        xhr.overrideMimeType('application/json');
+        xhr.send(null);
+        if (xhr.status === 200 || xhr.status === 0) return xhr.responseText;
+      } catch (_) {}
+      try {
+        const res = await fetch(path);
+        if (res.ok) return await res.text();
+      } catch (_) {}
+      return '';
+    };
+
+    const promise = (async () => {
+      const text = await tryReadText(SCHEDULER_TERM_MANIFEST_PATH);
+      if (!text) return { terms: {} };
+      try {
+        const parsed = JSON.parse(text);
+        return parsed && typeof parsed === 'object' ? parsed : { terms: {} };
+      } catch (_) {
+        return { terms: {} };
+      }
+    })();
+
+    try { window.__schedulerTermManifestPromise = promise; } catch (_) {}
+    return promise;
+  }
+
+  async function getAvailableSchedulerTerms() {
+    const manifest = await loadSchedulerTermManifest();
+    const terms = manifest && manifest.terms && typeof manifest.terms === 'object' ? manifest.terms : {};
+    return Object.keys(terms)
+      .map((code) => String(code || '').trim())
+      .filter((code) => /^\d{6}$/.test(code))
+      .sort((a, b) => parseInt(String(b || '0'), 10) - parseInt(String(a || '0'), 10));
+  }
+
+  function resolveSchedulerTermCode(preferredTermCode, availableTerms, currentTermCode) {
+    const preferred = String(preferredTermCode || '').trim();
+    const current = String(currentTermCode || '').trim();
+    const terms = Array.isArray(availableTerms) ? availableTerms.map(x => String(x || '').trim()).filter(Boolean) : [];
+    if (preferred && terms.includes(preferred)) return preferred;
+    if (current && terms.includes(current)) return current;
+    return terms[0] || current || '';
+  }
+
+  function hasSeenFutureTermWarning(termCode) {
+    try {
+      return localStorage.getItem(FUTURE_TERM_WARNING_KEY_PREFIX + String(termCode || '').trim()) === '1';
+    } catch (_) {}
+    return false;
+  }
+
+  function markFutureTermWarningSeen(termCode) {
+    try { localStorage.setItem(FUTURE_TERM_WARNING_KEY_PREFIX + String(termCode || '').trim(), '1'); } catch (_) {}
+  }
+
+  async function maybeWarnFutureSchedulerTerm(termCode, currentTermCode, ui) {
+    const target = String(termCode || '').trim();
+    const current = String(currentTermCode || '').trim();
+    if (!target || !current) return;
+    if (!/^\d{6}$/.test(target) || !/^\d{6}$/.test(current)) return;
+    if (parseInt(target, 10) <= parseInt(current, 10)) return;
+    if (hasSeenFutureTermWarning(target)) return;
+    if (ui && typeof ui.alert === 'function') {
+      await ui.alert(
+        'Future term schedule',
+        `<p><strong>${escapeHtml(displayTermNameSafe(target))}</strong> is a future term.</p>` +
+        `<p>Its courses, sections, CRNs, instructors, and meeting times are provisional and likely to change.</p>`
+      );
+    }
+    markFutureTermWarningSeen(target);
+  }
+
+  function getSavedSchedulerSelectedTerm() {
+    try { return String(planGetItem('schedulerSelectedTerm') || '').trim(); } catch (_) {}
+    return '';
+  }
+
+  function setSavedSchedulerSelectedTerm(termCode) {
+    try { planSetItem('schedulerSelectedTerm', String(termCode || '').trim()); } catch (_) {}
+  }
+
   function normalizeCourseId(code) {
     return String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   }
@@ -201,18 +305,18 @@
     return promise;
   }
 
-  function getCurrentTermSemesterCourseCodes() {
+  function getPlannerSemesterCourseCodes(termCode) {
     try {
       const cur = window.curriculum;
       if (!cur || !cur.semesters) return [];
-      const ct = getCurrentTermNameSafe();
-      if (!ct) return [];
+      const targetTermName = displayTermNameSafe(termCode);
+      if (!targetTermName) return [];
       const containers = document.querySelectorAll('.container_semester');
       for (let i = 0; i < containers.length; i++) {
         const c = containers[i];
         const p = c.querySelector('.date p');
         const name = p ? String(p.textContent || '').trim() : '';
-        if (name !== ct) continue;
+        if (name !== targetTermName) continue;
         const sem = c.querySelector('.semester');
         if (!sem) continue;
         const semObj = cur.getSemester(sem.id);
@@ -621,20 +725,46 @@
     return ensure({ selected: {}, blocked: [] }); // selected[course_id] = { course_id, crn }
   }
 
-  function openSchedulerModal() {
-    const termName = getCurrentTermNameSafe();
-    const termCode = getCurrentTermCodeSafe();
+  async function openSchedulerModal(preferredTermCode) {
+    const currentTermName = getCurrentTermNameSafe();
+    const currentTermCode = getCurrentTermCodeSafe();
     const ui = (typeof window !== 'undefined') ? window.uiModal : null;
     const DISPLAY_END_EXTRA_MIN = 10; // show the final boundary at 19:40
     const DISPLAY_END_MIN = DAY_END_MIN + DISPLAY_END_EXTRA_MIN;
     const BLOCK_END_MIN = DISPLAY_END_MIN;
 
-    if (!termCode) {
+    if (!currentTermCode) {
       if (ui && typeof ui.alert === 'function') {
         ui.alert('Scheduler unavailable', '<p>Could not determine the current term.</p>');
       }
       return;
     }
+
+    const availableTerms = await getAvailableSchedulerTerms();
+    if (!availableTerms.length) {
+      if (ui && typeof ui.alert === 'function') {
+        ui.alert('Scheduler unavailable', '<p>No schedule terms are available locally. Run the schedule scraper first.</p>');
+      }
+      return;
+    }
+
+    const initialTermCode = resolveSchedulerTermCode(
+      preferredTermCode || getSavedSchedulerSelectedTerm(),
+      availableTerms,
+      currentTermCode
+    );
+    if (!initialTermCode) {
+      if (ui && typeof ui.alert === 'function') {
+        ui.alert('Scheduler unavailable', '<p>Could not resolve a schedule term to open.</p>');
+      }
+      return;
+    }
+    setSavedSchedulerSelectedTerm(initialTermCode);
+    await maybeWarnFutureSchedulerTerm(initialTermCode, currentTermCode, ui);
+
+    const termCode = initialTermCode;
+    const termName = displayTermNameSafe(termCode) || currentTermName || termCode;
+    const isCurrentSchedulerTerm = termCode === currentTermCode;
 
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay scheduler-overlay';
@@ -648,7 +778,7 @@
     const header = document.createElement('div');
     header.className = 'scheduler-header';
     header.innerHTML =
-      `<div class="scheduler-title">Current Term Scheduler <span class="scheduler-term">— ${escapeHtml(termName || termCode)}</span></div>` +
+      `<div class="scheduler-title">Scheduler <span class="scheduler-term${isCurrentSchedulerTerm ? ' is-current' : ''}">— ${escapeHtml(termName || termCode)}</span></div>` +
       `<div class="scheduler-legend">` +
       `  <span class="scheduler-legend-item"><span class="scheduler-legend-dot"></span> Course color</span>` +
       `  <span class="scheduler-legend-item"><span class="scheduler-legend-badge scheduler-legend-conflict"></span> Time conflict</span>` +
@@ -1347,6 +1477,11 @@
 
     const body = document.createElement('div');
     body.className = 'scheduler-body';
+    const plannerSectionTitle = isCurrentSchedulerTerm ? 'Current Term Plan' : 'Planner Semester';
+    const plannerUpdateLabel = isCurrentSchedulerTerm ? 'Update current-term plan' : 'Update planner semester';
+    const plannerHintHtml = isCurrentSchedulerTerm
+      ? ''
+      : `<div class="scheduler-term-note">Planner sync targets <strong>${escapeHtml(termName)}</strong>.</div>`;
 
     const schedulerFilterControlsHtml =
       `<div class="scheduler-controls">` +
@@ -1437,6 +1572,13 @@
       `<div class="scheduler-layout">` +
       `  <div class="scheduler-sidebar">` +
       `    <div class="scheduler-sidebar-top">` +
+      `      <div class="scheduler-term-row">` +
+      `        <div class="scheduler-term-label">Schedule term</div>` +
+      `        <div class="scheduler-term-controls">` +
+      `          <select class="select-control scheduler-term-select${isCurrentSchedulerTerm ? ' is-current' : ''}"></select>` +
+      `          ${isCurrentSchedulerTerm ? '<span class="scheduler-term-badge is-current">Current</span>' : ''}` +
+      `        </div>` +
+      `      </div>` +
       `      <div class="scheduler-schedule-row">` +
       `        <button type="button" class="btn btn-secondary btn-sm scheduler-schedule-toggle" title="Switch schedule"><i class="fa-solid fa-layer-group"></i>&nbsp;<span class="scheduler-schedule-name">Default schedule</span></button>` +
       `      </div>` +
@@ -1444,10 +1586,11 @@
       `    </div>` +
       `    <div class="scheduler-sidebar-section scheduler-collapsible" data-collapsible="plan">` +
       `      <button type="button" class="scheduler-collapsible-header">` +
-      `        <span>Current Term Plan</span>` +
+      `        <span>${escapeHtml(plannerSectionTitle)}</span>` +
       `        <i class="fa-solid fa-chevron-down"></i>` +
       `      </button>` +
       `      <div class="scheduler-collapsible-body">` +
+      `        ${plannerHintHtml}` +
       `        <div class="scheduler-plan-list"></div>` +
       `      </div>` +
       `    </div>` +
@@ -1460,7 +1603,7 @@
       `        <div class="scheduler-selected"></div>` +
       `        <div class="scheduler-selected-actions">` +
       `          <button class="btn btn-danger btn-sm scheduler-clear" type="button">Clear</button>` +
-      `          <button class="btn btn-primary btn-sm scheduler-pick-plan" type="button">Update current-term plan</button>` +
+      `          <button class="btn btn-primary btn-sm scheduler-pick-plan" type="button">${escapeHtml(plannerUpdateLabel)}</button>` +
       `        </div>` +
       `      </div>` +
       `    </div>` +
@@ -1756,6 +1899,7 @@
 
     const scheduleBtn = body.querySelector('.scheduler-schedule-toggle');
     const scheduleNameEl = body.querySelector('.scheduler-schedule-name');
+    const termSelectEl = body.querySelector('.scheduler-term-select');
 
     const getActiveSchedule = (root) => {
       try {
@@ -1783,6 +1927,32 @@
       } catch (_) {}
     };
     refreshScheduleLabel();
+
+    const applySchedulerTermOptions = () => {
+      try {
+        if (!termSelectEl) return;
+        termSelectEl.innerHTML = availableTerms.map((code) => {
+          const label = displayTermNameSafe(code) || code;
+          return `<option value="${escapeHtml(code)}">${escapeHtml(label)}</option>`;
+        }).join('');
+        termSelectEl.value = termCode;
+      } catch (_) {}
+    };
+    applySchedulerTermOptions();
+
+    if (termSelectEl) {
+      termSelectEl.addEventListener('change', async () => {
+        const nextTermCode = resolveSchedulerTermCode(termSelectEl.value, availableTerms, currentTermCode);
+        if (!nextTermCode || nextTermCode === termCode) {
+          try { termSelectEl.value = termCode; } catch (_) {}
+          return;
+        }
+        setSavedSchedulerSelectedTerm(nextTermCode);
+        await maybeWarnFutureSchedulerTerm(nextTermCode, currentTermCode, ui);
+        cleanup();
+        try { await openSchedulerModal(nextTermCode); } catch (_) {}
+      });
+    }
 
     // Collapsible sidebar sections (Current Term Plan / Selected Sections)
     const applyCollapse = (key, collapsed) => {
@@ -1852,14 +2022,14 @@
       });
     });
 
-    const plannedCourses = getCurrentTermSemesterCourseCodes();
+    const plannedCourses = getPlannerSemesterCourseCodes(termCode);
     const planListEl = body.querySelector('.scheduler-plan-list');
     if (plannedCourses.length) {
       planListEl.innerHTML = plannedCourses.map(c => (
         `<button type="button" class="scheduler-pill scheduler-plan-pick" data-course="${escapeHtml(c)}" title="Pick a section">${escapeHtml(c)}</button>`
       )).join('');
     } else {
-      planListEl.innerHTML = '<div class="scheduler-muted">No courses in your current-term plan yet.</div>';
+      planListEl.innerHTML = `<div class="scheduler-muted">No courses in your planner semester for <strong>${escapeHtml(termName)}</strong> yet.</div>`;
     }
 
     const resultsEl = body.querySelector('.scheduler-results');
@@ -4198,28 +4368,28 @@
       resultsEl.innerHTML = '<div class="scheduler-muted">Cleared. Search to add courses.</div>';
     });
 
-    const findOrCreateCurrentTermSemester = () => {
+    const findOrCreatePlannerSemester = (targetTermCode) => {
       const cur = (typeof window !== 'undefined') ? window.curriculum : null;
       if (!cur) return null;
-      const ct = getCurrentTermNameSafe();
-      if (!ct) return null;
+      const targetTermName = displayTermNameSafe(targetTermCode);
+      if (!targetTermName) return null;
       const containers = document.querySelectorAll('.container_semester');
       for (let i = 0; i < containers.length; i++) {
         const c = containers[i];
         const p = c.querySelector('.date p');
         const name = p ? String(p.textContent || '').trim() : '';
-        if (name !== ct) continue;
+        if (name !== targetTermName) continue;
         const semEl = c.querySelector('.semester');
         if (!semEl) continue;
         const semObj = cur.getSemester(semEl.id);
         return { container: c, semesterEl: semEl, semesterObj: semObj };
       }
-      // Create a semester for the current term if missing.
+      // Create a semester for the selected term if missing.
       try {
         if (typeof createSemeter === 'function') {
           const board = document.querySelector('.board');
           const ghost = board ? board.querySelector('.add-semester-ghost') : null;
-          const created = createSemeter(true, [], cur, course_data, [], ct);
+          const created = createSemeter(true, [], cur, course_data, [], targetTermName);
           if (created && board && ghost) {
             // Keep the "+ New Semester" ghost at the end like the normal flow.
             board.insertBefore(created, ghost);
@@ -4238,7 +4408,7 @@
           const c = containers2[i];
           const p = c.querySelector('.date p');
           const name = p ? String(p.textContent || '').trim() : '';
-          if (name !== ct) continue;
+          if (name !== targetTermName) continue;
           const semEl = c.querySelector('.semester');
           if (!semEl) continue;
           const semObj = cur.getSemester(semEl.id);
@@ -4341,29 +4511,29 @@
         }
         const ok = (ui && typeof ui.confirm === 'function')
           ? await ui.confirm(
-              'Update current-term plan',
-              '<p>This will <strong>replace</strong> the courses in your current-term plan with the scheduler’s selected sections.</p>',
+              `Update ${termName}`,
+              `<p>This will <strong>replace</strong> the courses in your planner semester for <strong>${escapeHtml(termName)}</strong> with the scheduler’s selected sections.</p>`,
               { confirmText: 'Replace', danger: true }
             )
           : true;
         if (!ok) return;
 
-        const loc = findOrCreateCurrentTermSemester();
+        const loc = findOrCreatePlannerSemester(termCode);
         if (!loc || !loc.container || !loc.semesterEl || !loc.semesterObj) {
-          if (ui && typeof ui.alert === 'function') ui.alert('Update failed', '<p>Could not find (or create) the current-term semester in your plan.</p>');
+          if (ui && typeof ui.alert === 'function') ui.alert('Update failed', `<p>Could not find (or create) the planner semester for <strong>${escapeHtml(termName)}</strong>.</p>`);
           return;
         }
 
-        // Avoid duplicates across semesters: move any matching courses into the current term.
+        // Avoid duplicates across semesters: move any matching courses into the selected planner term.
         for (let i = 0; i < keys.length; i++) {
           removeCourseFromOtherSemesters(keys[i], loc.semesterObj.id);
         }
 
-        // Clear current term semester DOM + any open add-course inputs.
+        // Clear selected planner semester DOM + any open add-course inputs.
         try { loc.semesterEl.querySelectorAll('.course').forEach(el => el.remove()); } catch (_) {}
         try { loc.container.querySelectorAll('.input_container').forEach(el => el.remove()); } catch (_) {}
 
-        // Clear current term semester model.
+        // Clear selected planner semester model.
         try {
           loc.semesterObj.courses = [];
           loc.semesterObj.totalCredit = 0;
@@ -4439,7 +4609,7 @@
           loc.semesterEl.appendChild(domCourse);
         }
 
-        // Recompute effective categories and totals and refresh "current term" highlights.
+        // Recompute effective categories and totals and refresh semester highlights.
         try {
           if (cur && typeof cur.recalcEffectiveTypes === 'function') cur.recalcEffectiveTypes(course_data);
           if (cur && cur.doubleMajor && typeof cur.recalcEffectiveTypesDouble === 'function') {
@@ -4452,7 +4622,7 @@
 
         refreshPlannerTotalsForContainer(loc.container, loc.semesterObj);
 
-        // Refresh scheduler "Current Term Plan" pills.
+        // Refresh scheduler planner-semester pills.
         try {
           const nextCourses = (loc.semesterObj && Array.isArray(loc.semesterObj.courses))
             ? loc.semesterObj.courses.map(x => normalizePlannerCode(x && x.code)).filter(Boolean)
@@ -4462,7 +4632,7 @@
             ? plannedCourses.map(c => (
                 `<button type="button" class="scheduler-pill scheduler-plan-pick" data-course="${escapeHtml(c)}" title="Pick a section">${escapeHtml(c)}</button>`
               )).join('')
-            : '<div class="scheduler-muted">No courses in your current-term plan yet.</div>';
+            : `<div class="scheduler-muted">No courses in your planner semester for <strong>${escapeHtml(termName)}</strong> yet.</div>`;
         } catch (_) {}
 
         // Re-render results/grid (hide-taken & sorting can depend on plan state).

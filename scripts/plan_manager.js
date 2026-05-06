@@ -5,6 +5,8 @@
   const INDEX_KEY = 'surriculum.plans.v1';
   const MIGRATED_KEY = 'surriculum.plans.migrated.v1';
   const PLAN_PREFIX = 'surriculum.plan.';
+  const APP_DATA_VERSION = 1;
+  const APP_DATA_VERSION_KEY = 'surriculum.appDataVersion';
   const MAX_PLANS = 10;
   const DEFAULT_PLAN_NAME = 'Default Plan';
   const LEGACY_KEYS = [
@@ -189,6 +191,56 @@
     }
   }
 
+  function initAppDataVersion() {
+    let storedBefore = 0;
+    try {
+      const raw = localStorage.getItem(APP_DATA_VERSION_KEY);
+      const parsed = parseInt(String(raw || '0'), 10);
+      storedBefore = Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+    } catch (_) {}
+
+    try {
+      localStorage.setItem(APP_DATA_VERSION_KEY, String(APP_DATA_VERSION));
+    } catch (_) {}
+
+    const info = {
+      current: APP_DATA_VERSION,
+      storedBefore,
+      firstRunAfterUpgrade: storedBefore > 0 && storedBefore < APP_DATA_VERSION,
+      firstRunEver: storedBefore <= 0,
+    };
+
+    const api = {
+      getCurrentAppDataVersion() {
+        return APP_DATA_VERSION;
+      },
+      getStoredAppDataVersion() {
+        try {
+          const raw = localStorage.getItem(APP_DATA_VERSION_KEY);
+          const parsed = parseInt(String(raw || '0'), 10);
+          return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+        } catch (_) {
+          return 0;
+        }
+      },
+      getPreviousAppDataVersion() {
+        return storedBefore;
+      },
+      isFirstRunAfterUpgrade() {
+        return info.firstRunAfterUpgrade;
+      },
+      markCurrentAppDataVersionSeen() {
+        try { localStorage.setItem(APP_DATA_VERSION_KEY, String(APP_DATA_VERSION)); } catch (_) {}
+      },
+    };
+
+    try {
+      window.APP_DATA_VERSION = APP_DATA_VERSION;
+      window.appDataVersionInfo = info;
+      window.appDataVersion = api;
+    } catch (_) {}
+  }
+
   function loadIndex() {
     const raw = localStorage.getItem(INDEX_KEY);
     const parsed = safeJsonParse(raw, null);
@@ -366,21 +418,34 @@
       minor1: get('minor1') || null,
       minor2: get('minor2') || null,
       minor3: get('minor3') || null,
+      schedulerSelectedTerm: get('schedulerSelectedTerm') || null,
       curriculum: safeJsonParse(get('curriculum') || 'null', null),
       grades: safeJsonParse(get('grades') || 'null', null),
       dates: safeJsonParse(get('dates') || 'null', null),
       customCourses: {},
+      schedulerStates: {},
     };
 
     const prefix = planKey(planId, 'customCourses_');
+    const schedulerPrefix = planKey(planId, 'schedulerState_');
     const keys = listLocalStorageKeys();
     for (const k of keys) {
-      if (!k.startsWith(prefix)) continue;
-      const majorKey = k.slice(planKey(planId, '').length);
-      const raw = localStorage.getItem(k);
-      const parsed = safeJsonParse(raw || 'null', null);
-      if (Array.isArray(parsed)) {
-        state.customCourses[majorKey.replace(/^customCourses_/, '')] = parsed;
+      if (k.startsWith(prefix)) {
+        const majorKey = k.slice(planKey(planId, '').length);
+        const raw = localStorage.getItem(k);
+        const parsed = safeJsonParse(raw || 'null', null);
+        if (Array.isArray(parsed)) {
+          state.customCourses[majorKey.replace(/^customCourses_/, '')] = parsed;
+        }
+        continue;
+      }
+      if (k.startsWith(schedulerPrefix)) {
+        const termKey = k.slice(planKey(planId, '').length).replace(/^schedulerState_/, '');
+        const raw = localStorage.getItem(k);
+        const parsed = safeJsonParse(raw || 'null', null);
+        if (parsed && typeof parsed === 'object') {
+          state.schedulerStates[termKey] = parsed;
+        }
       }
     }
 
@@ -403,6 +468,7 @@
     if (state.minor1 != null) setRaw('minor1', String(state.minor1));
     if (state.minor2 != null) setRaw('minor2', String(state.minor2));
     if (state.minor3 != null) setRaw('minor3', String(state.minor3));
+    if (state.schedulerSelectedTerm != null) setRaw('schedulerSelectedTerm', String(state.schedulerSelectedTerm));
 
     if (state.curriculum != null) setJson('curriculum', state.curriculum);
     if (state.grades != null) setJson('grades', state.grades);
@@ -413,6 +479,14 @@
         const list = state.customCourses[maj];
         if (!Array.isArray(list)) continue;
         setJson('customCourses_' + maj, list);
+      }
+    }
+
+    if (state.schedulerStates && typeof state.schedulerStates === 'object') {
+      for (const term of Object.keys(state.schedulerStates)) {
+        const schedState = state.schedulerStates[term];
+        if (!schedState || typeof schedState !== 'object') continue;
+        setJson('schedulerState_' + term, schedState);
       }
     }
 
@@ -842,6 +916,7 @@
   // Boot
   ensureIndex();
   migrateLegacyIfNeeded();
+  initAppDataVersion();
   window.planStorage = planStorage;
   window.uiModal = window.uiModal || uiModal;
 
