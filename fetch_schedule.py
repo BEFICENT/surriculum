@@ -5,7 +5,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 import requests
 from bs4 import BeautifulSoup
@@ -17,6 +17,8 @@ BASE = "https://suis.sabanciuniv.edu/prod"
 DYN_SCHED_URL = f"{BASE}/bwckschd.p_disp_dyn_sched"
 PROC_TERM_URL = f"{BASE}/bwckgens.p_proc_term_date"
 SEARCH_URL = f"{BASE}/bwckschd.p_get_crse_unsec"
+SCHEDULE_DIR = Path("courses") / "schedule"
+SUBJECT_MANIFEST_PATH = Path("courses") / "schedule_subjects.json"
 
 
 def _parse_float(s: str) -> float:
@@ -59,6 +61,45 @@ def _parse_time_range_to_minutes(time_str: str) -> Tuple[Optional[int], Optional
 
 def _norm_course_id(subj: str, numb: str) -> str:
     return f"{subj}{numb}".upper().replace(" ", "")
+
+
+def _term_sort_key(code: str) -> int:
+    try:
+        return int(str(code or "").strip())
+    except Exception:
+        return -1
+
+
+def _term_suffix(code: str) -> str:
+    raw = str(code or "").strip()
+    return raw[4:] if len(raw) == 6 else ""
+
+
+def _is_summer_term(code: str) -> bool:
+    return _term_suffix(code) == "03"
+
+
+def _advance_term_code(code: str, steps: int = 1) -> str:
+    raw = _validate_term_code(code, arg_name="term code")
+    year = int(raw[:4])
+    suffix = raw[4:]
+    order = ["01", "02", "03"]
+    idx = order.index(suffix)
+    remaining = max(0, int(steps))
+    while remaining > 0:
+        idx += 1
+        if idx >= len(order):
+            idx = 0
+            year += 1
+        remaining -= 1
+    return f"{year}{order[idx]}"
+
+
+def _iter_term_codes_forward(start_code: str) -> Iterable[str]:
+    current = _validate_term_code(start_code, arg_name="start term code")
+    while True:
+        yield current
+        current = _advance_term_code(current)
 
 
 def _extract_term_code_from_dyn_sched(html: str) -> Optional[str]:
@@ -120,19 +161,8 @@ def _resolve_terms_to_scrape(
     if from_term:
         return _resolve_range_terms(from_term, through_term)
 
-    sess = requests.Session()
-    dyn_html = _fetch_with_retry(sess, "GET", DYN_SCHED_URL, timeout=timeout)
-    available_terms = _extract_term_codes_from_dyn_sched(dyn_html)
-    if not available_terms:
-        raise RuntimeError("Could not determine available term codes from dynamic schedule page.")
-
     current_term = term_code_from_date(today_in_tz())
-    terms = sorted((code for code in available_terms if code >= current_term), key=int)
-    if terms:
-        return terms
-
-    fallback = _extract_term_code_from_dyn_sched(dyn_html)
-    return [fallback] if fallback else []
+    return [_validate_term_code(current_term, arg_name="current term")]
 
 
 def _fetch_with_retry(
@@ -172,6 +202,168 @@ def _parse_subject_codes_from_search(html: str) -> List[str]:
         if val and re.fullmatch(r"[A-Z0-9]{1,6}", val):
             out.append(val)
     return out
+
+
+def _normalize_subject_codes(values: Iterable[str]) -> List[str]:
+    seen: Set[str] = set()
+    out: List[str] = []
+    for value in values:
+        code = str(value or "").strip().upper()
+        if not code or not re.fullmatch(r"[A-Z0-9]{1,6}", code):
+            continue
+        if code in seen:
+            continue
+        seen.add(code)
+        out.append(code)
+    out.sort()
+    return out
+
+
+def _empty_subject_manifest() -> Dict[str, Any]:
+    return {
+        "latest_known_term": "",
+        "latest_known_non_summer_term": "",
+        "latest_subjects": [],
+        "latest_non_summer_subjects": [],
+        "terms": {},
+    }
+
+
+def _load_subject_manifest() -> Dict[str, Any]:
+    manifest = _empty_subject_manifest()
+    if SUBJECT_MANIFEST_PATH.exists():
+        try:
+            loaded = json.loads(SUBJECT_MANIFEST_PATH.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                for key in manifest.keys():
+                    if key in loaded:
+                        manifest[key] = loaded.get(key, manifest[key])
+                if not manifest.get("latest_known_term"):
+                    manifest["latest_known_term"] = str(loaded.get("latest_visible_term") or "")
+                if not manifest.get("latest_known_non_summer_term"):
+                    manifest["latest_known_non_summer_term"] = str(loaded.get("latest_visible_non_summer_term") or "")
+        except Exception:
+            pass
+    terms = manifest.get("terms")
+    manifest["terms"] = terms if isinstance(terms, dict) else {}
+    _seed_subject_manifest_from_schedule_files(manifest)
+    _refresh_subject_manifest_summary(manifest)
+    return manifest
+
+
+def _seed_subject_manifest_from_schedule_files(manifest: Dict[str, Any]) -> None:
+    terms = manifest.setdefault("terms", {})
+    try:
+        files = sorted(SCHEDULE_DIR.glob("*.jsonl"))
+    except Exception:
+        files = []
+    for path in files:
+        term = path.stem
+        if not re.fullmatch(r"\d{6}", term):
+            continue
+        existing = terms.get(term)
+        if isinstance(existing, list) and existing:
+            continue
+        subjects: Set[str] = set()
+        try:
+            for line in path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                rec = json.loads(line)
+                subj = str(rec.get("subject") or "").strip().upper()
+                if subj and re.fullmatch(r"[A-Z0-9]{1,6}", subj):
+                    subjects.add(subj)
+        except Exception:
+            continue
+        if subjects:
+            terms[term] = sorted(subjects)
+
+
+def _refresh_subject_manifest_summary(manifest: Dict[str, Any]) -> None:
+    terms = manifest.setdefault("terms", {})
+    normalized_terms: Dict[str, List[str]] = {}
+    for term, subjects in list(terms.items()):
+        if not re.fullmatch(r"\d{6}", str(term or "").strip()):
+            continue
+        normalized = _normalize_subject_codes(subjects if isinstance(subjects, list) else [])
+        if normalized:
+            normalized_terms[str(term)] = normalized
+    manifest["terms"] = normalized_terms
+
+    sorted_terms = sorted(normalized_terms.keys(), key=_term_sort_key)
+    manifest["latest_known_term"] = sorted_terms[-1] if sorted_terms else ""
+    manifest["latest_subjects"] = normalized_terms.get(manifest["latest_known_term"], []) if sorted_terms else []
+
+    non_summer_terms = [term for term in sorted_terms if not _is_summer_term(term)]
+    manifest["latest_known_non_summer_term"] = non_summer_terms[-1] if non_summer_terms else ""
+    manifest["latest_non_summer_subjects"] = (
+        normalized_terms.get(manifest["latest_known_non_summer_term"], [])
+        if non_summer_terms
+        else []
+    )
+
+
+def _save_subject_manifest(manifest: Dict[str, Any]) -> None:
+    _refresh_subject_manifest_summary(manifest)
+    SUBJECT_MANIFEST_PATH.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "latest_known_term": manifest.get("latest_known_term", ""),
+        "latest_known_non_summer_term": manifest.get("latest_known_non_summer_term", ""),
+        "latest_subjects": manifest.get("latest_subjects", []),
+        "latest_non_summer_subjects": manifest.get("latest_non_summer_subjects", []),
+        "terms": manifest.get("terms", {}),
+    }
+    SUBJECT_MANIFEST_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _record_subject_manifest_entry(manifest: Dict[str, Any], term: str, subjects: Iterable[str]) -> None:
+    existing = []
+    try:
+        existing = manifest.setdefault("terms", {}).get(term, [])
+    except Exception:
+        existing = []
+    normalized = _normalize_subject_codes([*list(existing or []), *list(subjects or [])])
+    if not normalized:
+        return
+    manifest.setdefault("terms", {})[term] = normalized
+    _refresh_subject_manifest_summary(manifest)
+
+
+def _resolve_subjects_for_term(term: str, manifest: Dict[str, Any]) -> Tuple[List[str], str]:
+    terms = manifest.get("terms") if isinstance(manifest.get("terms"), dict) else {}
+    exact = _normalize_subject_codes(terms.get(term, []))
+    if exact:
+        return exact, f"manifest:{term}"
+
+    sorted_terms = sorted(
+        [code for code in terms.keys() if re.fullmatch(r"\d{6}", str(code or "").strip()) and _term_sort_key(code) < _term_sort_key(term)],
+        key=_term_sort_key,
+        reverse=True,
+    )
+    for code in sorted_terms:
+        if _is_summer_term(code):
+            continue
+        subjects = _normalize_subject_codes(terms.get(code, []))
+        if subjects:
+            return subjects, f"fallback:{code}"
+
+    latest_non_summer = _normalize_subject_codes(manifest.get("latest_non_summer_subjects", []))
+    if latest_non_summer:
+        source_term = str(manifest.get("latest_known_non_summer_term") or "latest_non_summer")
+        return latest_non_summer, f"fallback:{source_term}"
+
+    for code in sorted_terms:
+        subjects = _normalize_subject_codes(terms.get(code, []))
+        if subjects:
+            return subjects, f"fallback:{code}"
+
+    latest_any = _normalize_subject_codes(manifest.get("latest_subjects", []))
+    if latest_any:
+        source_term = str(manifest.get("latest_known_term") or "latest")
+        return latest_any, f"fallback:{source_term}"
+
+    return [], ""
 
 
 def _parse_sections_from_listing(html: str) -> List[Dict[str, Any]]:
@@ -306,7 +498,8 @@ def scrape_term_schedule(
     timeout: float,
     delay_s: float,
     max_subjects: Optional[int],
-) -> List[Dict[str, Any]]:
+    subject_manifest: Optional[Dict[str, Any]] = None,
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     sess = requests.Session()
     sess.headers.update(
         {
@@ -330,10 +523,17 @@ def scrape_term_schedule(
         timeout=timeout,
     )
 
-    subjects = _parse_subject_codes_from_search(search_html)
+    live_subjects = _parse_subject_codes_from_search(search_html)
+    live_subjects = _normalize_subject_codes(live_subjects)
+    subject_source = "live"
+    subjects = live_subjects
     if not subjects:
-        raise RuntimeError("Could not parse subject list from schedule search page.")
+        subjects, subject_source = _resolve_subjects_for_term(term, subject_manifest or {})
+    if not subjects:
+        raise RuntimeError("Could not determine subject list from schedule search page or local manifest.")
+    subject_list_was_truncated = False
     if max_subjects is not None:
+        subject_list_was_truncated = len(subjects) > max_subjects
         subjects = subjects[: max_subjects]
 
     all_sections: List[Dict[str, Any]] = []
@@ -378,7 +578,17 @@ def scrape_term_schedule(
         if delay_s:
             time.sleep(delay_s)
 
-    return all_sections
+    meta = {
+        "term": term,
+        "subjects": subjects,
+        "live_subjects": live_subjects,
+        "subject_source": subject_source,
+        "used_fallback_subjects": subject_source != "live",
+        "had_live_subjects": bool(live_subjects),
+        "subject_list_was_truncated": subject_list_was_truncated,
+        "section_count": len(all_sections),
+    }
+    return all_sections, meta
 
 
 def parse_saved_listing_files(files: List[Path], term: Optional[str]) -> List[Dict[str, Any]]:
@@ -395,7 +605,7 @@ def parse_saved_listing_files(files: List[Path], term: Optional[str]) -> List[Di
 
 def _is_schedule_output_path(path: Path) -> bool:
     try:
-        rel = path.resolve().relative_to((Path.cwd() / "courses" / "schedule").resolve())
+        rel = path.resolve().relative_to(SCHEDULE_DIR.resolve())
         return rel.suffix.lower() == ".jsonl"
     except Exception:
         return False
@@ -404,6 +614,65 @@ def _is_schedule_output_path(path: Path) -> bool:
 def rebuild_instructor_history() -> None:
     script_path = Path(__file__).with_name("build_course_instructor_history.py")
     subprocess.run([sys.executable, str(script_path)], check=True)
+
+
+def _write_rows_if_nonempty(path: Path, rows: List[Dict[str, Any]]) -> bool:
+    if not rows:
+        return False
+    write_jsonl(path, rows)
+    return True
+
+
+def scrape_terms_forward(
+    start_term: str,
+    *,
+    timeout: float,
+    delay_s: float,
+    max_subjects: Optional[int],
+    subject_manifest: Dict[str, Any],
+    stop_after_empty_terms: int = 2,
+) -> Tuple[List[Tuple[str, List[Dict[str, Any]], Dict[str, Any]]], Dict[str, Any]]:
+    current_term = _validate_term_code(start_term, arg_name="start term code")
+    consecutive_empty = 0
+    results: List[Tuple[str, List[Dict[str, Any]], Dict[str, Any]]] = []
+    for term in _iter_term_codes_forward(current_term):
+        print(f"[auto] Scraping term {term}...")
+        try:
+            rows, meta = scrape_term_schedule(
+                term,
+                timeout=timeout,
+                delay_s=delay_s,
+                max_subjects=max_subjects,
+                subject_manifest=subject_manifest,
+            )
+        except Exception as e:
+            print(f"Warning: failed to scrape term {term}: {e}")
+            rows = []
+            meta = {
+                "term": term,
+                "subjects": [],
+                "live_subjects": [],
+                "subject_source": "",
+                "used_fallback_subjects": False,
+                "had_live_subjects": False,
+                "section_count": 0,
+                "error": str(e),
+            }
+
+        if meta.get("had_live_subjects"):
+            _record_subject_manifest_entry(subject_manifest, term, meta.get("live_subjects", []))
+        elif rows and not meta.get("subject_list_was_truncated"):
+            _record_subject_manifest_entry(subject_manifest, term, meta.get("subjects", []))
+
+        if rows:
+            consecutive_empty = 0
+            results.append((term, rows, meta))
+            continue
+
+        consecutive_empty += 1
+        if consecutive_empty >= max(1, int(stop_after_empty_terms)):
+            break
+    return results, subject_manifest
 
 
 def main() -> None:
@@ -432,6 +701,12 @@ def main() -> None:
     parser.add_argument("--timeout", type=float, default=30.0, help="HTTP timeout seconds.")
     parser.add_argument("--delay", type=float, default=0.5, help="Delay between subject requests (seconds).")
     parser.add_argument("--max-subjects", type=int, default=0, help="Limit subjects for testing (0 = no limit).")
+    parser.add_argument(
+        "--future-stop-after",
+        type=int,
+        default=2,
+        help="When auto-probing from the current term onward, stop after this many consecutive empty/unavailable terms.",
+    )
     parser.add_argument(
         "--html",
         nargs="*",
@@ -475,20 +750,57 @@ def main() -> None:
         if not terms_to_scrape:
             raise RuntimeError("Missing term code(s).")
 
-    if args.out and len(terms_to_scrape) != 1:
+    auto_forward_mode = not args.html and not term and not terms_arg and not from_term
+
+    if args.out and (len(terms_to_scrape) != 1 or auto_forward_mode):
         raise RuntimeError("--out can only be used when scraping exactly one term.")
 
     written_paths: List[Path] = []
-    for idx, resolved_term in enumerate(terms_to_scrape, start=1):
-        if args.html:
-            rows = parsed_rows
-        else:
-            print(f"[{idx}/{len(terms_to_scrape)}] Scraping term {resolved_term}...")
-            rows = scrape_term_schedule(resolved_term, timeout=args.timeout, delay_s=args.delay, max_subjects=max_subjects)
-        out_path = Path(args.out) if args.out else Path("courses") / "schedule" / f"{resolved_term}.jsonl"
-        write_jsonl(out_path, rows)
-        written_paths.append(out_path)
-        print(f"Wrote {len(rows)} sections to {out_path}")
+    subject_manifest = _load_subject_manifest()
+
+    if auto_forward_mode:
+        scraped, subject_manifest = scrape_terms_forward(
+            terms_to_scrape[0],
+            timeout=args.timeout,
+            delay_s=args.delay,
+            max_subjects=max_subjects,
+            subject_manifest=subject_manifest,
+            stop_after_empty_terms=args.future_stop_after,
+        )
+        for resolved_term, rows, meta in scraped:
+            out_path = SCHEDULE_DIR / f"{resolved_term}.jsonl"
+            if _write_rows_if_nonempty(out_path, rows):
+                written_paths.append(out_path)
+                print(
+                    f"Wrote {len(rows)} sections to {out_path}"
+                    + (f" [{meta.get('subject_source')} subjects]" if meta.get("subject_source") else "")
+                )
+    else:
+        for idx, resolved_term in enumerate(terms_to_scrape, start=1):
+            if args.html:
+                rows = parsed_rows
+                meta = None
+            else:
+                print(f"[{idx}/{len(terms_to_scrape)}] Scraping term {resolved_term}...")
+                rows, meta = scrape_term_schedule(
+                    resolved_term,
+                    timeout=args.timeout,
+                    delay_s=args.delay,
+                    max_subjects=max_subjects,
+                    subject_manifest=subject_manifest,
+                )
+                if meta and meta.get("had_live_subjects"):
+                    _record_subject_manifest_entry(subject_manifest, resolved_term, meta.get("live_subjects", []))
+                elif meta and rows and not meta.get("subject_list_was_truncated"):
+                    _record_subject_manifest_entry(subject_manifest, resolved_term, meta.get("subjects", []))
+            out_path = Path(args.out) if args.out else SCHEDULE_DIR / f"{resolved_term}.jsonl"
+            if _write_rows_if_nonempty(out_path, rows):
+                written_paths.append(out_path)
+                print(f"Wrote {len(rows)} sections to {out_path}")
+            else:
+                print(f"Skipped writing empty schedule output for {resolved_term}")
+
+    _save_subject_manifest(subject_manifest)
 
     should_rebuild_history = (
         not args.skip_instructor_history and any(_is_schedule_output_path(path) for path in written_paths)
