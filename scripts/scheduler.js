@@ -373,7 +373,7 @@
           const it = listItems[i] || {};
           const btn = document.createElement('button');
           btn.type = 'button';
-          btn.className = 'scheduler-picker-option';
+          btn.className = 'scheduler-picker-option' + (it.className ? ' ' + String(it.className) : '');
           btn.innerHTML =
             `<div class="scheduler-picker-option-title">${escapeHtml(it.label || '')}</div>` +
             (it.subLabel ? `<div class="scheduler-picker-option-meta">${escapeHtml(it.subLabel || '')}</div>` : '');
@@ -2903,6 +2903,30 @@
       return occ;
     };
 
+    const sectionAvailabilityClasses = (courseId, sec, occForAvailability) => {
+      const classes = [];
+      try {
+        const cid = normalizeCourseId(courseId);
+        const crn = String(sec && sec.crn ? sec.crn : '').trim();
+        const isSelected = !!(cid && crn && selected[cid] && String(selected[cid].crn || '') === crn);
+        if (isSelected) {
+          classes.push('is-selected');
+          return classes;
+        }
+        if (shouldHighlightAvailability()) {
+          const intervals = getSectionIntervals(sec);
+          const conflict = intervals.some((it) => countIntervalOverlaps(it, (occForAvailability && occForAvailability[it.dayKey]) || []) > 0);
+          classes.push(conflict ? 'is-available-conflict' : 'is-available');
+        }
+        if (Array.isArray(blocked) && blocked.length && shouldShowBlockedCourses()) {
+          const blockedByDay = getBlockedByDay();
+          const blockedHit = getSectionIntervals(sec).some((it) => countIntervalOverlaps(it, blockedByDay[it.dayKey] || []) > 0);
+          if (blockedHit) classes.push('is-blocked-hours');
+        }
+      } catch (_) {}
+      return classes;
+    };
+
     const getRequiredBundleCourseIds = (idx, baseCourseId) => {
       const start = normalizeCourseId(baseCourseId);
       if (!start || !idx) return [];
@@ -3021,7 +3045,7 @@
       } catch (_) {}
     };
 
-    const renderPreviewForCourse = (idx, baseCourseId) => {
+    const renderPreviewForCourse = (idx, baseCourseId, forcedSection) => {
       clearPreviewBlocks();
       try {
         if (!idx || !baseCourseId) return;
@@ -3034,16 +3058,26 @@
           if (!(takenBeforeCurrentSet instanceof Set)) takenBeforeCurrentSet = computeTakenBeforeCurrentTermSet();
           if (takenBeforeCurrentSet instanceof Set && takenBeforeCurrentSet.has(cid)) return;
         } catch (_) {}
-        if (selected[cid]) return;
+        if (selected[cid] && !forcedSection) return;
 
         const bundle = getRequiredBundleCourseIds(idx, cid);
         if (!bundle.length) return;
 
         const baseOcc = getOccupiedByDayFromSelected(idx, { includeBlocked: true });
+        if (forcedSection) {
+          try {
+            Object.keys(baseOcc || {}).forEach((dayKey) => {
+              baseOcc[dayKey] = (baseOcc[dayKey] || []).filter(it => normalizeCourseId(it && it.course_id) !== cid);
+            });
+          } catch (_) {}
+        }
         const best = pickBestBundleSections(idx, bundle, baseOcc);
         if (!best || !best.picked) return;
 
         const picked = best.picked;
+        if (forcedSection && forcedSection.crn) {
+          picked[cid] = forcedSection;
+        }
         for (let i = 0; i < bundle.length; i++) {
           const courseId = bundle[i];
           const entry = idx.get(courseId);
@@ -3076,6 +3110,8 @@
 
     let hoverSelectedCourseId = '';
     let hoverResultCourseId = '';
+    let hoverResultSection = null;
+    const expandedResultSections = new Set();
 
     const computeScore = (courseId) => {
       try {
@@ -4179,6 +4215,56 @@
             }
           })();
 
+          const renderInlineSectionsForEntry = (courseId, entry) => {
+            const cid = normalizeCourseId(courseId);
+            const sections = Array.isArray(entry && entry.sections) ? entry.sections.slice() : [];
+            sections.sort((a, b) => {
+              const aL = /lec/i.test(a.component || '') ? 0 : 1;
+              const bL = /lec/i.test(b.component || '') ? 0 : 1;
+              if (aL !== bL) return aL - bL;
+              const ac = String(a.component || '').localeCompare(String(b.component || ''));
+              if (ac) return ac;
+              return String(a.section || '').localeCompare(String(b.section || ''));
+            });
+            const groups = new Map();
+            sections.forEach((sec) => {
+              const component = String(sec && sec.component ? sec.component : 'Other').trim() || 'Other';
+              if (!groups.has(component)) groups.set(component, []);
+              groups.get(component).push(sec);
+            });
+            const groupHtml = Array.from(groups.entries()).map(([component, list]) => {
+              const rows = list.map((sec) => {
+                const crn = sec && sec.crn ? String(sec.crn) : '';
+                const sectionLabel = sec && sec.section ? String(sec.section) : '';
+                const meetingSummary = sectionMeetingPreview(sec, 3);
+                const instr = sectionInstructorPreview(sec);
+                const meta = [meetingSummary, instr ? `Instructor: ${instr}` : ''].filter(Boolean).join(' — ');
+                const isSelected = !!(selected[cid] && String(selected[cid].crn || '') === crn);
+                const rowClasses = ['scheduler-inline-section-row', ...sectionAvailabilityClasses(cid, sec, occForAvailability)];
+                return (
+                  `<div class="${rowClasses.join(' ')}" data-course="${escapeHtml(cid)}" data-crn="${escapeHtml(crn)}" tabindex="0">` +
+                  `<div class="scheduler-inline-section-main">` +
+                  `<div class="scheduler-inline-section-title">${escapeHtml(cid)}${sectionLabel ? `-${escapeHtml(sectionLabel)}` : ''}${crn ? ` <span class="muted">(CRN ${escapeHtml(crn)})</span>` : ''}${isSelected ? ' <span class="scheduler-details-badge">Selected</span>' : ''}</div>` +
+                  (meta ? `<div class="scheduler-inline-section-meta">${escapeHtml(meta)}</div>` : '') +
+                  `</div>` +
+                  `<div class="scheduler-inline-section-actions">` +
+                  `<button class="btn btn-secondary btn-sm scheduler-section-pick" type="button" data-course="${escapeHtml(cid)}" data-crn="${escapeHtml(crn)}">${isSelected ? 'Selected' : 'Pick'}</button>` +
+                  `</div>` +
+                  `</div>`
+                );
+              }).join('');
+              return (
+                `<div class="scheduler-inline-section-group">` +
+                `<div class="scheduler-inline-section-group-title">${escapeHtml(component)} (${list.length})</div>` +
+                rows +
+                `</div>`
+              );
+            }).join('');
+            return groupHtml
+              ? `<div class="scheduler-inline-sections">${groupHtml}</div>`
+              : `<div class="scheduler-inline-sections"><div class="scheduler-muted">No sections listed.</div></div>`;
+          };
+
           const coreqHtml = coreqs.length
             ? (
               `<div class="scheduler-course-coreqs">` +
@@ -4191,18 +4277,29 @@
                 const meta = sel ? `${cid}${secLabel}${comp ? ` • ${escapeHtml(comp)}` : ''}` : cid;
                 const missing = (Array.isArray(missingByCourse[e.course_id]) ? missingByCourse[e.course_id] : []).includes(cid);
                 const btnText = sel ? 'Change' : 'Pick';
+                const expanded = expandedResultSections.has(cid);
+                const entry = scheduleIndex.get(cid);
                 return (
                   `<div class="scheduler-coreq-row${missing ? ' is-missing' : ''}">` +
                   `<div class="scheduler-coreq-label">${missing ? '<span class="scheduler-coreq-badge">Required</span>' : ''}${escapeHtml(meta)}</div>` +
                   `<div class="scheduler-coreq-actions">` +
                   `<button class="btn btn-secondary btn-sm scheduler-details" type="button" data-course="${escapeHtml(cid)}">Details</button>` +
+                  `<button class="btn btn-secondary btn-sm scheduler-sections-toggle${expanded ? ' is-expanded' : ''}" type="button" data-course="${escapeHtml(cid)}" aria-expanded="${expanded ? 'true' : 'false'}" title="${expanded ? 'Hide sections' : 'Show sections'}" aria-label="${expanded ? 'Hide sections' : 'Show sections'}">` +
+                  `<i class="fa-solid fa-list-ul" aria-hidden="true"></i>` +
+                  (entry && Array.isArray(entry.sections) ? `<span class="scheduler-section-count">${entry.sections.length}</span>` : '') +
+                  `</button>` +
                   `<button class="btn btn-secondary btn-sm scheduler-pick" type="button" data-course="${escapeHtml(cid)}">${btnText}</button>` +
                   `</div>` +
+                  (expanded && entry ? renderInlineSectionsForEntry(cid, entry) : '') +
                   `</div>`
                 );
               }).join('') +
               `</div>`
             )
+            : '';
+          const sectionsExpanded = expandedResultSections.has(normalizeCourseId(e.course_id));
+          const inlineSectionsHtml = sectionsExpanded
+            ? renderInlineSectionsForEntry(e.course_id, e)
             : '';
           return (
             (() => {
@@ -4281,8 +4378,13 @@
               : '') +
             `<div class="scheduler-course-actions">` +
             `<button class="btn btn-secondary btn-sm scheduler-details" type="button" data-course="${escapeHtml(e.course_id)}">Details</button>` +
+            `<button class="btn btn-secondary btn-sm scheduler-sections-toggle${sectionsExpanded ? ' is-expanded' : ''}" type="button" data-course="${escapeHtml(e.course_id)}" aria-expanded="${sectionsExpanded ? 'true' : 'false'}" title="${sectionsExpanded ? 'Hide sections' : 'Show sections'}" aria-label="${sectionsExpanded ? 'Hide sections' : 'Show sections'}">` +
+            `<i class="fa-solid fa-list-ul" aria-hidden="true"></i>` +
+            (Array.isArray(e.sections) ? `<span class="scheduler-section-count">${e.sections.length}</span>` : '') +
+            `</button>` +
             `<button class="btn btn-secondary btn-sm scheduler-pick" type="button" data-course="${escapeHtml(e.course_id)}">${already ? 'Change section' : 'Pick section'}</button>` +
             `</div>` +
+            inlineSectionsHtml +
             coreqHtml +
             `</div>`
               );
@@ -4312,6 +4414,7 @@
           });
           if (!found) {
             hoverResultCourseId = '';
+            hoverResultSection = null;
             clearPreviewBlocks();
             clearHoverHighlights();
           }
@@ -4388,7 +4491,7 @@
               const instr = sectionInstructorPreview(sec);
               const sub = [meetingSummary, instr ? `Instructor: ${instr}` : ''].filter(Boolean).join(' — ');
               const label = `${cid}${sec.section ? `-${sec.section}` : ''}${sec.component ? ` • ${sec.component}` : ''}${sec.crn ? ` (CRN ${sec.crn})` : ''}`;
-              return { action: 'pick', label, subLabel: sub, value: { course_id: cid, crn: sec.crn } };
+              return { action: 'pick', label, subLabel: sub, value: { course_id: cid, crn: sec.crn }, className: sectionAvailabilityClasses(cid, sec, getOccupiedByDayFromSelected(scheduleIndex, { includeBlocked: true })).join(' ') };
             }),
             buttons: [{ action: 'cancel', label: 'Skip', variant: 'secondary' }],
           });
@@ -4425,7 +4528,7 @@
           const instr = sectionInstructorPreview(sec);
           const sub = [meetingSummary, instr ? `Instructor: ${instr}` : ''].filter(Boolean).join(' — ');
           const label = `${courseId}${sec.section ? `-${sec.section}` : ''}${sec.component ? ` • ${sec.component}` : ''}${sec.crn ? ` (CRN ${sec.crn})` : ''}`;
-          return { action: 'pick', label, subLabel: sub, value: { course_id: courseId, crn: sec.crn } };
+          return { action: 'pick', label, subLabel: sub, value: { course_id: courseId, crn: sec.crn }, className: sectionAvailabilityClasses(courseId, sec, getOccupiedByDayFromSelected(scheduleIndex, { includeBlocked: true })).join(' ') };
         }),
         buttons: [{ action: 'cancel', label: 'Cancel', variant: 'secondary' }],
       });
@@ -4434,6 +4537,23 @@
       selected[courseId] = { course_id: courseId, crn: String(res.value.crn || '') };
       saveSchedulerState(termCode, { selected });
       await ensureCoreqsSelected(scheduleIndex, courseId);
+      await recomputeMissingCoreqs();
+      renderSelected();
+      renderGrid(scheduleIndex);
+      try { renderResults(scheduleIndex, lastQuery); } catch (_) {}
+    };
+
+    const pickSpecificSection = async (scheduleIndex, courseId, crn) => {
+      const cid = normalizeCourseId(courseId);
+      const crnText = String(crn || '').trim();
+      if (!scheduleIndex || !cid || !crnText) return;
+      const entry = scheduleIndex.get(cid);
+      if (!entry || !Array.isArray(entry.sections)) return;
+      const section = entry.sections.find(sec => String(sec && sec.crn ? sec.crn : '') === crnText) || null;
+      if (!section) return;
+      selected[cid] = { course_id: cid, crn: crnText };
+      saveSchedulerState(termCode, { selected });
+      await ensureCoreqsSelected(scheduleIndex, cid);
       await recomputeMissingCoreqs();
       renderSelected();
       renderGrid(scheduleIndex);
@@ -4834,6 +4954,32 @@
     });
 
     resultsEl.addEventListener('click', async (e) => {
+      const toggleSections = e.target && e.target.closest ? e.target.closest('.scheduler-sections-toggle') : null;
+      if (toggleSections) {
+        const courseId = normalizeCourseId(toggleSections.getAttribute('data-course') || '');
+        if (!courseId) return;
+        if (expandedResultSections.has(courseId)) expandedResultSections.delete(courseId);
+        else expandedResultSections.add(courseId);
+        try {
+          const idx = scheduleIndex || await loadTermScheduleIndex(termCode);
+          if (idx) {
+            scheduleIndex = idx;
+            renderResults(idx, lastQuery);
+          }
+        } catch (_) {}
+        return;
+      }
+      const sectionPick = e.target && e.target.closest ? e.target.closest('.scheduler-section-pick') : null;
+      if (sectionPick) {
+        const courseId = normalizeCourseId(sectionPick.getAttribute('data-course') || '');
+        const crn = String(sectionPick.getAttribute('data-crn') || '').trim();
+        if (!courseId || !crn) return;
+        const idx = await loadTermScheduleIndex(termCode);
+        if (!idx) return;
+        scheduleIndex = idx;
+        await pickSpecificSection(idx, courseId, crn);
+        return;
+      }
       const btn = e.target && e.target.closest ? e.target.closest('.scheduler-pick') : null;
       const details = e.target && e.target.closest ? e.target.closest('.scheduler-details') : null;
       if (details) {
@@ -5120,12 +5266,33 @@
     if (resultsEl) {
       resultsEl.addEventListener('mouseover', (e) => {
         if (!shouldHoverPreview()) return;
+        const sectionRow = e.target && e.target.closest ? e.target.closest('.scheduler-inline-section-row') : null;
+        if (sectionRow) {
+          const courseId = normalizeCourseId(sectionRow.getAttribute('data-course') || '');
+          const crn = String(sectionRow.getAttribute('data-crn') || '').trim();
+          if (!courseId || !crn) return;
+          const key = `${courseId}:${crn}`;
+          if (hoverResultSection === key) return;
+          hoverResultSection = key;
+          hoverResultCourseId = courseId;
+          hoverSelectedCourseId = '';
+          clearHoverHighlights();
+          try {
+            const entry = scheduleIndex ? scheduleIndex.get(courseId) : null;
+            const section = entry && Array.isArray(entry.sections)
+              ? (entry.sections.find(sec => String(sec && sec.crn ? sec.crn : '') === crn) || null)
+              : null;
+            if (scheduleIndex && section) renderPreviewForCourse(scheduleIndex, courseId, section);
+          } catch (_) {}
+          return;
+        }
         const card = e.target && e.target.closest ? e.target.closest('.scheduler-course') : null;
         if (!card) return;
         const courseId = normalizeCourseId(card.getAttribute('data-course') || '');
         if (!courseId) return;
-        if (courseId === hoverResultCourseId) return;
+        if (courseId === hoverResultCourseId && !hoverResultSection) return;
         hoverResultCourseId = courseId;
+        hoverResultSection = null;
         hoverSelectedCourseId = '';
         clearHoverHighlights();
         try {
@@ -5142,6 +5309,7 @@
       });
       resultsEl.addEventListener('mouseleave', () => {
         hoverResultCourseId = '';
+        hoverResultSection = null;
         clearPreviewBlocks();
         clearHoverHighlights();
       });

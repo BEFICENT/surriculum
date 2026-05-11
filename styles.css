@@ -2321,6 +2321,25 @@ html, body {
     border-color: var(--border-hover);
 }
 
+.scheduler-picker-option.is-selected {
+    background: color-mix(in srgb, var(--primary) 10%, var(--bg-card));
+}
+
+.scheduler-picker-option.is-available {
+    border-left: 4px solid rgba(34, 197, 94, 0.65);
+    background: color-mix(in srgb, rgba(34, 197, 94, 0.12) 35%, var(--bg-card));
+}
+
+.scheduler-picker-option.is-available-conflict {
+    border-left: 4px solid rgba(245, 158, 11, 0.75);
+    background: color-mix(in srgb, rgba(245, 158, 11, 0.14) 35%, var(--bg-card));
+}
+
+.scheduler-picker-option.is-blocked-hours {
+    border-left: 4px solid rgba(239, 68, 68, 0.8);
+    background: color-mix(in srgb, rgba(239, 68, 68, 0.13) 35%, var(--bg-card));
+}
+
 .scheduler-picker-option-title {
     font-weight: 700;
     font-size: 0.9rem;
@@ -3177,6 +3196,25 @@ html, body {
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+    flex-wrap: wrap;
+}
+
+.scheduler-sections-toggle {
+    min-width: 38px;
+    padding-left: 8px;
+    padding-right: 8px;
+    gap: 4px;
+}
+
+.scheduler-sections-toggle.is-expanded {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.scheduler-section-count {
+    font-size: 0.72rem;
+    font-weight: 800;
+    line-height: 1;
 }
 
 .scheduler-course-meta {
@@ -3185,6 +3223,84 @@ html, body {
     font-size: 0.82rem;
     color: var(--text-secondary);
     line-height: 1.25;
+}
+
+.scheduler-inline-sections {
+    margin-top: 10px;
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.scheduler-inline-section-group {
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg-surface) 55%, var(--bg-card));
+}
+
+.scheduler-inline-section-group-title {
+    padding: 7px 9px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-surface);
+}
+
+.scheduler-inline-section-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    padding: 8px 9px;
+}
+
+.scheduler-inline-section-row:not(:last-child) {
+    border-bottom: 1px solid var(--border);
+}
+
+.scheduler-inline-section-row:hover,
+.scheduler-inline-section-row:focus {
+    background: color-mix(in srgb, var(--primary) 8%, transparent);
+    outline: none;
+}
+
+.scheduler-inline-section-row.is-selected {
+    background: color-mix(in srgb, var(--primary) 10%, var(--bg-card));
+}
+
+.scheduler-inline-section-row.is-available {
+    border-left: 3px solid rgba(34, 197, 94, 0.65);
+    background: color-mix(in srgb, rgba(34, 197, 94, 0.12) 35%, var(--bg-card));
+}
+
+.scheduler-inline-section-row.is-available-conflict {
+    border-left: 3px solid rgba(245, 158, 11, 0.75);
+    background: color-mix(in srgb, rgba(245, 158, 11, 0.14) 35%, var(--bg-card));
+}
+
+.scheduler-inline-section-row.is-blocked-hours {
+    border-left: 3px solid rgba(239, 68, 68, 0.8);
+    background: color-mix(in srgb, rgba(239, 68, 68, 0.13) 35%, var(--bg-card));
+}
+
+.scheduler-inline-section-title {
+    font-size: 0.82rem;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+
+.scheduler-inline-section-meta {
+    margin-top: 3px;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    line-height: 1.25;
+}
+
+.scheduler-inline-section-actions {
+    display: flex;
+    justify-content: flex-end;
 }
 
 .scheduler-results-actions {
@@ -3209,14 +3325,19 @@ html, body {
 }
 
 .scheduler-coreq-row {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    justify-content: space-between;
     gap: 10px;
     padding: 8px 10px;
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     background: color-mix(in srgb, var(--bg-card) 80%, var(--bg-surface));
+}
+
+.scheduler-coreq-row .scheduler-inline-sections {
+    grid-column: 1 / -1;
+    margin-top: 2px;
 }
 
 .scheduler-coreq-row.is-missing {
@@ -3238,6 +3359,8 @@ html, body {
     align-items: center;
     gap: 8px;
     flex-shrink: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
 }
 
 .scheduler-coreq-badge {
