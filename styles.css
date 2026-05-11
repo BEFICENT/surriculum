@@ -2155,9 +2155,34 @@ html, body {
     display: block;
 }
 
+.course-history-disclosure-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.course-history-disclosure {
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+}
+
+.course-history-disclosure-summary {
+    cursor: pointer;
+    padding: 8px 10px;
+    font-weight: 700;
+    color: var(--text-primary);
+    background: var(--bg-surface);
+}
+
+.course-history-disclosure .course-history-table {
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+}
+
 .course-history-table {
     width: 100%;
-    max-width: 720px;
+    max-width: 680px;
     min-width: 0;
     margin: 0 auto;
     font-size: 0.88rem;
@@ -2170,6 +2195,14 @@ html, body {
 .course-history-row {
     display: grid;
     grid-template-columns: minmax(140px, 180px) minmax(0, 1fr);
+}
+
+.course-history-table--sections .course-history-row {
+    grid-template-columns: minmax(96px, 132px) minmax(0, 1fr) minmax(84px, 104px);
+}
+
+.course-history-table--sections .course-history-row--group {
+    grid-template-columns: minmax(96px, 132px) minmax(0, 1fr);
 }
 
 .course-history-row:not(:last-child) {
@@ -2195,7 +2228,45 @@ html, body {
 }
 
 .course-history-cell--term {
+    align-items: center;
     justify-content: center;
+    text-align: center;
+}
+
+.course-history-cell--number {
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    justify-self: stretch;
+    display: grid;
+    place-items: center;
+    padding-left: 4px;
+    padding-right: 4px;
+}
+
+.course-history-section-rows {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.course-history-section-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(84px, 104px);
+    align-items: stretch;
+}
+
+.course-history-section-row:not(:last-child) {
+    border-bottom: 1px solid var(--border-hover);
+}
+
+.course-history-section-label {
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.course-history-instructor-line {
+    color: var(--text-secondary);
 }
 
 .course-history-cell > div + div {

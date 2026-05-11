@@ -17,6 +17,7 @@ BASE = "https://suis.sabanciuniv.edu/prod"
 DYN_SCHED_URL = f"{BASE}/bwckschd.p_disp_dyn_sched"
 PROC_TERM_URL = f"{BASE}/bwckgens.p_proc_term_date"
 SEARCH_URL = f"{BASE}/bwckschd.p_get_crse_unsec"
+DETAIL_URL = f"{BASE}/bwckschd.p_disp_detail_sched"
 SCHEDULE_DIR = Path("courses") / "schedule"
 SUBJECT_MANIFEST_PATH = Path("courses") / "schedule_subjects.json"
 
@@ -61,6 +62,14 @@ def _parse_time_range_to_minutes(time_str: str) -> Tuple[Optional[int], Optional
 
 def _norm_course_id(subj: str, numb: str) -> str:
     return f"{subj}{numb}".upper().replace(" ", "")
+
+
+def _build_detail_url(term: str, crn: str) -> str:
+    term_s = str(term or "").strip()
+    crn_s = str(crn or "").strip()
+    if not term_s or not crn_s:
+        return ""
+    return f"{DETAIL_URL}?term_in={term_s}&crn_in={crn_s}"
 
 
 def _term_sort_key(code: str) -> int:
@@ -590,6 +599,7 @@ def scrape_term_schedule(
             for r in rows:
                 r["term"] = term
                 r["subject"] = subj
+                r["source_url"] = _build_detail_url(term, r.get("crn", ""))
             all_sections.extend(rows)
         except Exception as e:
             # Avoid aborting the entire scrape due to transient server errors.
@@ -618,6 +628,7 @@ def parse_saved_listing_files(files: List[Path], term: Optional[str]) -> List[Di
         for r in rows:
             if term:
                 r["term"] = term
+                r["source_url"] = _build_detail_url(term, r.get("crn", ""))
             out.append(r)
     return out
 
@@ -633,6 +644,110 @@ def _is_schedule_output_path(path: Path) -> bool:
 def rebuild_instructor_history() -> None:
     script_path = Path(__file__).with_name("build_course_instructor_history.py")
     subprocess.run([sys.executable, str(script_path)], check=True)
+
+
+def rebuild_section_history(
+    terms: Iterable[str],
+    *,
+    refresh: bool = True,
+    crn_pairs: Optional[Iterable[Tuple[str, str]]] = None,
+) -> None:
+    requested_terms = sorted({str(term or "").strip() for term in terms if re.fullmatch(r"\d{6}", str(term or "").strip())})
+    if not requested_terms:
+        return
+    script_path = Path(__file__).with_name("build_course_section_history.py")
+    cmd = [sys.executable, str(script_path), "--terms", ",".join(requested_terms)]
+    if refresh:
+        cmd.append("--refresh")
+    if crn_pairs:
+        pairs = sorted(
+            {
+                (str(term or "").strip(), str(crn or "").strip())
+                for term, crn in crn_pairs
+                if re.fullmatch(r"\d{6}", str(term or "").strip()) and str(crn or "").strip()
+            }
+        )
+        if pairs:
+            cmd.extend(["--crns", ",".join(f"{term}:{crn}" for term, crn in pairs)])
+    subprocess.run(cmd, check=True)
+
+
+def _primary_section_signature(row: Dict[str, Any]) -> Optional[Tuple[str, str]]:
+    try:
+        crn = str(row.get("crn") or "").strip()
+        if not crn:
+            return None
+        component = str(row.get("component") or "").strip().lower()
+        if component in {"recitation", "lab", "laboratory"}:
+            return None
+        if _parse_float(row.get("credits")) <= 0:
+            return None
+        meetings = row.get("meetings") if isinstance(row.get("meetings"), list) else []
+        normalized_meetings = []
+        for meeting in meetings:
+            if not isinstance(meeting, dict):
+                continue
+            normalized_meetings.append(
+                {
+                    "time": str(meeting.get("time") or "").strip(),
+                    "days": str(meeting.get("days") or "").strip(),
+                    "where": str(meeting.get("where") or "").strip(),
+                    "date_range": str(meeting.get("date_range") or "").strip(),
+                    "instructors": str(meeting.get("instructors") or "").strip(),
+                }
+            )
+        signature = json.dumps(
+            {
+                "course_id": str(row.get("course_id") or "").strip(),
+                "section": str(row.get("section") or "").strip(),
+                "component": str(row.get("component") or "").strip(),
+                "credits": _parse_float(row.get("credits")),
+                "meetings": normalized_meetings,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        return crn, signature
+    except Exception:
+        return None
+
+
+def _primary_section_signatures(rows: Iterable[Dict[str, Any]]) -> Dict[str, str]:
+    out: Dict[str, str] = {}
+    for row in rows:
+        item = _primary_section_signature(row)
+        if not item:
+            continue
+        crn, signature = item
+        out[crn] = signature
+    return out
+
+
+def _read_schedule_jsonl(path: Path) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    if not path.exists():
+        return rows
+    for line in path.read_text(encoding="utf-8").splitlines():
+        raw = line.strip()
+        if not raw:
+            continue
+        try:
+            obj = json.loads(raw)
+        except Exception:
+            continue
+        if isinstance(obj, dict):
+            rows.append(obj)
+    return rows
+
+
+def _changed_primary_crns(old_rows: Iterable[Dict[str, Any]], new_rows: Iterable[Dict[str, Any]]) -> Set[str]:
+    old = _primary_section_signatures(old_rows)
+    new = _primary_section_signatures(new_rows)
+    changed: Set[str] = set()
+    for crn, signature in new.items():
+        if old.get(crn) != signature:
+            changed.add(crn)
+    return changed
 
 
 def _write_rows_if_nonempty(path: Path, rows: List[Dict[str, Any]]) -> bool:
@@ -737,6 +852,17 @@ def main() -> None:
         action="store_true",
         help="Skip rebuilding courses/course_instructor_history.jsonl after schedule files are written.",
     )
+    parser.add_argument(
+        "--skip-section-history",
+        action="store_true",
+        help="Skip updating courses/course_section_history.jsonl after schedule files are written.",
+    )
+    parser.add_argument(
+        "--section-history-mode",
+        choices=("delta", "full", "skip"),
+        default="delta",
+        help="How to update section seat history after schedule writes.",
+    )
     args = parser.parse_args()
 
     term = str(args.term or "").strip()
@@ -775,6 +901,7 @@ def main() -> None:
         raise RuntimeError("--out can only be used when scraping exactly one term.")
 
     written_paths: List[Path] = []
+    changed_section_crns_by_term: Dict[str, Set[str]] = {}
     subject_manifest = _load_subject_manifest()
 
     if auto_forward_mode:
@@ -788,8 +915,10 @@ def main() -> None:
         )
         for resolved_term, rows, meta in scraped:
             out_path = SCHEDULE_DIR / f"{resolved_term}.jsonl"
+            old_rows = _read_schedule_jsonl(out_path)
             if _write_rows_if_nonempty(out_path, rows):
                 written_paths.append(out_path)
+                changed_section_crns_by_term[resolved_term] = _changed_primary_crns(old_rows, rows)
                 print(
                     f"Wrote {len(rows)} sections to {out_path}"
                     + (f" [{meta.get('subject_source')} subjects]" if meta.get("subject_source") else "")
@@ -813,8 +942,11 @@ def main() -> None:
                 elif meta and rows and not meta.get("subject_list_was_truncated"):
                     _record_subject_manifest_entry(subject_manifest, resolved_term, meta.get("subjects", []))
             out_path = Path(args.out) if args.out else SCHEDULE_DIR / f"{resolved_term}.jsonl"
+            old_rows = _read_schedule_jsonl(out_path) if _is_schedule_output_path(out_path) else []
             if _write_rows_if_nonempty(out_path, rows):
                 written_paths.append(out_path)
+                if _is_schedule_output_path(out_path):
+                    changed_section_crns_by_term[resolved_term] = _changed_primary_crns(old_rows, rows)
                 print(f"Wrote {len(rows)} sections to {out_path}")
             else:
                 print(f"Skipped writing empty schedule output for {resolved_term}")
@@ -827,6 +959,24 @@ def main() -> None:
     if should_rebuild_history:
         print("Rebuilding course instructor history...")
         rebuild_instructor_history()
+
+    should_rebuild_section_history = (
+        not args.skip_section_history
+        and args.section_history_mode != "skip"
+        and any(_is_schedule_output_path(path) for path in written_paths)
+    )
+    if should_rebuild_section_history:
+        written_terms = [path.stem for path in written_paths if _is_schedule_output_path(path)]
+        print("Updating course section history...")
+        if args.section_history_mode == "full":
+            rebuild_section_history(written_terms, refresh=True)
+        else:
+            crn_pairs = [
+                (term, crn)
+                for term, crns in changed_section_crns_by_term.items()
+                for crn in sorted(crns)
+            ]
+            rebuild_section_history(written_terms, refresh=False, crn_pairs=crn_pairs)
 
 
 if __name__ == "__main__":

@@ -155,7 +155,8 @@ Schedule data files:
 
 - The scheduler reads from `courses/schedule/<TERM>.jsonl`.
 - Course details also lazily read `courses/course_instructor_history.jsonl`, which is derived from all saved schedule files.
-- Generate/update these files using `python fetch_schedule.py` (defaults to all terms from the current term onward and rebuilds instructor history automatically).
+- Course details can also read `courses/course_section_history.jsonl` for per-section instructors and seat counts.
+- Generate/update these files using `python fetch_schedule.py` (defaults to all terms from the current term onward and rebuilds derived history automatically).
 
 Mobile note:
 
@@ -196,6 +197,12 @@ Update schedule data from the current term onward:
 python fetch_schedule.py
 ```
 
+Daily schedule refreshes update section seat history in delta mode by default; use full mode when you explicitly want to refresh every current/future primary section detail page:
+
+```bash
+python fetch_schedule.py --section-history-mode full
+```
+
 Scrape one specific term (or a custom list) instead:
 
 ```bash
@@ -213,6 +220,12 @@ Rebuild instructor history from already-downloaded schedule files without making
 
 ```bash
 python build_course_instructor_history.py
+```
+
+Backfill section-level seat history from already-downloaded schedule CRNs:
+
+```bash
+python build_course_section_history.py --all-terms --workers 8 --max-inflight 4
 ```
 
 Legacy JSON → JSONL migration (only needed if you still have `.json` files):

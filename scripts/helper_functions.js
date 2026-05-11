@@ -255,22 +255,62 @@ function displayTermIdentifier(term) {
     return normalized;
 }
 
-function buildCourseHistoryTableElement(rows) {
+function buildCourseHistoryTableElement(rows, options) {
     try {
         const list = Array.isArray(rows) ? rows : [];
         if (!list.length || typeof document === 'undefined') return null;
+        const opts = options && typeof options === 'object' ? options : {};
+        const splitTerms = opts.splitTerms !== false;
+        const hasSectionSeats = list.some((entry) => {
+            try {
+                return !!(
+                    entry &&
+                    (
+                        entry.showSeats ||
+                        entry.section ||
+                        entry.crn ||
+                        Object.prototype.hasOwnProperty.call(entry, 'capacity') ||
+                        Object.prototype.hasOwnProperty.call(entry, 'actual') ||
+                        Object.prototype.hasOwnProperty.call(entry, 'remaining')
+                    )
+                );
+            } catch (_) {
+                return false;
+            }
+        });
+        const seatPartText = (value) => {
+            if (value === null || typeof value === 'undefined' || value === '') return 'N/A';
+            const n = Number(value);
+            return Number.isFinite(n) ? String(n) : 'N/A';
+        };
+        const isFutureTerm = (entry) => {
+            try {
+                const code = entry && entry.termCode ? String(entry.termCode) : normalizeTermIdentifier(entry && entry.term ? entry.term : '');
+                const current = (typeof window !== 'undefined' && window.currentTermCode) ? String(window.currentTermCode) : '';
+                return /^\d{6}$/.test(code) && /^\d{6}$/.test(current) && parseInt(code, 10) > parseInt(current, 10);
+            } catch (_) {
+                return false;
+            }
+        };
+        const seatsText = (entry) => {
+            const actual = isFutureTerm(entry) ? '-' : seatPartText(entry ? entry.actual : null);
+            const capacity = seatPartText(entry ? entry.capacity : null);
+            return `${actual} / ${capacity}`;
+        };
 
-        const wrap = document.createElement('div');
-        wrap.className = 'course-history-table-wrap';
+        const buildTable = (tableRows) => {
+            const wrap = document.createElement('div');
+            wrap.className = 'course-history-table-wrap';
 
-        const table = document.createElement('div');
-        table.className = 'course-history-table';
-        table.setAttribute('role', 'table');
-        table.setAttribute('aria-label', 'Offered terms and instructors');
+            const table = document.createElement('div');
+            table.className = 'course-history-table' + (hasSectionSeats ? ' course-history-table--sections' : '');
+            table.setAttribute('role', 'table');
+            table.setAttribute('aria-label', hasSectionSeats ? 'Offered terms, sections, instructors, and seats' : 'Offered terms and instructors');
 
-        const head = document.createElement('div');
-        head.className = 'course-history-row course-history-row--head';
-        head.setAttribute('role', 'row');
+            const head = document.createElement('div');
+            head.className = 'course-history-row course-history-row--head';
+            if (hasSectionSeats) head.classList.add('course-history-row--group');
+            head.setAttribute('role', 'row');
 
         const headTerm = document.createElement('div');
         headTerm.className = 'course-history-cell course-history-cell--term';
@@ -280,30 +320,51 @@ function buildCourseHistoryTableElement(rows) {
         const headInstructor = document.createElement('div');
         headInstructor.className = 'course-history-cell';
         headInstructor.setAttribute('role', 'columnheader');
-        headInstructor.textContent = 'Instructor(s)';
+        headInstructor.textContent = hasSectionSeats ? 'Section / Instructor(s)' : 'Instructor(s)';
 
         head.appendChild(headTerm);
-        head.appendChild(headInstructor);
-        table.appendChild(head);
+        if (hasSectionSeats) {
+            const headNested = document.createElement('div');
+            headNested.className = 'course-history-section-rows';
+            const headSectionRow = document.createElement('div');
+            headSectionRow.className = 'course-history-section-row';
+            headSectionRow.appendChild(headInstructor);
 
-        list.forEach((entry) => {
-            const row = document.createElement('div');
-            row.className = 'course-history-row';
-            row.setAttribute('role', 'row');
+            const cell = document.createElement('div');
+            cell.className = 'course-history-cell course-history-cell--number';
+            cell.setAttribute('role', 'columnheader');
+            cell.title = 'Actual / Capacity';
+            cell.setAttribute('aria-label', 'Actual / Capacity');
+            cell.textContent = 'A/C';
+            headSectionRow.appendChild(cell);
+            headNested.appendChild(headSectionRow);
+            head.appendChild(headNested);
+        } else {
+            head.appendChild(headInstructor);
+        }
+            table.appendChild(head);
 
-            const termCell = document.createElement('div');
-            termCell.className = 'course-history-cell course-history-cell--term';
-            termCell.setAttribute('role', 'cell');
-            termCell.textContent = entry && entry.term ? String(entry.term) : 'Unknown term';
-
-            const instructorCell = document.createElement('div');
+        const appendInstructorContent = (instructorCell, entry) => {
             instructorCell.className = 'course-history-cell';
             instructorCell.setAttribute('role', 'cell');
+
+            if (hasSectionSeats) {
+                const sectionLine = document.createElement('div');
+                sectionLine.className = 'course-history-section-label';
+                const section = entry && entry.section ? String(entry.section) : '';
+                const crn = entry && entry.crn ? String(entry.crn) : '';
+                const labelParts = [];
+                if (section) labelParts.push(`Section ${section}`);
+                if (crn) labelParts.push(`CRN ${crn}`);
+                sectionLine.textContent = labelParts.join(' · ') || (entry && entry.summaryOnly ? 'Term summary' : 'Section not available');
+                instructorCell.appendChild(sectionLine);
+            }
 
             const instructors = entry && Array.isArray(entry.instructors) ? entry.instructors : [];
             if (instructors.length) {
                 instructors.forEach((name) => {
                     const line = document.createElement('div');
+                    if (hasSectionSeats) line.className = 'course-history-instructor-line';
                     line.textContent = String(name || '');
                     instructorCell.appendChild(line);
                 });
@@ -313,14 +374,107 @@ function buildCourseHistoryTableElement(rows) {
                 muted.textContent = 'Not available';
                 instructorCell.appendChild(muted);
             }
+        };
 
-            row.appendChild(termCell);
-            row.appendChild(instructorCell);
-            table.appendChild(row);
-        });
+            if (hasSectionSeats) {
+            const groups = [];
+            tableRows.forEach((entry) => {
+                const termKey = entry && entry.termCode ? String(entry.termCode) : String(entry && entry.term ? entry.term : '');
+                const last = groups.length ? groups[groups.length - 1] : null;
+                if (last && last.termKey === termKey) {
+                    last.items.push(entry);
+                } else {
+                    groups.push({ termKey, termLabel: entry && entry.term ? String(entry.term) : 'Unknown term', items: [entry] });
+                }
+            });
 
-        wrap.appendChild(table);
-        return wrap;
+            groups.forEach((group) => {
+                const row = document.createElement('div');
+                row.className = 'course-history-row course-history-row--group';
+                row.setAttribute('role', 'rowgroup');
+
+                const termCell = document.createElement('div');
+                termCell.className = 'course-history-cell course-history-cell--term';
+                termCell.setAttribute('role', 'cell');
+                termCell.textContent = group.termLabel || 'Unknown term';
+                row.appendChild(termCell);
+
+                const sectionRows = document.createElement('div');
+                sectionRows.className = 'course-history-section-rows';
+
+                group.items.forEach((entry) => {
+                    const sectionRow = document.createElement('div');
+                    sectionRow.className = 'course-history-section-row';
+                    sectionRow.setAttribute('role', 'row');
+
+                    const instructorCell = document.createElement('div');
+                    appendInstructorContent(instructorCell, entry);
+
+                    const seatCell = document.createElement('div');
+                    seatCell.className = 'course-history-cell course-history-cell--number';
+                    seatCell.setAttribute('role', 'cell');
+                    seatCell.textContent = seatsText(entry || {});
+
+                    sectionRow.appendChild(instructorCell);
+                    sectionRow.appendChild(seatCell);
+                    sectionRows.appendChild(sectionRow);
+                });
+
+                row.appendChild(sectionRows);
+                table.appendChild(row);
+            });
+            } else {
+            tableRows.forEach((entry) => {
+                const row = document.createElement('div');
+                row.className = 'course-history-row';
+                row.setAttribute('role', 'row');
+
+                const termCell = document.createElement('div');
+                termCell.className = 'course-history-cell course-history-cell--term';
+                termCell.setAttribute('role', 'cell');
+                termCell.textContent = entry && entry.term ? String(entry.term) : 'Unknown term';
+
+                const instructorCell = document.createElement('div');
+                appendInstructorContent(instructorCell, entry);
+
+                row.appendChild(termCell);
+                row.appendChild(instructorCell);
+                table.appendChild(row);
+            });
+            }
+
+            wrap.appendChild(table);
+            return wrap;
+        };
+
+        const isFutureRow = (entry) => isFutureTerm(entry);
+        if (!splitTerms) {
+            return buildTable(list);
+        }
+
+        const offeredRows = list.filter(entry => !isFutureRow(entry));
+        const futureRows = list.filter(entry => isFutureRow(entry));
+
+        const container = document.createElement('div');
+        container.className = 'course-history-disclosure-list';
+
+        const addDisclosure = (title, rowsForTable, open) => {
+            if (!rowsForTable.length) return;
+            const details = document.createElement('details');
+            details.className = 'course-history-disclosure';
+            if (open) details.open = true;
+            const summary = document.createElement('summary');
+            summary.className = 'course-history-disclosure-summary';
+            const termCount = new Set(rowsForTable.map(row => row && (row.termCode || row.term)).filter(Boolean)).size;
+            summary.textContent = `${title} (${termCount})`;
+            details.appendChild(summary);
+            details.appendChild(buildTable(rowsForTable));
+            container.appendChild(details);
+        };
+
+        addDisclosure('To Be Offered Terms', futureRows, !!opts.openFuture);
+        addDisclosure('Offered Terms', offeredRows, opts.openOffered !== false);
+        return container;
     } catch (_) {
         return null;
     }
@@ -1002,6 +1156,59 @@ function loadCourseInstructorHistoryIndex() {
 
 if (typeof window !== 'undefined') {
     window.loadCourseInstructorHistoryIndex = loadCourseInstructorHistoryIndex;
+}
+
+function loadCourseSectionHistoryIndex() {
+    try {
+        if (typeof window === 'undefined') return Promise.resolve(null);
+        if (window.__courseSectionHistoryPromise) return window.__courseSectionHistoryPromise;
+
+        window.__courseSectionHistoryPromise = (async () => {
+            const tryReadText = async () => {
+                try {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('GET', './courses/course_section_history.jsonl', false);
+                    xhr.overrideMimeType('application/json');
+                    xhr.send(null);
+                    if (xhr.status === 200 || xhr.status === 0) return xhr.responseText;
+                } catch (_) {}
+
+                try {
+                    const res = await fetch('./courses/course_section_history.jsonl');
+                    if (res.ok) return await res.text();
+                } catch (_) {}
+                return '';
+            };
+
+            const text = await tryReadText();
+            const byCode = new Map();
+            if (!text) {
+                window.courseSectionHistoryByCode = byCode;
+                return byCode;
+            }
+            const lines = text.split(/\r?\n/);
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i] && lines[i].trim();
+                if (!line) continue;
+                try {
+                    const obj = JSON.parse(line);
+                    const id = obj && obj.course_id ? String(obj.course_id) : '';
+                    if (!id) continue;
+                    if (!byCode.has(id)) byCode.set(id, obj);
+                } catch (_) {}
+            }
+            window.courseSectionHistoryByCode = byCode;
+            return byCode;
+        })();
+
+        return window.__courseSectionHistoryPromise;
+    } catch (_) {
+        return Promise.resolve(null);
+    }
+}
+
+if (typeof window !== 'undefined') {
+    window.loadCourseSectionHistoryIndex = loadCourseSectionHistoryIndex;
 }
 
 // Adjust semester totals by adding or subtracting the specified course's

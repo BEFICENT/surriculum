@@ -972,6 +972,12 @@
             courseInstructorHistoryMap = await loadInstructorHistory();
           }
         } catch (_) {}
+        try {
+          const loadSectionHistory = (typeof window !== 'undefined') ? window.loadCourseSectionHistoryIndex : null;
+          if (!courseSectionHistoryMap && typeof loadSectionHistory === 'function') {
+            courseSectionHistoryMap = await loadSectionHistory();
+          }
+        } catch (_) {}
         const pi = (() => {
           try { return coursePageInfoMap && typeof coursePageInfoMap.get === 'function' ? coursePageInfoMap.get(cid) : null; } catch (_) { return null; }
         })();
@@ -979,6 +985,15 @@
           try {
             return courseInstructorHistoryMap && typeof courseInstructorHistoryMap.get === 'function'
               ? courseInstructorHistoryMap.get(cid)
+              : null;
+          } catch (_) {
+            return null;
+          }
+        })();
+        const sectionHistoryInfo = (() => {
+          try {
+            return courseSectionHistoryMap && typeof courseSectionHistoryMap.get === 'function'
+              ? courseSectionHistoryMap.get(cid)
               : null;
           } catch (_) {
             return null;
@@ -1099,6 +1114,11 @@
               ? instructorHistoryInfo.history
               : []
           );
+          const sectionHistory = (
+            sectionHistoryInfo && Array.isArray(sectionHistoryInfo.history)
+              ? sectionHistoryInfo.history
+              : []
+          );
           const normalizeTerm = (value) => {
             try {
               const fn = (typeof window !== 'undefined') ? window.normalizeTermIdentifier : null;
@@ -1130,13 +1150,65 @@
             existing.instructors = Array.from(new Set([...(existing.instructors || []), ...instructors])).sort();
             termHistoryMap.set(term, existing);
           });
-          const termHistoryRows = Array.from(termHistoryMap.values())
-            .sort((a, b) => parseInt(String(b.term || '0'), 10) - parseInt(String(a.term || '0'), 10))
-            .slice(0, 12);
+          const sectionTerms = new Set();
+          const sectionRows = sectionHistory
+            .map((entry) => {
+              const term = normalizeTerm(entry && entry.term ? String(entry.term) : '');
+              if (!term) return null;
+              sectionTerms.add(term);
+              return {
+                term,
+                termCode: term,
+                section: entry && entry.section ? String(entry.section) : '',
+                crn: entry && entry.crn ? String(entry.crn) : '',
+                instructors: entry && Array.isArray(entry.instructors)
+                  ? entry.instructors.filter(Boolean).map(name => String(name))
+                  : [],
+                capacity: entry ? entry.capacity : null,
+                actual: entry ? entry.actual : null,
+                remaining: entry ? entry.remaining : null,
+                showSeats: true,
+              };
+            })
+            .filter(Boolean);
+          const fallbackRows = Array.from(termHistoryMap.values())
+            .filter(entry => entry && entry.term && !sectionTerms.has(entry.term))
+            .map(entry => ({
+              term: entry.term,
+              termCode: entry.term,
+              section: '',
+              crn: '',
+              instructors: entry && Array.isArray(entry.instructors)
+                ? entry.instructors.filter(Boolean).map(name => String(name))
+                : [],
+              capacity: null,
+              actual: null,
+              remaining: null,
+              showSeats: true,
+              summaryOnly: true,
+            }));
+          const limitRowsByDistinctTerms = (rows, maxTerms) => {
+            const seenTerms = new Set();
+            return rows.filter((row) => {
+              const term = row && row.term ? String(row.term) : '';
+              if (!term) return false;
+              if (!seenTerms.has(term) && seenTerms.size >= maxTerms) return false;
+              seenTerms.add(term);
+              return true;
+            });
+          };
+          const sortedTermHistoryRows = [...sectionRows, ...fallbackRows]
+            .sort((a, b) => {
+              const termDiff = parseInt(String(b.term || '0'), 10) - parseInt(String(a.term || '0'), 10);
+              if (termDiff) return termDiff;
+              return String(a.section || '').localeCompare(String(b.section || '')) || String(a.crn || '').localeCompare(String(b.crn || ''));
+            });
+          const termHistoryRows = limitRowsByDistinctTerms(sortedTermHistoryRows, 24);
+          const fullTermCount = new Set(termHistoryRows.map(row => row && row.term).filter(Boolean)).size;
           const termHistoryHtml = termHistoryRows.length
             ? (
               `<div class="scheduler-details-subsection">` +
-              `<div class="scheduler-details-subtitle">Offered Terms & Instructors (${termHistoryMap.size})</div>` +
+              `<div class="scheduler-details-subtitle">Offered Terms, Instructors & Seats (${fullTermCount || termHistoryMap.size})</div>` +
               `<div class="course-history-anchor" data-course-history-anchor="scheduler"></div>` +
               `</div>`
             )
@@ -1144,9 +1216,17 @@
 
           termHistoryRowsForDom = termHistoryRows.map(entry => ({
             term: entry && entry.term ? displayTerm(entry.term) : 'Unknown term',
+            termCode: entry && entry.termCode ? entry.termCode : (entry && entry.term ? entry.term : ''),
+            section: entry && entry.section ? entry.section : '',
+            crn: entry && entry.crn ? entry.crn : '',
             instructors: entry && Array.isArray(entry.instructors)
               ? entry.instructors.filter(Boolean).map(name => String(name))
               : [],
+            capacity: entry ? entry.capacity : null,
+            actual: entry ? entry.actual : null,
+            remaining: entry ? entry.remaining : null,
+            showSeats: true,
+            summaryOnly: !!(entry && entry.summaryOnly),
           }));
 
           const formattedDesc = formatDescription(desc);
@@ -1175,7 +1255,7 @@
             (termHistoryRows.length
               ? (
                 `<details class="scheduler-details-disclosure">` +
-                `<summary class="scheduler-details-disclosure-summary">Offered Terms & Instructors (${termHistoryMap.size})</summary>` +
+                `<summary class="scheduler-details-disclosure-summary">Offered Terms, Instructors & Seats (${fullTermCount || termHistoryMap.size})</summary>` +
                 `<div class="scheduler-details-disclosure-body">` +
                 `<div class="course-history-anchor" data-course-history-anchor="scheduler"></div>` +
                 `</div>` +
@@ -1252,7 +1332,7 @@
               const anchor = body ? body.querySelector('[data-course-history-anchor="scheduler"]') : null;
               const build = (typeof window !== 'undefined') ? window.buildCourseHistoryTableElement : null;
               if (anchor && typeof build === 'function') {
-                const node = build(termHistoryRowsForDom);
+                const node = build(termHistoryRowsForDom, { splitTerms: true, openOffered: true, openFuture: false });
                 if (node) anchor.appendChild(node);
               }
             } catch (_) {}
@@ -1893,6 +1973,7 @@
     let scheduleIndex = null;
     let coursePageInfoMap = null;
     let courseInstructorHistoryMap = null;
+    let courseSectionHistoryMap = null;
     let missingByCourse = {}; // course_id -> [missing coreq course_id]
     let orphanByCourse = {};  // course_id -> [base course_ids that require this course as coreq]
     let reverseCoreqIndex = null; // Map(coreq -> Set(baseCourse))

@@ -617,6 +617,7 @@ function dynamic_click(e, curriculum, course_data)
                 const ui = (typeof window !== 'undefined') ? window.uiModal : null;
                 const load = (typeof window !== 'undefined') ? window.loadCoursePageInfoIndex : null;
                 const loadInstructorHistory = (typeof window !== 'undefined') ? window.loadCourseInstructorHistoryIndex : null;
+                const loadSectionHistory = (typeof window !== 'undefined') ? window.loadCourseSectionHistoryIndex : null;
                 if (!ui || typeof ui.alert !== 'function') return;
                 if (typeof load !== 'function') {
                     ui.alert('Details unavailable', '<p>Course details index is not available.</p>');
@@ -626,9 +627,15 @@ function dynamic_click(e, curriculum, course_data)
                 const idx = await load();
                 const info = idx && typeof idx.get === 'function' ? idx.get(courseCode) : null;
                 const instructorHistoryIdx = (typeof loadInstructorHistory === 'function') ? await loadInstructorHistory() : null;
+                const sectionHistoryIdx = (typeof loadSectionHistory === 'function') ? await loadSectionHistory() : null;
                 const instructorHistoryInfo = (
                     instructorHistoryIdx && typeof instructorHistoryIdx.get === 'function'
                         ? instructorHistoryIdx.get(courseCode)
+                        : null
+                );
+                const sectionHistoryInfo = (
+                    sectionHistoryIdx && typeof sectionHistoryIdx.get === 'function'
+                        ? sectionHistoryIdx.get(courseCode)
                         : null
                 );
                 if (!info) {
@@ -683,6 +690,11 @@ function dynamic_click(e, curriculum, course_data)
                         ? instructorHistoryInfo.history
                         : []
                 );
+                const sectionHistory = (
+                    sectionHistoryInfo && Array.isArray(sectionHistoryInfo.history)
+                        ? sectionHistoryInfo.history
+                        : []
+                );
                 const normalizeTerm = (value) => {
                     try {
                         const fn = (typeof window !== 'undefined') ? window.normalizeTermIdentifier : null;
@@ -714,23 +726,83 @@ function dynamic_click(e, curriculum, course_data)
                     existing.instructors = Array.from(new Set([...(existing.instructors || []), ...instructors])).sort();
                     termHistoryMap.set(term, existing);
                 });
-                const termHistoryRows = Array.from(termHistoryMap.values())
-                    .sort((a, b) => parseInt(String(b.term || '0'), 10) - parseInt(String(a.term || '0'), 10))
-                    .slice(0, 12);
+                const sectionTerms = new Set();
+                const sectionRows = sectionHistory
+                    .map((entry) => {
+                        const term = normalizeTerm(entry && entry.term ? String(entry.term) : '');
+                        if (!term) return null;
+                        sectionTerms.add(term);
+                        return {
+                            term,
+                            termCode: term,
+                            section: entry && entry.section ? String(entry.section) : '',
+                            crn: entry && entry.crn ? String(entry.crn) : '',
+                            instructors: entry && Array.isArray(entry.instructors)
+                                ? entry.instructors.filter(Boolean).map(name => String(name))
+                                : [],
+                            capacity: entry ? entry.capacity : null,
+                            actual: entry ? entry.actual : null,
+                            remaining: entry ? entry.remaining : null,
+                            showSeats: true,
+                        };
+                    })
+                    .filter(Boolean);
+                const fallbackRows = Array.from(termHistoryMap.values())
+                    .filter(entry => entry && entry.term && !sectionTerms.has(entry.term))
+                    .map(entry => ({
+                        term: entry.term,
+                        termCode: entry.term,
+                        section: '',
+                        crn: '',
+                        instructors: entry && Array.isArray(entry.instructors)
+                            ? entry.instructors.filter(Boolean).map(name => String(name))
+                            : [],
+                        capacity: null,
+                        actual: null,
+                        remaining: null,
+                        showSeats: true,
+                        summaryOnly: true,
+                    }));
+                const limitRowsByDistinctTerms = (rows, maxTerms) => {
+                    const seenTerms = new Set();
+                    return rows.filter((row) => {
+                        const term = row && row.term ? String(row.term) : '';
+                        if (!term) return false;
+                        if (!seenTerms.has(term) && seenTerms.size >= maxTerms) return false;
+                        seenTerms.add(term);
+                        return true;
+                    });
+                };
+                const sortedTermHistoryRows = [...sectionRows, ...fallbackRows]
+                    .sort((a, b) => {
+                        const termDiff = parseInt(String(b.term || '0'), 10) - parseInt(String(a.term || '0'), 10);
+                        if (termDiff) return termDiff;
+                        return String(a.section || '').localeCompare(String(b.section || '')) || String(a.crn || '').localeCompare(String(b.crn || ''));
+                    });
+                const termHistoryRows = limitRowsByDistinctTerms(sortedTermHistoryRows, 24);
+                const fullTermCount = new Set(termHistoryRows.map(row => row && row.term).filter(Boolean)).size;
                 const termHistoryHtml = termHistoryRows.length
                     ? (
                         '<div class="course-details-section">' +
-                        `<h4>Offered Terms & Instructors (${termHistoryMap.size})</h4>` +
+                        `<h4>Offered Terms, Instructors & Seats (${fullTermCount || termHistoryMap.size})</h4>` +
                         '<div class="course-history-anchor" data-course-history-anchor="planner"></div>' +
                         '</div>'
                     )
-                    : '<div class="course-details-section"><h4>Offered Terms & Instructors</h4><p>Not available.</p></div>';
+                    : '<div class="course-details-section"><h4>Offered Terms, Instructors & Seats</h4><p>Not available.</p></div>';
 
                 const termHistoryRowsForDom = termHistoryRows.map(entry => ({
                     term: entry && entry.term ? displayTerm(entry.term) : 'Unknown term',
+                    termCode: entry && entry.termCode ? entry.termCode : (entry && entry.term ? entry.term : ''),
+                    section: entry && entry.section ? entry.section : '',
+                    crn: entry && entry.crn ? entry.crn : '',
                     instructors: entry && Array.isArray(entry.instructors)
                         ? entry.instructors.filter(Boolean).map(name => String(name))
                         : [],
+                    capacity: entry ? entry.capacity : null,
+                    actual: entry ? entry.actual : null,
+                    remaining: entry ? entry.remaining : null,
+                    showSeats: true,
+                    summaryOnly: !!(entry && entry.summaryOnly),
                 }));
 
                  const body =
@@ -764,7 +836,7 @@ function dynamic_click(e, curriculum, course_data)
                             const anchor = body ? body.querySelector('[data-course-history-anchor="planner"]') : null;
                             const build = (typeof window !== 'undefined') ? window.buildCourseHistoryTableElement : null;
                             if (!anchor || typeof build !== 'function') return;
-                            const node = build(termHistoryRowsForDom);
+                            const node = build(termHistoryRowsForDom, { splitTerms: true, openOffered: true, openFuture: false });
                             if (node) anchor.appendChild(node);
                         } catch (_) {}
                     },

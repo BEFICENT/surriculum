@@ -45,7 +45,11 @@ jobs:
 
       - name: Refresh schedule data (best-effort)
         run: |
-          python fetch_schedule.py
+          mode="delta"
+          if [ "$(date -u +%u)" = "1" ]; then
+            mode="full"
+          fi
+          python fetch_schedule.py --section-history-mode "$mode"
         continue-on-error: true
 
       - name: Normalize known-order JSONL files
