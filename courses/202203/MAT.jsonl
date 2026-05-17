@@ -463,6 +463,7 @@
 {"Major": "MGMT", "Code": "420", "Course_Name": "New venture and Business Plan Development", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "MGMT", "Code": "421", "Course_Name": "Technology Awareness and Implications of Technology Trends to Business Life and Processes", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "MGMT", "Code": "422", "Course_Name": "Socio-Cultural and Institutional Perspectives on the Family Business", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
+{"Major": "MGMT", "Code": "423", "Course_Name": "Entrepreneurial Finance", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "MGMT", "Code": "424", "Course_Name": "Leadership of Sustainability", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "MGMT", "Code": "425", "Course_Name": "Art Business and Entrepreneurship", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "MGMT", "Code": "426", "Course_Name": "Strategic Management of AI and Emerging Technologies", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
@@ -518,6 +519,7 @@
 {"Major": "ORG", "Code": "402", "Course_Name": "Organizational Design", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ORG", "Code": "403", "Course_Name": "Cross-Cultural Management", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ORG", "Code": "404", "Course_Name": "Creativity & Leading  Innovations", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
+{"Major": "ORG", "Code": "405", "Course_Name": "Human Resources Analytics", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ORG", "Code": "450", "Course_Name": "Selected Topics in Organizations I", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ORG", "Code": "451", "Course_Name": "Selected Topics in Organizations II", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "PHIL", "Code": "202", "Course_Name": "Problems of Philosophy", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "FASS"}
