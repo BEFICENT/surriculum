@@ -378,6 +378,19 @@ def main() -> None:
     requested = build_requested_sections(schedule_dir, terms)
     crn_filter = parse_crn_filter(args.crns)
     existing = load_existing(out_path)
+    requested_by_term: Dict[str, int] = defaultdict(int)
+    for section in requested:
+        requested_by_term[str(section.get("term") or "")] += 1
+    print(
+        "Course section history input: "
+        f"terms={','.join(sorted(terms))} "
+        f"requested_primary_sections={len(requested)} "
+        f"by_term={dict(sorted(requested_by_term.items()))} "
+        f"existing_rows={len(existing)} "
+        f"refresh={bool(args.refresh)} "
+        f"crn_filter={len(crn_filter)}",
+        flush=True,
+    )
     requested_keys = {
         (section["course_id"], section["term"], section["crn"])
         for section in requested
@@ -392,12 +405,13 @@ def main() -> None:
 
     to_fetch: List[Dict[str, Any]] = []
     updates: List[Dict[str, Any]] = []
+    has_crn_filter = bool(crn_filter)
     for section in requested:
         key = (section["course_id"], section["term"], section["crn"])
         pair = (section["term"], section["crn"])
-        explicitly_requested = not crn_filter or pair in crn_filter
+        explicitly_requested = has_crn_filter and pair in crn_filter
         if args.refresh:
-            if not explicitly_requested:
+            if has_crn_filter and not explicitly_requested:
                 continue
         elif key in existing and not explicitly_requested:
             continue
@@ -406,10 +420,25 @@ def main() -> None:
     if args.max_crns and args.max_crns > 0:
         to_fetch = to_fetch[: args.max_crns]
 
+    fetch_by_term: Dict[str, int] = defaultdict(int)
+    for section in to_fetch:
+        fetch_by_term[str(section.get("term") or "")] += 1
+    print(
+        "Course section history fetch plan: "
+        f"to_fetch={len(to_fetch)} "
+        f"by_term={dict(sorted(fetch_by_term.items()))} "
+        f"reused_existing_rows={len(existing)}",
+        flush=True,
+    )
+
     if to_fetch:
         semaphore = threading.Semaphore(max(1, int(args.max_inflight or 1)))
         local_state = threading.local()
         workers = max(1, int(args.workers or 1))
+        print(
+            f"Fetching section detail pages with workers={workers} max_inflight={max(1, int(args.max_inflight or 1))}...",
+            flush=True,
+        )
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = {
                 executor.submit(
@@ -430,14 +459,16 @@ def main() -> None:
                     if row:
                         updates.append(row)
                 except Exception as exc:
-                    print(f"Warning: failed {section['term']} CRN {section['crn']}: {exc}")
+                    print(f"Warning: failed {section['term']} CRN {section['crn']}: {exc}", flush=True)
                 if idx == 1 or idx % 50 == 0 or idx == len(futures):
-                    print(f"Fetched {idx}/{len(futures)} section detail pages...")
+                    print(f"Fetched {idx}/{len(futures)} section detail pages...", flush=True)
+    else:
+        print("No section detail pages need fetching.", flush=True)
 
     by_course = merge_rows(existing_for_merge, updates)
     write_jsonl(out_path, by_course)
-    print(f"Wrote {len(by_course)} course section histories to {out_path}")
-    print(f"Fetched {len(updates)} new/updated section rows; reused {len(existing)} existing rows.")
+    print(f"Wrote {len(by_course)} course section histories to {out_path}", flush=True)
+    print(f"Fetched {len(updates)} new/updated section rows; reused {len(existing)} existing rows.", flush=True)
 
 
 if __name__ == "__main__":

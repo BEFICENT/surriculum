@@ -3060,7 +3060,7 @@
         } catch (_) {}
         if (selected[cid] && !forcedSection) return;
 
-        const bundle = getRequiredBundleCourseIds(idx, cid);
+        const bundle = forcedSection ? [cid] : getRequiredBundleCourseIds(idx, cid);
         if (!bundle.length) return;
 
         const baseOcc = getOccupiedByDayFromSelected(idx, { includeBlocked: true });
@@ -3071,12 +3071,13 @@
             });
           } catch (_) {}
         }
-        const best = pickBestBundleSections(idx, bundle, baseOcc);
-        if (!best || !best.picked) return;
-
-        const picked = best.picked;
+        const picked = {};
         if (forcedSection && forcedSection.crn) {
           picked[cid] = forcedSection;
+        } else {
+          const best = pickBestBundleSections(idx, bundle, baseOcc);
+          if (!best || !best.picked) return;
+          Object.assign(picked, best.picked);
         }
         for (let i = 0; i < bundle.length; i++) {
           const courseId = bundle[i];

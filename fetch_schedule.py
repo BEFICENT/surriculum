@@ -654,11 +654,13 @@ def rebuild_section_history(
 ) -> None:
     requested_terms = sorted({str(term or "").strip() for term in terms if re.fullmatch(r"\d{6}", str(term or "").strip())})
     if not requested_terms:
+        print("Skipping course section history: no valid terms requested.", flush=True)
         return
     script_path = Path(__file__).with_name("build_course_section_history.py")
     cmd = [sys.executable, str(script_path), "--terms", ",".join(requested_terms)]
     if refresh:
         cmd.append("--refresh")
+    pairs: List[Tuple[str, str]] = []
     if crn_pairs:
         pairs = sorted(
             {
@@ -669,6 +671,11 @@ def rebuild_section_history(
         )
         if pairs:
             cmd.extend(["--crns", ",".join(f"{term}:{crn}" for term, crn in pairs)])
+    print(
+        "Course section history command: "
+        f"terms={','.join(requested_terms)} refresh={refresh} crn_filter={len(pairs)}",
+        flush=True,
+    )
     subprocess.run(cmd, check=True)
 
 
@@ -967,7 +974,11 @@ def main() -> None:
     )
     if should_rebuild_section_history:
         written_terms = [path.stem for path in written_paths if _is_schedule_output_path(path)]
-        print("Updating course section history...")
+        print(
+            f"Updating course section history: mode={args.section_history_mode} "
+            f"terms={','.join(written_terms)}",
+            flush=True,
+        )
         if args.section_history_mode == "full":
             rebuild_section_history(written_terms, refresh=True)
         else:
@@ -976,6 +987,10 @@ def main() -> None:
                 for term, crns in changed_section_crns_by_term.items()
                 for crn in sorted(crns)
             ]
+            print(
+                f"Changed primary section CRNs detected for delta refresh: {len(crn_pairs)}",
+                flush=True,
+            )
             rebuild_section_history(written_terms, refresh=False, crn_pairs=crn_pairs)
 
 
