@@ -75,6 +75,7 @@
 {"Major": "SOC", "Code": "425", "Course_Name": "Power, Economy, and Society", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "SPS", "Code": "374", "Course_Name": "Global Environmental Challenges", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "SPS", "Code": "384", "Course_Name": "Climate Change and Environmental Politics", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
+{"Major": "SPS", "Code": "394", "Course_Name": "Political Ecology and Society", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "SPS", "Code": "404", "Course_Name": "Six Key Global Challenges: A Historical Perspective", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "ACCA", "Code": "200", "Course_Name": "Area Electives ACC", "ECTS": "-", "Engineering": 0, "Basic_Science": 0, "SU_credit": "0", "Faculty": "", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ACC", "Code": "201", "Course_Name": "Introduction to Financial Accounting and Reporting", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "SBS"}
@@ -654,7 +655,6 @@
 {"Major": "SPA", "Code": "110", "Course_Name": "Basic Spanish I", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "SPA", "Code": "120", "Course_Name": "Basic Spanish II", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "SPS", "Code": "201", "Course_Name": "Fundamentals of Scientific Inquiry and Statistical Reasoning for Social Sciences", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "SPS", "Code": "394", "Course_Name": "Political Ecology and Society", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "TLL", "Code": "001", "Course_Name": "Communication Skills in Turkish", "ECTS": "8", "Engineering": 0, "Basic_Science": 0, "SU_credit": "0", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "TS", "Code": "320", "Course_Name": "Digital Humanities", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "TUR", "Code": "101", "Course_Name": "Basic Turkish I", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
