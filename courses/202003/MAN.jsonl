@@ -312,6 +312,7 @@
 {"Major": "EE", "Code": "312", "Course_Name": "Discrete-Time Signals and Systems", "ECTS": "6", "Engineering": 5.0, "Basic_Science": 1.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "EE", "Code": "313", "Course_Name": "Introduction to Communication Systems", "ECTS": "6", "Engineering": 5.0, "Basic_Science": 1.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "EE", "Code": "314", "Course_Name": "Digital Communications", "ECTS": "6", "Engineering": 4.0, "Basic_Science": 2.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
+{"Major": "EE", "Code": "321", "Course_Name": "Introduction to Digital Circuits", "ECTS": "7", "Engineering": 0, "Basic_Science": 0, "SU_credit": "4", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "EE", "Code": "401", "Course_Name": "Very Large Scale Integrated System Design I", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "EE", "Code": "402", "Course_Name": "VLSI II: System-on-Chip (SoC) Application Specific Integrated Circuits (ASIC) built on RISC-V Architecture", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "EE", "Code": "403", "Course_Name": "Optoelectronics", "ECTS": "6", "Engineering": 4.0, "Basic_Science": 2.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
@@ -328,6 +329,8 @@
 {"Major": "EE", "Code": "415", "Course_Name": "Digital Speech and Audio Processing", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "EE", "Code": "417", "Course_Name": "Computer Vision", "ECTS": "6", "Engineering": 5.0, "Basic_Science": 1.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "EE", "Code": "419", "Course_Name": "Signal Processing Design and Implementation", "ECTS": "6", "Engineering": 4.0, "Basic_Science": 2.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
+{"Major": "EE", "Code": "423", "Course_Name": "Embedded Systems", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
+{"Major": "EE", "Code": "426", "Course_Name": "Heterogeneous Computing and System-on-Chip Design", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "EE", "Code": "440", "Course_Name": "Mixed-Signal Integrated Circuits", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "EE", "Code": "444", "Course_Name": "Optics", "ECTS": "6", "Engineering": 5.0, "Basic_Science": 1.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "EE", "Code": "473", "Course_Name": "Biomedical Instrumentation", "ECTS": "6", "Engineering": 4.0, "Basic_Science": 2.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
