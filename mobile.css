@@ -1,0 +1,129 @@
+/*
+ * mobile.css — SUrriculum mobile UI layer.
+ *
+ * FROZEN-DESKTOP RULE: every selector in this file MUST be scoped under
+ * `body.is-mobile`. Nothing here may affect the desktop build. The
+ * `is-mobile` class is toggled by mobile.js based on viewport width, and
+ * the active screen is tracked by the `data-mobile-tab` attribute on
+ * <body> (values: planner | controls).
+ *
+ * Sections are added here one at a time: shell/nav (below), then planner,
+ * controls, progress, scheduler.
+ */
+
+/* ============================================================
+ * SHELL — compact header, screen switching, bottom tab bar
+ * ============================================================ */
+
+/* Hide desktop-only chrome that the mobile shell replaces. */
+body.is-mobile .sidebar-toggle { display: none; }
+body.is-mobile .mobile-notice { display: none !important; }
+body.is-mobile .footer { display: none; }
+
+/* --- Compact header + collapsible actions across the whole mobile range
+ * (mirrors the existing <=640px behaviour, but keyed on is-mobile). --- */
+body.is-mobile .header {
+    height: 56px;
+    padding: 0 12px;
+    gap: 10px;
+}
+body.is-mobile .header-title {
+    font-size: 1.1rem;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+body.is-mobile .header-controls {
+    justify-content: flex-end;
+    gap: 8px;
+}
+body.is-mobile .header-more {
+    display: inline-flex;
+}
+body.is-mobile .header-actions {
+    display: none;
+    position: absolute;
+    top: calc(100% + 10px);
+    right: 0;
+    width: min(92vw, 420px);
+    padding: 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    z-index: 120;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+}
+body.is-mobile .header-controls.is-open .header-actions {
+    display: flex;
+}
+body.is-mobile .header-actions .btn {
+    width: 100%;
+    justify-content: center;
+}
+body.is-mobile .header-actions .plan-dropdown,
+body.is-mobile .header-actions .import-dropdown {
+    position: static;
+    width: 100%;
+    right: auto;
+    top: auto;
+    margin-top: 10px;
+}
+
+/* --- Screen switching: Planner shows the board, Controls shows the
+ * sidebar full-screen. Only one is visible at a time. --- */
+body.is-mobile[data-mobile-tab="planner"] .sidebar { display: none; }
+body.is-mobile[data-mobile-tab="planner"] .board {
+    margin-left: 0;
+    width: 100%;
+}
+
+body.is-mobile[data-mobile-tab="controls"] .board { display: none; }
+body.is-mobile[data-mobile-tab="controls"] .sidebar {
+    display: flex;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    transform: none;
+    border-right: none;
+    z-index: 6;
+}
+
+/* --- Bottom tab bar (injected by mobile.js). Hidden on desktop. --- */
+.m-nav { display: none; }
+body.is-mobile .m-nav {
+    display: flex;
+    flex-shrink: 0;
+    height: 58px;
+    background: var(--bg-card);
+    border-top: 1px solid var(--border);
+    z-index: 50;
+}
+.m-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 6px 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    font-weight: 500;
+    font-family: inherit;
+    transition: color 0.15s ease;
+}
+.m-nav-item i {
+    font-size: 1.2rem;
+    pointer-events: none;
+}
+.m-nav-item.active {
+    color: var(--primary);
+}
