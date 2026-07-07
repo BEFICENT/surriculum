@@ -509,9 +509,17 @@ body.is-mobile[data-mobile-tab="progress"] .m-progress {
 .m-progress .m-prog-detail .ms-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     cursor: pointer;
     gap: 8px;
+}
+/* Fixed-width title column so the "N courses • X/Y SU" info lines up across
+   sections regardless of the category name's length. */
+.m-progress .m-prog-detail .ms-header .ms-title {
+    flex: 0 0 100px;
+}
+.m-progress .m-prog-detail .ms-header .ms-req {
+    flex: 1 1 auto;
+    text-align: left;
 }
 .m-progress .m-prog-detail .ms-header::after {
     content: "\25BE";
