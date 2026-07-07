@@ -127,3 +127,218 @@ body.is-mobile .m-nav {
 .m-nav-item.active {
     color: var(--primary);
 }
+
+/* ============================================================
+ * PLANNER — vertical accordion of semesters
+ * ============================================================ */
+
+/* Board: horizontal column strip -> vertical scrolling stack. */
+body.is-mobile[data-mobile-tab="planner"] .board {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    overflow-x: hidden;
+    overflow-y: auto;
+    gap: 12px;
+    padding: 12px;
+}
+
+/* Each semester becomes a full-width stacked card (was a fixed-width,
+   full-height column). */
+body.is-mobile[data-mobile-tab="planner"] .container_semester {
+    flex: 0 0 auto;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+    margin: 0;
+    /* Visual-only reversal: recent terms on top. mobile.js sets --m-order
+       to the negated DOM index; the DOM order itself is never changed, so
+       drag-drop / iteration / ids are unaffected. Scoped to mobile planner
+       only, so desktop ordering is untouched. */
+    order: var(--m-order, 0);
+}
+body.is-mobile[data-mobile-tab="planner"] .add-semester-ghost {
+    flex: 0 0 auto;
+    width: 100%;
+    height: auto;
+    min-height: 56px;
+    margin: 0;
+    /* Terms are reversed (newest on top), and new terms land at the top, so
+       the "add semester" affordance belongs above the stack. */
+    order: -9999;
+}
+
+/* Header = colored credits bar + name row (both always visible). */
+body.is-mobile .subcontainer_semester {
+    padding: 10px 12px;
+    gap: 8px;
+    overflow: visible;
+    /* Content-sized (desktop uses flex:1 to fill the column height) so the
+       box encloses all courses + add-course and the credits footer lands
+       truly last. */
+    flex: 0 0 auto;
+}
+body.is-mobile .subcontainer_semester .date {
+    cursor: pointer;
+    padding: 2px 0;
+}
+body.is-mobile .container_semester .total_credit {
+    cursor: pointer;
+}
+body.is-mobile .subcontainer_semester .date p {
+    font-size: 0.95rem;
+}
+
+/* Semester reorder-by-drag is impractical on touch; hide that handle. */
+body.is-mobile .subcontainer_semester .semester_drag {
+    display: none;
+}
+
+/* Chevron affordance (injected into .icons by mobile.js). */
+.m-sem-chevron {
+    display: none;
+}
+body.is-mobile .m-sem-chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    color: var(--text-muted);
+    transition: transform 0.2s ease;
+}
+body.is-mobile .container_semester:not(.m-collapsed) .m-sem-chevron {
+    transform: rotate(180deg);
+}
+
+/* Escape desktop's fixed-height, internally-scrolling column model: each card
+   and its body size to content in normal block flow, so the course list and
+   Add-course button can't overflow their card. */
+body.is-mobile[data-mobile-tab="planner"] .container_semester,
+body.is-mobile[data-mobile-tab="planner"] .subcontainer_semester {
+    display: block;
+    height: auto;
+    overflow: visible;
+}
+body.is-mobile[data-mobile-tab="planner"] .subcontainer_semester .semester {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: none;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+}
+/* Empty semester = a slim drop area, not a large void. */
+body.is-mobile[data-mobile-tab="planner"] .subcontainer_semester .semester:empty {
+    min-height: 6px;
+}
+/* Block flow drops the flex gap, so space the header / courses / add-course.
+   Expanded only — a collapsed card is just the header row, which must stay
+   vertically centered (no trailing margin). */
+body.is-mobile[data-mobile-tab="planner"] .container_semester:not(.m-collapsed) .subcontainer_semester > * {
+    margin-bottom: 8px;
+}
+body.is-mobile[data-mobile-tab="planner"] .container_semester:not(.m-collapsed) .subcontainer_semester > *:last-child {
+    margin-bottom: 0;
+}
+
+/* Collapsed: hide the body (courses + add-course), keep the header. */
+body.is-mobile[data-mobile-tab="planner"] .container_semester.m-collapsed .semester,
+body.is-mobile[data-mobile-tab="planner"] .container_semester.m-collapsed .addCourse {
+    display: none;
+}
+
+/* --- SLIM credits variant: the bold full-width bar becomes a compact pill,
+ * with the chevron as a left-edge accordion affordance, so a collapsed
+ * semester is a single clean line. Remove this block to fall back to the
+ * bold bar. --- */
+body.is-mobile[data-mobile-tab="planner"] .container_semester {
+    position: relative;
+}
+body.is-mobile[data-mobile-tab="planner"] .container_semester .total_credit_line {
+    display: none;
+}
+
+/* Chevron: left-edge accordion affordance (pulled out of the icons row),
+ * vertically centered on the name row via the relatively-positioned .date. */
+body.is-mobile[data-mobile-tab="planner"] .subcontainer_semester .date {
+    position: relative;
+    padding-left: 26px;
+}
+body.is-mobile[data-mobile-tab="planner"] .m-sem-chevron {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+}
+body.is-mobile[data-mobile-tab="planner"] .container_semester:not(.m-collapsed) .m-sem-chevron {
+    transform: translateY(-50%) rotate(180deg);
+}
+
+/* Credits pill: only shown while collapsed, so 50% of the card centers it
+ * on the single header row. */
+body.is-mobile[data-mobile-tab="planner"] .container_semester .total_credit {
+    position: absolute;
+    top: 50%;
+    right: 12px;
+    transform: translateY(-50%);
+    width: auto;
+    padding: 0;
+    background: transparent;
+    z-index: 2;
+}
+body.is-mobile[data-mobile-tab="planner"] .container_semester .total_credit_text {
+    padding: 2px 9px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    white-space: nowrap;
+}
+body.is-mobile[data-mobile-tab="planner"] .container_semester.current-term .total_credit_text {
+    color: #fff;
+    background: var(--accent);
+    border-color: transparent;
+}
+/* Edit/delete icons only while expanded (collapsed row stays clean). */
+body.is-mobile[data-mobile-tab="planner"] .container_semester.m-collapsed .semester_date_edit,
+body.is-mobile[data-mobile-tab="planner"] .container_semester.m-collapsed .delete_semester {
+    display: none;
+}
+
+/* Credits pill stays top-right in BOTH states so the total is visible while
+   expanded too. Collapsed centers via 50% of the single-row card (rule above);
+   expanded pins it to the header row instead of the tall card's middle. */
+body.is-mobile[data-mobile-tab="planner"] .container_semester:not(.m-collapsed) .total_credit {
+    top: 11px;
+    transform: none;
+}
+
+/* Reserve room on the name row for the pill (and the icons when expanded). */
+body.is-mobile[data-mobile-tab="planner"] .subcontainer_semester .date {
+    padding-right: 108px;
+}
+
+/* The current term is signalled by its green credits pill + green card border
+   (see .current-term rules), so no separate text tag is needed — a tag here
+   made the name wrap to a second line and crowd the header. */
+
+/* Date-edit mode: the term <p> is swapped for a <select> + a .tick confirm.
+   Hide the credits pill and relax the reserved padding so the dropdown gets
+   the full row; :has() auto-reverts once editing ends. */
+body.is-mobile[data-mobile-tab="planner"] .container_semester:has(.date .select-control) .total_credit {
+    display: none;
+}
+body.is-mobile[data-mobile-tab="planner"] .subcontainer_semester .date:has(.select-control) {
+    padding-right: 12px;
+    gap: 8px;
+}
+body.is-mobile[data-mobile-tab="planner"] .date .select-control {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+body.is-mobile[data-mobile-tab="planner"] .date .tick {
+    flex-shrink: 0;
+}

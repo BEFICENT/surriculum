@@ -28,12 +28,19 @@ self.addEventListener('activate', event => {
 });
 
 // Network-first: updated files always win; fall back to cache when offline.
+// Same-origin requests bypass the HTTP cache ('no-store') so an edited file is
+// never masked by a stale browser-cached copy; the SW still keeps its own Cache
+// Storage copy for offline use.
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
+  const sameOrigin = event.request.url.startsWith(self.location.origin);
+  const networkFetch = sameOrigin
+    ? fetch(event.request, { cache: 'no-store' })
+    : fetch(event.request);
   event.respondWith(
-    fetch(event.request)
+    networkFetch
       .then(response => {
-        if (response && response.ok && event.request.url.startsWith(self.location.origin)) {
+        if (response && response.ok && sameOrigin) {
           const copy = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy)).catch(() => {});
         }

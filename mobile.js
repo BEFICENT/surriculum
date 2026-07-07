@@ -120,3 +120,77 @@
     if (document.body) initShell();
     else document.addEventListener('DOMContentLoaded', initShell);
 })();
+
+/*
+ * Mobile planner — vertical accordion of semesters.
+ *
+ * Injects a chevron affordance, collapses non-current semesters by
+ * default, and toggles a semester open/closed when its name row is
+ * tapped. All visual effects are gated on body.is-mobile in mobile.css,
+ * so adding the classes/chevron is a no-op on desktop.
+ */
+(function () {
+    'use strict';
+
+    function ensureChevron(cont) {
+        var icons = cont.querySelector('.subcontainer_semester .date .icons');
+        if (icons && !icons.querySelector('.m-sem-chevron')) {
+            var chev = document.createElement('i');
+            chev.className = 'fa-solid fa-chevron-down m-sem-chevron';
+            chev.setAttribute('aria-hidden', 'true');
+            icons.appendChild(chev);
+        }
+    }
+
+    function syncSemesters() {
+        var conts = document.querySelectorAll('.board .container_semester');
+        for (var i = 0; i < conts.length; i++) {
+            var c = conts[i];
+            ensureChevron(c);
+            // Visual-only reversal (recent terms on top). Negated DOM index;
+            // consumed by `order: var(--m-order)` in mobile.css, mobile-only.
+            c.style.setProperty('--m-order', String(-i));
+            if (!c.hasAttribute('data-m-init')) {
+                c.setAttribute('data-m-init', '1');
+                // Collapse by default unless it's the current term.
+                if (!c.classList.contains('current-term')) c.classList.add('m-collapsed');
+            }
+        }
+        // Guarantee at least one open semester when there's no current term.
+        if (conts.length && !document.querySelector('.board .container_semester:not(.m-collapsed)')) {
+            conts[0].classList.remove('m-collapsed');
+        }
+    }
+
+    function onBoardClick(e) {
+        if (!document.body.classList.contains('is-mobile')) return;
+        if (!e.target.closest) return;
+        // Leave the semester action icons (edit date / delete) to their own handlers.
+        if (e.target.closest('.semester_date_edit, .semester_drag, .delete_semester')) return;
+        // The header is the colored credits bar + the name row.
+        var header = e.target.closest('.date') || e.target.closest('.total_credit');
+        if (!header) return;
+        var cont = header.closest('.container_semester');
+        if (cont) cont.classList.toggle('m-collapsed');
+    }
+
+    function init() {
+        var board = document.querySelector('.board');
+        if (!board || board.__mPlannerInit) return;
+        board.__mPlannerInit = true;
+        syncSemesters();
+        board.addEventListener('click', onBoardClick);
+        // The board is populated asynchronously (and rebuilt on plan switch),
+        // so re-sync whenever its children change.
+        try {
+            new MutationObserver(function () { syncSemesters(); }).observe(board, { childList: true });
+        } catch (e) {}
+    }
+
+    if (document.body) {
+        init();
+        window.addEventListener('load', init);
+    } else {
+        document.addEventListener('DOMContentLoaded', init);
+    }
+})();
