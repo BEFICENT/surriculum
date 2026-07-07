@@ -149,6 +149,7 @@
                     stats.push({ label: 'CGPA (min)', value: Math.round((r.cgpa || 0) * 100) / 100, limit: r.gpaThreshold, met: !!r.gpaOk });
                 }
                 cards.push({
+                    code: minors[i],
                     title: r.title || (minors[i] + ' Minor'),
                     bar: sumNeed ? { value: sumHave, limit: sumNeed, label: 'SU credits' } : null,
                     stats: stats
@@ -161,7 +162,7 @@
     function buildProgress() {
         var screen = document.getElementById('mProgress');
         if (!screen) return;
-        var cards = [];
+        var cards = [], descriptors = [];
         var majors = readProgramSummaries();
         for (var i = 0; i < majors.length; i++) {
             var p = majors[i], su = null, rest = [];
@@ -169,8 +170,13 @@
                 if (p.stats[k].label === 'SU Credits') su = p.stats[k]; else rest.push(p.stats[k]);
             }
             cards.push({ title: p.title, bar: su ? { value: su.value, limit: su.limit, label: 'SU credits' } : null, stats: rest });
+            descriptors.push({ type: 'major', domIndex: i });
         }
-        cards = cards.concat(readMinorCards());
+        var minorCards = readMinorCards();
+        for (var mi = 0; mi < minorCards.length; mi++) {
+            cards.push(minorCards[mi]);
+            descriptors.push({ type: 'minor', code: minorCards[mi].code, minorIndex: mi });
+        }
         if (!cards.length) {
             screen.innerHTML = '<div class="m-prog-empty">Pick a program in Controls to see your progress.</div>';
             return;
@@ -200,8 +206,78 @@
         }
         screen.innerHTML =
             '<div class="m-prog-carousel' + (multi ? ' is-multi' : '') + '">' + html + '</div>' +
-            '<div class="m-prog-dots' + (multi ? '' : ' is-single') + '">' + dots + '</div>';
+            '<div class="m-prog-dots' + (multi ? '' : ' is-single') + '">' + dots + '</div>' +
+            '<div class="m-prog-detail"></div>';
+        screen._mDescriptors = descriptors;
         wireProgressCarousel(screen);
+        if (descriptors.length) loadDetailFor(descriptors[0]);
+    }
+
+    // Detail accordion: re-render the desktop detailed summary for one program,
+    // relocate its .major-summary / .minor-summary out of the modal into the
+    // Progress detail area, and make each .ms-section header collapse its list.
+    function loadDetailFor(descriptor) {
+        var area = document.querySelector('.m-prog-detail');
+        if (!area || !descriptor) return;
+        var ex = document.querySelector('.summary_modal_overlay');
+        if (ex) ex.remove();
+        var content = null;
+        try {
+            var sumBtn = document.querySelector('.summary');
+            if (sumBtn) sumBtn.click();
+            if (descriptor.type === 'major') {
+                var mcards = document.querySelectorAll('.summary_cards_row .summary_modal');
+                var card = mcards[descriptor.domIndex];
+                var db = card ? card.querySelector('.summary_detail_btn') : null;
+                if (db) { db.click(); content = document.querySelector('.summary_major_panel .major-summary'); }
+            } else {
+                var mbtns = document.querySelectorAll('.summary_minor_row button');
+                var target = mbtns[descriptor.minorIndex] || null;
+                if (target) { target.click(); content = document.querySelector('.summary_minor_panel .minor-summary'); }
+            }
+        } catch (e) {}
+        area.innerHTML = '';
+        if (content) {
+            area.appendChild(content);
+            wireAccordionSections(area);
+            wireUntakenToggles(area);
+        }
+        var cleanup = document.querySelector('.summary_modal_overlay');
+        if (cleanup) cleanup.remove();
+    }
+
+    // The desktop "Show untaken" handler is bound to the (now-discarded) panel,
+    // so re-bind fresh handlers scoped to the relocated detail area.
+    function wireUntakenToggles(area) {
+        var btns = area.querySelectorAll('.ms-untaken-toggle');
+        for (var i = 0; i < btns.length; i++) {
+            var fresh = btns[i].cloneNode(true);
+            btns[i].parentNode.replaceChild(fresh, btns[i]);
+            (function (btn) {
+                var targetId = btn.getAttribute('data-target');
+                var count = btn.getAttribute('data-count') || '';
+                btn.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    var target = targetId ? area.querySelector('[id="' + targetId + '"]') : null;
+                    if (!target) return;
+                    var hidden = target.classList.toggle('is-hidden');
+                    btn.textContent = (hidden ? 'Show untaken (' : 'Hide untaken (') + count + ')';
+                });
+            })(fresh);
+        }
+    }
+
+    function wireAccordionSections(area) {
+        var sections = area.querySelectorAll('.ms-section');
+        for (var i = 0; i < sections.length; i++) {
+            (function (sec, idx) {
+                var header = sec.querySelector('.ms-header');
+                if (!header) return;
+                if (idx > 0) sec.classList.add('m-sec-collapsed');
+                header.addEventListener('click', function () { sec.classList.toggle('m-sec-collapsed'); });
+            })(sections[i], i);
+        }
     }
 
     // Peek-carousel: cards swipe horizontally (scroll-snap); dots track the
@@ -219,9 +295,18 @@
             }
             return idx;
         }
+        var detailTimer = null, lastDetailIdx = 0;
         function syncDots() {
             var idx = activeIndex();
             for (var j = 0; j < dots.length; j++) dots[j].classList.toggle('active', j === idx);
+            if (idx !== lastDetailIdx) {
+                clearTimeout(detailTimer);
+                detailTimer = setTimeout(function () {
+                    lastDetailIdx = idx;
+                    var descs = screen._mDescriptors || [];
+                    if (descs[idx]) { try { loadDetailFor(descs[idx]); } catch (e) {} }
+                }, 180);
+            }
         }
         carousel.addEventListener('scroll', syncDots, { passive: true });
         for (var i = 0; i < dots.length; i++) {

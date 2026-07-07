@@ -495,6 +495,40 @@ body.is-mobile[data-mobile-tab="progress"] .m-progress {
     border-radius: 4px;
     background: var(--primary);
 }
+
+/* Detail accordion: the relocated .major-summary / .minor-summary, with each
+   .ms-section header toggling its course list. */
+.m-progress .m-prog-detail {
+    margin-top: 16px;
+}
+.m-progress .m-prog-detail .major-summary,
+.m-progress .m-prog-detail .minor-summary {
+    width: 100%;
+    max-width: none;
+}
+.m-progress .m-prog-detail .ms-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    gap: 8px;
+}
+.m-progress .m-prog-detail .ms-header::after {
+    content: "\25BE";
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
+}
+.m-progress .m-prog-detail .ms-section:not(.m-sec-collapsed) > .ms-header::after {
+    transform: rotate(180deg);
+}
+.m-progress .m-prog-detail .ms-section.m-sec-collapsed > .ms-subheader,
+.m-progress .m-prog-detail .ms-section.m-sec-collapsed > .ms-rules,
+.m-progress .m-prog-detail .ms-section.m-sec-collapsed > .ms-list,
+.m-progress .m-prog-detail .ms-section.m-sec-collapsed > .ms-untaken-toggle {
+    display: none;
+}
 .m-progress .m-prog-title {
     font-size: 0.95rem;
     font-weight: 600;
