@@ -342,3 +342,91 @@ body.is-mobile[data-mobile-tab="planner"] .date .select-control {
 body.is-mobile[data-mobile-tab="planner"] .date .tick {
     flex-shrink: 0;
 }
+
+/* ============================================================
+ * CONTROLS — the sidebar reorganized into mobile sections.
+ * NOTE: keyed on the fixed order of the 8 .control-group blocks in the
+ * frozen index.html (1 Programs, 2 nav-dupes, 3-6 toggles, 7 Courses,
+ * 8 Danger). If that markup ever changes, revisit these nth-child rules.
+ * ============================================================ */
+
+body.is-mobile[data-mobile-tab="controls"] .sidebar-header {
+    padding: 14px 16px;
+}
+body.is-mobile[data-mobile-tab="controls"] .sidebar-content {
+    padding: 12px 14px 28px;
+}
+
+/* Hide the nav-duplicate group (New Semester / Check Graduation / Summary /
+   Scheduler) — those live on the Planner, Progress, and Scheduler tabs. */
+body.is-mobile[data-mobile-tab="controls"] .sidebar-content > .control-group:nth-child(2) {
+    display: none;
+}
+
+/* Each group becomes a card. */
+body.is-mobile[data-mobile-tab="controls"] .control-group {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+    margin-bottom: 12px;
+}
+
+/* Section headers. */
+body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(1)::before,
+body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(3)::before,
+body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(7)::before,
+body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(8)::before {
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+}
+body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(1)::before { content: "Programs"; }
+body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(3)::before { content: "Options"; }
+body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(7)::before { content: "Courses"; }
+body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(8)::before { content: "Danger zone"; }
+
+/* Merge the four single-toggle groups (3-6) into one "Options" card. */
+body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(3),
+body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(4),
+body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(5),
+body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(6) {
+    border-radius: 0;
+    margin-bottom: 0;
+}
+body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(3),
+body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(4),
+body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(5) {
+    border-bottom: none;
+}
+body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(3) {
+    border-top-left-radius: var(--radius-md);
+    border-top-right-radius: var(--radius-md);
+}
+body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(6) {
+    border-bottom-left-radius: var(--radius-md);
+    border-bottom-right-radius: var(--radius-md);
+    margin-bottom: 12px;
+}
+
+/* Stack program + admit-term selects full-width; keep toggle rows horizontal. */
+body.is-mobile[data-mobile-tab="controls"] .control-row {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 8px;
+}
+body.is-mobile[data-mobile-tab="controls"] .control-row.toggle-row {
+    flex-direction: row;
+    align-items: center;
+}
+body.is-mobile[data-mobile-tab="controls"] .control-row .select-control {
+    width: 100%;
+    flex: none;
+}
+body.is-mobile[data-mobile-tab="controls"] .control-group .btn {
+    width: 100%;
+}
