@@ -46,6 +46,19 @@
     document.addEventListener('DOMContentLoaded', apply);
     window.addEventListener('load', apply);
 
+    // theme.js's toggle checks `document.body.className === 'light-theme'`
+    // exactly, which our added is-mobile class breaks (it becomes a no-op).
+    // Strip is-mobile in the capture phase — before theme.js's click handler
+    // (bubble) reads className — so its comparison is correct; the resulting
+    // themeChanged re-adds is-mobile synchronously, so nothing repaints.
+    document.addEventListener('click', function (e) {
+        try {
+            if (e.target && e.target.closest && e.target.closest('#themeToggle')) {
+                document.body.classList.remove('is-mobile');
+            }
+        } catch (_) {}
+    }, true);
+
     // Run as soon as the body exists.
     if (document.body) apply();
 
