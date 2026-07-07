@@ -430,3 +430,120 @@ body.is-mobile[data-mobile-tab="controls"] .control-row .select-control {
 body.is-mobile[data-mobile-tab="controls"] .control-group .btn {
     width: 100%;
 }
+
+/* ============================================================
+ * PROGRESS — merged graduation/summary screen (built by mobile.js,
+ * reusing the desktop summary computation). Phase 1: per-program
+ * overview cards (credit progress + category stats).
+ * ============================================================ */
+.m-progress { display: none; }
+body.is-mobile[data-mobile-tab="progress"] .board,
+body.is-mobile[data-mobile-tab="progress"] .sidebar {
+    display: none;
+}
+body.is-mobile[data-mobile-tab="progress"] .m-progress {
+    display: block;
+    position: absolute;
+    inset: 0;
+    overflow-y: auto;
+    padding: 14px;
+    background: var(--bg-main);
+}
+
+/* Swipe carousel: cards scroll-snap horizontally with the next one peeking;
+   pagination dots below. Degrades to a single full-width card. */
+.m-progress .m-prog-carousel {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    gap: 10px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+.m-progress .m-prog-carousel::-webkit-scrollbar { display: none; }
+.m-progress .m-prog-card {
+    flex: 0 0 100%;
+    box-sizing: border-box;
+    scroll-snap-align: start;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px;
+}
+.m-progress .m-prog-carousel.is-multi .m-prog-card {
+    flex-basis: 86%;
+}
+.m-progress .m-prog-dots {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 12px;
+}
+.m-progress .m-prog-dots.is-single { display: none; }
+.m-progress .m-prog-dot {
+    width: 7px;
+    height: 7px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: var(--border);
+    cursor: pointer;
+    transition: width 0.2s ease, background 0.2s ease;
+}
+.m-progress .m-prog-dot.active {
+    width: 18px;
+    border-radius: 4px;
+    background: var(--primary);
+}
+.m-progress .m-prog-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: var(--text-primary);
+}
+.m-progress .m-prog-barrow {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 5px;
+}
+.m-progress .m-prog-bar {
+    height: 8px;
+    background: var(--bg-surface);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 12px;
+}
+.m-progress .m-prog-fill {
+    height: 100%;
+    background: var(--primary);
+}
+.m-progress .m-prog-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+.m-progress .m-prog-stat {
+    background: var(--bg-surface);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+}
+.m-progress .m-prog-lbl {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+}
+.m-progress .m-prog-val {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.m-progress .m-prog-stat.is-met .m-prog-val {
+    color: var(--accent);
+}
+.m-progress .m-prog-empty {
+    padding: 28px 16px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}

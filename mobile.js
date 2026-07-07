@@ -73,6 +73,165 @@
         for (var i = 0; i < items.length; i++) {
             items[i].classList.toggle('active', items[i].getAttribute('data-mtab') === tab);
         }
+        if (tab === 'progress') { try { buildProgress(); } catch (e) {} }
+    }
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"]/g, function (ch) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch];
+        });
+    }
+    function fmt(n) { var r = Math.round(n * 100) / 100; return String(r); }
+
+    function buildProgressScreen() {
+        if (document.getElementById('mProgress')) return;
+        var main = document.querySelector('.main-content');
+        if (!main) return;
+        var el = document.createElement('div');
+        el.id = 'mProgress';
+        el.className = 'm-progress';
+        main.appendChild(el);
+    }
+
+    // Reuse the desktop summary computation: render it (off-screen), read the
+    // per-program stats, then remove the overlay before it can paint.
+    function readProgramSummaries() {
+        var existing = document.querySelector('.summary_modal_overlay');
+        if (existing) existing.remove();
+        var programs = [];
+        try {
+            var btn = document.querySelector('.summary');
+            if (btn) btn.click();
+            var cards = document.querySelectorAll('.summary_cards_row .summary_modal');
+            for (var i = 0; i < cards.length; i++) {
+                var card = cards[i];
+                var title = ((card.querySelector('.summary_modal_title') || {}).textContent || '').trim();
+                var stats = [];
+                var ps = card.querySelectorAll('.summary_modal_child p');
+                for (var j = 0; j < ps.length; j++) {
+                    var m = (ps[j].textContent || '').trim().match(/^(.*?):\s*([\d.]+)\s*\/\s*([\d.]+)/);
+                    if (m) stats.push({ label: m[1].trim(), value: parseFloat(m[2]), limit: parseFloat(m[3]) });
+                }
+                programs.push({ title: title, stats: stats });
+            }
+        } catch (e) {}
+        var ov = document.querySelector('.summary_modal_overlay');
+        if (ov) ov.remove();
+        return programs;
+    }
+
+    // Minors: computeMinorAllocation() and curriculum are both top-level, so we
+    // call them directly (minors aren't in the summary cards_row).
+    function readMinorCards() {
+        var cards = [];
+        try {
+            var curr = window.curriculum || (typeof curriculum !== 'undefined' ? curriculum : null);
+            var cma = window.computeMinorAllocation || (typeof computeMinorAllocation !== 'undefined' ? computeMinorAllocation : null);
+            if (!curr || !cma || !curr.minors) return cards;
+            var minors = curr.minors.filter(Boolean);
+            for (var i = 0; i < minors.length; i++) {
+                var r;
+                try { r = cma(curr, minors[i]); } catch (e) { continue; }
+                if (!r || r.error) continue;
+                var cats = (r.req && r.req.categories) || {};
+                var done = r.totals || {};
+                var stats = [], sumHave = 0, sumNeed = 0;
+                var order = ['required', 'core', 'area', 'free'];
+                for (var k = 0; k < order.length; k++) {
+                    var key = order[k];
+                    if (!cats[key] || !cats[key].minSU) continue;
+                    var need = cats[key].minSU;
+                    var have = (done[key] && done[key].credits) || 0;
+                    sumHave += have; sumNeed += need;
+                    stats.push({ label: key.charAt(0).toUpperCase() + key.slice(1), value: have, limit: need });
+                }
+                if (r.gpaThreshold) {
+                    stats.push({ label: 'CGPA (min)', value: Math.round((r.cgpa || 0) * 100) / 100, limit: r.gpaThreshold, met: !!r.gpaOk });
+                }
+                cards.push({
+                    title: r.title || (minors[i] + ' Minor'),
+                    bar: sumNeed ? { value: sumHave, limit: sumNeed, label: 'SU credits' } : null,
+                    stats: stats
+                });
+            }
+        } catch (e) {}
+        return cards;
+    }
+
+    function buildProgress() {
+        var screen = document.getElementById('mProgress');
+        if (!screen) return;
+        var cards = [];
+        var majors = readProgramSummaries();
+        for (var i = 0; i < majors.length; i++) {
+            var p = majors[i], su = null, rest = [];
+            for (var k = 0; k < p.stats.length; k++) {
+                if (p.stats[k].label === 'SU Credits') su = p.stats[k]; else rest.push(p.stats[k]);
+            }
+            cards.push({ title: p.title, bar: su ? { value: su.value, limit: su.limit, label: 'SU credits' } : null, stats: rest });
+        }
+        cards = cards.concat(readMinorCards());
+        if (!cards.length) {
+            screen.innerHTML = '<div class="m-prog-empty">Pick a program in Controls to see your progress.</div>';
+            return;
+        }
+        var html = '';
+        for (var c = 0; c < cards.length; c++) {
+            var card = cards[c];
+            var pct = (card.bar && card.bar.limit) ? Math.min(100, Math.round(card.bar.value / card.bar.limit * 100)) : 0;
+            html += '<div class="m-prog-card">';
+            html += '<div class="m-prog-title">' + esc(card.title) + '</div>';
+            if (card.bar) {
+                html += '<div class="m-prog-barrow"><span>' + fmt(card.bar.value) + ' / ' + fmt(card.bar.limit) + ' ' + esc(card.bar.label) + '</span><span>' + pct + '%</span></div>';
+                html += '<div class="m-prog-bar"><div class="m-prog-fill" style="width:' + pct + '%"></div></div>';
+            }
+            html += '<div class="m-prog-grid">';
+            for (var j = 0; j < card.stats.length; j++) {
+                var s = card.stats[j];
+                var met = (s.met !== undefined) ? s.met : (s.value >= s.limit);
+                html += '<div class="m-prog-stat' + (met ? ' is-met' : '') + '"><div class="m-prog-lbl">' + esc(s.label) + '</div><div class="m-prog-val">' + fmt(s.value) + ' / ' + fmt(s.limit) + '</div></div>';
+            }
+            html += '</div></div>';
+        }
+        var multi = cards.length > 1;
+        var dots = '';
+        for (var d = 0; d < cards.length; d++) {
+            dots += '<button class="m-prog-dot' + (d === 0 ? ' active' : '') + '" type="button" data-i="' + d + '" aria-label="Program ' + (d + 1) + '"></button>';
+        }
+        screen.innerHTML =
+            '<div class="m-prog-carousel' + (multi ? ' is-multi' : '') + '">' + html + '</div>' +
+            '<div class="m-prog-dots' + (multi ? '' : ' is-single') + '">' + dots + '</div>';
+        wireProgressCarousel(screen);
+    }
+
+    // Peek-carousel: cards swipe horizontally (scroll-snap); dots track the
+    // active card and can be tapped to jump. Degrades to one full-width card.
+    function wireProgressCarousel(screen) {
+        var carousel = screen.querySelector('.m-prog-carousel');
+        if (!carousel) return;
+        var dots = screen.querySelectorAll('.m-prog-dot');
+        var cardEls = carousel.querySelectorAll('.m-prog-card');
+        function activeIndex() {
+            var cl = carousel.getBoundingClientRect().left, idx = 0, min = Infinity;
+            for (var i = 0; i < cardEls.length; i++) {
+                var dd = Math.abs(cardEls[i].getBoundingClientRect().left - cl);
+                if (dd < min) { min = dd; idx = i; }
+            }
+            return idx;
+        }
+        function syncDots() {
+            var idx = activeIndex();
+            for (var j = 0; j < dots.length; j++) dots[j].classList.toggle('active', j === idx);
+        }
+        carousel.addEventListener('scroll', syncDots, { passive: true });
+        for (var i = 0; i < dots.length; i++) {
+            (function (i) {
+                dots[i].addEventListener('click', function () {
+                    if (!cardEls[i]) return;
+                    carousel.scrollBy({ left: cardEls[i].getBoundingClientRect().left - carousel.getBoundingClientRect().left, behavior: 'smooth' });
+                });
+            })(i);
+        }
     }
 
     function buildNav() {
@@ -88,7 +247,7 @@
         nav.innerHTML =
             '<button class="m-nav-item" type="button" data-mtab="planner"><i class="fa-solid fa-table-columns" aria-hidden="true"></i><span>Planner</span></button>' +
             '<button class="m-nav-item" type="button" data-maction="scheduler"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i><span>Scheduler</span></button>' +
-            '<button class="m-nav-item" type="button" data-maction="progress"><i class="fa-solid fa-circle-check" aria-hidden="true"></i><span>Progress</span></button>' +
+            '<button class="m-nav-item" type="button" data-mtab="progress"><i class="fa-solid fa-circle-check" aria-hidden="true"></i><span>Progress</span></button>' +
             '<button class="m-nav-item" type="button" data-mtab="controls"><i class="fa-solid fa-sliders" aria-hidden="true"></i><span>Controls</span></button>';
         app.appendChild(nav);
 
@@ -111,6 +270,7 @@
 
     function initShell() {
         buildNav();
+        buildProgressScreen();
         if (!document.body.getAttribute('data-mobile-tab')) setTab('planner');
     }
 
