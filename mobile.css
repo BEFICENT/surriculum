@@ -628,6 +628,25 @@ body.is-mobile .scheduler-modal.m-scheduler .scheduler-layout {
     border-bottom-color: var(--primary);
 }
 
+/* "Add courses" sheet + its trigger — portrait only (rules below opt them in). */
+.m-sched-fab { display: none; }
+.m-sched-sheet-bar { display: none; }
+.m-sched-sheet-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+}
+.m-sched-sheet-done {
+    border: none;
+    background: none;
+    color: var(--primary);
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 4px 8px;
+}
+
 @media (orientation: portrait) {
     body.is-mobile .scheduler-modal.m-scheduler .m-sched-days {
         display: flex;
@@ -635,9 +654,56 @@ body.is-mobile .scheduler-modal.m-scheduler .scheduler-layout {
         background: var(--bg-card);
         border-bottom: 1px solid var(--border);
     }
-    /* Portrait hides the course-list sidebar (it becomes the search sheet) and
-       the week header; the grid fills the width. */
-    body.is-mobile .scheduler-modal.m-scheduler .scheduler-sidebar { display: none; }
+    /* Portrait: the course-list sidebar becomes a slide-up "Add courses" sheet
+       (hidden off-screen until its floating button opens it); the week header
+       is dropped and the day grid fills the width. */
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-sidebar {
+        position: fixed;
+        inset: 0;
+        z-index: 60;
+        width: 100%;
+        max-width: none;
+        background: var(--bg-card);
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        transform: translateY(100%);
+        transition: transform 0.26s ease;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler.m-sheet-open .scheduler-sidebar {
+        transform: translateY(0);
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .m-sched-sheet-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        padding: 12px 16px;
+        background: var(--bg-card);
+        border-bottom: 1px solid var(--border);
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .m-sched-fab {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        z-index: 55;
+        padding: 12px 18px;
+        border: none;
+        border-radius: 999px;
+        background: var(--primary);
+        color: #fff;
+        font-family: inherit;
+        font-size: 0.85rem;
+        font-weight: 600;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+        cursor: pointer;
+    }
+    /* While the sheet is open, its Done button replaces the floating trigger. */
+    body.is-mobile .scheduler-modal.m-scheduler.m-sheet-open .m-sched-fab { display: none; }
     body.is-mobile .scheduler-modal.m-scheduler .scheduler-grid-header { display: none; }
     body.is-mobile .scheduler-modal.m-scheduler .scheduler-grid-wrap {
         width: 100%;

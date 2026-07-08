@@ -503,6 +503,30 @@
             if (btn) setDay(modal, btn.getAttribute('data-day'));
         });
         setDay(modal, defaultDay());
+
+        // Portrait: the desktop left sidebar (search / filters / course list /
+        // selected sections / blocked hours) is hidden inline — there's no room.
+        // Surface the scheduler's own sidebar as a slide-up sheet, opened by a
+        // floating button, so all its wiring keeps working untouched.
+        var sidebar = modal.querySelector('.scheduler-sidebar');
+        if (sidebar && !sidebar.querySelector('.m-sched-sheet-bar')) {
+            var bar = document.createElement('div');
+            bar.className = 'm-sched-sheet-bar';
+            bar.innerHTML = '<span class="m-sched-sheet-title">Add courses</span>' +
+                '<button type="button" class="m-sched-sheet-done">Done</button>';
+            sidebar.insertBefore(bar, sidebar.firstChild);
+            bar.querySelector('.m-sched-sheet-done').addEventListener('click', function () {
+                modal.classList.remove('m-sheet-open');
+            });
+        }
+        if (!modal.querySelector('.m-sched-fab')) {
+            var fab = document.createElement('button');
+            fab.type = 'button';
+            fab.className = 'm-sched-fab';
+            fab.innerHTML = '<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><span>Add courses</span>';
+            fab.addEventListener('click', function () { modal.classList.add('m-sheet-open'); });
+            modal.appendChild(fab);
+        }
     }
 
     function init() {
