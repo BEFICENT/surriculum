@@ -519,7 +519,12 @@
     }
     function endPreview(modal) {
         var results = modal.querySelector('.scheduler-results');
-        if (results) { try { results.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false, view: window })); } catch (e) {} }
+        if (results) {
+            // Let this intentional clear through the mouseleave guard below.
+            modal.__allowPreviewClear = true;
+            try { results.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false, view: window })); } catch (e) {}
+            modal.__allowPreviewClear = false;
+        }
         modal.classList.remove('m-preview');
         modal.__mPreviewCard = null;
     }
@@ -662,6 +667,24 @@
                 var card = t.closest('.scheduler-course');
                 if (card) startPreview(modal, card);
             });
+        }
+        if (!modal.__mPreviewGuard) {
+            modal.__mPreviewGuard = true;
+            // A touch tap fires a trailing mouseleave on .scheduler-results, whose
+            // own handler wipes the preview we just showed. Swallow that leave (in
+            // capture, before the target handler) while previewing — except the
+            // intentional clear from endPreview, flagged by __allowPreviewClear.
+            modal.addEventListener('mouseleave', function (e) {
+                var t = e.target;
+                var onResults = t && ((t.classList && t.classList.contains('scheduler-results')) ||
+                    (t.closest && t.closest('.scheduler-results')));
+                if (!onResults) return;
+                if (modal.__allowPreviewClear) return;
+                if (modal.classList.contains('m-preview')) {
+                    e.stopPropagation();
+                    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+                }
+            }, true);
         }
     }
 
