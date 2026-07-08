@@ -628,23 +628,14 @@ body.is-mobile .scheduler-modal.m-scheduler .scheduler-layout {
     border-bottom-color: var(--primary);
 }
 
-/* "Add courses" sheet + its trigger — portrait only (rules below opt them in). */
+/* "Add courses" sheet + its floating triggers — portrait only (rules below opt them in). */
 .m-sched-fab { display: none; }
+.m-sched-done-fab { display: none; }
 .m-sched-sheet-bar { display: none; }
 .m-sched-sheet-title {
     font-weight: 600;
     font-size: 0.95rem;
     color: var(--text-primary);
-}
-.m-sched-sheet-done {
-    border: none;
-    background: none;
-    color: var(--primary);
-    font-family: inherit;
-    font-size: 0.9rem;
-    font-weight: 600;
-    cursor: pointer;
-    padding: 4px 8px;
 }
 /* Toggles that make no sense on touch (e.g. Hover preview) are dropped. */
 body.is-mobile .scheduler-modal.m-scheduler .m-sched-hidden-row { display: none; }
@@ -710,6 +701,7 @@ body.is-mobile .scheduler-modal.m-scheduler .m-sched-hidden-row { display: none;
         -webkit-overflow-scrolling: touch;
         transform: translateY(100%);
         transition: transform 0.26s ease;
+        padding-bottom: 84px; /* clearance so the last course clears the Done floater */
     }
     body.is-mobile .scheduler-modal.m-scheduler.m-sheet-open .scheduler-sidebar {
         transform: translateY(0);
@@ -744,8 +736,28 @@ body.is-mobile .scheduler-modal.m-scheduler .m-sched-hidden-row { display: none;
         box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
         cursor: pointer;
     }
-    /* While the sheet is open, its Done button replaces the floating trigger. */
+    /* While the sheet is open, the "Done" floater replaces the "Add courses"
+       one in the same corner (it must sit above the sheet's own z-index:60). */
     body.is-mobile .scheduler-modal.m-scheduler.m-sheet-open .m-sched-fab { display: none; }
+    body.is-mobile .scheduler-modal.m-scheduler.m-sheet-open .m-sched-done-fab {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        z-index: 65;
+        padding: 12px 20px;
+        border: none;
+        border-radius: 999px;
+        background: var(--primary);
+        color: #fff;
+        font-family: inherit;
+        font-size: 0.85rem;
+        font-weight: 600;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+        cursor: pointer;
+    }
     body.is-mobile .scheduler-modal.m-scheduler .scheduler-grid-header { display: none; }
     body.is-mobile .scheduler-modal.m-scheduler .scheduler-grid-wrap {
         width: 100%;

@@ -512,13 +512,12 @@
         if (sidebar && !sidebar.querySelector('.m-sched-sheet-bar')) {
             var bar = document.createElement('div');
             bar.className = 'm-sched-sheet-bar';
-            bar.innerHTML = '<span class="m-sched-sheet-title">Add courses</span>' +
-                '<button type="button" class="m-sched-sheet-done">Done</button>';
+            bar.innerHTML = '<span class="m-sched-sheet-title">Add courses</span>';
             sidebar.insertBefore(bar, sidebar.firstChild);
-            bar.querySelector('.m-sched-sheet-done').addEventListener('click', function () {
-                modal.classList.remove('m-sheet-open');
-            });
         }
+        // Bottom-right floating button toggles the sheet: "Add courses" while
+        // closed, "Done" while open — same corner so it's always thumb-reachable
+        // (the sheet's own title bar sits far up-screen when scrolled).
         if (!modal.querySelector('.m-sched-fab')) {
             var fab = document.createElement('button');
             fab.type = 'button';
@@ -526,6 +525,14 @@
             fab.innerHTML = '<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><span>Add courses</span>';
             fab.addEventListener('click', function () { modal.classList.add('m-sheet-open'); });
             modal.appendChild(fab);
+        }
+        if (!modal.querySelector('.m-sched-done-fab')) {
+            var doneFab = document.createElement('button');
+            doneFab.type = 'button';
+            doneFab.className = 'm-sched-done-fab';
+            doneFab.innerHTML = '<i class="fa-solid fa-check" aria-hidden="true"></i><span>Done</span>';
+            doneFab.addEventListener('click', function () { modal.classList.remove('m-sheet-open'); });
+            modal.appendChild(doneFab);
         }
 
         // "Hover preview" is a no-op on touch — drop that toggle from the sheet's
