@@ -632,6 +632,7 @@ body.is-mobile .scheduler-modal.m-scheduler .scheduler-layout {
 .m-sched-fab { display: none; }
 .m-sched-done-fab { display: none; }
 .m-sched-sheet-bar { display: none; }
+.m-sched-preview-bar { display: none; }
 .m-sched-sheet-title {
     font-weight: 600;
     font-size: 0.95rem;
@@ -639,6 +640,17 @@ body.is-mobile .scheduler-modal.m-scheduler .scheduler-layout {
 }
 /* Toggles that make no sense on touch (e.g. Hover preview) are dropped. */
 body.is-mobile .scheduler-modal.m-scheduler .m-sched-hidden-row { display: none; }
+
+/* The Schedules picker footer has five actions; on a phone-width panel the
+   nowrap flex row overflowed past the panel edge. Tighten it and let it wrap. */
+body.is-mobile .scheduler-picker-modal .app-modal-footer {
+    flex-wrap: wrap;
+    gap: 6px;
+}
+body.is-mobile .scheduler-picker-modal .app-modal-footer .btn {
+    padding-left: 10px;
+    padding-right: 10px;
+}
 
 @media (orientation: portrait) {
     /* Header polish: desktop's narrow layout stacks title / actions / legend on
@@ -757,6 +769,52 @@ body.is-mobile .scheduler-modal.m-scheduler .m-sched-hidden-row { display: none;
         font-weight: 600;
         box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
         cursor: pointer;
+    }
+
+    /* Tap-to-preview: the sheet drops away to reveal the grid, and this bar
+       (course label + Back / Add) floats at the bottom above everything. */
+    body.is-mobile .scheduler-modal.m-scheduler.m-preview .m-sched-fab { display: none; }
+    body.is-mobile .scheduler-modal.m-scheduler.m-preview .m-sched-preview-bar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 62;
+        padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
+        background: var(--bg-card);
+        border-top: 1px solid var(--border);
+    }
+    body.is-mobile .scheduler-modal.m-scheduler.m-preview .m-prev-label {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 600;
+        font-size: 0.85rem;
+        color: var(--text-primary);
+    }
+    body.is-mobile .scheduler-modal.m-scheduler.m-preview .m-prev-back,
+    body.is-mobile .scheduler-modal.m-scheduler.m-preview .m-prev-add {
+        flex: 0 0 auto;
+        border: none;
+        border-radius: 8px;
+        padding: 8px 14px;
+        font-family: inherit;
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: pointer;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler.m-preview .m-prev-back {
+        background: var(--bg-surface);
+        color: var(--text-secondary);
+    }
+    body.is-mobile .scheduler-modal.m-scheduler.m-preview .m-prev-add {
+        background: var(--primary);
+        color: #fff;
     }
     body.is-mobile .scheduler-modal.m-scheduler .scheduler-grid-header { display: none; }
     body.is-mobile .scheduler-modal.m-scheduler .scheduler-grid-wrap {

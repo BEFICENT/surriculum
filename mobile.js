@@ -484,6 +484,46 @@
         }
     }
 
+    // Tap-to-preview: touch has no hover, so a tap on a course's body drives the
+    // scheduler's own (closured) hover preview via a synthetic mouseover, then we
+    // drop the sheet to reveal the grid. Back clears it; Add runs the card's pick.
+    function previewLabel(card) {
+        var head = card.querySelector('.scheduler-course-head');
+        if (head) {
+            // The code and title are adjacent nodes with no whitespace between
+            // them; join each node's text with a space so it reads "NS101 …".
+            var parts = [];
+            [].forEach.call(head.childNodes, function (n) {
+                var s = (n.textContent || '').trim();
+                if (s) parts.push(s);
+            });
+            if (parts.length) return parts.join(' ').replace(/\s+/g, ' ');
+        }
+        return card.getAttribute('data-course') || 'Course';
+    }
+    function startPreview(modal, card) {
+        try { card.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window })); } catch (e) {}
+        modal.__mPreviewCard = card;
+        var lbl = modal.querySelector('.m-prev-label');
+        if (lbl) lbl.textContent = previewLabel(card);
+        // Jump to the first day this course actually meets so the preview shows.
+        try {
+            var order = ['M', 'T', 'W', 'R', 'F'];
+            for (var d = 0; d < order.length; d++) {
+                var dcol = modal.querySelector('.scheduler-day-col[data-day="' + order[d] + '"]');
+                if (dcol && dcol.querySelector('.scheduler-block.is-preview')) { setDay(modal, order[d]); break; }
+            }
+        } catch (e2) {}
+        modal.classList.remove('m-sheet-open');
+        modal.classList.add('m-preview');
+    }
+    function endPreview(modal) {
+        var results = modal.querySelector('.scheduler-results');
+        if (results) { try { results.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false, view: window })); } catch (e) {} }
+        modal.classList.remove('m-preview');
+        modal.__mPreviewCard = null;
+    }
+
     function mobilize(modal) {
         if (modal.__mSched) return;
         modal.__mSched = true;
@@ -588,6 +628,40 @@
             };
             modal.addEventListener('touchend', endBridge);
             modal.addEventListener('touchcancel', endBridge);
+        }
+
+        // Tap-to-preview bar + the tap handler that drives it.
+        if (!modal.querySelector('.m-sched-preview-bar')) {
+            var pbar = document.createElement('div');
+            pbar.className = 'm-sched-preview-bar';
+            pbar.innerHTML =
+                '<button type="button" class="m-prev-back"><i class="fa-solid fa-chevron-left" aria-hidden="true"></i> List</button>' +
+                '<span class="m-prev-label"></span>' +
+                '<button type="button" class="m-prev-add">Add <i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button>';
+            modal.appendChild(pbar);
+            pbar.querySelector('.m-prev-back').addEventListener('click', function () {
+                endPreview(modal);
+                modal.classList.add('m-sheet-open');
+            });
+            pbar.querySelector('.m-prev-add').addEventListener('click', function () {
+                var card = modal.__mPreviewCard;
+                var pick = card ? card.querySelector('.scheduler-pick') : null;
+                endPreview(modal);
+                if (pick) pick.click();
+            });
+        }
+        if (!modal.__mPreviewClick) {
+            modal.__mPreviewClick = true;
+            modal.addEventListener('click', function (e) {
+                // Only from the open sheet; ignore taps on controls (let them work).
+                if (!modal.classList.contains('m-sheet-open')) return;
+                var t = e.target;
+                if (!t || !t.closest) return;
+                if (t.closest('button, a, input, select, label, .toggle-switch')) return;
+                if (!t.closest('.scheduler-results')) return;
+                var card = t.closest('.scheduler-course');
+                if (card) startPreview(modal, card);
+            });
         }
     }
 
