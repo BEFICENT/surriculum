@@ -585,6 +585,80 @@ body.is-mobile .header-actions .plan-container:has(.plan-dropdown.active) .plan-
 body.is-mobile .header-actions .import-container:has(.import-dropdown.active) .import-dropdown {
     margin-top: 0;
 }
+
+/* ============================================================
+ * SCHEDULER — full-screen; portrait = day-at-a-time, landscape = week grid.
+ * Reuses the scheduler's own grid (one .scheduler-day-col per day); we only
+ * pick which column shows and inject a day selector.
+ * ============================================================ */
+body.is-mobile .scheduler-modal.m-scheduler {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+}
+body.is-mobile .scheduler-modal.m-scheduler .scheduler-body,
+body.is-mobile .scheduler-modal.m-scheduler .scheduler-layout {
+    flex: 1;
+    min-height: 0;
+}
+
+/* Injected day selector (portrait only). */
+.m-sched-days { display: none; }
+.m-sched-day {
+    flex: 1;
+    padding: 10px 0;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+.m-sched-day.active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+}
+
+@media (orientation: portrait) {
+    body.is-mobile .scheduler-modal.m-scheduler .m-sched-days {
+        display: flex;
+        flex-shrink: 0;
+        background: var(--bg-card);
+        border-bottom: 1px solid var(--border);
+    }
+    /* Portrait hides the course-list sidebar (it becomes the search sheet) and
+       the week header; the grid fills the width. */
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-sidebar { display: none; }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-grid-header { display: none; }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-grid-wrap {
+        width: 100%;
+        flex: 1;
+        min-width: 0;
+    }
+    /* Show only the selected day's column. */
+    body.is-mobile .scheduler-modal.m-scheduler[data-m-day="M"] .scheduler-day-col:not([data-day="M"]),
+    body.is-mobile .scheduler-modal.m-scheduler[data-m-day="T"] .scheduler-day-col:not([data-day="T"]),
+    body.is-mobile .scheduler-modal.m-scheduler[data-m-day="W"] .scheduler-day-col:not([data-day="W"]),
+    body.is-mobile .scheduler-modal.m-scheduler[data-m-day="R"] .scheduler-day-col:not([data-day="R"]),
+    body.is-mobile .scheduler-modal.m-scheduler[data-m-day="F"] .scheduler-day-col:not([data-day="F"]) {
+        display: none;
+    }
+    /* The grid is CSS grid (64px time col + 5 day tracks). With four day
+       columns hidden, collapse the template to time col + one day so the
+       visible day fills the width. */
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-grid {
+        grid-template-columns: 64px 1fr;
+    }
+}
 .m-progress .m-prog-title {
     font-size: 0.95rem;
     font-weight: 600;

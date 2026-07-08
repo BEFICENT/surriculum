@@ -13,10 +13,14 @@
 (function () {
     'use strict';
 
-    // Viewport at or below this width (px) uses the mobile UI.
+    // Phones use the mobile UI in BOTH orientations: narrow (portrait) OR
+    // short-and-touch (a phone rotated to landscape is wide but short; the
+    // pointer:coarse guard keeps short desktop windows on the desktop UI).
     var MOBILE_MAX_WIDTH = 820;
+    var MOBILE_MAX_HEIGHT = 540;
 
-    var query = '(max-width: ' + MOBILE_MAX_WIDTH + 'px)';
+    var query = '(max-width: ' + MOBILE_MAX_WIDTH + 'px), ' +
+        '((max-height: ' + MOBILE_MAX_HEIGHT + 'px) and (pointer: coarse))';
     var mq = window.matchMedia ? window.matchMedia(query) : null;
 
     function apply() {
@@ -451,4 +455,74 @@
     } else {
         document.addEventListener('DOMContentLoaded', init);
     }
+})();
+
+/*
+ * Mobile scheduler — reshape the desktop scheduler modal (built on demand by
+ * scheduler.js, whose internals are closured and not callable from here).
+ * Portrait: day-at-a-time — an injected day selector drives `data-m-day`, and
+ * CSS shows only that day's .scheduler-day-col. Landscape: the full week grid.
+ * All block rendering + interactions remain the scheduler's own.
+ */
+(function () {
+    'use strict';
+    var DAYS = [
+        { k: 'M', label: 'Mon' }, { k: 'T', label: 'Tue' }, { k: 'W', label: 'Wed' },
+        { k: 'R', label: 'Thu' }, { k: 'F', label: 'Fri' }
+    ];
+
+    function defaultDay() {
+        var map = { 1: 'M', 2: 'T', 3: 'W', 4: 'R', 5: 'F' };
+        try { return map[new Date().getDay()] || 'M'; } catch (e) { return 'M'; }
+    }
+
+    function setDay(modal, day) {
+        modal.setAttribute('data-m-day', day);
+        var btns = modal.querySelectorAll('.m-sched-day');
+        for (var i = 0; i < btns.length; i++) {
+            btns[i].classList.toggle('active', btns[i].getAttribute('data-day') === day);
+        }
+    }
+
+    function mobilize(modal) {
+        if (modal.__mSched) return;
+        modal.__mSched = true;
+        modal.classList.add('m-scheduler');
+        var wrap = modal.querySelector('.scheduler-grid-wrap');
+        if (!wrap) return;
+        var sel = document.createElement('div');
+        sel.className = 'm-sched-days';
+        var html = '';
+        for (var i = 0; i < DAYS.length; i++) {
+            html += '<button type="button" class="m-sched-day" data-day="' + DAYS[i].k + '">' + DAYS[i].label + '</button>';
+        }
+        sel.innerHTML = html;
+        wrap.insertBefore(sel, wrap.firstChild);
+        sel.addEventListener('click', function (e) {
+            var btn = e.target.closest ? e.target.closest('.m-sched-day') : null;
+            if (btn) setDay(modal, btn.getAttribute('data-day'));
+        });
+        setDay(modal, defaultDay());
+    }
+
+    function init() {
+        try {
+            new MutationObserver(function (muts) {
+                if (!document.body.classList.contains('is-mobile')) return;
+                for (var i = 0; i < muts.length; i++) {
+                    var added = muts[i].addedNodes;
+                    for (var j = 0; j < added.length; j++) {
+                        var n = added[j];
+                        if (n.nodeType !== 1) continue;
+                        var modal = (n.classList && n.classList.contains('scheduler-modal')) ? n :
+                            (n.querySelector ? n.querySelector('.scheduler-modal') : null);
+                        if (modal) mobilize(modal);
+                    }
+                }
+            }).observe(document.body, { childList: true, subtree: true });
+        } catch (e) {}
+    }
+
+    if (document.body) init();
+    else document.addEventListener('DOMContentLoaded', init);
 })();
