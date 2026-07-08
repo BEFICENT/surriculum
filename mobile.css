@@ -646,8 +646,50 @@ body.is-mobile .scheduler-modal.m-scheduler .scheduler-layout {
     cursor: pointer;
     padding: 4px 8px;
 }
+/* Toggles that make no sense on touch (e.g. Hover preview) are dropped. */
+body.is-mobile .scheduler-modal.m-scheduler .m-sched-hidden-row { display: none; }
 
 @media (orientation: portrait) {
+    /* Header polish: desktop's narrow layout stacks title / actions / legend on
+       three full-width rows (~149px). Put the title and ⋮/× actions on one row,
+       and collapse the wrapping legend into a single compact scrollable line. */
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-header {
+        padding: 10px 12px;
+        row-gap: 4px;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-title {
+        width: auto;
+        flex: 1 1 auto;
+        min-width: 0;
+        order: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-header-actions {
+        width: auto;
+        order: 2;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-legend {
+        order: 3;
+        width: 100%;
+        flex-wrap: nowrap;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: 2px;
+        padding-bottom: 2px;
+        overflow-x: auto;
+        font-size: 0.68rem;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-legend::-webkit-scrollbar {
+        display: none;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-legend-item { gap: 5px; }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-legend-dot { width: 10px; height: 10px; }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-legend-badge { width: 11px; height: 11px; }
+
     body.is-mobile .scheduler-modal.m-scheduler .m-sched-days {
         display: flex;
         flex-shrink: 0;

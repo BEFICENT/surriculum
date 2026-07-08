@@ -527,6 +527,61 @@
             fab.addEventListener('click', function () { modal.classList.add('m-sheet-open'); });
             modal.appendChild(fab);
         }
+
+        // "Hover preview" is a no-op on touch — drop that toggle from the sheet's
+        // filter menu (matched by label so it survives any reordering).
+        var labels = modal.querySelectorAll('.scheduler-filter-menu .toggle-text');
+        for (var li = 0; li < labels.length; li++) {
+            if ((labels[li].textContent || '').trim() === 'Hover preview') {
+                var trow = labels[li].closest('.scheduler-control');
+                if (trow) trow.classList.add('m-sched-hidden-row');
+                break;
+            }
+        }
+
+        // Block-hours drag is wired to mouse events only (mousedown/move on each
+        // .scheduler-day-col, mouseup on document); a touch-drag pans instead, so
+        // it can't work on a phone. Bridge touch→mouse, but only while block mode
+        // is active so normal scrolling/tapping is untouched. Delegating on the
+        // modal survives grid re-renders (the day columns are reused, not rebuilt).
+        if (!modal.__mBlockTouch) {
+            modal.__mBlockTouch = true;
+            var bridgeCol = null;
+            var fireMouse = function (type, target, pt) {
+                try {
+                    target.dispatchEvent(new MouseEvent(type, {
+                        bubbles: true, cancelable: true, view: window,
+                        clientX: pt ? pt.clientX : 0, clientY: pt ? pt.clientY : 0
+                    }));
+                } catch (e) {}
+            };
+            modal.addEventListener('touchstart', function (e) {
+                if (!modal.classList.contains('is-block-mode')) return;
+                var target = e.target;
+                var col = (target && target.closest) ? target.closest('.scheduler-day-col') : null;
+                if (!col) return;
+                var t = e.touches[0];
+                if (!t) return;
+                bridgeCol = col;
+                e.preventDefault(); // suppress scroll + the browser's compat mouse events
+                fireMouse('mousedown', target, t);
+            }, { passive: false });
+            modal.addEventListener('touchmove', function (e) {
+                if (!bridgeCol || !modal.classList.contains('is-block-mode')) return;
+                var t = e.touches[0];
+                if (!t) return;
+                e.preventDefault(); // stop the grid scrolling while dragging a block
+                fireMouse('mousemove', bridgeCol, t);
+            }, { passive: false });
+            var endBridge = function (e) {
+                if (!bridgeCol) return;
+                var t = (e.changedTouches && e.changedTouches[0]) || null;
+                fireMouse('mouseup', document, t);
+                bridgeCol = null;
+            };
+            modal.addEventListener('touchend', endBridge);
+            modal.addEventListener('touchcancel', endBridge);
+        }
     }
 
     function init() {
