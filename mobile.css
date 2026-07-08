@@ -762,9 +762,14 @@ body.is-mobile .scheduler-modal.m-scheduler .m-sched-hidden-row { display: none;
     }
     /* The grid is CSS grid (64px time col + 5 day tracks). With four day
        columns hidden, collapse the template to time col + one day so the
-       visible day fills the width. */
+       visible day fills the width. The time labels are right-aligned against
+       the grid line, so a 64px gutter leaves a wide empty strip — slim it to
+       50px and hand the width to the day column. */
     body.is-mobile .scheduler-modal.m-scheduler .scheduler-grid {
-        grid-template-columns: 64px 1fr;
+        grid-template-columns: 50px 1fr;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-time-row {
+        padding-right: 8px;
     }
 }
 .m-progress .m-prog-title {
