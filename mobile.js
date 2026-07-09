@@ -533,6 +533,7 @@
         if (modal.__mSched) return;
         modal.__mSched = true;
         modal.classList.add('m-scheduler');
+        updateFitPpm(); // ensure the landscape px-per-minute var is current
         var wrap = modal.querySelector('.scheduler-grid-wrap');
         if (!wrap) return;
         var sel = document.createElement('div');
@@ -688,6 +689,36 @@
         }
     }
 
+    // Landscape "whole week fits": maintain a px-per-minute value from the
+    // viewport height so the ~660-min day (08:40–19:40) fills the grid without
+    // scrolling. The scheduler reads --scheduler-minute (→ --m-fit-ppm) live when
+    // it renders, so opening in landscape fits automatically.
+    function updateFitPpm() {
+        try {
+            if (document.body.classList.contains('is-mobile') && window.matchMedia('(orientation: landscape)').matches) {
+                // Overhead ≈ modal header + week header + gaps; 660 = day length in min.
+                var ppm = (window.innerHeight - 116) / 660;
+                ppm = Math.max(0.26, Math.min(1.0, ppm));
+                document.documentElement.style.setProperty('--m-fit-ppm', ppm.toFixed(3) + 'px');
+            } else {
+                document.documentElement.style.removeProperty('--m-fit-ppm');
+            }
+        } catch (e) {}
+    }
+
+    // Blocks are positioned in px at render time, so a rotation needs a re-render
+    // to pick up the new scale. There's no public re-render hook, so re-open the
+    // modal (its state is persisted); its fresh grid reads the updated scale.
+    function reRenderOpenScheduler() {
+        var modal = document.querySelector('.scheduler-modal');
+        if (!modal) return;
+        var closeBtn = modal.querySelector('.scheduler-close');
+        try { if (closeBtn) closeBtn.click(); } catch (e) {}
+        setTimeout(function () {
+            try { if (typeof window.openSchedulerModal === 'function') window.openSchedulerModal(); } catch (e2) {}
+        }, 50);
+    }
+
     function init() {
         try {
             new MutationObserver(function (muts) {
@@ -703,6 +734,22 @@
                     }
                 }
             }).observe(document.body, { childList: true, subtree: true });
+        } catch (e) {}
+
+        // is-mobile is applied on DOMContentLoaded (after this deferred script
+        // runs), so re-run once it's set — and whenever it's re-asserted.
+        updateFitPpm();
+        try { window.addEventListener('DOMContentLoaded', updateFitPpm); } catch (e) {}
+        try { window.addEventListener('load', updateFitPpm); } catch (e) {}
+        try { document.addEventListener('themeChanged', updateFitPpm); } catch (e) {}
+        try {
+            var mq = window.matchMedia('(orientation: landscape)');
+            var onOrient = function () {
+                updateFitPpm();
+                if (document.body.classList.contains('is-mobile')) reRenderOpenScheduler();
+            };
+            if (mq.addEventListener) mq.addEventListener('change', onOrient);
+            else if (mq.addListener) mq.addListener(onOrient);
         } catch (e) {}
     }
 

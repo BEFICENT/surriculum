@@ -866,6 +866,21 @@ body.is-mobile .scheduler-picker-modal .app-modal-footer .btn {
     body.is-mobile .scheduler-modal.m-scheduler .scheduler-legend::-webkit-scrollbar {
         display: none;
     }
+    /* Fit the whole ~660-min day into the grid so the entire week is visible at
+       once (no vertical scroll). mobile.js maintains --m-fit-ppm (px per minute)
+       from the viewport height; the scheduler reads --scheduler-minute live when
+       it renders. NB: scope to .scheduler-modal (not .m-scheduler) — the hour
+       lines are drawn during the modal build, before mobilize() adds the
+       .m-scheduler class, so the var must already apply then or the lines bake
+       in at the default scale while the blocks compress. Also centre the hour
+       labels in the gutter (they hugged the right edge). */
+    body.is-mobile .scheduler-modal .scheduler-grid {
+        --scheduler-minute: var(--m-fit-ppm, 0.42px);
+    }
+    body.is-mobile .scheduler-modal .scheduler-time-row {
+        justify-content: center;
+        padding: 0;
+    }
 }
 .m-progress .m-prog-title {
     font-size: 0.95rem;
