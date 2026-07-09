@@ -929,6 +929,35 @@ body.is-mobile .scheduler-picker-modal .app-modal-footer .btn {
         cursor: pointer;
         padding: 4px 8px;
     }
+
+    /* Compressed week → tiny blocks. Give the course name the room: tighten the
+       padding, drop the time (the grid position already shows it), clamp to two
+       lines, and add a shadow so the name reads on any block colour / under the
+       red conflict outline. */
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-block {
+        padding: 2px 4px;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-block-time {
+        display: none;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-block-title {
+        font-size: 0.66rem;
+        font-weight: 600; /* 800 is too wide for the compressed blocks */
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* Compact preview bar (no safe-area inset in landscape) so less of the week
+       scrolls off while previewing; reserve room for it so the fixed bar never
+       covers the last grid row. */
+    body.is-mobile .scheduler-modal.m-scheduler.m-preview .m-sched-preview-bar {
+        padding: 6px 14px;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler.m-preview .scheduler-grid-wrap {
+        padding-bottom: 48px;
+    }
 }
 .m-progress .m-prog-title {
     font-size: 0.95rem;
