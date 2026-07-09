@@ -581,6 +581,34 @@
             modal.appendChild(doneFab);
         }
 
+        // Landscape trigger: repurpose the top-left grid corner as the "add
+        // courses" search button — the desktop sidebar-toggle there is a no-op
+        // once the sidebar is a sheet. The corner only exists while the week
+        // header shows (landscape), so this is landscape's trigger and the FAB is
+        // portrait's. Landscape closes via the × injected into the sheet header.
+        var corner = modal.querySelector('.scheduler-grid-corner');
+        if (corner && !corner.querySelector('.m-sched-corner-search')) {
+            var deskToggle = corner.querySelector('.scheduler-sidebar-toggle');
+            if (deskToggle) deskToggle.style.display = 'none';
+            var cSearch = document.createElement('button');
+            cSearch.type = 'button';
+            cSearch.className = 'm-sched-corner-search';
+            cSearch.setAttribute('aria-label', 'Add courses');
+            cSearch.innerHTML = '<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>';
+            cSearch.addEventListener('click', function () { modal.classList.add('m-sheet-open'); });
+            corner.appendChild(cSearch);
+        }
+        var sBar = modal.querySelector('.m-sched-sheet-bar');
+        if (sBar && !sBar.querySelector('.m-sched-sheet-close')) {
+            var sClose = document.createElement('button');
+            sClose.type = 'button';
+            sClose.className = 'm-sched-sheet-close';
+            sClose.setAttribute('aria-label', 'Close');
+            sClose.innerHTML = '<i class="fa-solid fa-xmark" aria-hidden="true"></i>';
+            sClose.addEventListener('click', function () { modal.classList.remove('m-sheet-open'); });
+            sBar.appendChild(sClose);
+        }
+
         // "Hover preview" is a no-op on touch — drop that toggle from the sheet's
         // filter menu (matched by label so it survives any reordering).
         var labels = modal.querySelectorAll('.scheduler-filter-menu .toggle-text');

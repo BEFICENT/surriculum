@@ -633,6 +633,7 @@ body.is-mobile .scheduler-modal.m-scheduler .scheduler-layout {
 .m-sched-done-fab { display: none; }
 .m-sched-sheet-bar { display: none; }
 .m-sched-preview-bar { display: none; }
+.m-sched-sheet-close { display: none; } /* shown only for the landscape side-panel */
 .m-sched-sheet-title {
     font-weight: 600;
     font-size: 0.95rem;
@@ -880,6 +881,53 @@ body.is-mobile .scheduler-picker-modal .app-modal-footer .btn {
     body.is-mobile .scheduler-modal .scheduler-time-row {
         justify-content: center;
         padding: 0;
+    }
+
+    /* Add courses in landscape is a LEFT side-panel (full-screen would cover the
+       whole week and stretch the cards). It slides in from the left, keeping the
+       week visible on the right; opened by the top-left corner search button and
+       closed by the × in its header — so the bottom FAB/Done floaters are hidden. */
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-sidebar {
+        inset: 0 auto 0 0;
+        width: min(380px, 62%);
+        transform: translateX(-100%);
+        border-right: 1px solid var(--border);
+        box-shadow: 4px 0 18px rgba(0, 0, 0, 0.28);
+        padding-bottom: 0;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler.m-sheet-open .scheduler-sidebar {
+        transform: translateX(0);
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .m-sched-fab,
+    body.is-mobile .scheduler-modal.m-scheduler.m-sheet-open .m-sched-done-fab {
+        display: none;
+    }
+    /* Search button living in the top-left grid corner (replaces the dead toggle). */
+    body.is-mobile .scheduler-modal.m-scheduler .m-sched-corner-search {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        border: none;
+        background: none;
+        color: var(--text-secondary);
+        cursor: pointer;
+        font-size: 0.95rem;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .m-sched-corner-search:hover {
+        color: var(--primary);
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .m-sched-sheet-close {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: none;
+        background: none;
+        color: var(--text-secondary);
+        font-size: 1rem;
+        cursor: pointer;
+        padding: 4px 8px;
     }
 }
 .m-progress .m-prog-title {
