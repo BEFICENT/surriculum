@@ -699,9 +699,11 @@ body.is-mobile .scheduler-picker-modal .app-modal-footer .btn {
         background: var(--bg-card);
         border-bottom: 1px solid var(--border);
     }
-    /* Portrait: the course-list sidebar becomes a slide-up "Add courses" sheet
-       (hidden off-screen until its floating button opens it); the week header
-       is dropped and the day grid fills the width. */
+}
+
+/* ---- Add-courses sheet + floating triggers + tap-to-preview.
+   BOTH orientations hide the desktop sidebar and add via this slide-up sheet
+   (portrait = day-at-a-time grid, landscape = full-week grid behind it). ---- */
     body.is-mobile .scheduler-modal.m-scheduler .scheduler-sidebar {
         position: fixed;
         inset: 0;
@@ -816,13 +818,17 @@ body.is-mobile .scheduler-picker-modal .app-modal-footer .btn {
         background: var(--primary);
         color: #fff;
     }
-    body.is-mobile .scheduler-modal.m-scheduler .scheduler-grid-header { display: none; }
     body.is-mobile .scheduler-modal.m-scheduler .scheduler-grid-wrap {
         width: 100%;
         flex: 1;
         min-width: 0;
     }
-    /* Show only the selected day's column. */
+
+@media (orientation: portrait) {
+    /* Portrait = one day at a time: drop the week header, hide the other four
+       day columns, collapse the template to the time gutter + one day, and slim
+       the gutter (labels are right-aligned, so 64px left a wide empty strip). */
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-grid-header { display: none; }
     body.is-mobile .scheduler-modal.m-scheduler[data-m-day="M"] .scheduler-day-col:not([data-day="M"]),
     body.is-mobile .scheduler-modal.m-scheduler[data-m-day="T"] .scheduler-day-col:not([data-day="T"]),
     body.is-mobile .scheduler-modal.m-scheduler[data-m-day="W"] .scheduler-day-col:not([data-day="W"]),
@@ -830,16 +836,35 @@ body.is-mobile .scheduler-picker-modal .app-modal-footer .btn {
     body.is-mobile .scheduler-modal.m-scheduler[data-m-day="F"] .scheduler-day-col:not([data-day="F"]) {
         display: none;
     }
-    /* The grid is CSS grid (64px time col + 5 day tracks). With four day
-       columns hidden, collapse the template to time col + one day so the
-       visible day fills the width. The time labels are right-aligned against
-       the grid line, so a 64px gutter leaves a wide empty strip — slim it to
-       50px and hand the width to the day column. */
     body.is-mobile .scheduler-modal.m-scheduler .scheduler-grid {
         grid-template-columns: 50px 1fr;
     }
     body.is-mobile .scheduler-modal.m-scheduler .scheduler-time-row {
         padding-right: 8px;
+    }
+}
+
+@media (orientation: landscape) {
+    /* Landscape = full-week overview: the sidebar is hidden (sheeted via the
+       shared rules above) so the week grid gets the whole width; slim the
+       header to a single row (title + legend + actions inline). */
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-header {
+        padding: 8px 14px;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-title {
+        flex: 0 1 auto;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-legend {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        gap: 12px;
+        scrollbar-width: none;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-legend::-webkit-scrollbar {
+        display: none;
     }
 }
 .m-progress .m-prog-title {
