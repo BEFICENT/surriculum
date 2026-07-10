@@ -724,8 +724,9 @@
     function updateFitPpm() {
         try {
             if (document.body.classList.contains('is-mobile') && window.matchMedia('(orientation: landscape)').matches) {
-                // Overhead ≈ modal header + week header + gaps; 660 = day length in min.
-                var ppm = (window.innerHeight - 116) / 660;
+                // Overhead ≈ modal header + week header + top gap + the grid's
+                // own bottom slack (~19px beyond topGap+range); 660 = day length.
+                var ppm = (window.innerHeight - 132) / 660;
                 ppm = Math.max(0.26, Math.min(1.0, ppm));
                 document.documentElement.style.setProperty('--m-fit-ppm', ppm.toFixed(3) + 'px');
             } else {
