@@ -653,6 +653,21 @@ body.is-mobile .scheduler-picker-modal .app-modal-footer .btn {
     padding-right: 10px;
 }
 
+/* Course-history tables (shared: scheduler + planner "Course Details"). The
+   instructor column is minmax(0,1fr), so on a phone it collapses and names wrap
+   word-by-word into very tall rows. Give the table a comfortable floor and let
+   its wrap scroll horizontally (the wrap already has overflow-x:auto) instead of
+   squashing the columns. */
+body.is-mobile .course-history-table {
+    min-width: 360px;
+}
+body.is-mobile .course-history-table--sections {
+    min-width: 470px;
+}
+body.is-mobile .course-history-table-wrap {
+    -webkit-overflow-scrolling: touch;
+}
+
 @media (orientation: portrait) {
     /* Header polish: desktop's narrow layout stacks title / actions / legend on
        three full-width rows (~149px). Put the title and ⋮/× actions on one row,
