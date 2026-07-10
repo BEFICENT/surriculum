@@ -487,8 +487,16 @@
     // Tap-to-preview: touch has no hover, so a tap on a course's body drives the
     // scheduler's own (closured) hover preview via a synthetic mouseover, then we
     // drop the sheet to reveal the grid. Back clears it; Add runs the card's pick.
-    function previewLabel(card) {
-        var head = card.querySelector('.scheduler-course-head');
+    function previewLabel(el) {
+        // A specific section row → show its section id + meeting time (drop the
+        // trailing "@ location").
+        if (el.classList && el.classList.contains('scheduler-inline-section-row')) {
+            var main = el.querySelector('.scheduler-inline-section-main') || el;
+            var txt = (main.textContent || '').replace(/\s+/g, ' ').trim().replace(/\)(?=\S)/g, ') ');
+            var at = txt.indexOf(' @ ');
+            return at > 0 ? txt.slice(0, at) : txt;
+        }
+        var head = el.querySelector('.scheduler-course-head');
         if (head) {
             // The code and title are adjacent nodes with no whitespace between
             // them; join each node's text with a space so it reads "NS101 …".
@@ -499,14 +507,19 @@
             });
             if (parts.length) return parts.join(' ').replace(/\s+/g, ' ');
         }
-        return card.getAttribute('data-course') || 'Course';
+        return el.getAttribute('data-course') || 'Course';
     }
-    function startPreview(modal, card) {
-        try { card.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window })); } catch (e) {}
-        modal.__mPreviewCard = card;
+    // `target` is either a .scheduler-course card (default section) or a specific
+    // .scheduler-inline-section-row — dispatching mouseover on it drives the
+    // scheduler's own section-aware hover preview, so we respect the tapped section.
+    function startPreview(modal, target) {
+        try { target.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window })); } catch (e) {}
+        var isSection = target.classList && target.classList.contains('scheduler-inline-section-row');
+        modal.__mPreviewSectionRow = isSection ? target : null;
+        modal.__mPreviewCard = target.closest ? target.closest('.scheduler-course') : null;
         var lbl = modal.querySelector('.m-prev-label');
-        if (lbl) lbl.textContent = previewLabel(card);
-        // Jump to the first day this course actually meets so the preview shows.
+        if (lbl) lbl.textContent = previewLabel(target);
+        // Jump to the first day this course/section actually meets so it shows.
         try {
             var order = ['M', 'T', 'W', 'R', 'F'];
             for (var d = 0; d < order.length; d++) {
@@ -527,6 +540,7 @@
         }
         modal.classList.remove('m-preview');
         modal.__mPreviewCard = null;
+        modal.__mPreviewSectionRow = null;
     }
 
     function mobilize(modal) {
@@ -678,8 +692,12 @@
                 modal.classList.add('m-sheet-open');
             });
             pbar.querySelector('.m-prev-add').addEventListener('click', function () {
+                // Add the exact previewed section when a section row was tapped,
+                // otherwise the card's default Pick-section flow.
+                var row = modal.__mPreviewSectionRow;
                 var card = modal.__mPreviewCard;
-                var pick = card ? card.querySelector('.scheduler-pick') : null;
+                var pick = row ? row.querySelector('.scheduler-section-pick')
+                    : (card ? card.querySelector('.scheduler-pick') : null);
                 endPreview(modal);
                 if (pick) pick.click();
             });
@@ -693,6 +711,10 @@
                 if (!t || !t.closest) return;
                 if (t.closest('button, a, input, select, label, .toggle-switch')) return;
                 if (!t.closest('.scheduler-results')) return;
+                // A specific section row wins over the whole card, so tapping one
+                // recitation previews that recitation's hours (not the default).
+                var sectionRow = t.closest('.scheduler-inline-section-row');
+                if (sectionRow) { startPreview(modal, sectionRow); return; }
                 var card = t.closest('.scheduler-course');
                 if (card) startPreview(modal, card);
             });
