@@ -20,6 +20,16 @@ body.is-mobile .sidebar-toggle { display: none; }
 body.is-mobile .mobile-notice { display: none !important; }
 body.is-mobile .footer { display: none; }
 
+/* The desktop shell is `.app { height: 100vh }` with the injected bottom nav as
+   its last flex child. On mobile browsers 100vh is the *large* viewport (as if
+   the URL bar were hidden), so the nav lands below the visible area and only
+   appears once the URL bar retracts. Size the shell to the dynamic viewport
+   height so the nav is always on-screen; 100vh stays as a fallback. */
+body.is-mobile .app {
+    height: 100vh;
+    height: 100dvh;
+}
+
 /* --- Compact header + collapsible actions across the whole mobile range
  * (mirrors the existing <=640px behaviour, but keyed on is-mobile). --- */
 body.is-mobile .header {
