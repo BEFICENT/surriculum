@@ -654,18 +654,37 @@ body.is-mobile .scheduler-picker-modal .app-modal-footer .btn {
 }
 
 /* Course-history tables (shared: scheduler + planner "Course Details"). The
-   instructor column is minmax(0,1fr), so on a phone it collapses and names wrap
-   word-by-word into very tall rows. Give the table a comfortable floor and let
-   its wrap scroll horizontally (the wrap already has overflow-x:auto) instead of
-   squashing the columns. */
+   layout is term | (section/instructor | seats). On a phone the fixed term +
+   seats columns leave the section/instructor column too narrow, so names wrap
+   word-by-word into very tall rows. Rather than force a wide table (which just
+   overflowed and cut off the CRNs/seats), reclaim width for the middle column:
+   shrink the term + seats columns, the cell padding, and the font so it fits
+   within the modal without any horizontal scroll. */
 body.is-mobile .course-history-table {
-    min-width: 360px;
+    font-size: 0.8rem;
+    min-width: 0;
 }
-body.is-mobile .course-history-table--sections {
-    min-width: 470px;
+body.is-mobile .course-history-cell {
+    padding: 5px 6px;
 }
-body.is-mobile .course-history-table-wrap {
-    -webkit-overflow-scrolling: touch;
+/* term column (rows are grid: term + rest) */
+body.is-mobile .course-history-row {
+    grid-template-columns: minmax(54px, 76px) minmax(0, 1fr);
+}
+/* the seats (A/C) column lives in the nested section row */
+body.is-mobile .course-history-section-row {
+    grid-template-columns: minmax(0, 1fr) minmax(46px, 58px);
+}
+body.is-mobile .course-history-cell--number {
+    padding-left: 4px;
+    padding-right: 4px;
+}
+/* Reclaim the nested horizontal padding around the table (scheduler details
+   modal) so the middle column isn't starved. */
+body.is-mobile .scheduler-details-card,
+body.is-mobile .scheduler-details-disclosure-body {
+    padding-left: 6px;
+    padding-right: 6px;
 }
 
 @media (orientation: portrait) {
