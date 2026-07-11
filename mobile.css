@@ -762,8 +762,14 @@ body.is-mobile .scheduler-details-disclosure-body {
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
         transform: translateY(100%);
-        transition: transform 0.26s ease;
         padding-bottom: 84px; /* clearance so the last course clears the Done floater */
+    }
+    /* Slide only for user-driven opens/closes. mobilize() adds .m-sheet-ready a
+       couple frames after .m-scheduler, so the sheet's *initial* hide snaps off
+       instead of animating from its visible desktop position (which looked like
+       the Add-courses panel flashing open then closing when the scheduler opens). */
+    body.is-mobile .scheduler-modal.m-scheduler.m-sheet-ready .scheduler-sidebar {
+        transition: transform 0.26s ease;
     }
     body.is-mobile .scheduler-modal.m-scheduler.m-sheet-open .scheduler-sidebar {
         transform: translateY(0);

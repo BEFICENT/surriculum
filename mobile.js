@@ -594,6 +594,14 @@
         modal.__mSched = true;
         modal.classList.add('m-scheduler');
         updateFitPpm(); // ensure the landscape px-per-minute var is current
+        // Enable the sheet's slide transition only after the initial hide has
+        // painted, so opening the scheduler doesn't animate the sidebar away
+        // (it would look like the Add-courses panel flashing open then closing).
+        try {
+            requestAnimationFrame(function () {
+                requestAnimationFrame(function () { modal.classList.add('m-sheet-ready'); });
+            });
+        } catch (e0) { modal.classList.add('m-sheet-ready'); }
         var wrap = modal.querySelector('.scheduler-grid-wrap');
         if (!wrap) return;
         var sel = document.createElement('div');
