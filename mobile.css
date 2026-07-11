@@ -612,6 +612,7 @@ body.is-mobile .scheduler-modal.m-scheduler .scheduler-layout {
 /* Injected day selector (portrait only). */
 .m-sched-days { display: none; }
 .m-sched-day {
+    position: relative;
     flex: 1;
     padding: 10px 0;
     background: none;
@@ -626,6 +627,18 @@ body.is-mobile .scheduler-modal.m-scheduler .scheduler-layout {
 .m-sched-day.active {
     color: var(--primary);
     border-bottom-color: var(--primary);
+}
+/* During preview, a dot marks each day the previewed section meets. */
+.m-sched-day.m-day-affected::after {
+    content: "";
+    position: absolute;
+    top: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--primary);
 }
 
 /* "Add courses" sheet + its floating triggers — portrait only (rules below opt them in). */

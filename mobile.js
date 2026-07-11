@@ -519,16 +519,26 @@
         modal.__mPreviewCard = target.closest ? target.closest('.scheduler-course') : null;
         var lbl = modal.querySelector('.m-prev-label');
         if (lbl) lbl.textContent = previewLabel(target);
-        // Jump to the first day this course/section actually meets so it shows.
+        // Mark every day this section touches on the day selector, then jump to
+        // the first one so the user sees the section (not an unrelated day).
         try {
             var order = ['M', 'T', 'W', 'R', 'F'];
+            var firstDay = null;
             for (var d = 0; d < order.length; d++) {
                 var dcol = modal.querySelector('.scheduler-day-col[data-day="' + order[d] + '"]');
-                if (dcol && dcol.querySelector('.scheduler-block.is-preview')) { setDay(modal, order[d]); break; }
+                var affected = !!(dcol && dcol.querySelector('.scheduler-block.is-preview'));
+                var btn = modal.querySelector('.m-sched-day[data-day="' + order[d] + '"]');
+                if (btn) btn.classList.toggle('m-day-affected', affected);
+                if (affected && !firstDay) firstDay = order[d];
             }
+            if (firstDay) setDay(modal, firstDay);
         } catch (e2) {}
         modal.classList.remove('m-sheet-open');
         modal.classList.add('m-preview');
+    }
+    function clearAffectedDays(modal) {
+        var marks = modal.querySelectorAll('.m-sched-day.m-day-affected');
+        for (var i = 0; i < marks.length; i++) marks[i].classList.remove('m-day-affected');
     }
     function endPreview(modal) {
         var results = modal.querySelector('.scheduler-results');
@@ -538,9 +548,45 @@
             try { results.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false, view: window })); } catch (e) {}
             modal.__allowPreviewClear = false;
         }
+        clearAffectedDays(modal);
         modal.classList.remove('m-preview');
         modal.__mPreviewCard = null;
         modal.__mPreviewSectionRow = null;
+    }
+    // First day (Mon→Fri) that a committed (non-preview) course block sits on.
+    function firstDayForCourse(modal, courseId) {
+        var order = ['M', 'T', 'W', 'R', 'F'];
+        var days = {};
+        var blocks = modal.querySelectorAll('.scheduler-day-col .scheduler-block');
+        for (var i = 0; i < blocks.length; i++) {
+            var b = blocks[i];
+            if (b.classList.contains('is-preview')) continue;
+            if (b.getAttribute('data-course') !== courseId) continue;
+            var d = b.getAttribute('data-day');
+            if (d) days[d] = true;
+        }
+        for (var j = 0; j < order.length; j++) if (days[order[j]]) return order[j];
+        return null;
+    }
+    // After a section is picked, wait for its committed block(s) to render, then
+    // (portrait only) switch to the first day it meets so the add lands on a
+    // relevant day. Polls briefly, self-clears, and is superseded by a newer pick.
+    function scheduleJumpToCourse(modal, courseId) {
+        if (!courseId) return;
+        modal.__mJumpCourse = courseId;
+        var tries = 0;
+        var iv = setInterval(function () {
+            if (modal.__mJumpCourse !== courseId) { clearInterval(iv); return; }
+            var day = firstDayForCourse(modal, courseId);
+            if (day) {
+                if (window.matchMedia('(orientation: portrait)').matches) setDay(modal, day);
+                modal.__mJumpCourse = null;
+                clearInterval(iv);
+            } else if (++tries > 80) { // ~12s, covers the section-chooser detour
+                if (modal.__mJumpCourse === courseId) modal.__mJumpCourse = null;
+                clearInterval(iv);
+            }
+        }, 150);
     }
 
     function mobilize(modal) {
@@ -717,6 +763,17 @@
                 if (sectionRow) { startPreview(modal, sectionRow); return; }
                 var card = t.closest('.scheduler-course');
                 if (card) startPreview(modal, card);
+            });
+        }
+        if (!modal.__mPickJump) {
+            modal.__mPickJump = true;
+            // Picking a section (directly, or via the preview bar's Add which
+            // clicks the same button) should land the portrait view on a day the
+            // course meets. Non-stopping: scheduler.js still handles the pick.
+            modal.addEventListener('click', function (e) {
+                var pick = e.target && e.target.closest
+                    ? e.target.closest('.scheduler-pick, .scheduler-section-pick') : null;
+                if (pick) scheduleJumpToCourse(modal, pick.getAttribute('data-course'));
             });
         }
         if (!modal.__mPreviewGuard) {
