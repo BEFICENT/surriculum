@@ -86,6 +86,9 @@
 
     function setTab(tab) {
         try { document.body.setAttribute('data-mobile-tab', tab); } catch (e) {}
+        // Remember the tab so a full-page reload (e.g. changing major from
+        // Controls) restores it instead of dumping the user back on Planner.
+        try { sessionStorage.setItem('m-tab', tab); } catch (e) {}
         var items = document.querySelectorAll('.m-nav-item');
         for (var i = 0; i < items.length; i++) {
             items[i].classList.toggle('active', items[i].getAttribute('data-mtab') === tab);
@@ -373,7 +376,11 @@
     function initShell() {
         buildNav();
         buildProgressScreen();
-        if (!document.body.getAttribute('data-mobile-tab')) setTab('planner');
+        if (!document.body.getAttribute('data-mobile-tab')) {
+            var saved = null;
+            try { saved = sessionStorage.getItem('m-tab'); } catch (e) {}
+            setTab((saved === 'controls' || saved === 'progress') ? saved : 'planner');
+        }
     }
 
     // Exposed for debugging / future in-app navigation.
