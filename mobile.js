@@ -707,6 +707,10 @@
             modal.addEventListener('touchstart', function (e) {
                 if (!modal.classList.contains('is-block-mode')) return;
                 var target = e.target;
+                // Tapping an existing blocked block should remove it — let the
+                // native tap/click reach the scheduler's "Unblock hours" handler
+                // instead of us preventDefault-ing it into a (no-op) drag.
+                if (target && target.closest && target.closest('.scheduler-block-bg')) return;
                 var col = (target && target.closest) ? target.closest('.scheduler-day-col') : null;
                 if (!col) return;
                 var t = e.touches[0];

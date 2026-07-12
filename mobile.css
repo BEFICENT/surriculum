@@ -625,6 +625,17 @@ body.is-mobile .scheduler-modal.m-scheduler .scheduler-layout {
 body.is-mobile .scheduler-modal.m-scheduler .scheduler-header-actions .scheduler-fullscreen {
     display: inline-flex;
 }
+/* Same for Block hours — a one-tap in/out toggle beats digging through the menu
+   or the Add-courses sheet. It carries .is-active while blocking; make that state
+   unmistakable so it's obvious you're in block mode (drag to add, tap to remove). */
+body.is-mobile .scheduler-modal.m-scheduler .scheduler-header-actions .scheduler-block-mode {
+    display: inline-flex;
+}
+body.is-mobile .scheduler-modal.m-scheduler .scheduler-header-actions .scheduler-block-mode.is-active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+}
 
 /* Injected day selector (portrait only). */
 .m-sched-days { display: none; }
@@ -727,7 +738,7 @@ body.is-mobile .scheduler-details-disclosure-body {
     }
     body.is-mobile .scheduler-modal.m-scheduler .scheduler-title {
         width: auto;
-        flex: 1 1 auto;
+        flex: 1 1 0;
         min-width: 0;
         order: 1;
         white-space: nowrap;
