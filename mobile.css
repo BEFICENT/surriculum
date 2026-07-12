@@ -364,7 +364,12 @@ body.is-mobile[data-mobile-tab="controls"] .sidebar-header {
     padding: 14px 16px;
 }
 body.is-mobile[data-mobile-tab="controls"] .sidebar-content {
-    padding: 12px 14px 28px;
+    padding: 12px 14px 14px;
+}
+/* The last card (Danger zone) doesn't need its inter-card margin — it left a
+   ~40px dead strip above the bottom nav. */
+body.is-mobile[data-mobile-tab="controls"] .sidebar-content > .control-group:last-child {
+    margin-bottom: 0;
 }
 
 /* Hide the nav-duplicate group (New Semester / Check Graduation / Summary /
