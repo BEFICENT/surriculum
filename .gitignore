@@ -6,3 +6,10 @@ __pycache__/
 *.pyc
 tmp_*.html
 courses/schedule/202502_from_saved.jsonl
+
+# Dev-time test tooling (never shipped — the app itself stays dependency-free)
+node_modules/
+test-results/
+playwright-report/
+playwright/.cache/
+blob-report/
