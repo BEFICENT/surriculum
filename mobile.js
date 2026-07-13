@@ -601,6 +601,9 @@
         modal.__mSched = true;
         modal.classList.add('m-scheduler');
         updateFitPpm(); // ensure the landscape px-per-minute var is current
+        // Once the grid (and its blocks) have rendered, correct the landscape fit
+        // from the real grid height so the week fills the whole area exactly.
+        try { setTimeout(refitLandscapeInPlace, 350); } catch (e00) {}
         // Enable the sheet's slide transition only after the initial hide has
         // painted, so opening the scheduler doesn't animate the sidebar away
         // (it would look like the Add-courses panel flashing open then closing).
@@ -822,9 +825,11 @@
     function updateFitPpm() {
         try {
             if (document.body.classList.contains('is-mobile') && window.matchMedia('(orientation: landscape)').matches) {
-                // Overhead ≈ modal header + week header + top gap + the grid's
-                // own bottom slack (~19px beyond topGap+range); 660 = day length.
-                var ppm = (window.innerHeight - 132) / 660;
+                // Pre-render estimate for the first paint (no grid to measure yet):
+                // overhead ≈ modal header + week header (~93) + topGap (14); 660 =
+                // day length. refitLandscapeInPlace() corrects this exactly from the
+                // real grid height once it exists.
+                var ppm = (window.innerHeight - 107) / 660;
                 ppm = Math.max(0.26, Math.min(1.0, ppm));
                 document.documentElement.style.setProperty('--m-fit-ppm', ppm.toFixed(3) + 'px');
             } else {
@@ -863,10 +868,16 @@
             var topGap = parseFloat(cs.getPropertyValue('--scheduler-top-gap')) || 14;
             var blockGap = parseFloat(cs.getPropertyValue('--scheduler-block-gap')) || 6;
             if (!(oldPpm > 0)) return;
-            var newPpm = (window.innerHeight - 132) / 660;
+            // Fit the day (topGap + 660*ppm) to the *actual* grid area, not a
+            // guessed viewport overhead — otherwise the last hour sits short of
+            // the bottom. clientHeight is stable across ppm changes (it's the
+            // flex area, = modal minus its two headers).
+            var avail = grid.clientHeight;
+            if (!(avail > 60)) return;
+            var newPpm = (avail - topGap - 2) / 660;
             newPpm = Math.max(0.26, Math.min(1.0, newPpm));
             var ratio = newPpm / oldPpm;
-            if (!(ratio > 0) || Math.abs(ratio - 1) < 0.02) return; // no meaningful change
+            if (!(ratio > 0) || Math.abs(ratio - 1) < 0.01) return; // no meaningful change
             document.documentElement.style.setProperty('--m-fit-ppm', newPpm.toFixed(3) + 'px');
             var lines = modal.querySelectorAll('.scheduler-hour-line'); // top = topGap + min*ppm
             for (var i = 0; i < lines.length; i++) {
