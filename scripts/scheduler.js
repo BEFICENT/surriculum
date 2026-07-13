@@ -221,7 +221,12 @@
     const s = String(str || '');
     let hash = 0;
     for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
-    const hue = hash % 360;
+    // Distribute across the hue circle but skip the yellow / yellow-green band
+    // (~45–80°): at this lightness those hues are too pale for the white block
+    // text. Map the hash into the remaining arc, then hop over the reserved band.
+    const EXCL_START = 45, EXCL_WIDTH = 35; // 45–80° reserved (unreadable yellows)
+    let hue = hash % (360 - EXCL_WIDTH);
+    if (hue >= EXCL_START) hue += EXCL_WIDTH;
     return `hsl(${hue} 75% 55%)`;
   }
 
