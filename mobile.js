@@ -477,6 +477,10 @@
         { k: 'M', label: 'Mon' }, { k: 'T', label: 'Tue' }, { k: 'W', label: 'Wed' },
         { k: 'R', label: 'Thu' }, { k: 'F', label: 'Fri' }
     ];
+    // Landscape "tall" mode px-per-minute — matches the portrait/desktop default
+    // (1.05px) so a block reads the same height there; the week overflows and the
+    // grid scrolls instead of being squeezed to fit. See landscapeTargetPpm().
+    var TALL_PPM = 1.05;
 
     function defaultDay() {
         var map = { 1: 'M', 2: 'T', 3: 'W', 4: 'R', 5: 'F' };
@@ -612,6 +616,32 @@
                 requestAnimationFrame(function () { modal.classList.add('m-sheet-ready'); });
             });
         } catch (e0) { modal.classList.add('m-sheet-ready'); }
+
+        // Landscape-only compact/tall toggle for the week grid. Compact (default)
+        // fits the whole day on one screen; tall gives portrait-sized cards and
+        // scrolls the week instead. Injected into the header actions (before the ⋮),
+        // shown only in landscape via CSS. Drives .m-sched-tall + a live rescale.
+        var hActions = modal.querySelector('.scheduler-header-actions');
+        if (hActions && !hActions.querySelector('.m-sched-tall-toggle')) {
+            var tallBtn = document.createElement('button');
+            tallBtn.type = 'button';
+            tallBtn.className = 'scheduler-header-btn m-sched-tall-toggle';
+            tallBtn.setAttribute('title', 'Taller rows');
+            tallBtn.setAttribute('aria-label', 'Toggle taller rows');
+            tallBtn.setAttribute('aria-pressed', 'false');
+            tallBtn.innerHTML = '<i class="fa-solid fa-arrows-up-down" aria-hidden="true"></i>';
+            var moreBtnEl = hActions.querySelector('.scheduler-more');
+            if (moreBtnEl) hActions.insertBefore(tallBtn, moreBtnEl);
+            else hActions.appendChild(tallBtn);
+            tallBtn.addEventListener('click', function () {
+                var tall = modal.classList.toggle('m-sched-tall');
+                tallBtn.classList.toggle('is-active', tall);
+                tallBtn.setAttribute('title', tall ? 'Fit week to screen' : 'Taller rows');
+                tallBtn.setAttribute('aria-pressed', tall ? 'true' : 'false');
+                try { refitLandscapeInPlace(); } catch (e) {}
+            });
+        }
+
         var wrap = modal.querySelector('.scheduler-grid-wrap');
         if (!wrap) return;
         var sel = document.createElement('div');
@@ -851,11 +881,26 @@
         }, 50);
     }
 
+    // Target px-per-minute for the landscape week. Tall mode uses a fixed,
+    // portrait-comparable scale (the week overflows and the grid scrolls);
+    // compact mode fits the whole ~660-min day into the *actual* grid area (not a
+    // guessed viewport overhead — otherwise the last hour sits short of the
+    // bottom). clientHeight is stable across ppm changes (it's the flex area,
+    // = modal minus its two headers). Returns null if the area isn't measurable.
+    function landscapeTargetPpm(modal, grid, topGap) {
+        if (modal.classList.contains('m-sched-tall')) return TALL_PPM;
+        var avail = grid.clientHeight;
+        if (!(avail > 60)) return null;
+        var p = (avail - topGap - 2) / 660;
+        return Math.max(0.26, Math.min(1.0, p));
+    }
+
     // Landscape only: entering fullscreen (or the URL bar hiding) grows the
     // available height AFTER the grid baked its px positions, leaving the week
-    // crammed at the old scale. Recompute the scale and rescale the inline hour
-    // lines + blocks in place — the gutter and day columns are CSS-var-driven and
-    // follow --m-fit-ppm automatically. No re-render, so fullscreen is preserved.
+    // crammed at the old scale; likewise the compact/tall toggle changes the
+    // target scale. Recompute the scale and rescale the inline hour lines +
+    // blocks in place — the gutter and day columns are CSS-var-driven and follow
+    // --m-fit-ppm automatically. No re-render, so fullscreen is preserved.
     function refitLandscapeInPlace() {
         if (!document.body.classList.contains('is-mobile')) return;
         if (!window.matchMedia('(orientation: landscape)').matches) return;
@@ -868,14 +913,8 @@
             var topGap = parseFloat(cs.getPropertyValue('--scheduler-top-gap')) || 14;
             var blockGap = parseFloat(cs.getPropertyValue('--scheduler-block-gap')) || 6;
             if (!(oldPpm > 0)) return;
-            // Fit the day (topGap + 660*ppm) to the *actual* grid area, not a
-            // guessed viewport overhead — otherwise the last hour sits short of
-            // the bottom. clientHeight is stable across ppm changes (it's the
-            // flex area, = modal minus its two headers).
-            var avail = grid.clientHeight;
-            if (!(avail > 60)) return;
-            var newPpm = (avail - topGap - 2) / 660;
-            newPpm = Math.max(0.26, Math.min(1.0, newPpm));
+            var newPpm = landscapeTargetPpm(modal, grid, topGap);
+            if (newPpm == null) return;
             var ratio = newPpm / oldPpm;
             if (!(ratio > 0) || Math.abs(ratio - 1) < 0.01) return; // no meaningful change
             document.documentElement.style.setProperty('--m-fit-ppm', newPpm.toFixed(3) + 'px');

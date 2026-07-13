@@ -641,6 +641,23 @@ body.is-mobile .scheduler-modal.m-scheduler .scheduler-header-actions .scheduler
     border-color: var(--primary);
     color: #fff;
 }
+/* Landscape-only compact/tall toggle (injected by mobile.js). Hidden by default;
+   the landscape block below opts it in. Highlights while tall is active. */
+body.is-mobile .scheduler-modal.m-scheduler .scheduler-header-actions .m-sched-tall-toggle {
+    display: none;
+}
+body.is-mobile .scheduler-modal.m-scheduler .scheduler-header-actions .m-sched-tall-toggle.is-active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+}
+
+/* Drop the "Course color" legend entry (always the first item) in the mobile
+   scheduler — it's self-evident (blocks are colored) and the least useful of the
+   four, so hiding it reclaims valuable header width in both orientations. */
+body.is-mobile .scheduler-modal.m-scheduler .scheduler-legend-item:first-child {
+    display: none;
+}
 
 /* Injected day selector (portrait only). */
 .m-sched-days { display: none; }
@@ -1033,6 +1050,25 @@ body.is-mobile .scheduler-details-disclosure-body {
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+    }
+
+    /* Reveal the compact/tall toggle (portrait has no week to scale). */
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-header-actions .m-sched-tall-toggle {
+        display: inline-flex;
+    }
+
+    /* Tall mode: cards regain their portrait/desktop size (mobile.js scales the
+       grid so the week overflows and the grid scrolls). Undo the compressed-week
+       shrink — restore padding, the bigger title, and the meeting time. */
+    body.is-mobile .scheduler-modal.m-scheduler.m-sched-tall .scheduler-block {
+        padding: 6px 8px;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler.m-sched-tall .scheduler-block-title {
+        font-size: 0.78rem;
+        white-space: normal;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler.m-sched-tall .scheduler-block-time {
+        display: block;
     }
 
     /* Compact preview bar (no safe-area inset in landscape) so less of the week
