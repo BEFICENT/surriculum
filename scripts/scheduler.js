@@ -2759,21 +2759,33 @@
       }
     };
 
-    // In the scheduler, "taken" is treated as "already present anywhere in the
-    // user's plan". We keep current-term planned/selected courses visible via
-    // keepVisible so users can still schedule them.
-    let takenAnySet = null; // Set(courseId) populated per renderResults
+    // The "hide taken" filter treats a course as taken only if it's planned for
+    // the scheduler's selected term OR an earlier one. A course planned solely
+    // for a LATER term hasn't been taken yet as of the selected term, so it must
+    // stay visible instead of being filtered out. (Current-term planned/selected
+    // courses are also kept visible via keepVisible so users can schedule them.)
+    let takenUpToTermSet = null; // Set(courseId): selected term and earlier
     let takenBeforeCurrentSet = null; // Set(courseId) populated per renderResults (previous terms only)
-    const computeTakenAnySet = () => {
+    const computeTakenUpToTermSet = () => {
       try {
         const cur = (typeof window !== 'undefined') ? window.curriculum : null;
-        if (!cur || !Array.isArray(cur.semesters)) return null;
+        if (!cur) return null;
+        const curCode = parseInt(String(termCode || ''), 10) || 0;
+        if (!curCode) return null;
         const out = new Set();
-        for (let i = 0; i < cur.semesters.length; i++) {
-          const sem = cur.semesters[i];
-          if (!sem || !Array.isArray(sem.courses)) continue;
-          for (let j = 0; j < sem.courses.length; j++) {
-            const cc = sem.courses[j];
+        const containers = document.querySelectorAll('.container_semester');
+        for (let i = 0; i < containers.length; i++) {
+          const c = containers[i];
+          const p = c ? c.querySelector('.date p') : null;
+          const name = p ? String(p.textContent || '').trim() : '';
+          const code = parseInt(String(termNameToCodeSafe(name) || ''), 10) || 0;
+          if (!code || code > curCode) continue; // skip future terms only
+          const semEl = c ? c.querySelector('.semester') : null;
+          if (!semEl) continue;
+          const semObj = (cur && typeof cur.getSemester === 'function') ? cur.getSemester(semEl.id) : null;
+          if (!semObj || !Array.isArray(semObj.courses)) continue;
+          for (let j = 0; j < semObj.courses.length; j++) {
+            const cc = semObj.courses[j];
             const cid = normalizeCourseId(cc && cc.code);
             if (cid) out.add(cid);
           }
@@ -2822,7 +2834,7 @@
       try {
         const cid = normalizeCourseId(courseId);
         if (!cid) return false;
-        if (takenAnySet instanceof Set) return takenAnySet.has(cid);
+        if (takenUpToTermSet instanceof Set) return takenUpToTermSet.has(cid);
         const cur = (typeof window !== 'undefined') ? window.curriculum : null;
         if (!cur || typeof cur.hasCourse !== 'function') return false;
         return !!cur.hasCourse(cid);
@@ -3658,7 +3670,7 @@
 
       // Recompute taken courses set for this render pass so filtering and
       // availability highlighting stays accurate as the user edits the plan.
-      try { takenAnySet = computeTakenAnySet(); } catch (_) { takenAnySet = null; }
+      try { takenUpToTermSet = computeTakenUpToTermSet(); } catch (_) { takenUpToTermSet = null; }
       try { takenBeforeCurrentSet = computeTakenBeforeCurrentTermSet(); } catch (_) { takenBeforeCurrentSet = null; }
 
       // For availability highlighting, treat "taken" as "completed in previous terms".
