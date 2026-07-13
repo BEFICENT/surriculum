@@ -873,7 +873,7 @@ function SUrriculum(major_chosen_by_user) {
         const label = document.getElementById('offeredThisTermLabel');
         const ctName = (typeof window !== 'undefined' && window.currentTermName) ? window.currentTermName : '';
         if (label && ctName) {
-            label.textContent = `Only show offered courses in ${ctName}`;
+            label.textContent = `Only show offered courses for ${ctName} term`;
         }
     } catch (_) {}
 
