@@ -846,6 +846,42 @@
         }, 50);
     }
 
+    // Landscape only: entering fullscreen (or the URL bar hiding) grows the
+    // available height AFTER the grid baked its px positions, leaving the week
+    // crammed at the old scale. Recompute the scale and rescale the inline hour
+    // lines + blocks in place — the gutter and day columns are CSS-var-driven and
+    // follow --m-fit-ppm automatically. No re-render, so fullscreen is preserved.
+    function refitLandscapeInPlace() {
+        if (!document.body.classList.contains('is-mobile')) return;
+        if (!window.matchMedia('(orientation: landscape)').matches) return;
+        var modal = document.querySelector('.scheduler-modal.m-scheduler');
+        var grid = modal ? modal.querySelector('.scheduler-grid') : null;
+        if (!grid) return;
+        try {
+            var cs = getComputedStyle(grid);
+            var oldPpm = parseFloat(cs.getPropertyValue('--scheduler-minute'));
+            var topGap = parseFloat(cs.getPropertyValue('--scheduler-top-gap')) || 14;
+            var blockGap = parseFloat(cs.getPropertyValue('--scheduler-block-gap')) || 6;
+            if (!(oldPpm > 0)) return;
+            var newPpm = (window.innerHeight - 132) / 660;
+            newPpm = Math.max(0.26, Math.min(1.0, newPpm));
+            var ratio = newPpm / oldPpm;
+            if (!(ratio > 0) || Math.abs(ratio - 1) < 0.02) return; // no meaningful change
+            document.documentElement.style.setProperty('--m-fit-ppm', newPpm.toFixed(3) + 'px');
+            var lines = modal.querySelectorAll('.scheduler-hour-line'); // top = topGap + min*ppm
+            for (var i = 0; i < lines.length; i++) {
+                var lt = parseFloat(lines[i].style.top);
+                if (!isNaN(lt)) lines[i].style.top = (topGap + (lt - topGap) * ratio) + 'px';
+            }
+            var blocks = modal.querySelectorAll('.scheduler-day-col .scheduler-block'); // top adds blockGap; height = dur*ppm - 2*blockGap
+            for (var j = 0; j < blocks.length; j++) {
+                var bt = parseFloat(blocks[j].style.top), bh = parseFloat(blocks[j].style.height);
+                if (!isNaN(bt)) blocks[j].style.top = (topGap + blockGap + (bt - topGap - blockGap) * ratio) + 'px';
+                if (!isNaN(bh)) blocks[j].style.height = Math.max(8, (bh + 2 * blockGap) * ratio - 2 * blockGap) + 'px';
+            }
+        } catch (e) {}
+    }
+
     function init() {
         try {
             new MutationObserver(function (muts) {
@@ -877,6 +913,18 @@
             };
             if (mq.addEventListener) mq.addEventListener('change', onOrient);
             else if (mq.addListener) mq.addListener(onOrient);
+        } catch (e) {}
+        // Height changes within landscape (fullscreen enter/exit, URL bar) re-fit
+        // the week in place so it fills the freed space instead of staying crammed.
+        try {
+            var refitTimer = null;
+            window.addEventListener('resize', function () {
+                if (refitTimer) clearTimeout(refitTimer);
+                refitTimer = setTimeout(refitLandscapeInPlace, 180);
+            });
+            document.addEventListener('fullscreenchange', function () {
+                setTimeout(refitLandscapeInPlace, 120);
+            });
         } catch (e) {}
     }
 
