@@ -16,11 +16,12 @@ module.exports = defineConfig({
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,
-  // A small retry budget absorbs cold-start / first-load timing noise (the app
-  // fetches schedule data async on a freshly served page). A *real* regression
+  // A retry budget absorbs environment noise: cold-start data-fetch timing, and
+  // intermittent sandbox denials of even the localhost navigation
+  // (net::ERR_NETWORK_ACCESS_DENIED before the app loads). A *real* regression
   // fails consistently and still fails; only sub-100%-reproducible flakes are
   // retried, and Playwright flags them as "flaky" so they stay visible.
-  retries: process.env.CI ? 2 : 1,
+  retries: 2,
   reporter: [['list']],
   use: {
     baseURL: BASE_URL,
