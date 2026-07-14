@@ -39,4 +39,20 @@ async function seedPlan(page, state) {
   }
 }
 
-module.exports = { seedPlan };
+// Read the curriculum's aggregate credit/GPA totals from the live model.
+// earnedCredits = sum of semester.totalCredit; GPA = totalGPA / totalGPACredits.
+async function readCurriculumTotals(page) {
+  return page.evaluate(() => {
+    const sems = (window.curriculum && window.curriculum.semesters) || [];
+    const sum = (f) => sems.reduce((a, s) => a + (s[f] || 0), 0);
+    const gpaCredits = sum('totalGPACredits');
+    return {
+      earnedCredits: sum('totalCredit'),
+      gpaValue: sum('totalGPA'),
+      gpaCredits,
+      gpa: gpaCredits ? +(sum('totalGPA') / gpaCredits).toFixed(3) : null,
+    };
+  });
+}
+
+module.exports = { seedPlan, readCurriculumTotals };
