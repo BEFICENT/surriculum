@@ -865,6 +865,27 @@ function s_curriculum()
             this.hasCourse('DSA201')
         );
 
+        // SUIS math-alternative rule (CS): a student completes only ONE of
+        // MATH212 / MATH201; 2025+ admits never count MATH201 or MATH202. The
+        // EXTRA course must be excluded from EVERY pool. We decide which course
+        // to skip up-front (rather than excluding it after allocation) so the
+        // cascade below fills `required` with the kept course — excluding it
+        // afterwards left a required credit unfilled and dumped the extra course
+        // into `free`, which the rule forbids.
+        const mathSkip = new Set();
+        if (this.major === 'CS') {
+            const entryCS = parseInt(this.entryTerm || '0', 10);
+            const cs2025Plus = !isNaN(entryCS) && entryCS >= 202501;
+            const bothPreAlternatives = !cs2025Plus && this.hasCourse('MATH201') && this.hasCourse('MATH212');
+            const shouldSkipMath = (code) => {
+                if (cs2025Plus) return code === 'MATH201' || code === 'MATH202';
+                return bothPreAlternatives && code === 'MATH201';
+            };
+            this.semesters.forEach((sem) => {
+                (sem.courses || []).forEach((c) => { if (c && shouldSkipMath(c.code)) mathSkip.add(c); });
+            });
+        }
+
         // Iterate semesters in chronological order
         for (let i = 0; i < sortedSemesters.length; i++) {
             const sem = sortedSemesters[i];
@@ -888,6 +909,16 @@ function s_curriculum()
                             const typeElem = courseElem.querySelector('.course_type');
                             if (typeElem) typeElem.textContent = 'N/A';
                         }
+                    } catch (_) {}
+                    continue;
+                }
+                // Excluded math alternative (SUIS rule): counts toward no pool.
+                if (mathSkip.has(course)) {
+                    course.effective_type = 'none';
+                    try {
+                        const courseElem = document.getElementById(course.id);
+                        const typeElem = courseElem ? courseElem.querySelector('.course_type') : null;
+                        if (typeElem) typeElem.textContent = 'N/A';
                     } catch (_) {}
                     continue;
                 }
@@ -1122,80 +1153,8 @@ function s_curriculum()
             }
         }
 
-        // Special-case CS: math course exclusions/alternatives.
-        // - Pre-2025 admits: only ONE of MATH212 or MATH201 counts toward any pool.
-        //   If both are completed, the extra one should not be included in core/area/free pools.
-        // - 2025–2026 admits and later: MATH201 and MATH202 are not included in any course pool.
-        if (this.major === 'CS') {
-            const entry = parseInt(this.entryTerm || '0', 10);
-            const is2025Plus = !isNaN(entry) && entry >= 202501;
-
-            const clamp0 = (n) => (n < 0 ? 0 : n);
-            const parseInt0 = (v) => {
-                const n = parseInt(v || '0', 10);
-                return isNaN(n) ? 0 : n;
-            };
-            const parseFloat0 = (v) => {
-                const n = parseFloat(v || '0');
-                return isNaN(n) ? 0 : n;
-            };
-            const setCourseTypeLabel = (course, label) => {
-                try {
-                    const courseElem = document.getElementById(course.id);
-                    if (!courseElem) return;
-                    const typeElem = courseElem.querySelector('.course_type');
-                    if (typeElem) typeElem.textContent = label;
-                } catch (_) {}
-            };
-            const excludeCourse = (sem, course) => {
-                if (!sem || !course) return;
-                const credit = parseInt0(course.SU_credit);
-                const scienceVal = parseFloat0(course.Basic_Science);
-                const engVal = parseFloat0(course.Engineering);
-                const ectsVal = parseFloat0(course.ECTS);
-
-                // Remove previously-counted contributions (the allocation loop already added these).
-                sem.totalCredit = clamp0(sem.totalCredit - credit);
-                sem.totalScience = clamp0(sem.totalScience - scienceVal);
-                sem.totalEngineering = clamp0(sem.totalEngineering - engVal);
-                sem.totalECTS = clamp0(sem.totalECTS - ectsVal);
-
-                const et = course.effective_type;
-                if (et === 'core') sem.totalCore = clamp0(sem.totalCore - credit);
-                else if (et === 'area') sem.totalArea = clamp0(sem.totalArea - credit);
-                else if (et === 'free') sem.totalFree = clamp0(sem.totalFree - credit);
-                else if (et === 'required') sem.totalRequired = clamp0(sem.totalRequired - credit);
-                else if (et === 'university') sem.totalUniversity = clamp0(sem.totalUniversity - credit);
-
-                course.effective_type = 'none';
-                setCourseTypeLabel(course, 'N/A');
-            };
-
-            const math201 = [];
-            const math202 = [];
-            const math212 = [];
-            for (let i = 0; i < sortedSemesters.length; i++) {
-                const sem = sortedSemesters[i];
-                for (let j = 0; j < sem.courses.length; j++) {
-                    const course = sem.courses[j];
-                    if (!course) continue;
-                    if (course.effective_type === 'none') continue;
-                    if (course.code === 'MATH201') math201.push({ sem, course });
-                    else if (course.code === 'MATH202') math202.push({ sem, course });
-                    else if (course.code === 'MATH212') math212.push({ sem, course });
-                }
-            }
-
-            if (is2025Plus) {
-                for (let i = 0; i < math201.length; i++) excludeCourse(math201[i].sem, math201[i].course);
-                for (let i = 0; i < math202.length; i++) excludeCourse(math202[i].sem, math202[i].course);
-            } else {
-                // If both are present, exclude MATH201 (MATH212 is the primary path).
-                if (math201.length > 0 && math212.length > 0) {
-                    for (let i = 0; i < math201.length; i++) excludeCourse(math201[i].sem, math201[i].course);
-                }
-            }
-        }
+        // (CS math-alternative exclusions are handled BEFORE the allocation
+        // cascade above via `mathSkip`, so the kept course fills `required`.)
 
         // Special-case ME (Fall 2025+):
         // CS404 or CS412 is required. If both are completed, one counts as
