@@ -886,6 +886,35 @@ function s_curriculum()
             });
         }
 
+        // SUIS rule (ME, 2025+ admits): "ME403 or ME425" and "CS404 or CS412"
+        // are each required — a student takes ONE of each pair. If BOTH of a
+        // pair are completed, the extra is counted toward the Core Elective
+        // requirement. Decide the extra up-front so the cascade below fills
+        // `required` with the kept course and allocates the extra as a core
+        // elective. (Reassigning after allocation left `required` short: the
+        // demoted course's slot was never refilled from the overflow.)
+        const typeOverride = new Map();
+        if (this.major === 'ME') {
+            const entryME = parseInt(this.entryTerm || '0', 10);
+            if (!isNaN(entryME) && entryME >= 202501) {
+                const normalizeCode = (v) => String(v || '').toUpperCase().replace(/\s+/g, '');
+                const altPairs = [['ME403', 'ME425'], ['CS404', 'CS412']];
+                for (let p = 0; p < altPairs.length; p++) {
+                    const taken = [];
+                    for (let i = 0; i < sortedSemesters.length; i++) {
+                        const courses = sortedSemesters[i].courses || [];
+                        for (let j = 0; j < courses.length; j++) {
+                            const c = courses[j];
+                            if (c && altPairs[p].indexOf(normalizeCode(c.code)) !== -1) taken.push(c);
+                        }
+                    }
+                    // Keep the first (chronologically) as required; any extra
+                    // from the same pair counts as a core elective.
+                    for (let k = 1; k < taken.length; k++) typeOverride.set(taken[k], 'core');
+                }
+            }
+        }
+
         // Iterate semesters in chronological order
         for (let i = 0; i < sortedSemesters.length; i++) {
             const sem = sortedSemesters[i];
@@ -1036,6 +1065,9 @@ function s_curriculum()
                 }
                 // Use information from the main major catalog
                 staticType = (infoMain['EL_Type'] || '').toLowerCase();
+                // ME 2025+ alternative pairs: the extra course of a pair counts
+                // toward Core Elective rather than occupying a required slot.
+                if (typeOverride.has(course)) staticType = typeOverride.get(course);
                 credit = (typeof parseCreditValue === 'function')
                     ? parseCreditValue(infoMain['SU_credit'] || '0')
                     : (parseFloat(infoMain['SU_credit'] || '0') || 0);
@@ -1156,76 +1188,10 @@ function s_curriculum()
         // (CS math-alternative exclusions are handled BEFORE the allocation
         // cascade above via `mathSkip`, so the kept course fills `required`.)
 
-        // Special-case ME (Fall 2025+):
-        // CS404 or CS412 is required. If both are completed, one counts as
-        // required and the other counts as core elective.
-        if (this.major === 'ME') {
-            const entry = parseInt(this.entryTerm || '0', 10);
-            const is2025Plus = !isNaN(entry) && entry >= 202501;
-            if (is2025Plus) {
-                const parseCredit0 = (v) => {
-                    const n = (typeof parseCreditValue === 'function')
-                        ? parseCreditValue(v || '0')
-                        : (parseFloat(v || '0') || 0);
-                    return isNaN(n) ? 0 : n;
-                };
-                const setCourseTypeLabel = (course) => {
-                    try {
-                        if (!course || !course.id) return;
-                        const courseElem = document.getElementById(course.id);
-                        if (!courseElem) return;
-                        const typeElem = courseElem.querySelector('.course_type');
-                        if (!typeElem) return;
-                        typeElem.textContent = String(course.effective_type || 'N/A').toUpperCase();
-                        const base = (course.category || '').toString().toLowerCase();
-                        const eff = (course.effective_type || '').toString().toLowerCase();
-                        const movedDown = !!(base && eff && base !== eff && eff !== 'none');
-                        typeElem.classList.toggle('is-overflow-type', movedDown);
-                    } catch (_) {}
-                };
-
-                let assignedRequired = false;
-                const normalizeCode = (v) => String(v || '').toUpperCase().replace(/\s+/g, '');
-                for (let i = 0; i < sortedSemesters.length; i++) {
-                    const sem = sortedSemesters[i];
-                    for (let j = 0; j < sem.courses.length; j++) {
-                        const course = sem.courses[j];
-                        if (!course || course.effective_type === 'none') continue;
-                        const code = normalizeCode(course.code);
-                        if (code !== 'CS404' && code !== 'CS412') continue;
-                        if (!assignedRequired) {
-                            course.effective_type = 'required';
-                            assignedRequired = true;
-                        } else {
-                            course.effective_type = 'core';
-                        }
-                        setCourseTypeLabel(course);
-                    }
-                }
-
-                // Recompute category totals to reflect normalized ME allocations.
-                for (let i = 0; i < this.semesters.length; i++) {
-                    const sem = this.semesters[i];
-                    sem.totalArea = 0;
-                    sem.totalCore = 0;
-                    sem.totalFree = 0;
-                    sem.totalUniversity = 0;
-                    sem.totalRequired = 0;
-                    for (let j = 0; j < sem.courses.length; j++) {
-                        const course = sem.courses[j];
-                        if (!course) continue;
-                        const et = course.effective_type;
-                        if (!et || et === 'none') continue;
-                        const c = parseCredit0(course.SU_credit || '0');
-                        if (et === 'core') sem.totalCore += c;
-                        else if (et === 'area') sem.totalArea += c;
-                        else if (et === 'free') sem.totalFree += c;
-                        else if (et === 'required') sem.totalRequired += c;
-                        else if (et === 'university') sem.totalUniversity += c;
-                    }
-                }
-            }
-        }
+        // (ME 2025+ alternative pairs — ME403/ME425 and CS404/CS412 — are
+        // handled BEFORE the allocation cascade above via `typeOverride`, so the
+        // kept course fills `required` and the extra is allocated as a core
+        // elective.)
 
         // Special-case VACD: enforce mutually-exclusive pairs and pool spillover
         // rules. Some VACD course pools have the constraint that only one of a
