@@ -34,7 +34,9 @@ const termName = (code) => {
 //   19 = >= 2 MATH courses (only MATH201-204 carry the FENS Faculty_Course
 //        marker; MATH101/102/212 do NOT count toward this)
 //   23 = >= 9 credits of 400-level EE
-//   27 = >= 3 FENS courses among core electives
+//   29 = >= 3 SBS courses among core electives (27/28 are the FENS/FASS
+//        equivalents; DSA clears those and stops here — the generated plan
+//        carries no SBS core elective at all)
 //   35 = core courses must span >= 6 areas
 //
 // A non-zero value here is CORRECT behaviour on a generically-complete plan,
@@ -44,11 +46,11 @@ const termName = (code) => {
 // which no rule excludes for ME/IE) and so hands the engine a plan that really
 // does lack its FENS math — a fixture limitation, recorded rather than hidden.
 const EXPECTED_FLAG = {
-  202301: { BIO: 19, CS: 0, DSA: 27, ECON: 0, EE: 23, IE: 0, MAN: 35, MAT: 19, ME: 0, PSIR: 0, PSY: 18, VACD: 0 },
-  202402: { BIO: 19, CS: 0, DSA: 27, ECON: 0, EE: 23, IE: 0, MAN: 35, MAT: 19, ME: 0, PSIR: 0, PSY: 18, VACD: 0 },
-  202403: { BIO: 19, CS: 0, DSA: 27, ECON: 0, EE: 23, IE: 0, MAN: 35, MAT: 19, ME: 0, PSIR: 0, PSY: 18, VACD: 0 },
-  202501: { BIO: 19, CS: 0, DSA: 27, ECON: 0, EE: 23, IE: 19, MAN: 35, MAT: 19, ME: 19, PSIR: 0, PSY: 18, VACD: 0 },
-  202502: { BIO: 19, CS: 0, DSA: 27, ECON: 0, EE: 23, IE: 19, MAN: 35, MAT: 19, ME: 19, PSIR: 0, PSY: 18, VACD: 0 },
+  202301: { BIO: 19, CS: 0, DSA: 29, ECON: 0, EE: 23, IE: 0, MAN: 35, MAT: 19, ME: 0, PSIR: 0, PSY: 18, VACD: 0 },
+  202402: { BIO: 19, CS: 0, DSA: 29, ECON: 0, EE: 23, IE: 0, MAN: 35, MAT: 19, ME: 0, PSIR: 0, PSY: 18, VACD: 0 },
+  202403: { BIO: 19, CS: 0, DSA: 29, ECON: 0, EE: 23, IE: 0, MAN: 35, MAT: 19, ME: 0, PSIR: 0, PSY: 18, VACD: 0 },
+  202501: { BIO: 19, CS: 0, DSA: 29, ECON: 0, EE: 23, IE: 19, MAN: 35, MAT: 19, ME: 19, PSIR: 0, PSY: 18, VACD: 0 },
+  202502: { BIO: 19, CS: 0, DSA: 29, ECON: 0, EE: 23, IE: 19, MAN: 35, MAT: 19, ME: 19, PSIR: 0, PSY: 18, VACD: 0 },
 };
 
 test.describe('per-major graduation engine across frozen terms', () => {

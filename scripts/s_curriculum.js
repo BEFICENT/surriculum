@@ -917,11 +917,18 @@ function s_curriculum()
                     for(let a = 0; a < this.semesters[i].courses.length; a++) {
                         let course = this.semesters[i].courses[a];
                         if(course.category === "Core") {
-                            if(course.Faculty_Course === "FENS") {
+                            // "3 FASS courses in your core electives" means core
+                            // electives OFFERED BY that faculty -> `Faculty`.
+                            // NOT `Faculty_Course`, which marks membership of the
+                            // faculty-course pool and is what flags 14/20/21/22
+                            // above correctly use. They are different attributes:
+                            // every course has a Faculty; only ~10% are faculty
+                            // courses.
+                            if(course.Faculty === "FENS") {
                                 fensCoreCount++;
-                            } else if(course.Faculty_Course === "FASS") {
+                            } else if(course.Faculty === "FASS") {
                                 fassCoreCount++;
-                            } else if(course.Faculty_Course === "SBS") {
+                            } else if(course.Faculty === "SBS") {
                                 sbsCoreCount++;
                             }
                         }
@@ -2835,14 +2842,21 @@ function s_curriculum()
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
                         if (course.categoryDM === 'Core') {
-                            if (course.Faculty_Course === 'FENS') fensCoreCount++;
-                            else if (course.Faculty_Course === 'FASS') fassCoreCount++;
-                            else if (course.Faculty_Course === 'SBS') sbsCoreCount++;
+                            // The OFFERING faculty, not the faculty-course pool
+                            // marker -- see the main-major copy.
+                            if (course.Faculty === 'FENS') fensCoreCount++;
+                            else if (course.Faculty === 'FASS') fassCoreCount++;
+                            else if (course.Faculty === 'SBS') sbsCoreCount++;
                         }
                     }
                 }
-                // Each faculty must have at least 3 core courses
-                if (fensCoreCount < 3 || fassCoreCount < 3 || sbsCoreCount < 3) return 18;
+                // Each faculty must have at least 3 core courses. Report the same
+                // flags the main-major pass does: this returned 18 for all three,
+                // whose message ("faculty courses must span at least 3 different
+                // areas") describes an unrelated rule.
+                if (fensCoreCount < 3) return 27;
+                if (fassCoreCount < 3) return 28;
+                if (sbsCoreCount < 3) return 29;
                 // Sum of SU credits from core courses for DSA must be at least 27
                 let coreSUCredits = 0;
                 for (let i = 0; i < this.semesters.length; i++) {
