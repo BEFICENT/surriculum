@@ -7,6 +7,11 @@
 if (typeof window !== 'undefined') {
     window.s_curriculum = s_curriculum;
 }
+
+// VACD alternative-course pairs: each pair fills ONE required slot, so a
+// student takes one of the two. Shared by the main-major and double-major
+// allocation passes so the two cannot drift apart.
+const VACD_REQUIRED_PAIRS = [['VA301', 'VA303'], ['VA401', 'VA403'], ['VA300', 'PROJ300']];
 function s_curriculum()
 {
     this.semester_id = 0;
@@ -886,33 +891,47 @@ function s_curriculum()
             });
         }
 
-        // SUIS rule (ME, 2025+ admits): "ME403 or ME425" and "CS404 or CS412"
-        // are each required — a student takes ONE of each pair. If BOTH of a
-        // pair are completed, the extra is counted toward the Core Elective
-        // requirement. Decide the extra up-front so the cascade below fills
-        // `required` with the kept course and allocates the extra as a core
-        // elective. (Reassigning after allocation left `required` short: the
-        // demoted course's slot was never refilled from the overflow.)
+        // Alternative-course pairs: a pair is one required slot, and the student
+        // takes ONE of the two. If BOTH are completed, the extra does not occupy
+        // a required slot — it spills into an elective pool instead.
+        //
+        // The decision MUST happen here, BEFORE the allocation cascade below.
+        // Demoting the extra afterwards leaves `required` short: the cascade has
+        // already capped `required` at its threshold and pushed the surplus into
+        // the elective pools, so freeing a required slot after the fact never
+        // pulls those courses back. Deciding up-front lets the cascade fill
+        // `required` with the kept course and allocate the extra as an elective.
         const typeOverride = new Map();
+        const normalizeCode = (v) => String(v || '').toUpperCase().replace(/\s+/g, '');
+        // Marks the extras of each pair (keeping the chronologically first as
+        // required) with the elective type the extra should count toward.
+        const overrideAltPairs = (pairs, extraType) => {
+            for (let p = 0; p < pairs.length; p++) {
+                const taken = [];
+                for (let i = 0; i < sortedSemesters.length; i++) {
+                    const courses = sortedSemesters[i].courses || [];
+                    for (let j = 0; j < courses.length; j++) {
+                        const c = courses[j];
+                        if (c && pairs[p].indexOf(normalizeCode(c.code)) !== -1) taken.push(c);
+                    }
+                }
+                for (let k = 1; k < taken.length; k++) typeOverride.set(taken[k], extraType);
+            }
+        };
         if (this.major === 'ME') {
+            // SUIS rule (ME, 2025+ admits): "ME403 or ME425" and "CS404 or
+            // CS412" are each required; a student taking both has the extra
+            // counted toward the Core Elective requirement.
             const entryME = parseInt(this.entryTerm || '0', 10);
             if (!isNaN(entryME) && entryME >= 202501) {
-                const normalizeCode = (v) => String(v || '').toUpperCase().replace(/\s+/g, '');
-                const altPairs = [['ME403', 'ME425'], ['CS404', 'CS412']];
-                for (let p = 0; p < altPairs.length; p++) {
-                    const taken = [];
-                    for (let i = 0; i < sortedSemesters.length; i++) {
-                        const courses = sortedSemesters[i].courses || [];
-                        for (let j = 0; j < courses.length; j++) {
-                            const c = courses[j];
-                            if (c && altPairs[p].indexOf(normalizeCode(c.code)) !== -1) taken.push(c);
-                        }
-                    }
-                    // Keep the first (chronologically) as required; any extra
-                    // from the same pair counts as a core elective.
-                    for (let k = 1; k < taken.length; k++) typeOverride.set(taken[k], 'core');
-                }
+                overrideAltPairs([['ME403', 'ME425'], ['CS404', 'CS412']], 'core');
             }
+        } else if (this.major === 'VACD') {
+            // VACD alternatives. The extra counts as a free elective: VACD's
+            // core requirement is defined by two named pools (see the pool
+            // allocation further below), which these courses are not part of,
+            // so the extra cannot become a core elective the way ME's does.
+            overrideAltPairs(VACD_REQUIRED_PAIRS, 'free');
         }
 
         // Iterate semesters in chronological order
@@ -1124,7 +1143,10 @@ function s_curriculum()
                         effectiveType = 'free';
                     }
                 } else if (staticType === 'required') {
-                    if (currentRequiredCredits < reqRequired) {
+                    // A zero-credit required course (e.g. VACD's VA300) consumes
+                    // no capacity, so it can never overflow: reallocating it just
+                    // mislabels a named required course as an elective.
+                    if (currentRequiredCredits < reqRequired || credit === 0) {
                         effectiveType = 'required';
                         currentRequiredCredits += credit;
                     } else if (currentCoreCredits < reqCore) {
@@ -1199,7 +1221,6 @@ function s_curriculum()
         // taken from the pool should spill into area electives, and then free
         // electives once area is satisfied.
         if (this.major === 'VACD') {
-            const reqPairs = [['VA301', 'VA303'], ['VA401', 'VA403'], ['VA300', 'PROJ300']];
             const corePool1 = ['HART292', 'HART293', 'HART380', 'HART413', 'HART426', 'VA315', 'VA420', 'VA430'];
             const corePool1Min = 9;
             const corePool2 = ['VA202', 'VA204', 'VA234', 'VA302', 'VA304', 'VA402', 'VA404'];
@@ -1208,12 +1229,6 @@ function s_curriculum()
 
             const corePool1Set = new Set(corePool1);
             const corePool2Set = new Set(corePool2);
-            const reqPairKeyByCode = {};
-            for (let i = 0; i < reqPairs.length; i++) {
-                const key = reqPairs[i].join('|');
-                reqPairKeyByCode[reqPairs[i][0]] = key;
-                reqPairKeyByCode[reqPairs[i][1]] = key;
-            }
             const corePairKeyByCode = {};
             for (let i = 0; i < corePool2Pairs.length; i++) {
                 const key = corePool2Pairs[i].join('|');
@@ -1227,26 +1242,9 @@ function s_curriculum()
                     : (parseFloat(course.SU_credit || '0') || 0);
             }
 
-            // Choose a single course from each required pair to count as required.
-            // If both are taken, the extra counts as free elective (it should not
-            // double-count toward the required pool).
-            const chosenRequiredPairKeys = new Set();
-            for (let i = 0; i < sortedSemesters.length; i++) {
-                const sem = sortedSemesters[i];
-                for (let j = 0; j < sem.courses.length; j++) {
-                    const course = sem.courses[j];
-                    if (!course || !course.id) continue;
-                    if (course.effective_type === 'none') continue;
-                    const key = reqPairKeyByCode[course.code];
-                    if (!key) continue;
-                    if (!chosenRequiredPairKeys.has(key)) {
-                        chosenRequiredPairKeys.add(key);
-                        course.effective_type = 'required';
-                    } else {
-                        course.effective_type = 'free';
-                    }
-                }
-            }
+            // (The required pairs — VACD_REQUIRED_PAIRS — are resolved BEFORE
+            // the allocation cascade above via `typeOverride`, so the kept
+            // course fills `required` and the extra becomes a free elective.)
 
             // Select core courses for the two core elective pools, respecting
             // mutually-exclusive pairs in corePool2.
