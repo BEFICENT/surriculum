@@ -12,6 +12,50 @@ if (typeof window !== 'undefined') {
 // student takes one of the two. Shared by the main-major and double-major
 // allocation passes so the two cannot drift apart.
 const VACD_REQUIRED_PAIRS = [['VA301', 'VA303'], ['VA401', 'VA403'], ['VA300', 'PROJ300']];
+const ME_2025_ALT_PAIRS = [['ME403', 'ME425'], ['CS404', 'CS412']];
+
+// Alternative-course pairs: a pair is one required slot and the student takes
+// ONE of the two. If both are completed, the extra must not occupy a required
+// slot — it spills into an elective pool instead.
+//
+// This MUST be resolved BEFORE the allocation cascade. Demoting the extra
+// afterwards leaves `required` short: the cascade has already capped `required`
+// at its threshold and pushed the surplus into the elective pools, so freeing a
+// required slot after the fact never pulls those courses back. Deciding up
+// front lets the cascade fill `required` with the kept course.
+//
+// Keeps the chronologically first member of each pair as required and records
+// `extraType` for the rest in the `out` Map (course object -> static type).
+// Shared by both allocation passes: the double-major copy of this rule drifted
+// from the main one and kept a bug the main one had already fixed.
+function markAltPairExtras(sortedSems, pairs, extraType, out) {
+    const norm = (v) => String(v || '').toUpperCase().replace(/\s+/g, '');
+    for (let p = 0; p < pairs.length; p++) {
+        const taken = [];
+        for (let i = 0; i < sortedSems.length; i++) {
+            const courses = sortedSems[i].courses || [];
+            for (let j = 0; j < courses.length; j++) {
+                const c = courses[j];
+                if (c && pairs[p].indexOf(norm(c.code)) !== -1) taken.push(c);
+            }
+        }
+        for (let k = 1; k < taken.length; k++) out.set(taken[k], extraType);
+    }
+}
+
+// SUIS math-alternative rule (CS): pre-2025 admits count only ONE of
+// MATH212/MATH201 (the extra MATH201 is dropped); 2025+ admits count neither
+// MATH201 nor MATH202. An excluded course counts toward NO pool — not core,
+// area or free. Returns a predicate over course codes.
+function csMathSkipPredicate(entryTermCode, hasCourse) {
+    const entry = parseInt(entryTermCode || '0', 10);
+    const is2025Plus = !isNaN(entry) && entry >= 202501;
+    const bothAlternatives = !is2025Plus && hasCourse('MATH201') && hasCourse('MATH212');
+    return (code) => {
+        if (is2025Plus) return code === 'MATH201' || code === 'MATH202';
+        return bothAlternatives && code === 'MATH201';
+    };
+}
 function s_curriculum()
 {
     this.semester_id = 0;
@@ -879,59 +923,29 @@ function s_curriculum()
         // into `free`, which the rule forbids.
         const mathSkip = new Set();
         if (this.major === 'CS') {
-            const entryCS = parseInt(this.entryTerm || '0', 10);
-            const cs2025Plus = !isNaN(entryCS) && entryCS >= 202501;
-            const bothPreAlternatives = !cs2025Plus && this.hasCourse('MATH201') && this.hasCourse('MATH212');
-            const shouldSkipMath = (code) => {
-                if (cs2025Plus) return code === 'MATH201' || code === 'MATH202';
-                return bothPreAlternatives && code === 'MATH201';
-            };
+            const shouldSkipMath = csMathSkipPredicate(this.entryTerm, (c) => this.hasCourse(c));
             this.semesters.forEach((sem) => {
                 (sem.courses || []).forEach((c) => { if (c && shouldSkipMath(c.code)) mathSkip.add(c); });
             });
         }
 
-        // Alternative-course pairs: a pair is one required slot, and the student
-        // takes ONE of the two. If BOTH are completed, the extra does not occupy
-        // a required slot — it spills into an elective pool instead.
-        //
-        // The decision MUST happen here, BEFORE the allocation cascade below.
-        // Demoting the extra afterwards leaves `required` short: the cascade has
-        // already capped `required` at its threshold and pushed the surplus into
-        // the elective pools, so freeing a required slot after the fact never
-        // pulls those courses back. Deciding up-front lets the cascade fill
-        // `required` with the kept course and allocate the extra as an elective.
+        // Alternative-course pairs, resolved before the cascade below. See
+        // markAltPairExtras() for why this cannot run afterwards.
         const typeOverride = new Map();
-        const normalizeCode = (v) => String(v || '').toUpperCase().replace(/\s+/g, '');
-        // Marks the extras of each pair (keeping the chronologically first as
-        // required) with the elective type the extra should count toward.
-        const overrideAltPairs = (pairs, extraType) => {
-            for (let p = 0; p < pairs.length; p++) {
-                const taken = [];
-                for (let i = 0; i < sortedSemesters.length; i++) {
-                    const courses = sortedSemesters[i].courses || [];
-                    for (let j = 0; j < courses.length; j++) {
-                        const c = courses[j];
-                        if (c && pairs[p].indexOf(normalizeCode(c.code)) !== -1) taken.push(c);
-                    }
-                }
-                for (let k = 1; k < taken.length; k++) typeOverride.set(taken[k], extraType);
-            }
-        };
         if (this.major === 'ME') {
             // SUIS rule (ME, 2025+ admits): "ME403 or ME425" and "CS404 or
             // CS412" are each required; a student taking both has the extra
             // counted toward the Core Elective requirement.
             const entryME = parseInt(this.entryTerm || '0', 10);
             if (!isNaN(entryME) && entryME >= 202501) {
-                overrideAltPairs([['ME403', 'ME425'], ['CS404', 'CS412']], 'core');
+                markAltPairExtras(sortedSemesters, ME_2025_ALT_PAIRS, 'core', typeOverride);
             }
         } else if (this.major === 'VACD') {
             // VACD alternatives. The extra counts as a free elective: VACD's
             // core requirement is defined by two named pools (see the pool
             // allocation further below), which these courses are not part of,
             // so the extra cannot become a core elective the way ME's does.
-            overrideAltPairs(VACD_REQUIRED_PAIRS, 'free');
+            markAltPairExtras(sortedSemesters, VACD_REQUIRED_PAIRS, 'free', typeOverride);
         }
 
         // Iterate semesters in chronological order
@@ -1672,6 +1686,26 @@ function s_curriculum()
             const bIdx = (b.termIndex !== null && b.termIndex !== undefined) ? b.termIndex : -1;
             return bIdx - aIdx;
         });
+
+        // Alternative-course rules for the double major, resolved BEFORE the
+        // allocation loop below — same reasoning as the main-major pass; see
+        // markAltPairExtras().
+        const mathSkipDM = new Set();
+        const typeOverrideDM = new Map();
+        if (this.doubleMajor === 'CS') {
+            const shouldSkipMathDM = csMathSkipPredicate(this.entryTermDM, (c) => this.hasCourse(c));
+            this.semesters.forEach((sem) => {
+                (sem.courses || []).forEach((c) => { if (c && shouldSkipMathDM(c.code)) mathSkipDM.add(c); });
+            });
+        } else if (this.doubleMajor === 'ME') {
+            const entryDM = parseInt(this.entryTermDM || '0', 10);
+            if (!isNaN(entryDM) && entryDM >= 202501) {
+                markAltPairExtras(sorted, ME_2025_ALT_PAIRS, 'core', typeOverrideDM);
+            }
+        } else if (this.doubleMajor === 'VACD') {
+            markAltPairExtras(sorted, VACD_REQUIRED_PAIRS, 'free', typeOverrideDM);
+        }
+
         // Walk semesters and courses allocating DM categories
         for (let i = 0; i < sorted.length; i++) {
             const sem = sorted[i];
@@ -1686,6 +1720,11 @@ function s_curriculum()
                     }
                 } catch (_) {}
                 if (gradeText === 'F') {
+                    course.effective_type_dm = 'none';
+                    continue;
+                }
+                // Excluded math alternative (SUIS rule): counts toward no pool.
+                if (mathSkipDM.has(course)) {
                     course.effective_type_dm = 'none';
                     continue;
                 }
@@ -1726,6 +1765,9 @@ function s_curriculum()
                 delete course.categoryDM;
                 if (info) {
                     dmStaticType = (info['EL_Type'] || '').toLowerCase();
+                    // Alternative pairs: the extra course of a pair counts
+                    // toward an elective pool rather than a required slot.
+                    if (typeOverrideDM.has(course)) dmStaticType = typeOverrideDM.get(course);
                     if (dmStaticType) {
                         course.categoryDM = dmStaticType.charAt(0).toUpperCase() + dmStaticType.slice(1);
                     }
@@ -1754,7 +1796,9 @@ function s_curriculum()
                             dmType = 'free';
                         }
                     } else if (dmStaticType === 'required') {
-                        if (currentDMRequired < dmReqRequired) {
+                        // A zero-credit required course consumes no capacity and
+                        // so can never overflow (see the main-major pass).
+                        if (currentDMRequired < dmReqRequired || credit === 0) {
                             dmType = 'required';
                             currentDMRequired += credit;
                         } else if (currentDMCores < dmCoreReq) {
@@ -1941,116 +1985,18 @@ function s_curriculum()
             }
         }
 
-        // Special-case CS double major: math course exclusions/alternatives.
-        // - Pre-2025 admits: only ONE of MATH212 or MATH201 counts toward CS pools.
-        // - 2025–2026 admits and later: MATH201 and MATH202 are not included in any CS pool.
-        if (this.doubleMajor === 'CS') {
-            const entryDM = parseInt(this.entryTermDM || '0', 10);
-            const is2025PlusDM = !isNaN(entryDM) && entryDM >= 202501;
+        // (CS double-major math exclusions are handled BEFORE the allocation
+        // loop above via `mathSkipDM`, so the kept course fills `required`.)
 
-            const parseCredit0 = (v) => {
-                const n = (typeof parseCreditValue === 'function')
-                    ? parseCreditValue(v || '0')
-                    : (parseFloat(v || '0') || 0);
-                return isNaN(n) ? 0 : n;
-            };
-            const excludeCourseDM = (sem, course) => {
-                if (!sem || !course) return;
-                const credit = parseCredit0(course.SU_credit);
-                const et = course.effective_type_dm;
-                if (et === 'core') sem.totalCoreDM = Math.max(0, sem.totalCoreDM - credit);
-                else if (et === 'area') sem.totalAreaDM = Math.max(0, sem.totalAreaDM - credit);
-                else if (et === 'free') sem.totalFreeDM = Math.max(0, sem.totalFreeDM - credit);
-                else if (et === 'required') sem.totalRequiredDM = Math.max(0, sem.totalRequiredDM - credit);
-                else if (et === 'university') sem.totalUniversityDM = Math.max(0, sem.totalUniversityDM - credit);
-                course.effective_type_dm = 'none';
-            };
-
-            const math201 = [];
-            const math202 = [];
-            const math212 = [];
-            for (let i = 0; i < sorted.length; i++) {
-                const sem = sorted[i];
-                for (let j = 0; j < sem.courses.length; j++) {
-                    const course = sem.courses[j];
-                    if (!course) continue;
-                    if (course.effective_type_dm === 'none') continue;
-                    if (course.code === 'MATH201') math201.push({ sem, course });
-                    else if (course.code === 'MATH202') math202.push({ sem, course });
-                    else if (course.code === 'MATH212') math212.push({ sem, course });
-                }
-            }
-
-            if (is2025PlusDM) {
-                for (let i = 0; i < math201.length; i++) excludeCourseDM(math201[i].sem, math201[i].course);
-                for (let i = 0; i < math202.length; i++) excludeCourseDM(math202[i].sem, math202[i].course);
-            } else {
-                if (math201.length > 0 && math212.length > 0) {
-                    for (let i = 0; i < math201.length; i++) excludeCourseDM(math201[i].sem, math201[i].course);
-                }
-            }
-        }
-
-        // Special-case ME double major (Fall 2025+):
-        // CS404 or CS412 is required. If both are completed, one counts as
-        // required and the other counts as core elective.
-        if (this.doubleMajor === 'ME') {
-            const entryDM = parseInt(this.entryTermDM || '0', 10);
-            const is2025PlusDM = !isNaN(entryDM) && entryDM >= 202501;
-            if (is2025PlusDM) {
-                const parseCredit0 = (v) => {
-                    const n = (typeof parseCreditValue === 'function')
-                        ? parseCreditValue(v || '0')
-                        : (parseFloat(v || '0') || 0);
-                    return isNaN(n) ? 0 : n;
-                };
-                let assignedRequired = false;
-                const normalizeCode = (v) => String(v || '').toUpperCase().replace(/\s+/g, '');
-                for (let i = 0; i < sorted.length; i++) {
-                    const sem = sorted[i];
-                    for (let j = 0; j < sem.courses.length; j++) {
-                        const course = sem.courses[j];
-                        if (!course || course.effective_type_dm === 'none') continue;
-                        const code = normalizeCode(course.code);
-                        if (code !== 'CS404' && code !== 'CS412') continue;
-                        if (!assignedRequired) {
-                            course.effective_type_dm = 'required';
-                            assignedRequired = true;
-                        } else {
-                            course.effective_type_dm = 'core';
-                        }
-                    }
-                }
-
-                // Recompute DM category totals to reflect normalized ME allocations.
-                for (let i = 0; i < this.semesters.length; i++) {
-                    const sem = this.semesters[i];
-                    sem.totalCoreDM = 0;
-                    sem.totalAreaDM = 0;
-                    sem.totalFreeDM = 0;
-                    sem.totalRequiredDM = 0;
-                    sem.totalUniversityDM = 0;
-                    for (let j = 0; j < sem.courses.length; j++) {
-                        const course = sem.courses[j];
-                        if (!course) continue;
-                        const et = course.effective_type_dm;
-                        if (!et || et === 'none') continue;
-                        const c = parseCredit0(course.SU_credit || '0');
-                        if (et === 'core') sem.totalCoreDM += c;
-                        else if (et === 'area') sem.totalAreaDM += c;
-                        else if (et === 'free') sem.totalFreeDM += c;
-                        else if (et === 'required') sem.totalRequiredDM += c;
-                        else if (et === 'university') sem.totalUniversityDM += c;
-                    }
-                }
-            }
-        }
+        // (ME double-major alternative pairs — ME403/ME425 and CS404/CS412 —
+        // are handled BEFORE the allocation loop above via `typeOverrideDM`.
+        // The old code here handled only CS404/CS412, and did so after the
+        // cascade, which left `required` short.)
 
         // Special-case VACD double major: enforce mutually-exclusive pair rules
         // for required and core elective pools and spill extra pool courses into
         // area/free as specified by VACD requirements.
         if (this.doubleMajor === 'VACD') {
-            const reqPairs = [['VA301', 'VA303'], ['VA401', 'VA403'], ['VA300', 'PROJ300']];
             const corePool1 = ['HART292', 'HART293', 'HART380', 'HART413', 'HART426', 'VA315', 'VA420', 'VA430'];
             const corePool1Min = 9;
             const corePool2 = ['VA202', 'VA204', 'VA234', 'VA302', 'VA304', 'VA402', 'VA404'];
@@ -2059,12 +2005,6 @@ function s_curriculum()
 
             const corePool1Set = new Set(corePool1);
             const corePool2Set = new Set(corePool2);
-            const reqPairKeyByCode = {};
-            for (let i = 0; i < reqPairs.length; i++) {
-                const key = reqPairs[i].join('|');
-                reqPairKeyByCode[reqPairs[i][0]] = key;
-                reqPairKeyByCode[reqPairs[i][1]] = key;
-            }
             const corePairKeyByCode = {};
             for (let i = 0; i < corePool2Pairs.length; i++) {
                 const key = corePool2Pairs[i].join('|');
@@ -2077,24 +2017,8 @@ function s_curriculum()
                     : (parseFloat(course.SU_credit || '0') || 0);
             }
 
-            // Required pairs: only one counts as required. Extras become free.
-            const chosenReqPairKeys = new Set();
-            for (let i = 0; i < sorted.length; i++) {
-                const sem = sorted[i];
-                for (let j = 0; j < sem.courses.length; j++) {
-                    const course = sem.courses[j];
-                    if (!course || !course.id) continue;
-                    if (course.effective_type_dm === 'none') continue;
-                    const key = reqPairKeyByCode[course.code];
-                    if (!key) continue;
-                    if (!chosenReqPairKeys.has(key)) {
-                        chosenReqPairKeys.add(key);
-                        course.effective_type_dm = 'required';
-                    } else {
-                        course.effective_type_dm = 'free';
-                    }
-                }
-            }
+            // (The required pairs — VACD_REQUIRED_PAIRS — are resolved BEFORE
+            // the allocation loop above via `typeOverrideDM`.)
 
             // Core pools: pick minimum credits from each pool, respecting the
             // mutually-exclusive pairs in corePool2. Pool overflow fills area
