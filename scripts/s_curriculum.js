@@ -20,6 +20,18 @@ const VACD_REQUIRED_PAIRS = [['VA301', 'VA303'], ['VA401', 'VA403'], ['VA300', '
 // course requirements." Likewise for "CS 404 or CS 412".
 const ME_2025_ALT_PAIRS = [['ME403', 'ME425'], ['CS404', 'CS412']];
 
+// SUIS (PSY): "Philosophy Requirement Course — Either one of the courses below:
+// PHIL 300, PHIL 301." Both are catalog-`required`, and the threshold is tight
+// (the seven named PSY courses = 18cr, + one PHIL = 21 = the requirement), so
+// this is an alternative pair like the ones above.
+//
+// SUIS is SILENT on taking both — there is no published rule. Assumption agreed
+// with the maintainer: one fills the requirement, the extra counts as a FREE
+// elective. Without this the extra cascades into `core`, which PSY's own rules
+// contradict: PSY's core is a named 14-course pool that does not include PHIL,
+// so an extra PHIL could wrongly help satisfy the core requirement.
+const PSY_PHILOSOPHY_PAIR = [['PHIL300', 'PHIL301']];
+
 // Beginning/Basic level language courses — SUIS caps how many of these may
 // count toward free electives. These are the School of Languages courses
 // (catalog `Faculty: 'SL'`) whose names begin with "Basic". The Intermediate
@@ -31,6 +43,36 @@ const BASIC_LANGUAGE_COURSES = new Set([
 // "PSY 4XX-level advanced Psychology courses" (SUIS, PSY area electives).
 function isPsyAdvancedCode(code) {
     return /^PSY\s?4\d{2}$/.test(String(code || '').toUpperCase().replace(/\s+/g, ''));
+}
+
+// SUIS states the same free-elective language cap on every non-engineering
+// major, in near-identical words:
+//   MAN:  "At most 2 of the Beginning / Basic level language courses can be
+//          used to fulfill the requirements for this area."
+//   PSY:  "at most two of the beginning/basic level second language courses
+//          can be used to fulfill the free elective requirements."
+//   VACD: "At most 2 of the Begnining / Basic level language courses can be
+//          used to fulfill the requirements for this area."
+//   PSIR: "At most two of the beginning/basic level second language courses
+//          can be used to fulfill the free elective requirements."
+//   ECON: "At most 2 of the Beginning / Basic level language courses can be
+//          used to fulfill the requirements for this area."
+// One helper for all ten call sites (five majors x main/double-major pass):
+// hand-copying this rule per major is how the last several bugs survived.
+// `effField` selects the pass: 'effective_type' or 'effective_type_dm'.
+const BASIC_LANGUAGE_LIMIT = 2;
+function countBasicLanguageInFree(semesters, effField) {
+    let count = 0;
+    for (let i = 0; i < semesters.length; i++) {
+        const courses = semesters[i].courses || [];
+        for (let j = 0; j < courses.length; j++) {
+            const course = courses[j];
+            if (!course) continue;
+            if (String(course[effField] || '').toLowerCase() !== 'free') continue;
+            if (BASIC_LANGUAGE_COURSES.has(course.code)) count++;
+        }
+    }
+    return count;
 }
 
 // Alternative-course pairs: a pair is one required slot and the student takes
@@ -494,6 +536,10 @@ function s_curriculum()
                 if(facultyCoursesCount < 5) return 14;
                 if(fassCount < 3) return 15;
                 if(areasCount.size < 3) return 18;
+
+                // SUIS: at most 2 Beginning/Basic level language courses may
+                // count toward the free electives.
+                if (countBasicLanguageInFree(this.semesters, 'effective_type') > BASIC_LANGUAGE_LIMIT) return 40;
             }
         }
         else if(this.major == 'MAN') {
@@ -567,7 +613,6 @@ function s_curriculum()
                 // this area."
                 let freeElectiveCredits = 0;
                 let fassFensCredits = 0;
-                let basicLanguageCoursesCount = 0;
 
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
@@ -584,9 +629,6 @@ function s_curriculum()
                             if (course.Faculty === 'FASS' || course.Faculty === 'FENS') {
                                 fassFensCredits += c;
                             }
-                            if (BASIC_LANGUAGE_COURSES.has(course.code)) {
-                                basicLanguageCoursesCount++;
-                            }
                         }
                     }
                 }
@@ -600,7 +642,7 @@ function s_curriculum()
                 // Its own flag: 37's message only describes the FASS/FENS rule,
                 // so reporting the language cap as 37 told students the wrong
                 // thing entirely.
-                if (basicLanguageCoursesCount > 2) return 40;
+                if (countBasicLanguageInFree(this.semesters, 'effective_type') > BASIC_LANGUAGE_LIMIT) return 40;
             }
         }
         else if(this.major == 'PSIR')
@@ -672,6 +714,10 @@ function s_curriculum()
                     }
                 }
                 if (coreElectivesIICount < 12) return 34;
+
+                // SUIS: at most 2 Beginning/Basic level language courses may
+                // count toward the free electives.
+                if (countBasicLanguageInFree(this.semesters, 'effective_type') > BASIC_LANGUAGE_LIMIT) return 40;
             }
         }
         else if(this.major == 'PSY')
@@ -728,17 +774,15 @@ function s_curriculum()
                 // level second language courses can be used to fulfill the free
                 // elective requirements."
                 let psy4xxAreaCount = 0;
-                let basicLanguageCount = 0;
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
-                        const eff = (course.effective_type || '').toLowerCase();
-                        if (eff === 'area' && isPsyAdvancedCode(course.code)) psy4xxAreaCount++;
-                        else if (eff === 'free' && BASIC_LANGUAGE_COURSES.has(course.code)) basicLanguageCount++;
+                        if ((course.effective_type || '').toLowerCase() === 'area'
+                            && isPsyAdvancedCode(course.code)) psy4xxAreaCount++;
                     }
                 }
                 if (psy4xxAreaCount < 2) return 39;
-                if (basicLanguageCount > 2) return 40;
+                if (countBasicLanguageInFree(this.semesters, 'effective_type') > BASIC_LANGUAGE_LIMIT) return 40;
             }
         }
         else if(this.major == 'VACD')
@@ -824,6 +868,9 @@ function s_curriculum()
                     }
                 }
                 if (coreElectivesIICount < 12) return 31;
+                // SUIS: at most 2 Beginning/Basic level language courses may
+                // count toward the free electives.
+                if (countBasicLanguageInFree(this.semesters, 'effective_type') > BASIC_LANGUAGE_LIMIT) return 40;
             }
         }
         else if(this.major == 'DSA')
@@ -1004,6 +1051,11 @@ function s_curriculum()
             // outright rather than allowed to fill a free-elective slot.
             collectAltPairExtras(sortedSemesters, VACD_REQUIRED_PAIRS)
                 .forEach((c) => excludedFromDegree.add(c));
+        } else if (this.major === 'PSY') {
+            // No published rule for taking both; the extra counts as free by
+            // agreed assumption. See PSY_PHILOSOPHY_PAIR.
+            collectAltPairExtras(sortedSemesters, PSY_PHILOSOPHY_PAIR)
+                .forEach((c) => typeOverride.set(c, 'free'));
         }
 
         // Iterate semesters in chronological order
@@ -1771,6 +1823,9 @@ function s_curriculum()
         } else if (this.doubleMajor === 'VACD') {
             collectAltPairExtras(sorted, VACD_REQUIRED_PAIRS)
                 .forEach((c) => excludedFromDegreeDM.add(c));
+        } else if (this.doubleMajor === 'PSY') {
+            collectAltPairExtras(sorted, PSY_PHILOSOPHY_PAIR)
+                .forEach((c) => typeOverrideDM.set(c, 'free'));
         }
 
         // Walk semesters and courses allocating DM categories
@@ -2464,6 +2519,9 @@ function s_curriculum()
                 if (facultyCoursesCount < 5) return 14;
                 if (fassCount < 3) return 15;
                 if (areasCount.size < 3) return 18;
+                // SUIS: at most 2 Beginning/Basic level language courses may
+                // count toward the free electives.
+                if (countBasicLanguageInFree(this.semesters, 'effective_type_dm') > BASIC_LANGUAGE_LIMIT) return 40;
             }
         } else if (maj === 'MAN') {
             {
@@ -2523,7 +2581,6 @@ function s_curriculum()
                 // rule in canGraduate() for the quoted text.
                 let freeElectiveCredits = 0;
                 let fassFensCredits = 0;
-                let basicLanguageCoursesCount = 0;
 
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
@@ -2538,9 +2595,6 @@ function s_curriculum()
                             if (course.Faculty === 'FASS' || course.Faculty === 'FENS') {
                                 fassFensCredits += c;
                             }
-                            if (BASIC_LANGUAGE_COURSES.has(course.code)) {
-                                basicLanguageCoursesCount++;
-                            }
                         }
                     }
                 }
@@ -2554,7 +2608,7 @@ function s_curriculum()
                 // Its own flag: 37's message only describes the FASS/FENS rule,
                 // so reporting the language cap as 37 told students the wrong
                 // thing entirely.
-                if (basicLanguageCoursesCount > 2) return 40;
+                if (countBasicLanguageInFree(this.semesters, 'effective_type_dm') > BASIC_LANGUAGE_LIMIT) return 40;
             }
         } else if (maj === 'PSIR') {
             {
@@ -2613,6 +2667,9 @@ function s_curriculum()
                     }
                 }
                 if (coreElectivesIICount < 12) return 34;
+                // SUIS: at most 2 Beginning/Basic level language courses may
+                // count toward the free electives.
+                if (countBasicLanguageInFree(this.semesters, 'effective_type_dm') > BASIC_LANGUAGE_LIMIT) return 40;
             }
         } else if (maj === 'PSY') {
             {
@@ -2646,17 +2703,15 @@ function s_curriculum()
                 // free electives may count at most 2 basic language courses.
                 // See the main-major PSY block for the quoted text.
                 let psy4xxAreaCountDM = 0;
-                let basicLanguageCountDM = 0;
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
                         const course = this.semesters[i].courses[a];
-                        const eff = (course.effective_type_dm || '').toLowerCase();
-                        if (eff === 'area' && isPsyAdvancedCode(course.code)) psy4xxAreaCountDM++;
-                        else if (eff === 'free' && BASIC_LANGUAGE_COURSES.has(course.code)) basicLanguageCountDM++;
+                        if ((course.effective_type_dm || '').toLowerCase() === 'area'
+                            && isPsyAdvancedCode(course.code)) psy4xxAreaCountDM++;
                     }
                 }
                 if (psy4xxAreaCountDM < 2) return 39;
-                if (basicLanguageCountDM > 2) return 40;
+                if (countBasicLanguageInFree(this.semesters, 'effective_type_dm') > BASIC_LANGUAGE_LIMIT) return 40;
 
                 // Core electives requirement: 7 courses. Redundant with the
                 // generic core check above (core = 21 credits and every pool
@@ -2747,6 +2802,9 @@ function s_curriculum()
                     }
                 }
                 if (coreElectivesIICount < 12) return 31;
+                // SUIS: at most 2 Beginning/Basic level language courses may
+                // count toward the free electives.
+                if (countBasicLanguageInFree(this.semesters, 'effective_type_dm') > BASIC_LANGUAGE_LIMIT) return 40;
             }
         } else if (maj === 'DSA') {
             {

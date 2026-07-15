@@ -23,6 +23,7 @@ const plans = require('../fixtures/passing-plans-multiterm.json');
 const TERM = '202301';
 const TERM_NAME = 'Fall 2023-2024';
 const PSY_REQUIRED = 21;
+const PSY_CORE = 21; // = the 7-course named pool x 3cr
 
 const seedPsy = (page, drop = []) => {
   const courses = plans[TERM].PSY.filter((c) => !drop.includes(c));
@@ -35,10 +36,18 @@ const seedPsy = (page, drop = []) => {
   });
 };
 
-const read = (page) => page.evaluate(() => ({
-  flag: window.curriculum.canGraduate(),
-  required: window.curriculum.semesters.reduce((a, s) => a + (s.totalRequired || 0), 0),
-}));
+const read = (page) => page.evaluate(() => {
+  const s = window.curriculum.semesters;
+  const sum = (f) => s.reduce((a, x) => a + (x[f] || 0), 0);
+  const eff = {};
+  s.forEach((x) => x.courses.forEach((c) => { if (/^PHIL30[01]$/.test(c.code)) eff[c.code] = c.effective_type; }));
+  return {
+    flag: window.curriculum.canGraduate(),
+    required: sum('totalRequired'),
+    core: sum('totalCore'),
+    eff,
+  };
+});
 
 test.describe('PSY philosophy requirement (PHIL300 / PHIL301)', () => {
   test('either PHIL course alone fills the required pool', async ({ page }) => {
@@ -61,6 +70,27 @@ test.describe('PSY philosophy requirement (PHIL300 / PHIL301)', () => {
     // student really is short on required credits, so the generic check wins.
     expect(r.required, 'required without any PHIL course').toBeLessThan(PSY_REQUIRED);
     expect(r.flag, 'generic required-short flag pre-empts the philosophy check').toBe(2);
+  });
+
+  test('taking BOTH: one fills the requirement, the extra is a free elective', async ({ page }) => {
+    // SUIS is SILENT on taking both — there is no published rule. Assumption
+    // agreed with the maintainer: one counts, the extra goes to free.
+    //
+    // It matters because the fallback was wrong in a specific way. Both PHIL
+    // courses are catalog-`required`, so without a pair rule the cascade capped
+    // `required` at 21 and pushed the extra PHIL down into `core` — inflating
+    // core to 24. PSY's core is a named 14-course pool that excludes PHIL, so
+    // that let a PHIL course help satisfy a requirement it is not part of.
+    await seedPsy(page);
+    const r = await read(page);
+
+    const types = [r.eff.PHIL300, r.eff.PHIL301];
+    expect(types.filter((t) => t === 'required'), `exactly one PHIL should be required (got ${types})`).toHaveLength(1);
+    expect(types, 'the extra PHIL should be a free elective').toContain('free');
+    expect(types, 'the extra PHIL must NOT land in core — it is not in the core pool').not.toContain('core');
+
+    expect(r.required, 'one PHIL still carries required to threshold').toBe(PSY_REQUIRED);
+    expect(r.core, 'core comes from the named pool only, un-inflated by the extra PHIL').toBe(PSY_CORE);
   });
 
   test('the flag-26 message names the philosophy courses, not physics', async ({ page }) => {
