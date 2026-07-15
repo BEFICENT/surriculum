@@ -20,6 +20,14 @@ const VACD_REQUIRED_PAIRS = [['VA301', 'VA303'], ['VA401', 'VA403'], ['VA300', '
 // course requirements." Likewise for "CS 404 or CS 412".
 const ME_2025_ALT_PAIRS = [['ME403', 'ME425'], ['CS404', 'CS412']];
 
+// Beginning/Basic level language courses — SUIS caps how many of these may
+// count toward free electives. These are the School of Languages courses
+// (catalog `Faculty: 'SL'`) whose names begin with "Basic". The Intermediate
+// ones (FRE130/140, GER130/140, TUR201) and TLL/ENG/AL are NOT capped.
+const BASIC_LANGUAGE_COURSES = new Set([
+    'FRE110', 'FRE120', 'GER110', 'GER120', 'SPA110', 'SPA120', 'TUR101', 'TUR102',
+]);
+
 // Alternative-course pairs: a pair is one required slot and the student takes
 // ONE of the two. Returns the EXTRA courses — everything after the
 // chronologically first member of each pair the student actually completed.
@@ -547,11 +555,14 @@ function s_curriculum()
                 }
                 if (areaAreas.size < 5) return 36;
 
-                // Free Electives requirement for MAN
-                let freeElectivesCount = 0;
+                // SUIS (MAN free electives): "26 SU credits are required. 9 out
+                // of these 26 SU credits should be among the courses offered by
+                // FASS or FENS. At most 2 of the Beginning / Basic level
+                // language courses can be used to fulfill the requirements for
+                // this area."
+                let freeElectiveCredits = 0;
                 let fassFensCredits = 0;
                 let basicLanguageCoursesCount = 0;
-                const basicLanguageCourses = ['LANG101', 'LANG102', 'LANG103', 'LANG104']; // Example codes for basic language courses
 
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
@@ -561,11 +572,14 @@ function s_curriculum()
                             const c = (typeof parseCreditValue === 'function')
                                 ? parseCreditValue(course.SU_credit || '0')
                                 : (parseFloat(course.SU_credit || '0') || 0);
-                            freeElectivesCount += c;
-                            if (course.Faculty_Course === 'FASS' || course.Faculty_Course === 'FENS') {
+                            freeElectiveCredits += c;
+                            // "offered by FASS or FENS" is the OFFERING faculty
+                            // (`Faculty`), not the faculty-course pool marker
+                            // (`Faculty_Course`, set on only ~66 of 670 courses).
+                            if (course.Faculty === 'FASS' || course.Faculty === 'FENS') {
                                 fassFensCredits += c;
                             }
-                            if (basicLanguageCourses.includes(course.code)) {
+                            if (BASIC_LANGUAGE_COURSES.has(course.code)) {
                                 basicLanguageCoursesCount++;
                             }
                         }
@@ -573,7 +587,7 @@ function s_curriculum()
                 }
 
                 // Check Free Electives requirements
-                if (freeElectivesCount < 26) return 37;
+                if (freeElectiveCredits < 26) return 37;
                 if (fassFensCredits < 9) return 37;
                 if (basicLanguageCoursesCount > 2) return 37;
             }
@@ -1095,6 +1109,7 @@ function s_curriculum()
                     course.SU_credit = credit;
                     course.ECTS = ectsVal;
                     course.Faculty_Course = (dmInfo && dmInfo['Faculty_Course']) ? dmInfo['Faculty_Course'] : (course.Faculty_Course || 'No');
+                    course.Faculty = (dmInfo && dmInfo['Faculty']) ? dmInfo['Faculty'] : (course.Faculty || '');
                     // Update DOM label to N/A
                     try {
                         const courseElem = document.getElementById(course.id);
@@ -1127,6 +1142,10 @@ function s_curriculum()
                 course.SU_credit = credit;
                 course.ECTS = ectsVal;
                 course.Faculty_Course = infoMain['Faculty_Course'] || 'No';
+                // The OFFERING faculty (FASS/FENS/SBS/SL) — distinct from
+                // Faculty_Course above, which marks membership of the faculty-
+                // course pool. Rules worded "offered by X" need this one.
+                course.Faculty = infoMain['Faculty'] || '';
 
                 // Update generic totals (credits, science, engineering, ECTS)
                 sem.totalCredit += credit;
@@ -2465,11 +2484,11 @@ function s_curriculum()
                 }
                 if (areaAreas.size < 5) return 36;
 
-                // Free Electives requirement for MAN
-                let freeElectivesCount = 0;
+                // SUIS (MAN free electives) — see the main-major copy of this
+                // rule in canGraduate() for the quoted text.
+                let freeElectiveCredits = 0;
                 let fassFensCredits = 0;
                 let basicLanguageCoursesCount = 0;
-                const basicLanguageCourses = ['LANG101', 'LANG102', 'LANG103', 'LANG104']; // Example codes for basic language courses
 
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {
@@ -2479,11 +2498,12 @@ function s_curriculum()
                             const c = (typeof parseCreditValue === 'function')
                                 ? parseCreditValue(course.SU_credit || '0')
                                 : (parseFloat(course.SU_credit || '0') || 0);
-                            freeElectivesCount += c;
-                            if (course.Faculty_Course === 'FASS' || course.Faculty_Course === 'FENS') {
+                            freeElectiveCredits += c;
+                            // "offered by FASS or FENS" = the offering faculty.
+                            if (course.Faculty === 'FASS' || course.Faculty === 'FENS') {
                                 fassFensCredits += c;
                             }
-                            if (basicLanguageCourses.includes(course.code)) {
+                            if (BASIC_LANGUAGE_COURSES.has(course.code)) {
                                 basicLanguageCoursesCount++;
                             }
                         }
@@ -2491,7 +2511,7 @@ function s_curriculum()
                 }
 
                 // Check Free Electives requirements
-                if (freeElectivesCount < 26) return 37;
+                if (freeElectiveCredits < 26) return 37;
                 if (fassFensCredits < 9) return 37;
                 if (basicLanguageCoursesCount > 2) return 37;
             }
