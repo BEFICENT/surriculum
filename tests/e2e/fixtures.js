@@ -19,7 +19,16 @@ const base = require('@playwright/test');
 const IGNORED_CONSOLE = [/Failed to load resource/];
 
 const test = base.test.extend({
-  browserErrors: async ({ page }, use) => {
+  // `auto: true` so EVERY test gets this, whether or not it asks for the
+  // fixture. It used to be opt-in, and only 2 of 202 tests opted in — the net
+  // was there but hardly wired up, so an uncaught TypeError could fire on a
+  // flow a test was driving and the test would still pass. (That is exactly
+  // what happened: getAncestor threw on every drag dropped outside a semester,
+  // and the drag test sailed past it.)
+  //
+  // A test that MEANS to trigger an error should assert on `browserErrors` and
+  // then empty it — see semester-drag.spec.js.
+  browserErrors: [async ({ page }, use, testInfo) => {
     const errors = [];
     page.on('pageerror', (err) => errors.push('pageerror: ' + err.message));
     page.on('console', (msg) => {
@@ -28,8 +37,17 @@ const test = base.test.extend({
       if (IGNORED_CONSOLE.some((re) => re.test(text))) return;
       errors.push('console.error: ' + text);
     });
+
     await use(errors);
-  },
+
+    // Only when the test would otherwise have passed: if it already failed,
+    // its own failure is the more useful one and must not be masked.
+    if (errors.length && testInfo.status === testInfo.expectedStatus) {
+      throw new Error(
+        `The app emitted ${errors.length} uncaught error(s) during this test:\n  ` + errors.join('\n  '),
+      );
+    }
+  }, { auto: true }],
 });
 
 module.exports = { test, expect: base.expect };

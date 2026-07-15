@@ -1320,10 +1320,14 @@ function reload(curriculum, course_data)
 
 function getAncestor(element, ancestor_class)
 {
-    let parent = element.parentNode;
+    let parent = element ? element.parentNode : null;
     while(parent)
     {
-        if(parent.classList.contains(ancestor_class))
+        // Not every node up the chain is an Element: the walk ends at `document`,
+        // which has no classList, so an unmatched search used to throw a
+        // TypeError instead of returning null. That fired on any drag dropped
+        // outside a semester.
+        if(parent.classList && parent.classList.contains(ancestor_class))
         {return parent;}
         else{parent = parent.parentNode;}
     }
