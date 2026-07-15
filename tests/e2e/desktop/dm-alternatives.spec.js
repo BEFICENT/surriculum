@@ -87,8 +87,10 @@ test.describe('double-major alternative-course rules', () => {
     });
 
     expect(requiredDM, 'VACD requiredDM').toBeGreaterThanOrEqual(readReqs(TERM).VACD.required);
-    expectPair(eff, 'VA301', 'VA303', ['free']);
-    expectPair(eff, 'VA401', 'VA403', ['free']);
+    // SUIS: only one of each pair is counted towards the degree, so the extra
+    // is excluded outright rather than filling a free-elective slot.
+    expectPair(eff, 'VA301', 'VA303', ['none']);
+    expectPair(eff, 'VA401', 'VA403', ['none']);
     expect(eff.VA300, 'VA300 (0 credits) should stay required').toBe('required');
   });
 

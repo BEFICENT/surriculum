@@ -8,28 +8,38 @@ if (typeof window !== 'undefined') {
     window.s_curriculum = s_curriculum;
 }
 
-// VACD alternative-course pairs: each pair fills ONE required slot, so a
-// student takes one of the two. Shared by the main-major and double-major
-// allocation passes so the two cannot drift apart.
+// SUIS rule (VACD): "Only one of the following course pairs will be counted
+// towards the degree: 'VA 301 or VA 303', 'VA 401 or VA 403', 'VA 300 or
+// PROJ 300'. All the other courses are required."
+// PROJ300 no longer exists in any catalog, but SUIS still states the pair, so
+// it is kept verbatim — an absent course simply never matches.
 const VACD_REQUIRED_PAIRS = [['VA301', 'VA303'], ['VA401', 'VA403'], ['VA300', 'PROJ300']];
+
+// SUIS rule (ME, 2025+ admits): "'ME 403 or ME 425' is required. For students
+// who take both courses, 'ME 403/ME 425' is counted towards 'Core Elective'
+// course requirements." Likewise for "CS 404 or CS 412".
 const ME_2025_ALT_PAIRS = [['ME403', 'ME425'], ['CS404', 'CS412']];
 
 // Alternative-course pairs: a pair is one required slot and the student takes
-// ONE of the two. If both are completed, the extra must not occupy a required
-// slot — it spills into an elective pool instead.
+// ONE of the two. Returns the EXTRA courses — everything after the
+// chronologically first member of each pair the student actually completed.
 //
-// This MUST be resolved BEFORE the allocation cascade. Demoting the extra
+// What happens to an extra differs per rule and is the caller's decision, so
+// this only identifies them. SUIS is explicit and inconsistent about it: ME's
+// extra "is counted towards Core Elective", while VACD's is not "counted
+// towards the degree" at all.
+//
+// Callers MUST act on this BEFORE the allocation cascade. Demoting an extra
 // afterwards leaves `required` short: the cascade has already capped `required`
 // at its threshold and pushed the surplus into the elective pools, so freeing a
 // required slot after the fact never pulls those courses back. Deciding up
 // front lets the cascade fill `required` with the kept course.
 //
-// Keeps the chronologically first member of each pair as required and records
-// `extraType` for the rest in the `out` Map (course object -> static type).
 // Shared by both allocation passes: the double-major copy of this rule drifted
 // from the main one and kept a bug the main one had already fixed.
-function markAltPairExtras(sortedSems, pairs, extraType, out) {
+function collectAltPairExtras(sortedSems, pairs) {
     const norm = (v) => String(v || '').toUpperCase().replace(/\s+/g, '');
+    const extras = [];
     for (let p = 0; p < pairs.length; p++) {
         const taken = [];
         for (let i = 0; i < sortedSems.length; i++) {
@@ -39,8 +49,9 @@ function markAltPairExtras(sortedSems, pairs, extraType, out) {
                 if (c && pairs[p].indexOf(norm(c.code)) !== -1) taken.push(c);
             }
         }
-        for (let k = 1; k < taken.length; k++) out.set(taken[k], extraType);
+        for (let k = 1; k < taken.length; k++) extras.push(taken[k]);
     }
+    return extras;
 }
 
 // SUIS math-alternative rule (CS): pre-2025 admits count only ONE of
@@ -914,38 +925,36 @@ function s_curriculum()
             this.hasCourse('DSA201')
         );
 
-        // SUIS math-alternative rule (CS): a student completes only ONE of
-        // MATH212 / MATH201; 2025+ admits never count MATH201 or MATH202. The
-        // EXTRA course must be excluded from EVERY pool. We decide which course
-        // to skip up-front (rather than excluding it after allocation) so the
-        // cascade below fills `required` with the kept course — excluding it
-        // afterwards left a required credit unfilled and dumped the extra course
-        // into `free`, which the rule forbids.
-        const mathSkip = new Set();
+        // Alternative-course rules, resolved BEFORE the allocation cascade below
+        // — see collectAltPairExtras() for why this cannot run afterwards.
+        //
+        // `excludedFromDegree` holds courses that count toward NOTHING: no pool,
+        // and no credit/science/engineering/ECTS total. `typeOverride` instead
+        // re-points a course at a different pool.
+        const excludedFromDegree = new Set();
+        const typeOverride = new Map();
         if (this.major === 'CS') {
+            // SUIS: a student completes only ONE of MATH212/MATH201, and 2025+
+            // admits never count MATH201 or MATH202. The extra is excluded from
+            // every pool.
             const shouldSkipMath = csMathSkipPredicate(this.entryTerm, (c) => this.hasCourse(c));
             this.semesters.forEach((sem) => {
-                (sem.courses || []).forEach((c) => { if (c && shouldSkipMath(c.code)) mathSkip.add(c); });
+                (sem.courses || []).forEach((c) => { if (c && shouldSkipMath(c.code)) excludedFromDegree.add(c); });
             });
-        }
-
-        // Alternative-course pairs, resolved before the cascade below. See
-        // markAltPairExtras() for why this cannot run afterwards.
-        const typeOverride = new Map();
-        if (this.major === 'ME') {
-            // SUIS rule (ME, 2025+ admits): "ME403 or ME425" and "CS404 or
-            // CS412" are each required; a student taking both has the extra
-            // counted toward the Core Elective requirement.
+        } else if (this.major === 'ME') {
+            // SUIS: the extra of an ME pair IS counted — toward Core Elective.
             const entryME = parseInt(this.entryTerm || '0', 10);
             if (!isNaN(entryME) && entryME >= 202501) {
-                markAltPairExtras(sortedSemesters, ME_2025_ALT_PAIRS, 'core', typeOverride);
+                collectAltPairExtras(sortedSemesters, ME_2025_ALT_PAIRS)
+                    .forEach((c) => typeOverride.set(c, 'core'));
             }
         } else if (this.major === 'VACD') {
-            // VACD alternatives. The extra counts as a free elective: VACD's
-            // core requirement is defined by two named pools (see the pool
-            // allocation further below), which these courses are not part of,
-            // so the extra cannot become a core elective the way ME's does.
-            markAltPairExtras(sortedSemesters, VACD_REQUIRED_PAIRS, 'free', typeOverride);
+            // SUIS: "Only one ... will be counted towards the degree" — unlike
+            // ME's rule, which explicitly redirects the extra to Core Elective,
+            // this one does not count the extra at all. So the extra is excluded
+            // outright rather than allowed to fill a free-elective slot.
+            collectAltPairExtras(sortedSemesters, VACD_REQUIRED_PAIRS)
+                .forEach((c) => excludedFromDegree.add(c));
         }
 
         // Iterate semesters in chronological order
@@ -974,8 +983,10 @@ function s_curriculum()
                     } catch (_) {}
                     continue;
                 }
-                // Excluded math alternative (SUIS rule): counts toward no pool.
-                if (mathSkip.has(course)) {
+                // Excluded alternative (SUIS rule): counts toward no pool, and
+                // toward no credit total either — hence the `continue` before
+                // any of the totals below are touched.
+                if (excludedFromDegree.has(course)) {
                     course.effective_type = 'none';
                     try {
                         const courseElem = document.getElementById(course.id);
@@ -1222,7 +1233,7 @@ function s_curriculum()
         }
 
         // (CS math-alternative exclusions are handled BEFORE the allocation
-        // cascade above via `mathSkip`, so the kept course fills `required`.)
+        // cascade above via `excludedFromDegree`, so the kept course fills `required`.)
 
         // (ME 2025+ alternative pairs — ME403/ME425 and CS404/CS412 — are
         // handled BEFORE the allocation cascade above via `typeOverride`, so the
@@ -1688,22 +1699,24 @@ function s_curriculum()
         });
 
         // Alternative-course rules for the double major, resolved BEFORE the
-        // allocation loop below — same reasoning as the main-major pass; see
-        // markAltPairExtras().
-        const mathSkipDM = new Set();
+        // allocation loop below — same rules and same reasoning as the
+        // main-major pass; see collectAltPairExtras().
+        const excludedFromDegreeDM = new Set();
         const typeOverrideDM = new Map();
         if (this.doubleMajor === 'CS') {
             const shouldSkipMathDM = csMathSkipPredicate(this.entryTermDM, (c) => this.hasCourse(c));
             this.semesters.forEach((sem) => {
-                (sem.courses || []).forEach((c) => { if (c && shouldSkipMathDM(c.code)) mathSkipDM.add(c); });
+                (sem.courses || []).forEach((c) => { if (c && shouldSkipMathDM(c.code)) excludedFromDegreeDM.add(c); });
             });
         } else if (this.doubleMajor === 'ME') {
             const entryDM = parseInt(this.entryTermDM || '0', 10);
             if (!isNaN(entryDM) && entryDM >= 202501) {
-                markAltPairExtras(sorted, ME_2025_ALT_PAIRS, 'core', typeOverrideDM);
+                collectAltPairExtras(sorted, ME_2025_ALT_PAIRS)
+                    .forEach((c) => typeOverrideDM.set(c, 'core'));
             }
         } else if (this.doubleMajor === 'VACD') {
-            markAltPairExtras(sorted, VACD_REQUIRED_PAIRS, 'free', typeOverrideDM);
+            collectAltPairExtras(sorted, VACD_REQUIRED_PAIRS)
+                .forEach((c) => excludedFromDegreeDM.add(c));
         }
 
         // Walk semesters and courses allocating DM categories
@@ -1723,8 +1736,8 @@ function s_curriculum()
                     course.effective_type_dm = 'none';
                     continue;
                 }
-                // Excluded math alternative (SUIS rule): counts toward no pool.
-                if (mathSkipDM.has(course)) {
+                // Excluded alternative (SUIS rule): counts toward no DM pool.
+                if (excludedFromDegreeDM.has(course)) {
                     course.effective_type_dm = 'none';
                     continue;
                 }
@@ -1986,7 +1999,7 @@ function s_curriculum()
         }
 
         // (CS double-major math exclusions are handled BEFORE the allocation
-        // loop above via `mathSkipDM`, so the kept course fills `required`.)
+        // loop above via `excludedFromDegreeDM`, so the kept course fills `required`.)
 
         // (ME double-major alternative pairs — ME403/ME425 and CS404/CS412 —
         // are handled BEFORE the allocation loop above via `typeOverrideDM`.

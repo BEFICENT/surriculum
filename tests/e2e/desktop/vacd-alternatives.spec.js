@@ -3,10 +3,18 @@
 const { test, expect } = require('../fixtures');
 const { seedPlan } = require('../helpers/plan');
 
-// VACD alternative-course pairs: "VA301 or VA303" and "VA401 or VA403" each
-// fill ONE required slot. A student who takes both members of a pair must not
-// be penalised — the extra spills to a free elective, and the kept course still
-// occupies its required slot.
+// Official SUIS rule (VACD):
+//   "Only one of the following course pairs will be counted towards the degree:
+//    'VA 301 or VA 303', 'VA 401 or VA 403', 'VA 300 or PROJ 300'. All the
+//    other courses are required."
+//
+// Two consequences, and they pull in opposite directions:
+//   - The KEPT course of each pair occupies its required slot, so taking both
+//     must not cost the student required credits.
+//   - The EXTRA is not counted towards the degree AT ALL. Note SUIS says
+//     exactly what it means elsewhere: ME's rule explicitly redirects its extra
+//     to "Core Elective". VACD's does not, so the extra is excluded outright —
+//     it does not get to fill a free-elective slot.
 //
 // The named required set is credit-tight:
 //   VA201(4) + VA203(4) + VA300(0) + one of VA301/VA303(3) + one of VA401/VA403(4)
@@ -58,14 +66,15 @@ test.describe('VACD alternative-pair rule', () => {
       // threshold no matter what order they took them in.
       expect(r.required, `VACD required credits (${label})`).toBeGreaterThanOrEqual(VACD_REQUIRED_CREDITS);
 
-      // Exactly one of each pair holds the required slot; the extra is free.
+      // Exactly one of each pair holds the required slot; the extra counts
+      // toward nothing ('none'), NOT toward a free elective.
       for (const [a, b] of PAIRS) {
         const types = [r.eff[a], r.eff[b]];
         expect(
           types.filter((t) => t === 'required'),
           `${a}/${b}: exactly one should be required (got ${types})`,
         ).toHaveLength(1);
-        expect(types, `${a}/${b}: the extra should be a free elective`).toContain('free');
+        expect(types, `${a}/${b}: the extra should not count towards the degree`).toContain('none');
       }
 
       // VA300 carries 0 credits, so it can never fill a pool and must not be
