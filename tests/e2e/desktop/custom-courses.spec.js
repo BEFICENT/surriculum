@@ -134,3 +134,83 @@ test.describe('custom courses', () => {
     expect(roundTripped, 'the custom course should be readable from plan state').toContain('ZZZ106');
   });
 });
+
+// --- The Add Custom Course form (main.js) ---
+//
+// Faculty is OPTIONAL and user-chosen. It used to be hardcoded to 'FENS' on
+// every created course, which silently made all of them count toward
+// FENS-specific graduation rules (DSA's 3-per-faculty core rule, MAN's
+// FASS/FENS free-elective credits). Transfer and exchange courses belong to no
+// Sabanci faculty at all, so "none" has to be expressible — and is the default.
+test.describe('custom course form', () => {
+  const openForm = async (page) => {
+    await page.locator('.customCourse').click();
+    const modal = page.locator('.custom_course_modal');
+    await expect(modal).toBeVisible({ timeout: 10000 });
+    return modal;
+  };
+
+  const fill = async (modal, { code, name, su }) => {
+    const rows = modal.locator('.cc-row');
+    await rows.nth(0).locator('input').fill(code);
+    await rows.nth(1).locator('input').fill(name);
+    await rows.nth(2).locator('input').fill(su);
+  };
+
+  const savedCourses = (page) => page.evaluate(
+    () => JSON.parse(window.planStorage.getItem('customCourses_CS') || '[]'),
+  );
+
+  test('faculty defaults to none, so a custom course claims no faculty by default', async ({ page }) => {
+    await seedPlan(page, { major: 'CS', entryTerm: TERM_NAME, curriculum: [['CS201']], grades: [['A']], dates: [TERM_NAME] });
+    const modal = await openForm(page);
+
+    await expect(modal.locator('.cc-faculty'), 'default is "none"').toHaveValue('');
+
+    await fill(modal, { code: 'XYZ301', name: 'Exchange Course', su: '3' });
+    await modal.locator('.cc-buttons button', { hasText: /save|add|create/i }).first().click();
+
+    const saved = await savedCourses(page);
+    const rec = saved.find((c) => String(c.Major) + String(c.Code) === 'XYZ301');
+    expect(rec, 'the course should be saved').toBeTruthy();
+    expect(rec.Faculty, 'a transfer/exchange course claims no faculty').toBe('');
+    expect(rec.Faculty_Course, 'a custom course is never in the faculty-course pool').toBe('No');
+  });
+
+  test('a chosen faculty is persisted and counts toward faculty rules', async ({ page }) => {
+    await seedPlan(page, { major: 'CS', entryTerm: TERM_NAME, curriculum: [['CS201']], grades: [['A']], dates: [TERM_NAME] });
+    const modal = await openForm(page);
+
+    await fill(modal, { code: 'XYZ302', name: 'Real FASS Course', su: '3' });
+    await modal.locator('.cc-faculty').selectOption('FASS');
+    await modal.locator('.cc-buttons button', { hasText: /save|add|create/i }).first().click();
+
+    const rec = (await savedCourses(page)).find((c) => String(c.Major) + String(c.Code) === 'XYZ302');
+    expect(rec.Faculty, 'the chosen faculty should persist').toBe('FASS');
+
+    // And it must reach the course object the rules read.
+    const onCourse = await page.evaluate(() => {
+      const rec2 = course_data.find((c) => (String(c.Major || '') + String(c.Code || '')) === 'XYZ302');
+      return rec2 ? rec2.Faculty : null;
+    });
+    expect(onCourse, 'the loaded catalog record carries the faculty').toBe('FASS');
+  });
+
+  test('the ? button explains what faculty is and when to leave it blank', async ({ page }) => {
+    await seedPlan(page, { major: 'CS', entryTerm: TERM_NAME, curriculum: [['CS201']], grades: [['A']], dates: [TERM_NAME] });
+    const modal = await openForm(page);
+
+    const help = modal.locator('.cc-help-text');
+    const btn = modal.locator('.cc-help');
+    await expect(help, 'the explanation starts collapsed').toBeHidden();
+    await expect(btn, 'the ? control is visible without the icon font').toBeVisible();
+
+    await btn.click();
+    await expect(help).toBeVisible();
+    await expect(help, 'it should say when NOT to set a faculty').toContainText(/transfer or exchange/i);
+    await expect(btn).toHaveAttribute('aria-expanded', 'true');
+
+    await btn.click();
+    await expect(help, 'the ? toggles it back').toBeHidden();
+  });
+});

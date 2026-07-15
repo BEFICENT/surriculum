@@ -1443,6 +1443,63 @@ function SUrriculum(major_chosen_by_user) {
             typeRow.appendChild(typeSelect);
             modal.appendChild(typeRow);
 
+            // Faculty (optional). Several graduation rules count courses by the
+            // faculty that OFFERS them, so a custom course needs to be able to
+            // say — or to say nothing, which is the honest answer for a transfer
+            // or exchange course that belongs to no Sabanci faculty. It used to
+            // be hardcoded to FENS, which silently made every custom course
+            // count toward FENS-specific rules.
+            const facultyRow = document.createElement('div');
+            facultyRow.classList.add('cc-row');
+            const facultyLabel = document.createElement('label');
+            facultyLabel.innerText = 'Faculty (optional):';
+            const facultyHelpBtn = document.createElement('button');
+            facultyHelpBtn.type = 'button';
+            facultyHelpBtn.className = 'cc-help';
+            facultyHelpBtn.textContent = '?';
+            facultyHelpBtn.setAttribute('aria-label', 'What is Faculty, and when should I set it?');
+            facultyHelpBtn.setAttribute('aria-expanded', 'false');
+            facultyLabel.appendChild(facultyHelpBtn);
+            facultyRow.appendChild(facultyLabel);
+
+            const facultySelect = document.createElement('select');
+            facultySelect.className = 'cc-faculty';
+            [
+                ['', 'None / not applicable'],
+                ['FENS', 'FENS — Engineering and Natural Sciences'],
+                ['FASS', 'FASS — Arts and Social Sciences'],
+                ['SBS', 'SBS — School of Management (SOM)'],
+                ['SL', 'SL — School of Languages'],
+            ].forEach(function(pair) {
+                const option = document.createElement('option');
+                option.value = pair[0];
+                option.innerText = pair[1];
+                facultySelect.appendChild(option);
+            });
+            facultyRow.appendChild(facultySelect);
+
+            const facultyHelp = document.createElement('p');
+            facultyHelp.className = 'cc-help-text is-hidden';
+            facultyHelp.innerText = [
+                'The faculty that offers the course. Some graduation rules count courses by faculty '
+                + '— for example DSA needs at least 3 core electives from each of FENS, FASS and SBS, '
+                + 'and MAN needs 9 free-elective credits from FASS or FENS courses.',
+                'Leave it as "None" for transfer or exchange courses that do not belong to a Sabancı '
+                + 'faculty. They still count toward your credits, ECTS and category totals — they just '
+                + 'will not count toward these faculty-specific rules.',
+            ].join('\n\n');
+            facultyRow.appendChild(facultyHelp);
+
+            facultyHelpBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                const willShow = facultyHelp.classList.contains('is-hidden');
+                facultyHelp.classList.toggle('is-hidden', !willShow);
+                facultyHelpBtn.setAttribute('aria-expanded', willShow ? 'true' : 'false');
+            });
+
+            modal.appendChild(facultyRow);
+
             // Optional DM category control (only when a DM is selected).
             let dmTypeSelect = null;
             const dmProgramCode = (() => {
@@ -1543,6 +1600,13 @@ function SUrriculum(major_chosen_by_user) {
                 } else if (prefill.elType) {
                     typeSelect.value = prefill.elType;
                 }
+                // Set faculty dropdown ('' is a real, meaningful choice here,
+                // so check for presence rather than truthiness.)
+                if (courseObj && courseObj.Faculty !== undefined && courseObj.Faculty !== null) {
+                    facultySelect.value = String(courseObj.Faculty);
+                } else if (prefill.faculty !== undefined) {
+                    facultySelect.value = String(prefill.faculty);
+                }
             }
 
         // Buttons container
@@ -1599,6 +1663,7 @@ function SUrriculum(major_chosen_by_user) {
                         Engineering: parseInt(engInput.value || '0') || 0,
                         Basic_Science: parseInt(bsInput.value || '0') || 0,
                         SU_credit: suInput.value.toString() || '0',
+                        Faculty: facultySelect.value,
                         EL_Type: typeSelect.value
                     };
                     Object.assign(courseObj, updatedCourse);
@@ -1659,8 +1724,10 @@ function SUrriculum(major_chosen_by_user) {
                         Engineering: parseInt(engInput.value || '0') || 0,
                         Basic_Science: parseInt(bsInput.value || '0') || 0,
                         SU_credit: suInput.value.toString() || '0',
-                        Faculty: 'FENS',
+                        Faculty: facultySelect.value,
                         EL_Type: typeSelect.value,
+                        // A custom course is never part of the faculty-course
+                        // pool; that is a separate attribute from `Faculty`.
                         Faculty_Course: 'No'
                     };
                     // Append to in-memory course_data

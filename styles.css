@@ -3983,6 +3983,50 @@ html, body {
     margin-top: 15px;
 }
 
+/* Inline "?" affordance next to a field label. Deliberately a text glyph rather
+   than a Font Awesome icon: the icon font is a third-party CDN, and a help
+   control that silently disappears when that fails to load is worse than none. */
+.custom_course_modal .cc-help {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    margin-left: 6px;
+    padding: 0;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    background: transparent;
+    color: inherit;
+    opacity: 0.65;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    vertical-align: middle;
+}
+
+.custom_course_modal .cc-help:hover,
+.custom_course_modal .cc-help:focus-visible {
+    opacity: 1;
+}
+
+.custom_course_modal .cc-help-text {
+    margin: 6px 0 0;
+    padding: 8px 10px;
+    border-left: 2px solid currentColor;
+    border-radius: 4px;
+    background: rgba(127, 127, 127, 0.12);
+    font-size: 12px;
+    line-height: 1.45;
+    white-space: pre-line; /* the copy is two paragraphs joined by \n\n */
+    opacity: 0.9;
+}
+
+.custom_course_modal .cc-help-text.is-hidden {
+    display: none;
+}
+
 .custom_course_manage_overlay {
     position: fixed;
     top: 0;
