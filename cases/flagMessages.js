@@ -63,7 +63,7 @@ export function buildFlagMessages(major) {
       23: () => `You need at least 9 credits from 400-level EE courses!`,
       24: () => `You need at least one course from CS300, CS401, CS412, ME303, PHYS302, PHYS303, or EE48XXX special topics!`,
       25: () => `You need to complete your Mathematics requirement (MATH201, MATH202, or MATH204)!`,
-      26: () => `You need to complete your Physics requirement (PHYS201, PHYS202, or PHYS204)!`,
+      26: () => `You need to complete your Philosophy requirement (PHIL300 or PHIL301)!`,
       27: () => `You need at least 3 FENS courses in your core electives!`,
       28: () => `You need at least 3 FASS courses in your core electives!`,
       29: () => `You need at least 3 SBS courses in your core electives!`,
