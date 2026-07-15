@@ -28,6 +28,11 @@ const BASIC_LANGUAGE_COURSES = new Set([
     'FRE110', 'FRE120', 'GER110', 'GER120', 'SPA110', 'SPA120', 'TUR101', 'TUR102',
 ]);
 
+// "PSY 4XX-level advanced Psychology courses" (SUIS, PSY area electives).
+function isPsyAdvancedCode(code) {
+    return /^PSY\s?4\d{2}$/.test(String(code || '').toUpperCase().replace(/\s+/g, ''));
+}
+
 // Alternative-course pairs: a pair is one required slot and the student takes
 // ONE of the two. Returns the EXTRA courses — everything after the
 // chronologically first member of each pair the student actually completed.
@@ -587,9 +592,15 @@ function s_curriculum()
                 }
 
                 // Check Free Electives requirements
+                // The 26-credit condition is redundant with the generic free
+                // check (MAN's `free` requirement IS 26), so it never fires —
+                // kept as a guard in case the two ever diverge.
                 if (freeElectiveCredits < 26) return 37;
                 if (fassFensCredits < 9) return 37;
-                if (basicLanguageCoursesCount > 2) return 37;
+                // Its own flag: 37's message only describes the FASS/FENS rule,
+                // so reporting the language cap as 37 told students the wrong
+                // thing entirely.
+                if (basicLanguageCoursesCount > 2) return 40;
             }
         }
         else if(this.major == 'PSIR')
@@ -704,6 +715,30 @@ function s_curriculum()
                 if(facultyCoursesCount < 5) return 14;
                 if(fassCoursesCount < 3) return 15;
                 if(areasCount.size < 3) return 18;
+
+                // SUIS (PSY area electives): "At least 6 courses from all PSY
+                // coded undergraduate courses. At least 2 courses must be from
+                // PSY 4XX-level advanced Psychology courses."
+                // The 6-course minimum needs no check of its own: the `area`
+                // threshold is 18 credits = 6 x 3cr, and the PSY catalog types
+                // only PSY-coded courses as area, so the generic area check
+                // already enforces it. Only the 4XX rule is left.
+                //
+                // SUIS (PSY free electives): "at most two of the beginning/basic
+                // level second language courses can be used to fulfill the free
+                // elective requirements."
+                let psy4xxAreaCount = 0;
+                let basicLanguageCount = 0;
+                for (let i = 0; i < this.semesters.length; i++) {
+                    for (let a = 0; a < this.semesters[i].courses.length; a++) {
+                        const course = this.semesters[i].courses[a];
+                        const eff = (course.effective_type || '').toLowerCase();
+                        if (eff === 'area' && isPsyAdvancedCode(course.code)) psy4xxAreaCount++;
+                        else if (eff === 'free' && BASIC_LANGUAGE_COURSES.has(course.code)) basicLanguageCount++;
+                    }
+                }
+                if (psy4xxAreaCount < 2) return 39;
+                if (basicLanguageCount > 2) return 40;
             }
         }
         else if(this.major == 'VACD')
@@ -2511,9 +2546,15 @@ function s_curriculum()
                 }
 
                 // Check Free Electives requirements
+                // The 26-credit condition is redundant with the generic free
+                // check (MAN's `free` requirement IS 26), so it never fires —
+                // kept as a guard in case the two ever diverge.
                 if (freeElectiveCredits < 26) return 37;
                 if (fassFensCredits < 9) return 37;
-                if (basicLanguageCoursesCount > 2) return 37;
+                // Its own flag: 37's message only describes the FASS/FENS rule,
+                // so reporting the language cap as 37 told students the wrong
+                // thing entirely.
+                if (basicLanguageCoursesCount > 2) return 40;
             }
         } else if (maj === 'PSIR') {
             {
@@ -2600,7 +2641,30 @@ function s_curriculum()
                 if (facultyCoursesCount < 5) return 14;
                 if (fassCoursesCount < 3) return 15;
                 if (areasCount.size < 3) return 18;
-                // Core electives requirement: 7 courses
+
+                // SUIS (PSY): area electives need >= 2 PSY 4XX-level courses;
+                // free electives may count at most 2 basic language courses.
+                // See the main-major PSY block for the quoted text.
+                let psy4xxAreaCountDM = 0;
+                let basicLanguageCountDM = 0;
+                for (let i = 0; i < this.semesters.length; i++) {
+                    for (let a = 0; a < this.semesters[i].courses.length; a++) {
+                        const course = this.semesters[i].courses[a];
+                        const eff = (course.effective_type_dm || '').toLowerCase();
+                        if (eff === 'area' && isPsyAdvancedCode(course.code)) psy4xxAreaCountDM++;
+                        else if (eff === 'free' && BASIC_LANGUAGE_COURSES.has(course.code)) basicLanguageCountDM++;
+                    }
+                }
+                if (psy4xxAreaCountDM < 2) return 39;
+                if (basicLanguageCountDM > 2) return 40;
+
+                // Core electives requirement: 7 courses. Redundant with the
+                // generic core check above (core = 21 credits and every pool
+                // course is 3cr, so 21 credits IS 7 courses) and therefore
+                // unreachable — but it had no message at all, which rendered a
+                // bare "Error code 77" to the student. Kept with a message
+                // rather than removed, in case the pool ever gains a course
+                // whose credit value breaks that equivalence.
                 let psyCoreCount = 0;
                 for (let i = 0; i < this.semesters.length; i++) {
                     for (let a = 0; a < this.semesters[i].courses.length; a++) {

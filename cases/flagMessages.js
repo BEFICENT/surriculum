@@ -75,6 +75,9 @@ export function buildFlagMessages(major) {
       35: () => `Your Core courses must span at least 6 different areas!`,
       36: () => `Your Area courses must span at least 5 different areas!`,
       37: () => `You need at least 9 credits from FASS & FENS courses in your Free electives!`,
+      39: () => `You need at least 2 PSY 4XX-level courses among your Area electives!`,
+      40: () => `At most 2 Beginning/Basic level language courses can count towards your Free electives!`,
+      77: () => `You need at least 7 Core Elective courses!`,
 
   };
 }

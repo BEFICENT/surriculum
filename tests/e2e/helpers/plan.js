@@ -55,4 +55,15 @@ async function readCurriculumTotals(page) {
   });
 }
 
-module.exports = { seedPlan, readCurriculumTotals };
+// Move `codes` to the front of a course list, preserving the order of the rest.
+//
+// Allocation is chronological and capped per pool, so course ORDER decides which
+// courses land in a pool and which overflow past it. Fixtures are generated in
+// catalog order; when a test needs a specific course to actually occupy a pool
+// slot (or needs the order that exposes an order-dependent bug), hoist it.
+const hoist = (courses, codes) => [
+  ...codes.filter((c) => courses.includes(c)),
+  ...courses.filter((c) => !codes.includes(c)),
+];
+
+module.exports = { seedPlan, readCurriculumTotals, hoist };

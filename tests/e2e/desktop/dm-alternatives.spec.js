@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { test, expect } = require('../fixtures');
-const { seedPlan } = require('../helpers/plan');
+const { seedPlan, hoist } = require('../helpers/plan');
 const plans = require('../fixtures/passing-plans-multiterm.json');
 
 // The double-major allocation pass (recalcEffectiveTypesDouble) is a parallel
@@ -31,17 +31,10 @@ const termName = (code) => {
 // special-case rule with the double majors under test.
 const MAIN_MAJOR = 'MAN';
 
-// Move `codes` to the front, preserving the order of everything else.
-//
-// This matters. The VACD undercount is order-dependent, and the fixtures are
-// generated in catalog order — the one order that happens to mask it. Seeded
-// verbatim, the VACD test below passes against the buggy engine, which makes it
-// no test at all. Taking the alternative pairs first is what a real student who
-// took courses out of sequence looks like, and it is what exposes the bug.
-const hoist = (courses, codes) => [
-  ...codes.filter((c) => courses.includes(c)),
-  ...courses.filter((c) => !codes.includes(c)),
-];
+// NB the VACD case below MUST hoist its pair courses. The undercount is
+// order-dependent, and the fixtures are generated in catalog order — the one
+// order that happens to mask it. Seeded verbatim, that test passes against the
+// buggy engine, which makes it no test at all.
 
 async function seedDouble(page, { dm, term, courses, probe }) {
   await seedPlan(page, {
