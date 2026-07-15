@@ -45,6 +45,71 @@ function isPsyAdvancedCode(code) {
     return /^PSY\s?4\d{2}$/.test(String(code || '').toUpperCase().replace(/\s+/g, ''));
 }
 
+// VACD's core requirement is two named pools with their own minimums, and the
+// pools contain mutually-exclusive pairs. Courses beyond a pool's minimum are
+// EXTRA: they spill into area electives, then free — they do not count as core.
+const VACD_CORE_POOL_1 = ['HART292', 'HART293', 'HART380', 'HART413', 'HART426', 'VA315', 'VA420', 'VA430'];
+const VACD_CORE_POOL_1_MIN = 9;
+const VACD_CORE_POOL_2 = ['VA202', 'VA204', 'VA234', 'VA302', 'VA304', 'VA402', 'VA404'];
+const VACD_CORE_POOL_2_MIN = 12;
+const VACD_CORE_POOL_2_PAIRS = [['VA302', 'VA304'], ['VA402', 'VA404']];
+
+// Decides each VACD pool course's pool BEFORE the allocation cascade, returning
+// a Map of course -> static type ('core' for the ones filling a pool minimum,
+// 'area' for the extras, which then spill area -> free through the normal
+// cascade).
+//
+// Must run pre-cascade for the usual reason (see collectAltPairExtras): doing it
+// afterwards demoted an extra out of `core` once the cascade had already capped
+// core and pushed the surplus down, so the freed core slot was never refilled.
+// VACD's core requirement (27) EXCEEDS its pool minimums (9+12=21), so the
+// balance must come from core-typed courses outside both pools — and those were
+// exactly the ones left stranded in `free`.
+function selectVacdCorePools(sortedSems, isExcluded) {
+    const pool1 = new Set(VACD_CORE_POOL_1);
+    const pool2 = new Set(VACD_CORE_POOL_2);
+    const pairKeyByCode = {};
+    VACD_CORE_POOL_2_PAIRS.forEach((pair) => {
+        pairKeyByCode[pair[0]] = pair.join('|');
+        pairKeyByCode[pair[1]] = pair.join('|');
+    });
+    const creditOf = (c) => ((typeof parseCreditValue === 'function')
+        ? parseCreditValue(c.SU_credit || '0')
+        : (parseFloat(c.SU_credit || '0') || 0));
+
+    const out = new Map();
+    const takenPairKeys = new Set();
+    let pool1Credits = 0;
+    let pool2Credits = 0;
+
+    for (let i = 0; i < sortedSems.length; i++) {
+        const courses = sortedSems[i].courses || [];
+        for (let j = 0; j < courses.length; j++) {
+            const course = courses[j];
+            if (!course || (isExcluded && isExcluded(course))) continue;
+            const code = course.code;
+            if (pool1.has(code)) {
+                if (pool1Credits < VACD_CORE_POOL_1_MIN) {
+                    out.set(course, 'core');
+                    pool1Credits += creditOf(course);
+                } else {
+                    out.set(course, 'area');
+                }
+            } else if (pool2.has(code)) {
+                const pairKey = pairKeyByCode[code] || null;
+                if (pool2Credits < VACD_CORE_POOL_2_MIN && (!pairKey || !takenPairKeys.has(pairKey))) {
+                    out.set(course, 'core');
+                    pool2Credits += creditOf(course);
+                    if (pairKey) takenPairKeys.add(pairKey);
+                } else {
+                    out.set(course, 'area');
+                }
+            }
+        }
+    }
+    return out;
+}
+
 // SUIS states the same free-elective language cap on every non-engineering
 // major, in near-identical words:
 //   MAN:  "At most 2 of the Beginning / Basic level language courses can be
@@ -1036,6 +1101,8 @@ function s_curriculum()
         // re-points a course at a different pool.
         const excludedFromDegree = new Set();
         const typeOverride = new Map();
+        // Courses pinned to core regardless of the core cap (VACD's pools).
+        const forceCore = new Set();
         if (this.major === 'CS') {
             // SUIS: a student completes only ONE of MATH212/MATH201, and 2025+
             // admits never count MATH201 or MATH202. The extra is excluded from
@@ -1058,6 +1125,19 @@ function s_curriculum()
             // outright rather than allowed to fill a free-elective slot.
             collectAltPairExtras(sortedSemesters, VACD_REQUIRED_PAIRS)
                 .forEach((c) => excludedFromDegree.add(c));
+            // The two core pools: courses filling a minimum are pinned to core;
+            // the extras are typed `area` and spill area -> free via the cascade.
+            //
+            // The pool courses must be PINNED, not merely typed `core`: flags
+            // 30/31 count pool courses that actually landed in core, and the
+            // cascade's core cap would otherwise let a non-pool course take the
+            // slot first and push a pool course out. Pinning is safe — the two
+            // minimums total 21, well under the 27-credit core requirement.
+            selectVacdCorePools(sortedSemesters, (c) => excludedFromDegree.has(c))
+                .forEach((type, course) => {
+                    if (type === 'core') forceCore.add(course);
+                    else typeOverride.set(course, type);
+                });
         } else if (this.major === 'PSY') {
             // No published rule for taking both; the extra counts as free by
             // agreed assumption. See PSY_PHILOSOPHY_PAIR.
@@ -1258,7 +1338,14 @@ function s_curriculum()
                 let effectiveType = staticType;
                 // Core, area and required types may be reallocated based on
                 // remaining credit needs. University types remain unchanged.
-                if (forceCSCore && course.code === 'CS201') {
+                if (forceCore.has(course)) {
+                    // Pinned to core by a named-pool rule (VACD), so the core cap
+                    // cannot let another course take the slot. Its credits still
+                    // count toward the cap, so non-pool core electives fill only
+                    // the remainder.
+                    effectiveType = 'core';
+                    currentCoreCredits += credit;
+                } else if (forceCSCore && course.code === 'CS201') {
                     // Always allocate CS201 to core when the special IE
                     // condition is met.
                     effectiveType = 'core';
@@ -1353,160 +1440,16 @@ function s_curriculum()
         // kept course fills `required` and the extra is allocated as a core
         // elective.)
 
-        // Special-case VACD: enforce mutually-exclusive pairs and pool spillover
-        // rules. Some VACD course pools have the constraint that only one of a
-        // course pair counts toward the minimum pool requirement. Extra courses
-        // taken from the pool should spill into area electives, and then free
-        // electives once area is satisfied.
-        if (this.major === 'VACD') {
-            const corePool1 = ['HART292', 'HART293', 'HART380', 'HART413', 'HART426', 'VA315', 'VA420', 'VA430'];
-            const corePool1Min = 9;
-            const corePool2 = ['VA202', 'VA204', 'VA234', 'VA302', 'VA304', 'VA402', 'VA404'];
-            const corePool2Min = 12;
-            const corePool2Pairs = [['VA302', 'VA304'], ['VA402', 'VA404']];
-
-            const corePool1Set = new Set(corePool1);
-            const corePool2Set = new Set(corePool2);
-            const corePairKeyByCode = {};
-            for (let i = 0; i < corePool2Pairs.length; i++) {
-                const key = corePool2Pairs[i].join('|');
-                corePairKeyByCode[corePool2Pairs[i][0]] = key;
-                corePairKeyByCode[corePool2Pairs[i][1]] = key;
-            }
-
-            function creditOf(course) {
-                return (typeof parseCreditValue === 'function')
-                    ? parseCreditValue(course.SU_credit || '0')
-                    : (parseFloat(course.SU_credit || '0') || 0);
-            }
-
-            // (The required pairs — VACD_REQUIRED_PAIRS — are resolved BEFORE
-            // the allocation cascade above via `typeOverride`, so the kept
-            // course fills `required` and the extra becomes a free elective.)
-
-            // Select core courses for the two core elective pools, respecting
-            // mutually-exclusive pairs in corePool2.
-            const selectedCoreIds = new Set();
-            const selectedCorePool2PairKeys = new Set();
-            let pool1Credits = 0;
-            let pool2Credits = 0;
-            const overflowPoolCourses = [];
-
-            for (let i = 0; i < sortedSemesters.length; i++) {
-                const sem = sortedSemesters[i];
-                for (let j = 0; j < sem.courses.length; j++) {
-                    const course = sem.courses[j];
-                    if (!course || !course.id) continue;
-                    if (course.effective_type === 'none') continue;
-                    const code = course.code;
-                    if (corePool1Set.has(code)) {
-                        if (pool1Credits < corePool1Min) {
-                            selectedCoreIds.add(course.id);
-                            pool1Credits += creditOf(course);
-                        } else {
-                            overflowPoolCourses.push(course);
-                        }
-                    } else if (corePool2Set.has(code)) {
-                        const pairKey = corePairKeyByCode[code] || null;
-                        if (pool2Credits < corePool2Min && (!pairKey || !selectedCorePool2PairKeys.has(pairKey))) {
-                            selectedCoreIds.add(course.id);
-                            pool2Credits += creditOf(course);
-                            if (pairKey) selectedCorePool2PairKeys.add(pairKey);
-                        } else {
-                            overflowPoolCourses.push(course);
-                        }
-                    }
-                }
-            }
-
-            // Compute how many area credits are still needed, excluding pool
-            // overflow courses which will fill area first.
-            let baseAreaCredits = 0;
-            for (let i = 0; i < this.semesters.length; i++) {
-                const sem = this.semesters[i];
-                for (let j = 0; j < sem.courses.length; j++) {
-                    const course = sem.courses[j];
-                    if (!course || course.effective_type === 'none') continue;
-                    const code = course.code;
-                    if (corePool1Set.has(code) || corePool2Set.has(code)) continue;
-                    if (course.effective_type === 'area') {
-                        baseAreaCredits += creditOf(course);
-                    }
-                }
-            }
-            let areaRemaining = Math.max(0, reqArea - baseAreaCredits);
-
-            // Apply the VACD pool allocation: selected pool courses count as core;
-            // pool overflow counts as area then free.
-            for (let i = 0; i < this.semesters.length; i++) {
-                const sem = this.semesters[i];
-                for (let j = 0; j < sem.courses.length; j++) {
-                    const course = sem.courses[j];
-                    if (!course || !course.id) continue;
-                    if (course.effective_type === 'none') continue;
-                    const code = course.code;
-                    if (!corePool1Set.has(code) && !corePool2Set.has(code)) continue;
-                    if (selectedCoreIds.has(course.id)) {
-                        course.effective_type = 'core';
-                    }
-                }
-            }
-            for (let i = 0; i < overflowPoolCourses.length; i++) {
-                const course = overflowPoolCourses[i];
-                if (!course || course.effective_type === 'none') continue;
-                if (areaRemaining > 0) {
-                    course.effective_type = 'area';
-                    areaRemaining -= creditOf(course);
-                } else {
-                    course.effective_type = 'free';
-                }
-            }
-
-            // Recompute semester category totals to match VACD normalized effective types.
-            for (let i = 0; i < this.semesters.length; i++) {
-                const sem = this.semesters[i];
-                sem.totalArea = 0;
-                sem.totalCore = 0;
-                sem.totalFree = 0;
-                sem.totalUniversity = 0;
-                sem.totalRequired = 0;
-                for (let j = 0; j < sem.courses.length; j++) {
-                    const course = sem.courses[j];
-                    if (!course) continue;
-                    const et = course.effective_type;
-                    if (!et || et === 'none') continue;
-                    const c = creditOf(course);
-                    if (et === 'core') sem.totalCore += c;
-                    else if (et === 'area') sem.totalArea += c;
-                    else if (et === 'free') sem.totalFree += c;
-                    else if (et === 'required') sem.totalRequired += c;
-                    else if (et === 'university') sem.totalUniversity += c;
-                }
-            }
-
-            // Update DOM type labels for VACD normalization.
-            try {
-                for (let i = 0; i < this.semesters.length; i++) {
-                    const sem = this.semesters[i];
-                    for (let j = 0; j < sem.courses.length; j++) {
-                        const course = sem.courses[j];
-                        if (!course || !course.id) continue;
-                        const courseElem = document.getElementById(course.id);
-                        if (!courseElem) continue;
-                        const typeElem = courseElem.querySelector('.course_type');
-                        if (typeElem && course.effective_type) {
-                            typeElem.textContent = course.effective_type.toUpperCase();
-                            try {
-                                const base = (course.category || '').toString().toLowerCase();
-                                const eff = (course.effective_type || '').toString().toLowerCase();
-                                const movedDown = !!(base && eff && base !== eff && eff !== 'none');
-                                typeElem.classList.toggle('is-overflow-type', movedDown);
-                            } catch (_) {}
-                        }
-                    }
-                }
-            } catch (_) {}
-        }
+        // (VACD's core pools are resolved BEFORE the allocation cascade above
+        // via selectVacdCorePools() + `typeOverride`: pool courses filling a
+        // minimum are typed `core`, extras are typed `area` and spill to free
+        // through the normal cascade. Doing it afterwards demoted an extra out
+        // of core once the cascade had already capped core and pushed the
+        // surplus down, and nothing refilled the freed slot from the
+        // core-typed courses stranded in `free` — VACD's core requirement (27)
+        // exceeds its pool minimums (9+12), so that balance MUST come from
+        // outside the pools. The cascade now handles allocation, totals and
+        // DOM labels uniformly.)
 
         // Special-case MAN: core/area electives have additional "at least one
         // from each area" constraints, and extra core electives can be counted
