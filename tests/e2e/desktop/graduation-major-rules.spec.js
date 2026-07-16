@@ -60,22 +60,43 @@ test.describe('EE 400-level rules', () => {
 });
 
 test.describe('ECON mathematics requirement', () => {
-  // MATH201/MATH202/MATH204 are alternatives — any ONE satisfies flag 25. All
-  // three are `required` (3cr each) and ECON's required-typed courses total 31
-  // against a 21 threshold, so dropping all three still leaves required at 22:
-  // flag 2 cannot mask flag 25.
-  test('dropping all three maths raises flag 25', async ({ page }) => {
-    await seed(page, 'ECON', { drop: ['MATH201', 'MATH202', 'MATH204'] });
-    expect(await flag(page)).toBe(25);
+  // SUIS (ECON, "Mathematics Requirement Courses"): 1 course from the pool
+  // MATH201 / MATH202 / MATH204 / MATH212 — any ONE satisfies flag 25.
+  //
+  // MATH212 was missing from the check. It is not an oddity: MATH212 replaces
+  // MATH201+MATH202, so it is the one a recent student is most likely to hold.
+  //
+  // These are all `required`-typed and ECON's required-typed courses total 31
+  // against a 21 threshold, so dropping every maths course still leaves required
+  // at 22 — flag 2 cannot mask flag 25.
+  const MATHS = ['MATH201', 'MATH202', 'MATH204', 'MATH212'];
+
+  test('holding NO maths is caught by the required pool, not flag 25', async ({ page }) => {
+    // Flag 25 is unreachable from an empty-maths plan: the pool courses are all
+    // `required`-typed and ECON's non-maths required courses total only 18
+    // against a 21 threshold, so dropping every maths course trips flag 2 first.
+    // Documented rather than asserted as 25 — the same shape as PSY's flag 26.
+    await seed(page, 'ECON', { drop: MATHS });
+    expect(await flag(page), 'required-short is the binding failure here').toBe(2);
   });
 
-  for (const keep of ['MATH201', 'MATH202', 'MATH204']) {
+  for (const keep of MATHS) {
     test(`${keep} alone satisfies the requirement`, async ({ page }) => {
-      const drop = ['MATH201', 'MATH202', 'MATH204'].filter((c) => c !== keep);
-      await seed(page, 'ECON', { drop });
+      await seed(page, 'ECON', { drop: MATHS.filter((c) => c !== keep) });
       expect(await flag(page), `${keep} should satisfy flag 25 on its own`).not.toBe(25);
     });
   }
+
+  test('the flag-25 message lists all four alternatives', async ({ page }) => {
+    await page.goto('/');
+    const msg = await page.evaluate(async () => {
+      const { buildFlagMessages } = await import('/cases/flagMessages.js');
+      return buildFlagMessages('ECON')[25]();
+    });
+    for (const c of MATHS) {
+      expect(msg, `the message should name ${c}`).toContain(c);
+    }
+  });
 });
 
 test.describe('IE CS201/DSA201 force-core rule', () => {

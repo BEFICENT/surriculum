@@ -40,6 +40,23 @@ const BASIC_LANGUAGE_COURSES = new Set([
     'FRE110', 'FRE120', 'GER110', 'GER120', 'SPA110', 'SPA120', 'TUR101', 'TUR102',
 ]);
 
+// University Courses HUM pools — identical in every major's catalog.
+const HUM_200_LEVEL = ['HUM201', 'HUM202', 'HUM207'];
+const HUM_300_LEVEL = ['HUM311', 'HUM312', 'HUM317', 'HUM321', 'HUM322', 'HUM371'];
+
+// Programs whose SUIS page requires TWO HUM courses — one 2xx and one 3xx —
+// rather than one. Confirmed verbatim for all five; the FENS programs
+// (university 41) require one instead.
+//
+// This mirrors the university-credit split exactly (44 vs 41 = the 3 SU of one
+// extra HUM course), so it could be derived from `req.university === 44`. It is
+// stated explicitly on purpose: deriving a named academic rule from a credit
+// total is the kind of implicit cleverness that reads as a coincidence later and
+// breaks the first time a threshold moves for an unrelated reason. Better still
+// would be a `humRequired` field in the requirements data — worth doing when the
+// scraper next changes.
+const HUM_TWO_LEVEL_MAJORS = new Set(['ECON', 'MAN', 'PSIR', 'PSY', 'VACD']);
+
 // "PSY 4XX-level advanced Psychology courses" (SUIS, PSY area electives).
 function isPsyAdvancedCode(code) {
     return /^PSY\s?4\d{2}$/.test(String(code || '').toUpperCase().replace(/\s+/g, ''));
@@ -282,6 +299,46 @@ function s_curriculum()
         }
         return false;
     }
+    // Tally the student's FACULTY COURSES by pool. `Faculty_Course` is the
+    // faculty-course pool marker (only ~10% of courses carry one) — NOT the
+    // offering faculty, which is `Faculty`. Conflating the two caused the MAN
+    // and DSA bugs, so the distinction is deliberate here.
+    //
+    // Courses excluded from every pool (effective_type 'none' — a failed course,
+    // or a math alternative SUIS drops) count toward nothing, including this.
+    //
+    // New code should use this rather than hand-rolling the loop: the same tally
+    // is currently written out 22 times across the major blocks, and the copies
+    // have already drifted (CS skips excluded courses; BIO does not).
+    this.countFacultyCourses = function() {
+        const tally = { total: 0, fens: 0, fass: 0, sbs: 0, math: 0 };
+        for (let i = 0; i < this.semesters.length; i++) {
+            const courses = this.semesters[i].courses || [];
+            for (let a = 0; a < courses.length; a++) {
+                const course = courses[a];
+                if (!course || course.effective_type === 'none') continue;
+                const pool = course.Faculty_Course;
+                if (!pool || pool === 'No') continue;
+                tally.total++;
+                if (pool === 'FENS') {
+                    tally.fens++;
+                    if (String(course.code || '').startsWith('MATH')) tally.math++;
+                } else if (pool === 'FASS') {
+                    tally.fass++;
+                } else if (pool === 'SBS') {
+                    tally.sbs++;
+                }
+            }
+        }
+        return tally;
+    }
+    // True when ANY of `codes` is present. For "one of the following" rules.
+    this.hasAnyCourse = function(codes) {
+        for (let i = 0; i < codes.length; i++) {
+            if (this.hasCourse(codes[i])) return true;
+        }
+        return false;
+    }
     this.canGraduate = function()
     {
         let area = 0;
@@ -333,11 +390,36 @@ function s_curriculum()
         if (!isNaN(GPA)){
             if (GPA < gpaThresholdMainMajor) return 38; // Flag for main major
         }
+        // ---- University Courses: SHARED across every undergrad program ----
+        // Every major's SUIS page carries the identical block: "All freshman
+        // courses (1XX coded courses, including PROJ 201) and SPS 303 are
+        // required." These were previously checked for CS only, so a non-CS
+        // student missing SPS 303 was told they could graduate.
+        if (!this.hasCourse('SPS303')) return 11;
+
+        // HUM requirement. FASS/SBS programs: "At least 2 of the below listed
+        // HUM courses must be taken. First the 2xx coded course, then the 3xx
+        // coded course must be taken." — confirmed verbatim on ECON, MAN, PSIR,
+        // PSY and VACD.
+        //
+        // NB this cannot be a count or a credit check: HUM201 + HUM202 is two
+        // HUM courses and reaches the 44-credit university total, yet fails the
+        // rule for want of a 3xx. It has to be compositional — one from each
+        // level. That is exactly what flags 12 and 13 were always for; only the
+        // 12 half was ever written.
+        //
+        // FENS programs require one HUM instead (BIO, DSA: "One of the HUM
+        // coded course listed below is required"). Their exact wording for
+        // CS/EE/IE/MAT/ME is unverified, so their existing behaviour is left
+        // alone here rather than guessed at.
+        if (HUM_TWO_LEVEL_MAJORS.has(this.major)) {
+            if (!this.hasAnyCourse(HUM_200_LEVEL)) return 12;
+            if (!this.hasAnyCourse(HUM_300_LEVEL)) return 13;
+        }
+
         // Major-specific CS checks (only additional flags beyond generic)
         if(this.major == 'CS')
         {
-            // Check CS internship and special courses handled generically, now check SPS303, HUM2XX/HUM3XX
-            if (!this.hasCourse("SPS303")) return 11;
             if (!(this.hasCourse("HUM201") || this.hasCourse("HUM202") || this.hasCourse("HUM207"))) return 12;
             {
                 // Check faculty course requirements for CS
@@ -410,6 +492,21 @@ function s_curriculum()
         {
             // Generic checks apply
             {
+                // SUIS (EE, Faculty Courses): "a total of at least 5 courses
+                // should be completed from FENS Faculty Courses and/or FASS, SBS
+                // Faculty Courses. At least 2 of these courses must be MATH
+                // coded. In addition, at least 3 of these courses must be from
+                // the pool of FENS Faculty Courses."
+                //
+                // EE had NO faculty-course checks at all — the only major
+                // missing them, though its rule is word-for-word BIO's. EE
+                // students were simply never checked against a requirement they
+                // must meet.
+                const facultyEE = this.countFacultyCourses();
+                if (facultyEE.total < 5) return 14;
+                if (facultyEE.math < 2) return 19;
+                if (facultyEE.fens < 3) return 16;
+
                 // Check for minimum 400-level EE courses requirement (9 credits)
                 let ee400LevelCredits = 0;
                 for(let i = 0; i < this.semesters.length; i++) {
@@ -565,7 +662,12 @@ function s_curriculum()
             // Generic checks apply
             {
                 // Check if Math requirement (3 credits) is fulfilled
-                let hasMathRequirement = this.hasCourse("MATH201") || this.hasCourse("MATH202") || this.hasCourse("MATH204");
+                // SUIS (ECON, "Mathematics Requirement Courses"): 1 course from
+                // MATH201 / MATH202 / MATH204 / MATH212. MATH212 was missing —
+                // it replaces MATH201+MATH202, is `required` in ECON's catalog
+                // (4cr), and a student who satisfied their maths with it was
+                // told they had not.
+                let hasMathRequirement = this.hasAnyCourse(['MATH201', 'MATH202', 'MATH204', 'MATH212']);
                 if (!hasMathRequirement) return 25;
 
                 // Check if at least 5 faculty courses requirement is met
@@ -1107,6 +1209,16 @@ function s_curriculum()
             // SUIS: a student completes only ONE of MATH212/MATH201, and 2025+
             // admits never count MATH201 or MATH202. The extra is excluded from
             // every pool.
+            //
+            // NOT YET EXTENDED TO IE, though SUIS gives IE the identical rule
+            // (bug #14). The blocker is the exclusion's SCOPE: SUIS says the
+            // extra "will not be included in core, area and free elective course
+            // pools" — three named pools, saying nothing about the FACULTY-COURSE
+            // pool, which SUIS treats separately. This code excludes it from
+            // everything, so extending it to IE flipped IE 202301 from graduating
+            // to flag 19 (<2 MATH faculty courses). Whether that is correct or a
+            // regression depends on a reading we do not have yet, and the same
+            // question hangs over CS's existing behaviour.
             const shouldSkipMath = csMathSkipPredicate(this.entryTerm, (c) => this.hasCourse(c));
             this.semesters.forEach((sem) => {
                 (sem.courses || []).forEach((c) => { if (c && shouldSkipMath(c.code)) excludedFromDegree.add(c); });
