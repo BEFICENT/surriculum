@@ -214,3 +214,53 @@ test.describe('custom course form', () => {
     await expect(help, 'the ? toggles it back').toBeHidden();
   });
 });
+
+// --- Editing a custom course (guards this session's Faculty field) ---
+//
+// The edit path opens the same form prefilled from the existing course and
+// saves through an `{ ...courseObj, ... }` spread. If either the prefill or the
+// spread ever drops Faculty, an edit would silently reset a course's faculty —
+// which now changes what graduation rules it counts toward. Both directions are
+// pinned here because Faculty was only just made editable.
+test.describe('editing a custom course', () => {
+  const seedWithFass = (page) => seedPlan(page, {
+    major: 'CS',
+    entryTerm: TERM_NAME,
+    customCourses: { CS: [custom('QQQ400', 'core', { Faculty: 'FASS', Course_Name: 'Original Name' })] },
+    curriculum: [['CS201']],
+    grades: [['A']],
+    dates: [TERM_NAME],
+  });
+
+  const openEditForm = async (page) => {
+    await page.locator('.manageCustomCourses').click();
+    const manage = page.locator('.custom_course_manage_overlay');
+    await expect(manage).toBeVisible({ timeout: 10000 });
+    await manage.locator('.custom_course_manage_item', { hasText: 'QQQ400' })
+      .getByRole('button', { name: /edit/i }).click();
+    const form = page.locator('.custom_course_modal');
+    await expect(form).toBeVisible({ timeout: 10000 });
+    return form;
+  };
+
+  test('the edit form prefills the existing faculty', async ({ page }) => {
+    await seedWithFass(page);
+    const form = await openEditForm(page);
+    await expect(form.locator('.cc-faculty'), 'faculty should prefill to the stored value').toHaveValue('FASS');
+  });
+
+  test('editing another field preserves the faculty', async ({ page }) => {
+    await seedWithFass(page);
+    const form = await openEditForm(page);
+
+    // Change only the name, then save. Faculty must survive the round trip.
+    await form.locator('.cc-row').nth(1).locator('input').fill('Renamed Course');
+    await form.locator('.cc-buttons button', { hasText: /save|update|add/i }).first().click();
+
+    const rec = await page.evaluate(
+      () => JSON.parse(window.planStorage.getItem('customCourses_CS') || '[]').find((c) => String(c.Major) + String(c.Code) === 'QQQ400'),
+    );
+    expect(rec.Course_Name, 'the name change should persist').toBe('Renamed Course');
+    expect(rec.Faculty, 'and the faculty must not be reset by the edit').toBe('FASS');
+  });
+});
