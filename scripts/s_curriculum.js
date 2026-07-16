@@ -191,18 +191,75 @@ function collectAltPairExtras(sortedSems, pairs) {
     return extras;
 }
 
-// SUIS math-alternative rule (CS): pre-2025 admits count only ONE of
-// MATH212/MATH201 (the extra MATH201 is dropped); 2025+ admits count neither
-// MATH201 nor MATH202. An excluded course counts toward NO pool — not core,
-// area or free. Returns a predicate over course codes.
-function csMathSkipPredicate(entryTermCode, hasCourse) {
+// Programs whose SUIS "Required Courses" note states the MATH212 alternative
+// AND whose required threshold can actually be met on the MATH212 path.
+//
+// EE and ME state the rule too ("either MATH 212 or both (MATH 201 and
+// MATH 202)") but are DELIBERATELY EXCLUDED pending a threshold fix — see
+// mathAlternativeSkipPredicate. Their thresholds assume the 201+202 path and are
+// 2 credits out of reach on the MATH212 path, so applying the exclusion there
+// would take a student who currently passes and fail them.
+//
+// MAT, BIO and DSA are excluded for a different reason: they state no such rule
+// and type these courses quite differently (BIO has MATH212 as an `area`
+// elective), so the predicate must not touch them.
+const MATH_ALTERNATIVE_MAJORS = new Set(['CS', 'IE']);
+
+// SUIS math-alternative rule. MATH212 "Linear Algebra and Differential
+// Equations" replaces MATH201 "Linear Algebra" + MATH202 "Differential
+// Equations" — but WHICH of them it replaces differs by program:
+//
+//   CS, IE:  "either MATH 212 or MATH 201"                  (they need only the
+//                                                            linear-algebra half)
+//   EE, ME:  "either MATH 212 or both (MATH 201 and MATH 202)"
+//
+// Rather than hard-code four majors, read it off the catalog, which already
+// encodes the distinction precisely: for CS/IE, MATH202 is an ordinary `area`
+// elective and no part of the alternative; for EE/ME it is `required`. So the
+// courses MATH212 stands in for are exactly the `required`-typed ones among
+// {MATH201, MATH202} for that program. This is also why CS's original predicate
+// skipped only MATH201 and never MATH202 — which looked arbitrary and was right.
+//
+// 2025+ admits: "MATH 201 and MATH 202 are not included in any course pool",
+// full stop, regardless of what else was taken.
+//
+// SCOPE OF THE EXCLUSION — an interpretation, not a quote. SUIS says the extra
+// "will not be included in core, area and free elective course pools", naming
+// three pools and saying nothing about the faculty-course pool, which it treats
+// separately. We exclude it from EVERYTHING (effective_type 'none'), so an
+// excluded MATH201 also stops counting toward the ">=2 MATH-coded faculty
+// courses" rule. Maintainer's call, on the reasoning that the 2025+ note says
+// "any course pool" outright and reading the older wording more narrowly would
+// invent a distinction SUIS never draws. Worth revisiting if SUIS ever clarifies:
+// it decides whether some pre-2025 CS/IE students see flag 19.
+//
+// WHY EE/ME ARE NOT WIRED UP HERE. Their required thresholds cannot be reached
+// on the MATH212 path at all:
+//
+//                threshold   via MATH212 (4cr)   via 201+202 (6cr)
+//        EE         35            33  SHORT            35  ok
+//        ME         34            32  SHORT            34  ok
+//
+// The threshold is the sum of the required list, which carries 201+202; MATH212
+// is worth two credits less than the pair it replaces. So an EE/ME student on
+// the MATH212 path is ALREADY told they cannot graduate (flag 2) — a live bug
+// independent of this rule, and one that lives in the threshold rather than
+// here. Applying the exclusion for EE/ME before fixing that would also fail the
+// students who hold all three courses, who pass today. CS/IE are unaffected:
+// their alternative is MATH212 (4cr) vs MATH201 (3cr), so the newer course is
+// worth MORE and every path clears.
+//
+// `elTypeOf(code)` returns the course's EL_Type in this program's catalog.
+function mathAlternativeSkipPredicate(entryTermCode, hasCourse, elTypeOf) {
     const entry = parseInt(entryTermCode || '0', 10);
     const is2025Plus = !isNaN(entry) && entry >= 202501;
-    const bothAlternatives = !is2025Plus && hasCourse('MATH201') && hasCourse('MATH212');
-    return (code) => {
-        if (is2025Plus) return code === 'MATH201' || code === 'MATH202';
-        return bothAlternatives && code === 'MATH201';
-    };
+    if (is2025Plus) {
+        return (code) => code === 'MATH201' || code === 'MATH202';
+    }
+    // Pre-2025: nothing is redundant unless MATH212 is actually held.
+    if (!hasCourse('MATH212')) return () => false;
+    return (code) => (code === 'MATH201' || code === 'MATH202')
+        && elTypeOf(code) === 'required';
 }
 function s_curriculum()
 {
@@ -1205,25 +1262,26 @@ function s_curriculum()
         const typeOverride = new Map();
         // Courses pinned to core regardless of the core cap (VACD's pools).
         const forceCore = new Set();
-        if (this.major === 'CS') {
-            // SUIS: a student completes only ONE of MATH212/MATH201, and 2025+
-            // admits never count MATH201 or MATH202. The extra is excluded from
-            // every pool.
-            //
-            // NOT YET EXTENDED TO IE, though SUIS gives IE the identical rule
-            // (bug #14). The blocker is the exclusion's SCOPE: SUIS says the
-            // extra "will not be included in core, area and free elective course
-            // pools" — three named pools, saying nothing about the FACULTY-COURSE
-            // pool, which SUIS treats separately. This code excludes it from
-            // everything, so extending it to IE flipped IE 202301 from graduating
-            // to flag 19 (<2 MATH faculty courses). Whether that is correct or a
-            // regression depends on a reading we do not have yet, and the same
-            // question hangs over CS's existing behaviour.
-            const shouldSkipMath = csMathSkipPredicate(this.entryTerm, (c) => this.hasCourse(c));
+        if (MATH_ALTERNATIVE_MAJORS.has(this.major)) {
+            // See mathAlternativeSkipPredicate: MATH212 stands in for the
+            // `required`-typed subset of {MATH201, MATH202} in this program's
+            // catalog — MATH201 alone for CS/IE, both for EE/ME.
+            const elTypeOf = (code) => {
+                const rec = getInfoFn(code, course_data);
+                return String((rec && rec['EL_Type']) || '').toLowerCase();
+            };
+            const shouldSkipMath = mathAlternativeSkipPredicate(
+                this.entryTerm, (c) => this.hasCourse(c), elTypeOf,
+            );
             this.semesters.forEach((sem) => {
                 (sem.courses || []).forEach((c) => { if (c && shouldSkipMath(c.code)) excludedFromDegree.add(c); });
             });
-        } else if (this.major === 'ME') {
+        }
+
+        // Deliberately a SEPARATE chain from the maths above, not an `else if`:
+        // ME needs both the MATH212 rule AND its own alternative pairs, and
+        // chaining them would silently drop the pairs.
+        if (this.major === 'ME') {
             // SUIS: the extra of an ME pair IS counted — toward Core Elective.
             const entryME = parseInt(this.entryTerm || '0', 10);
             if (!isNaN(entryME) && entryME >= 202501) {
@@ -1892,12 +1950,21 @@ function s_curriculum()
         // main-major pass; see collectAltPairExtras().
         const excludedFromDegreeDM = new Set();
         const typeOverrideDM = new Map();
-        if (this.doubleMajor === 'CS') {
-            const shouldSkipMathDM = csMathSkipPredicate(this.entryTermDM, (c) => this.hasCourse(c));
+        if (MATH_ALTERNATIVE_MAJORS.has(this.doubleMajor)) {
+            // Same rule as the main pass, read off the DOUBLE major's catalog —
+            // which of MATH201/MATH202 are `required` differs per program.
+            const elTypeOfDM = (code) => {
+                const rec = getInfoFnDM(code, course_data_dm);
+                return String((rec && rec['EL_Type']) || '').toLowerCase();
+            };
+            const shouldSkipMathDM = mathAlternativeSkipPredicate(
+                this.entryTermDM, (c) => this.hasCourse(c), elTypeOfDM,
+            );
             this.semesters.forEach((sem) => {
                 (sem.courses || []).forEach((c) => { if (c && shouldSkipMathDM(c.code)) excludedFromDegreeDM.add(c); });
             });
-        } else if (this.doubleMajor === 'ME') {
+        }
+        if (this.doubleMajor === 'ME') {
             const entryDM = parseInt(this.entryTermDM || '0', 10);
             if (!isNaN(entryDM) && entryDM >= 202501) {
                 collectAltPairExtras(sorted, ME_2025_ALT_PAIRS)

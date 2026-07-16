@@ -39,6 +39,13 @@ const termName = (code) => {
 //        carries no SBS core elective at all)
 //   35 = core courses must span >= 6 areas
 //
+// IE reads 19 on every term. Pre-2025 that is the SUIS math-alternative rule
+// biting: the generated plan holds MATH201 + MATH212, so MATH201 is the extra
+// and is excluded from every pool — including the faculty-course tally — which
+// leaves the plan with one FENS-marked MATH course where the rule wants two. A
+// fixture artifact (a real student would hold MATH203/204 as well), not an
+// engine fault.
+//
 // A non-zero value here is CORRECT behaviour on a generically-complete plan,
 // not a bug: the generator picks courses to clear credit thresholds and has no
 // notion of these diversity rules. The exception is ME/IE at 2025+, where the
@@ -46,9 +53,9 @@ const termName = (code) => {
 // which no rule excludes for ME/IE) and so hands the engine a plan that really
 // does lack its FENS math — a fixture limitation, recorded rather than hidden.
 const EXPECTED_FLAG = {
-  202301: { BIO: 19, CS: 0, DSA: 29, ECON: 0, EE: 23, IE: 0, MAN: 35, MAT: 19, ME: 0, PSIR: 0, PSY: 18, VACD: 0 },
-  202402: { BIO: 19, CS: 0, DSA: 29, ECON: 0, EE: 23, IE: 0, MAN: 35, MAT: 19, ME: 0, PSIR: 0, PSY: 18, VACD: 0 },
-  202403: { BIO: 19, CS: 0, DSA: 29, ECON: 0, EE: 23, IE: 0, MAN: 35, MAT: 19, ME: 0, PSIR: 0, PSY: 18, VACD: 0 },
+  202301: { BIO: 19, CS: 0, DSA: 29, ECON: 0, EE: 23, IE: 19, MAN: 35, MAT: 19, ME: 0, PSIR: 0, PSY: 18, VACD: 0 },
+  202402: { BIO: 19, CS: 0, DSA: 29, ECON: 0, EE: 23, IE: 19, MAN: 35, MAT: 19, ME: 0, PSIR: 0, PSY: 18, VACD: 0 },
+  202403: { BIO: 19, CS: 0, DSA: 29, ECON: 0, EE: 23, IE: 19, MAN: 35, MAT: 19, ME: 0, PSIR: 0, PSY: 18, VACD: 0 },
   202501: { BIO: 19, CS: 0, DSA: 29, ECON: 0, EE: 23, IE: 19, MAN: 35, MAT: 19, ME: 19, PSIR: 0, PSY: 18, VACD: 0 },
   202502: { BIO: 19, CS: 0, DSA: 29, ECON: 0, EE: 23, IE: 19, MAN: 35, MAT: 19, ME: 19, PSIR: 0, PSY: 18, VACD: 0 },
 };

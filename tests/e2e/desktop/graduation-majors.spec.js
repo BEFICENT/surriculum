@@ -17,7 +17,14 @@ const REQS = Object.fromEntries(
 // credits, ...), so it graduates outright. The others are complete on credits
 // but their diversity requirements aren't satisfiable by a generic generator;
 // asserting the credit engine there is still the point.
-const FULLY_GRADUATES = new Set(['CS', 'ECON', 'IE', 'ME']);
+//
+// IE is NOT in this set despite being credit-complete. Its SUIS math rule
+// ("either MATH 212 or MATH 201") excludes the extra from every pool, including
+// the faculty-course tally — and this fixture happens to hold MATH201 + MATH212
+// with MATH203 as its only other FENS-marked maths, so excluding MATH201 leaves
+// one where flag 19 wants two. A property of the generated plan (a real student
+// would also hold MATH204), not of the engine.
+const FULLY_GRADUATES = new Set(['CS', 'ECON', 'ME']);
 
 // Sweeps every major's requirement thresholds through recalcEffectiveTypes +
 // canGraduate — the class of code the MATH201/212 bug lived in.
