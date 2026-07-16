@@ -1301,6 +1301,27 @@ function s_curriculum()
                 // ME 2025+ alternative pairs: the extra course of a pair counts
                 // toward Core Elective rather than occupying a required slot.
                 if (typeOverride.has(course)) staticType = typeOverride.get(course);
+                // SUIS: a course the catalog types `unknown` is "not included in
+                // any course pool" for this program, so it counts toward NOTHING
+                // — not a pool, and not the degree total either (every major's
+                // `total` is exactly the sum of its pool minimums, so a course
+                // in no pool cannot contribute to it). Same treatment as the
+                // hard-coded alternative exclusions above; the `continue` runs
+                // before any total is touched.
+                //
+                // The catalog uses this consistently and only where SUIS says
+                // so: MATH201/MATH202 for the 2025+ engineering admits ("not
+                // included in any course pool"), and NS213/NS214 — physics for
+                // scientists and engineers — for the non-engineering majors.
+                if (staticType === 'unknown') {
+                    course.effective_type = 'none';
+                    try {
+                        const courseElem = document.getElementById(course.id);
+                        const typeElem = courseElem ? courseElem.querySelector('.course_type') : null;
+                        if (typeElem) typeElem.textContent = 'N/A';
+                    } catch (_) {}
+                    continue;
+                }
                 credit = (typeof parseCreditValue === 'function')
                     ? parseCreditValue(infoMain['SU_credit'] || '0')
                     : (parseFloat(infoMain['SU_credit'] || '0') || 0);
@@ -1840,6 +1861,13 @@ function s_curriculum()
                     // Alternative pairs: the extra course of a pair counts
                     // toward an elective pool rather than a required slot.
                     if (typeOverrideDM.has(course)) dmStaticType = typeOverrideDM.get(course);
+                    // SUIS: `unknown` means "not included in any course pool" for
+                    // this program — see the main-major pass for the full note.
+                    if (dmStaticType === 'unknown') {
+                        course.effective_type_dm = 'none';
+                        delete course.categoryDM;
+                        continue;
+                    }
                     if (dmStaticType) {
                         course.categoryDM = dmStaticType.charAt(0).toUpperCase() + dmStaticType.slice(1);
                     }
