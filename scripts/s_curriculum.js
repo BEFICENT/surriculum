@@ -43,6 +43,7 @@ const BASIC_LANGUAGE_COURSES = new Set([
 // University Courses HUM pools — identical in every major's catalog.
 const HUM_200_LEVEL = ['HUM201', 'HUM202', 'HUM207'];
 const HUM_300_LEVEL = ['HUM311', 'HUM312', 'HUM317', 'HUM321', 'HUM322', 'HUM371'];
+const HUM_ANY_LEVEL = HUM_200_LEVEL.concat(HUM_300_LEVEL);
 
 // Programs whose SUIS page requires TWO HUM courses — one 2xx and one 3xx —
 // rather than one. Confirmed verbatim for all five; the FENS programs
@@ -477,7 +478,14 @@ function s_curriculum()
         // Major-specific CS checks (only additional flags beyond generic)
         if(this.major == 'CS')
         {
-            if (!(this.hasCourse("HUM201") || this.hasCourse("HUM202") || this.hasCourse("HUM207"))) return 12;
+            // SUIS (CS, a FENS 1-HUM program): "One of the HUM coded course
+            // listed below is required" — the list is all nine, 2xx AND 3xx.
+            // This previously demanded a 2xx specifically, so a CS student whose
+            // single HUM was a 3xx (e.g. HUM311) reached university=41 yet was
+            // told they had not met their HUM. Any HUM satisfies it. (In effect
+            // unreachable — a student with zero HUM is short on university
+            // credits and trips flag 1 first — but kept as the correct check.)
+            if (!this.hasAnyCourse(HUM_ANY_LEVEL)) return 12;
             {
                 // Check faculty course requirements for CS
                 let facultyCoursesCount = 0;
@@ -2519,7 +2527,8 @@ function s_curriculum()
         if (maj === 'CS') {
             // Check CS-specific requirements
             if (!this.hasCourse("SPS303")) return 11;
-            if (!(this.hasCourse("HUM201") || this.hasCourse("HUM202") || this.hasCourse("HUM207"))) return 12;
+            // Any HUM satisfies it — see the main-major pass.
+            if (!this.hasAnyCourse(HUM_ANY_LEVEL)) return 12;
             {
                 let facultyCoursesCount = 0;
                 let fensCoursesCount = 0;

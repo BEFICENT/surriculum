@@ -99,3 +99,47 @@ test.describe('HUM requirement (FASS/SBS programs need a 2xx AND a 3xx)', () => 
     expect([12, 13], `DSA got flag ${f}; FENS programs need one HUM, not one of each`).not.toContain(f);
   });
 });
+
+test.describe('CS accepts any HUM, not only a 2xx', () => {
+  // SUIS (CS, a FENS 1-HUM program): "One of the HUM coded course listed below
+  // is required" — the list is all nine, 2xx AND 3xx. The check used to demand a
+  // 2xx, so a CS student whose single HUM was a 3xx reached university=41 yet was
+  // told they had not met their HUM.
+  const { seedPlan: seedFull } = require('../helpers/plan');
+  const { CS_PASSING_PLAN } = require('../helpers/passing-plan');
+
+  const seedCsHum = (page, hum) => {
+    const courses = CS_PASSING_PLAN
+      .filter((c) => !['HUM201', 'HUM202', 'HUM207'].includes(c))
+      .concat(hum ? [hum] : []);
+    return seedFull(page, {
+      major: 'CS',
+      entryTerm: 'Fall 2024-2025',
+      curriculum: [courses],
+      grades: [courses.map(() => 'A')],
+      dates: ['Fall 2024-2025'],
+    });
+  };
+
+  test('a single 3xx HUM satisfies the requirement (was wrongly flag 12)', async ({ page }) => {
+    await seedCsHum(page, 'HUM311');
+    const r = await page.evaluate(() => ({
+      flag: window.curriculum.canGraduate(),
+      university: window.curriculum.semesters.reduce((a, s) => a + (s.totalUniversity || 0), 0),
+    }));
+    expect(r.university, 'a 3cr HUM keeps university at threshold').toBeGreaterThanOrEqual(41);
+    expect(r.flag, 'HUM311 alone should satisfy the HUM requirement').toBe(0);
+  });
+
+  test('no HUM at all is caught by university credits (flag 1), never a HUM flag', async ({ page }) => {
+    // With zero HUM the student is short on university credits, so the generic
+    // check binds first — the HUM flag is effectively unreachable, which is fine.
+    await seedCsHum(page, null);
+    const r = await page.evaluate(() => ({
+      flag: window.curriculum.canGraduate(),
+      university: window.curriculum.semesters.reduce((a, s) => a + (s.totalUniversity || 0), 0),
+    }));
+    expect(r.university, 'without a HUM, university is short of 41').toBeLessThan(41);
+    expect(r.flag, 'so flag 1 (university credits) binds, not a HUM flag').toBe(1);
+  });
+});
