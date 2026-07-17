@@ -1,19 +1,23 @@
 'use strict';
 
-// Pure helpers from helper_functions.js that the whole engine leans on but
-// nothing pinned: credit parsing (called to size every pool — a bug here
-// mis-counts credits everywhere), numeric extraction, and the course-catalog
-// lookups getInfo / isCourseValid.
+// Pure helpers the whole engine leans on: credit parsing (called to size every
+// pool — a bug here mis-counts credits everywhere), numeric extraction, and the
+// course-catalog lookups getInfo / isCourseValid.
 //
-// All pure enough for the tolerant vm loader (getInfo/isCourseValid read
-// window.curriculum for the double-major fallback, which resolves to the
-// sandbox and is simply absent here — the main-catalog path is what matters).
+// These now live in real ES modules (scripts/domain/credits.js,
+// scripts/data/catalog.js), so this test imports them directly — no vm shim.
+// getInfo/isCourseValid read window.curriculum for the double-major/minor
+// fallback; under Node `window` is undefined, so only the main-catalog path
+// runs, which is what these cases exercise.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadScriptGlobals } = require('./helpers/load-script');
 
-const h = loadScriptGlobals('scripts/helper_functions.js');
+const h = {};
+test.before(async () => {
+  Object.assign(h, await import('../../scripts/domain/credits.js'));
+  Object.assign(h, await import('../../scripts/data/catalog.js'));
+});
 
 test('parseCreditValue: plain integers and decimals', () => {
   assert.equal(h.parseCreditValue('3'), 3);
