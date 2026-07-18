@@ -262,6 +262,49 @@ function mathAlternativeSkipPredicate(entryTermCode, hasCourse, elTypeOf) {
     return (code) => (code === 'MATH201' || code === 'MATH202')
         && elTypeOf(code) === 'required';
 }
+
+// The allocation cascade: decide a single course's effective category from its
+// static (catalog) type and credit, advancing the running pool counters.
+// Surplus spills one pool down: required -> core -> area -> free. `pinCore`
+// forces a course into core regardless of the cap (named-pool rules: VACD's
+// core pools, IE's CS201) while still consuming core capacity, so ordinary core
+// electives fill only the remainder. university / free / anything unexpected
+// pass through unchanged.
+//
+// Shared verbatim by the main-major and double-major passes — this is the one
+// piece of allocation logic they both need, and keeping two hand-copies of it
+// is exactly how the pool counters drifted before. `counters` and `reqs` carry
+// { required, core, area }; `counters` is mutated in place.
+function allocateCascade(staticType, credit, counters, reqs, pinCore) {
+    if (pinCore) {
+        counters.core += credit;
+        return 'core';
+    }
+    if (staticType === 'core') {
+        if (counters.core < reqs.core) { counters.core += credit; return 'core'; }
+        if (counters.area < reqs.area) { counters.area += credit; return 'area'; }
+        return 'free';
+    }
+    if (staticType === 'area') {
+        if (counters.area < reqs.area) { counters.area += credit; return 'area'; }
+        return 'free';
+    }
+    if (staticType === 'required') {
+        // A zero-credit required course (e.g. VACD's VA300) consumes no capacity,
+        // so it can never overflow: reallocating it would just mislabel a named
+        // required course as an elective.
+        if (counters.required < reqs.required || credit === 0) {
+            counters.required += credit;
+            return 'required';
+        }
+        if (counters.core < reqs.core) { counters.core += credit; return 'core'; }
+        if (counters.area < reqs.area) { counters.area += credit; return 'area'; }
+        return 'free';
+    }
+    // 'free', 'university', and any unexpected type are not reallocated.
+    return staticType;
+}
+
 function s_curriculum()
 {
     this.semester_id = 0;
@@ -1244,12 +1287,11 @@ function s_curriculum()
             return idxB - idxA; // larger index = earlier term
         });
 
-        // Running counters for how many credits have been allocated to required,
-        // core and area so far. Once these exceed their requirements, we
-        // allocate additional courses to the next category.
-        let currentRequiredCredits = 0;
-        let currentCoreCredits = 0;
-        let currentAreaCredits = 0;
+        // Running credit counters and their thresholds for the allocation
+        // cascade (allocateCascade): once a pool is full its surplus spills to
+        // the next. `counters` is mutated in place as courses are placed.
+        const counters = { required: 0, core: 0, area: 0 };
+        const reqs = { required: reqRequired, core: reqCore, area: reqArea };
         // Special-case: for IE majors, if both DSA201 and CS201 are taken,
         // CS201 must always count towards core regardless of when it is
         // taken. Record the condition once so it can be applied inside the
@@ -1534,61 +1576,10 @@ function s_curriculum()
                     course.category = staticType.charAt(0).toUpperCase() + staticType.slice(1);
                 }
 
-                let effectiveType = staticType;
-                // Core, area and required types may be reallocated based on
-                // remaining credit needs. University types remain unchanged.
-                if (forceCore.has(course)) {
-                    // Pinned to core by a named-pool rule (VACD), so the core cap
-                    // cannot let another course take the slot. Its credits still
-                    // count toward the cap, so non-pool core electives fill only
-                    // the remainder.
-                    effectiveType = 'core';
-                    currentCoreCredits += credit;
-                } else if (forceCSCore && course.code === 'CS201') {
-                    // Always allocate CS201 to core when the special IE
-                    // condition is met.
-                    effectiveType = 'core';
-                    currentCoreCredits += credit;
-                } else if (staticType === 'core') {
-                    if (currentCoreCredits < reqCore) {
-                        effectiveType = 'core';
-                        currentCoreCredits += credit;
-                    } else if (currentAreaCredits < reqArea) {
-                        effectiveType = 'area';
-                        currentAreaCredits += credit;
-                    } else {
-                        effectiveType = 'free';
-                    }
-                } else if (staticType === 'area') {
-                    if (currentAreaCredits < reqArea) {
-                        effectiveType = 'area';
-                        currentAreaCredits += credit;
-                    } else {
-                        effectiveType = 'free';
-                    }
-                } else if (staticType === 'required') {
-                    // A zero-credit required course (e.g. VACD's VA300) consumes
-                    // no capacity, so it can never overflow: reallocating it just
-                    // mislabels a named required course as an elective.
-                    if (currentRequiredCredits < reqRequired || credit === 0) {
-                        effectiveType = 'required';
-                        currentRequiredCredits += credit;
-                    } else if (currentCoreCredits < reqCore) {
-                        effectiveType = 'core';
-                        currentCoreCredits += credit;
-                    } else if (currentAreaCredits < reqArea) {
-                        effectiveType = 'area';
-                        currentAreaCredits += credit;
-                    } else {
-                        effectiveType = 'free';
-                    }
-                } else if (staticType === 'free') {
-                    effectiveType = 'free';
-                } else {
-                    // Types like 'university' remain unchanged and are not
-                    // reallocated.
-                    effectiveType = staticType;
-                }
+                // The allocation cascade (shared with the double-major pass).
+                const pinCore = forceCore.has(course)
+                    || (forceCSCore && course.code === 'CS201');
+                const effectiveType = allocateCascade(staticType, credit, counters, reqs, pinCore);
                 // Persist the effective type on the course object
                 course.effective_type = effectiveType;
 
@@ -1910,10 +1901,10 @@ function s_curriculum()
         const getInfoFnDM = (typeof getInfo === 'function') ? getInfo :
             ((typeof window !== 'undefined' && typeof window.getInfo === 'function') ? window.getInfo : null);
         if (!getInfoFnDM) return;
-        // Initialize running counters for DM allocations.
-        let currentDMRequired = 0;
-        let currentDMCores = 0;
-        let currentDMAreas = 0;
+        // Running credit counters and thresholds for the allocation cascade
+        // (allocateCascade), the double-major counterpart of the main pass.
+        const dmCounters = { required: 0, core: 0, area: 0 };
+        const dmReqs = { required: dmReqRequired, core: dmCoreReq, area: dmAreaReq };
         // For IE as a double major, ensure CS201 always counts as core when
         // both CS201 and DSA201 are present. Capture the condition once here
         // so the allocation loop can enforce it deterministically regardless
@@ -2076,52 +2067,10 @@ function s_curriculum()
                     credit = (typeof parseCreditValue === 'function')
                         ? parseCreditValue(info['SU_credit'] || '0')
                         : (parseFloat(info['SU_credit'] || '0') || 0);
-                    dmType = dmStaticType;
-                    if (forceCoreDM.has(course)) {
-                        // VACD core pool course, pinned to core (see above).
-                        dmType = 'core';
-                        currentDMCores += credit;
-                    } else if (dmForceCSCore && course.code === 'CS201') {
-                        dmType = 'core';
-                        currentDMCores += credit;
-                    } else if (dmStaticType === 'core') {
-                        if (currentDMCores < dmCoreReq) {
-                            dmType = 'core';
-                            currentDMCores += credit;
-                        } else if (currentDMAreas < dmAreaReq) {
-                            dmType = 'area';
-                            currentDMAreas += credit;
-                        } else {
-                            dmType = 'free';
-                        }
-                    } else if (dmStaticType === 'area') {
-                        if (currentDMAreas < dmAreaReq) {
-                            dmType = 'area';
-                            currentDMAreas += credit;
-                        } else {
-                            dmType = 'free';
-                        }
-                    } else if (dmStaticType === 'required') {
-                        // A zero-credit required course consumes no capacity and
-                        // so can never overflow (see the main-major pass).
-                        if (currentDMRequired < dmReqRequired || credit === 0) {
-                            dmType = 'required';
-                            currentDMRequired += credit;
-                        } else if (currentDMCores < dmCoreReq) {
-                            dmType = 'core';
-                            currentDMCores += credit;
-                        } else if (currentDMAreas < dmAreaReq) {
-                            dmType = 'area';
-                            currentDMAreas += credit;
-                        } else {
-                            dmType = 'free';
-                        }
-                    } else if (dmStaticType === 'free') {
-                        dmType = 'free';
-                    } else if (dmStaticType === 'university') {
-                        // University courses remain as is.
-                        dmType = 'university';
-                    }
+                    // The allocation cascade (shared with the main-major pass).
+                    const dmPinCore = forceCoreDM.has(course)
+                        || (dmForceCSCore && course.code === 'CS201');
+                    dmType = allocateCascade(dmStaticType, credit, dmCounters, dmReqs, dmPinCore);
                 } else {
                     // Unknown course in the double major catalog: do not
                     // allocate it to any DM category. Still count its credit
