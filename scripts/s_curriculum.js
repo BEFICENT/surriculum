@@ -305,6 +305,73 @@ function allocateCascade(staticType, credit, counters, reqs, pinCore) {
     return staticType;
 }
 
+// Resolve a program's alternative-course rules BEFORE the allocation cascade
+// (see collectAltPairExtras for why they cannot run afterwards). Returns the
+// three collections the cascade consults:
+//   excluded     - counts toward nothing (no pool, no credit total): the CS/IE/
+//                  EE/ME math-alternative extras and VACD's required-pair extras.
+//   typeOverride - re-point a course at a specific pool: ME's pair extra -> core,
+//                  PSY's philosophy extra -> free, VACD's pool extras -> area.
+//   forceCore    - pinned to core regardless of the core cap: VACD's core pools.
+//
+// Shared by both allocation passes; `major` / `entryTerm` / `getInfoFn` /
+// `courseData` select the program (main major or double major). `sortedSems` is
+// the chronological order the pair/pool rules depend on; `allSems` is used only
+// for the order-independent math-exclusion sweep. `hasCourse` takes a code.
+function resolveAlternativeRules(major, entryTerm, sortedSems, allSems, getInfoFn, courseData, hasCourse) {
+    const excluded = new Set();
+    const typeOverride = new Map();
+    const forceCore = new Set();
+
+    if (MATH_ALTERNATIVE_MAJORS.has(major)) {
+        // MATH212 stands in for the `required`-typed subset of {MATH201, MATH202}
+        // in this program's catalog — MATH201 alone for CS/IE, both for EE/ME.
+        const elTypeOf = (code) => {
+            const rec = getInfoFn(code, courseData);
+            return String((rec && rec['EL_Type']) || '').toLowerCase();
+        };
+        const shouldSkipMath = mathAlternativeSkipPredicate(entryTerm, hasCourse, elTypeOf);
+        allSems.forEach((sem) => {
+            (sem.courses || []).forEach((c) => { if (c && shouldSkipMath(c.code)) excluded.add(c); });
+        });
+    }
+
+    // Deliberately a SEPARATE chain from the maths above, not an `else if`: ME
+    // needs both the MATH212 rule AND its own alternative pairs, and chaining
+    // them would silently drop the pairs.
+    if (major === 'ME') {
+        // SUIS: the extra of an ME pair IS counted — toward Core Elective.
+        const entry = parseInt(entryTerm || '0', 10);
+        if (!isNaN(entry) && entry >= 202501) {
+            collectAltPairExtras(sortedSems, ME_2025_ALT_PAIRS)
+                .forEach((c) => typeOverride.set(c, 'core'));
+        }
+    } else if (major === 'VACD') {
+        // SUIS: "Only one ... will be counted towards the degree" — unlike ME's
+        // rule, this one does not count the extra at all, so it is excluded
+        // outright rather than allowed to fill a free-elective slot. The two core
+        // pools are then resolved: courses filling a minimum are pinned to core
+        // (the cascade's core cap must not let a non-pool course take the slot,
+        // since flags 30/31 count pool courses that actually landed in core);
+        // extras are typed `area` and spill area -> free via the cascade. Pinning
+        // is safe — the two minimums total 21, under the 27-credit core need.
+        collectAltPairExtras(sortedSems, VACD_REQUIRED_PAIRS)
+            .forEach((c) => excluded.add(c));
+        selectVacdCorePools(sortedSems, (c) => excluded.has(c))
+            .forEach((type, course) => {
+                if (type === 'core') forceCore.add(course);
+                else typeOverride.set(course, type);
+            });
+    } else if (major === 'PSY') {
+        // No published rule for taking both; the extra counts as free by agreed
+        // assumption. See PSY_PHILOSOPHY_PAIR.
+        collectAltPairExtras(sortedSems, PSY_PHILOSOPHY_PAIR)
+            .forEach((c) => typeOverride.set(c, 'free'));
+    }
+
+    return { excluded, typeOverride, forceCore };
+}
+
 function s_curriculum()
 {
     this.semester_id = 0;
@@ -1303,67 +1370,12 @@ function s_curriculum()
         );
 
         // Alternative-course rules, resolved BEFORE the allocation cascade below
-        // — see collectAltPairExtras() for why this cannot run afterwards.
-        //
-        // `excludedFromDegree` holds courses that count toward NOTHING: no pool,
-        // and no credit/science/engineering/ECTS total. `typeOverride` instead
-        // re-points a course at a different pool.
-        const excludedFromDegree = new Set();
-        const typeOverride = new Map();
-        // Courses pinned to core regardless of the core cap (VACD's pools).
-        const forceCore = new Set();
-        if (MATH_ALTERNATIVE_MAJORS.has(this.major)) {
-            // See mathAlternativeSkipPredicate: MATH212 stands in for the
-            // `required`-typed subset of {MATH201, MATH202} in this program's
-            // catalog — MATH201 alone for CS/IE, both for EE/ME.
-            const elTypeOf = (code) => {
-                const rec = getInfoFn(code, course_data);
-                return String((rec && rec['EL_Type']) || '').toLowerCase();
-            };
-            const shouldSkipMath = mathAlternativeSkipPredicate(
-                this.entryTerm, (c) => this.hasCourse(c), elTypeOf,
-            );
-            this.semesters.forEach((sem) => {
-                (sem.courses || []).forEach((c) => { if (c && shouldSkipMath(c.code)) excludedFromDegree.add(c); });
-            });
-        }
-
-        // Deliberately a SEPARATE chain from the maths above, not an `else if`:
-        // ME needs both the MATH212 rule AND its own alternative pairs, and
-        // chaining them would silently drop the pairs.
-        if (this.major === 'ME') {
-            // SUIS: the extra of an ME pair IS counted — toward Core Elective.
-            const entryME = parseInt(this.entryTerm || '0', 10);
-            if (!isNaN(entryME) && entryME >= 202501) {
-                collectAltPairExtras(sortedSemesters, ME_2025_ALT_PAIRS)
-                    .forEach((c) => typeOverride.set(c, 'core'));
-            }
-        } else if (this.major === 'VACD') {
-            // SUIS: "Only one ... will be counted towards the degree" — unlike
-            // ME's rule, which explicitly redirects the extra to Core Elective,
-            // this one does not count the extra at all. So the extra is excluded
-            // outright rather than allowed to fill a free-elective slot.
-            collectAltPairExtras(sortedSemesters, VACD_REQUIRED_PAIRS)
-                .forEach((c) => excludedFromDegree.add(c));
-            // The two core pools: courses filling a minimum are pinned to core;
-            // the extras are typed `area` and spill area -> free via the cascade.
-            //
-            // The pool courses must be PINNED, not merely typed `core`: flags
-            // 30/31 count pool courses that actually landed in core, and the
-            // cascade's core cap would otherwise let a non-pool course take the
-            // slot first and push a pool course out. Pinning is safe — the two
-            // minimums total 21, well under the 27-credit core requirement.
-            selectVacdCorePools(sortedSemesters, (c) => excludedFromDegree.has(c))
-                .forEach((type, course) => {
-                    if (type === 'core') forceCore.add(course);
-                    else typeOverride.set(course, type);
-                });
-        } else if (this.major === 'PSY') {
-            // No published rule for taking both; the extra counts as free by
-            // agreed assumption. See PSY_PHILOSOPHY_PAIR.
-            collectAltPairExtras(sortedSemesters, PSY_PHILOSOPHY_PAIR)
-                .forEach((c) => typeOverride.set(c, 'free'));
-        }
+        // (see resolveAlternativeRules / collectAltPairExtras for why they cannot
+        // run afterwards). Shared with the double-major pass.
+        const { excluded: excludedFromDegree, typeOverride, forceCore } = resolveAlternativeRules(
+            this.major, this.entryTerm, sortedSemesters, this.semesters,
+            getInfoFn, course_data, (c) => this.hasCourse(c),
+        );
 
         // Iterate semesters in chronological order
         for (let i = 0; i < sortedSemesters.length; i++) {
@@ -1945,52 +1957,13 @@ function s_curriculum()
         });
 
         // Alternative-course rules for the double major, resolved BEFORE the
-        // allocation loop below — same rules and same reasoning as the
-        // main-major pass; see collectAltPairExtras().
-        const excludedFromDegreeDM = new Set();
-        const typeOverrideDM = new Map();
-        // Courses pinned to core regardless of the core cap (VACD's pools).
-        const forceCoreDM = new Set();
-        if (MATH_ALTERNATIVE_MAJORS.has(this.doubleMajor)) {
-            // Same rule as the main pass, read off the DOUBLE major's catalog —
-            // which of MATH201/MATH202 are `required` differs per program.
-            const elTypeOfDM = (code) => {
-                const rec = getInfoFnDM(code, course_data_dm);
-                return String((rec && rec['EL_Type']) || '').toLowerCase();
-            };
-            const shouldSkipMathDM = mathAlternativeSkipPredicate(
-                this.entryTermDM, (c) => this.hasCourse(c), elTypeOfDM,
+        // allocation loop below — the same shared helper as the main-major pass,
+        // read off the DOUBLE major's code, entry term and catalog.
+        const { excluded: excludedFromDegreeDM, typeOverride: typeOverrideDM, forceCore: forceCoreDM } =
+            resolveAlternativeRules(
+                this.doubleMajor, this.entryTermDM, sorted, this.semesters,
+                getInfoFnDM, course_data_dm, (c) => this.hasCourse(c),
             );
-            this.semesters.forEach((sem) => {
-                (sem.courses || []).forEach((c) => { if (c && shouldSkipMathDM(c.code)) excludedFromDegreeDM.add(c); });
-            });
-        }
-        if (this.doubleMajor === 'ME') {
-            const entryDM = parseInt(this.entryTermDM || '0', 10);
-            if (!isNaN(entryDM) && entryDM >= 202501) {
-                collectAltPairExtras(sorted, ME_2025_ALT_PAIRS)
-                    .forEach((c) => typeOverrideDM.set(c, 'core'));
-            }
-        } else if (this.doubleMajor === 'VACD') {
-            // Mirror the main-major pass exactly (see recalcEffectiveTypes):
-            // the required-pair extras count toward nothing, and the two core
-            // pools are resolved BEFORE the cascade — pool courses filling a
-            // minimum are pinned to core (forceCoreDM), the extras typed `area`
-            // and spilled area -> free by the cascade. Pinning is required
-            // because VACD core (27) exceeds the pool minimums (9 + 12 = 21),
-            // so non-pool core courses must fill the balance; resolving the
-            // pools after the cascade strands them (bug #21).
-            collectAltPairExtras(sorted, VACD_REQUIRED_PAIRS)
-                .forEach((c) => excludedFromDegreeDM.add(c));
-            selectVacdCorePools(sorted, (c) => excludedFromDegreeDM.has(c))
-                .forEach((type, course) => {
-                    if (type === 'core') forceCoreDM.add(course);
-                    else typeOverrideDM.set(course, type);
-                });
-        } else if (this.doubleMajor === 'PSY') {
-            collectAltPairExtras(sorted, PSY_PHILOSOPHY_PAIR)
-                .forEach((c) => typeOverrideDM.set(c, 'free'));
-        }
 
         // Walk semesters and courses allocating DM categories
         for (let i = 0; i < sorted.length; i++) {
