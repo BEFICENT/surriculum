@@ -464,6 +464,170 @@ function tallyFacultyAreas(semesters, effField) {
     return areas;
 }
 
+// ---- Rules as data: the graduation-rule evaluator ---------------------------
+// A program's per-major graduation requirements are expressed as an ORDERED list
+// of plain-data rule descriptors (see PROGRAM_RULES). evaluateRules walks the
+// list and returns the flag code of the FIRST unmet rule (0 = all met) — exactly
+// the "first unmet requirement wins" behaviour the hand-written per-major branches
+// had. The SAME list drives both the main and double-major passes: `ctx.fields`
+// is the pass descriptor (MAIN_FIELDS / DM_FIELDS), so each rule reads the right
+// pass's effective-type / category fields. Every rule also carries a `suis`
+// string citing the SUIS section it comes from.
+
+function forEachCourse(semesters, fn) {
+    for (let i = 0; i < semesters.length; i++) {
+        const courses = semesters[i].courses || [];
+        for (let a = 0; a < courses.length; a++) {
+            if (courses[a]) fn(courses[a]);
+        }
+    }
+}
+
+// Effective category for a course under a given pass, with the historical
+// fallback to the static catalog category when the effective type is unset.
+function effectiveCategory(course, fields) {
+    const e = course[fields.effective];
+    if (e) return String(e).toLowerCase();
+    const c = fields.category ? course[fields.category] : '';
+    return String(c || '').toLowerCase();
+}
+
+// Sum SU credits of the courses whose code is in `pool`. Options:
+//   effField/catField: the pass's fields (for requireCore's effective lookup);
+//   requireCore: only count courses whose effective category is 'core' (VACD);
+//   pairs: arrays of mutually-exclusive codes — only the first taken of each pair
+//          counts (VACD Core II VA302/VA304, VA402/VA404).
+function sumPoolCredits(semesters, pool, opts) {
+    const o = opts || {};
+    const set = new Set(pool);
+    const fields = { effective: o.effField || MAIN_FIELDS.effective, category: o.catField };
+    const pairKey = {};
+    const seenPairs = o.pairs ? new Set() : null;
+    if (o.pairs) o.pairs.forEach((p) => { const k = p.join('|'); p.forEach((c) => { pairKey[c] = k; }); });
+    let sum = 0;
+    forEachCourse(semesters, (course) => {
+        const code = course.code || ((course.Major || '') + (course.Code || ''));
+        if (!set.has(code)) return;
+        if (o.requireCore && effectiveCategory(course, fields) !== 'core') return;
+        if (seenPairs) {
+            const k = pairKey[code];
+            if (k) { if (seenPairs.has(k)) return; seenPairs.add(k); }
+        }
+        sum += creditOfCourse(course);
+    });
+    return sum;
+}
+
+// type -> predicate(ctx, rule) returning TRUE when the requirement is SATISFIED.
+// `ctx` = { curr, semesters, fields, entryTerm }.
+const RULE_EVALUATORS = {
+    // A specific course is present.
+    hasCourse: (ctx, r) => ctx.curr.hasCourse(r.code),
+    // At least one of a list is present ("one of the following").
+    hasAny: (ctx, r) => ctx.curr.hasAnyCourse(r.codes),
+    // A faculty-course pool count meets its minimum (see tallyFacultyCourses).
+    facultyCount: (ctx, r) => tallyFacultyCourses(ctx.semesters, ctx.fields.effective)[r.pool] >= r.min,
+    // Faculty courses span at least `min` distinct areas (flag 18).
+    facultyAreas: (ctx, r) => tallyFacultyAreas(ctx.semesters, ctx.fields.effective).size >= r.min,
+    // At most `max` basic/beginning language courses among the free electives.
+    languageCap: (ctx, r) => countBasicLanguageInFree(ctx.semesters, ctx.fields.effective) <= r.max,
+    // Credits from courses with a code prefix in a STATIC catalog category
+    // (EE 400-level core, flag 23).
+    levelCreditSum: (ctx, r) => {
+        let sum = 0;
+        const catField = ctx.fields.category;
+        forEachCourse(ctx.semesters, (course) => {
+            if (String(course.code || '').startsWith(r.prefix) && course[catField] === r.category) {
+                sum += creditOfCourse(course);
+            }
+        });
+        return sum >= r.min;
+    },
+    // At least one course from an explicit list, or matching a prefix+static
+    // category (EE special area electives, flag 24).
+    specialCourseAny: (ctx, r) => {
+        const catField = ctx.fields.category;
+        let found = false;
+        forEachCourse(ctx.semesters, (course) => {
+            if (found) return;
+            const code = String(course.code || '');
+            if (r.codes && r.codes.includes(course.code)) found = true;
+            else if (r.altPrefix && code.startsWith(r.altPrefix) && course[catField] === r.altCategory) found = true;
+        });
+        return found;
+    },
+    // Credits from a named pool meet a minimum, with optional effective-core
+    // filter and mutually-exclusive pairs (VACD/PSIR core-elective pools).
+    poolCreditSum: (ctx, r) => sumPoolCredits(ctx.semesters, r.pool, {
+        effField: ctx.fields.effective, catField: ctx.fields.category,
+        requireCore: r.requireCore, pairs: r.pairs,
+    }) >= r.min,
+    // At least `min` area-effective courses whose code is an advanced PSY course
+    // (flag 39).
+    psyAdvancedAreaCount: (ctx, r) => {
+        let n = 0;
+        forEachCourse(ctx.semesters, (course) => {
+            if (String(course[ctx.fields.effective] || '').toLowerCase() === 'area'
+                && isPsyAdvancedCode(course.code)) n++;
+        });
+        return n >= r.min;
+    },
+    // Courses in a given effective category span at least `min` of the listed
+    // code prefixes (MAN core/area area-spread, flags 35/36).
+    categoryPrefixSpan: (ctx, r) => {
+        const seen = new Set();
+        forEachCourse(ctx.semesters, (course) => {
+            if (effectiveCategory(course, ctx.fields) !== r.category) return;
+            const code = String(course.code || '');
+            for (let i = 0; i < r.prefixes.length; i++) {
+                if (code.startsWith(r.prefixes[i])) { seen.add(r.prefixes[i]); break; }
+            }
+        });
+        return seen.size >= r.min;
+    },
+    // Credits of free-effective courses OFFERED BY one of the given faculties
+    // (`Faculty`, not the faculty-course pool) meet a minimum (MAN, flag 37).
+    freeOfferingFacultyCredits: (ctx, r) => {
+        let sum = 0;
+        forEachCourse(ctx.semesters, (course) => {
+            if (String(course[ctx.fields.effective] || '').toLowerCase() === 'free'
+                && r.faculties.includes(course.Faculty)) {
+                sum += creditOfCourse(course);
+            }
+        });
+        return sum >= r.min;
+    },
+    // Count of STATIC-core courses OFFERED BY a faculty meets a minimum
+    // (DSA core electives, flags 27/28/29).
+    coreOfferingFacultyCount: (ctx, r) => {
+        let n = 0;
+        const catField = ctx.fields.category;
+        forEachCourse(ctx.semesters, (course) => {
+            if (course[catField] === 'Core' && course.Faculty === r.faculty) n++;
+        });
+        return n >= r.min;
+    },
+    // Applies only from a given entry term onward; otherwise auto-satisfied
+    // (ME 2025+ requires CS404|CS412, flag 2).
+    entryGatedHasAny: (ctx, r) => {
+        const entry = parseInt(ctx.entryTerm || '0', 10);
+        if (isNaN(entry) || entry < r.minTerm) return true;
+        return ctx.curr.hasAnyCourse(r.codes);
+    },
+};
+
+function evaluateRules(ctx, rules) {
+    for (let i = 0; i < rules.length; i++) {
+        const r = rules[i];
+        const ev = RULE_EVALUATORS[r.type];
+        // An unknown rule type is a table bug; skip it rather than throw so a
+        // single bad descriptor can't block a graduation check entirely.
+        if (!ev) continue;
+        if (!ev(ctx, r)) return r.flag;
+    }
+    return 0;
+}
+
 // Reset and re-accumulate a program's per-semester category totals from the
 // courses' current effective types. The generic credit/science/engineering/ECTS
 // totals are owned by the main allocation loop and deliberately not touched.
