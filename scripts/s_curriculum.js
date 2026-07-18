@@ -372,6 +372,172 @@ function resolveAlternativeRules(major, entryTerm, sortedSems, allSems, getInfoF
     return { excluded, typeOverride, forceCore };
 }
 
+// Field descriptor for a program's allocation: which per-course and per-semester
+// fields it reads and writes. The main major and the double major keep parallel
+// sets on the SAME course/semester objects (the double-major set is …DM-suffixed
+// and reuses the shared credit/science/ECTS totals). This is the first piece of
+// "program as a value": allocation helpers take a descriptor instead of hard-
+// coding one program's field names.
+const MAIN_FIELDS = {
+    category: 'category',
+    effective: 'effective_type',
+    total: {
+        core: 'totalCore', area: 'totalArea', free: 'totalFree',
+        required: 'totalRequired', university: 'totalUniversity',
+    },
+};
+const DM_FIELDS = {
+    category: 'categoryDM',
+    effective: 'effective_type_dm',
+    total: {
+        core: 'totalCoreDM', area: 'totalAreaDM', free: 'totalFreeDM',
+        required: 'totalRequiredDM', university: 'totalUniversityDM',
+    },
+};
+
+const creditOfCourse = (course) => ((typeof parseCreditValue === 'function')
+    ? parseCreditValue(course.SU_credit || '0')
+    : (parseFloat(course.SU_credit || '0') || 0));
+
+// Reset and re-accumulate a program's per-semester category totals from the
+// courses' current effective types. The generic credit/science/engineering/ECTS
+// totals are owned by the main allocation loop and deliberately not touched.
+function recomputeCategoryTotals(allSems, fields) {
+    const T = fields.total;
+    for (let i = 0; i < allSems.length; i++) {
+        const sem = allSems[i];
+        sem[T.core] = 0;
+        sem[T.area] = 0;
+        sem[T.free] = 0;
+        sem[T.required] = 0;
+        sem[T.university] = 0;
+        for (let j = 0; j < sem.courses.length; j++) {
+            const course = sem.courses[j];
+            if (!course) continue;
+            const et = course[fields.effective];
+            if (!et || et === 'none') continue;
+            const c = creditOfCourse(course);
+            if (et === 'core') sem[T.core] += c;
+            else if (et === 'area') sem[T.area] += c;
+            else if (et === 'free') sem[T.free] += c;
+            else if (et === 'required') sem[T.required] += c;
+            else if (et === 'university') sem[T.university] += c;
+        }
+    }
+}
+
+// MAN's core/area electives carry "at least one from each area" constraints, and
+// an extra core elective may count as an area elective. The generic cascade can
+// place a required-prefix core elective into area/free even when a feasible
+// assignment exists, so after the cascade MAN re-selects: a core-prefix-covering
+// subset counts as core (then fill to the core threshold), an area-prefix-
+// covering subset of the remainder counts as area (then fill to the area
+// threshold), and everything left becomes free. Shared by both passes via the
+// `fields` descriptor; only the effective-type field is rewritten, then the
+// category totals are recomputed to match.
+const MAN_CORE_PREFIXES = ['ACC', 'FIN', 'MGMT', 'MKTG', 'OPIM', 'ORG'];
+const MAN_AREA_PREFIXES = ['ACC', 'FIN', 'MKTG', 'OPIM', 'ORG'];
+
+function applyManDiversity(sortedSems, allSems, fields, reqCore, reqArea) {
+    const firstMatchingPrefix = (code, prefixes) => {
+        for (let i = 0; i < prefixes.length; i++) {
+            if (code.startsWith(prefixes[i])) return prefixes[i];
+        }
+        return null;
+    };
+
+    // Gather elective candidates in chronological order (as the allocation loop
+    // used them).
+    const electiveItems = [];
+    for (let i = 0; i < sortedSems.length; i++) {
+        const sem = sortedSems[i];
+        for (let j = 0; j < sem.courses.length; j++) {
+            const course = sem.courses[j];
+            if (!course || !course.id) continue;
+            if (course[fields.effective] === 'none') continue;
+            const cat = course[fields.category];
+            if (cat !== 'Core' && cat !== 'Area') continue;
+            const credit = creditOfCourse(course);
+            electiveItems.push({
+                id: course.id,
+                code: course.code,
+                staticType: (cat || '').toLowerCase(),
+                credit: isNaN(credit) ? 0 : credit,
+                courseRef: course,
+            });
+        }
+    }
+
+    const coreCandidates = electiveItems.filter((it) => it.staticType === 'core');
+    const selectedCore = new Set();
+    const coreByPrefix = {};
+    for (let i = 0; i < coreCandidates.length; i++) {
+        const it = coreCandidates[i];
+        const prefix = firstMatchingPrefix(it.code, MAN_CORE_PREFIXES);
+        if (!prefix) continue;
+        if (!coreByPrefix[prefix]) coreByPrefix[prefix] = [];
+        coreByPrefix[prefix].push(it);
+    }
+    let coreCredits = 0;
+    for (let i = 0; i < MAN_CORE_PREFIXES.length; i++) {
+        const bucket = coreByPrefix[MAN_CORE_PREFIXES[i]] || [];
+        if (bucket.length) {
+            const pick = bucket[0];
+            if (!selectedCore.has(pick.id)) {
+                selectedCore.add(pick.id);
+                coreCredits += pick.credit;
+            }
+        }
+    }
+    for (let i = 0; i < coreCandidates.length && coreCredits < reqCore; i++) {
+        const it = coreCandidates[i];
+        if (selectedCore.has(it.id)) continue;
+        selectedCore.add(it.id);
+        coreCredits += it.credit;
+    }
+
+    // Area candidates: static area electives plus overflow core electives not
+    // selected as core.
+    const areaCandidates = electiveItems
+        .filter((it) => it.staticType === 'area')
+        .concat(coreCandidates.filter((it) => !selectedCore.has(it.id)));
+    const selectedArea = new Set();
+    const areaByPrefix = {};
+    for (let i = 0; i < areaCandidates.length; i++) {
+        const it = areaCandidates[i];
+        const prefix = firstMatchingPrefix(it.code, MAN_AREA_PREFIXES);
+        if (!prefix) continue;
+        if (!areaByPrefix[prefix]) areaByPrefix[prefix] = [];
+        areaByPrefix[prefix].push(it);
+    }
+    let areaCredits = 0;
+    for (let i = 0; i < MAN_AREA_PREFIXES.length; i++) {
+        const bucket = areaByPrefix[MAN_AREA_PREFIXES[i]] || [];
+        if (bucket.length) {
+            const pick = bucket[0];
+            if (!selectedArea.has(pick.id) && !selectedCore.has(pick.id)) {
+                selectedArea.add(pick.id);
+                areaCredits += pick.credit;
+            }
+        }
+    }
+    for (let i = 0; i < areaCandidates.length && areaCredits < reqArea; i++) {
+        const it = areaCandidates[i];
+        if (selectedCore.has(it.id) || selectedArea.has(it.id)) continue;
+        selectedArea.add(it.id);
+        areaCredits += it.credit;
+    }
+
+    for (let i = 0; i < electiveItems.length; i++) {
+        const it = electiveItems[i];
+        if (selectedCore.has(it.id)) it.courseRef[fields.effective] = 'core';
+        else if (selectedArea.has(it.id)) it.courseRef[fields.effective] = 'area';
+        else it.courseRef[fields.effective] = 'free';
+    }
+
+    recomputeCategoryTotals(allSems, fields);
+}
+
 function s_curriculum()
 {
     this.semester_id = 0;
@@ -1664,142 +1830,7 @@ function s_curriculum()
         // covers all required prefixes, and pushing duplicates/overflow into
         // area/free to satisfy area elective rules.
         if (this.major === 'MAN') {
-            const corePrefixes = ['ACC', 'FIN', 'MGMT', 'MKTG', 'OPIM', 'ORG'];
-            const areaPrefixes = ['ACC', 'FIN', 'MKTG', 'OPIM', 'ORG'];
-
-            function firstMatchingPrefix(code, prefixes) {
-                for (let i = 0; i < prefixes.length; i++) {
-                    if (code.startsWith(prefixes[i])) return prefixes[i];
-                }
-                return null;
-            }
-
-            // Gather elective candidates in chronological order (sortedSemesters
-            // is already chronological as used in the allocation loop).
-            const electiveItems = [];
-            for (let i = 0; i < sortedSemesters.length; i++) {
-                const sem = sortedSemesters[i];
-                for (let j = 0; j < sem.courses.length; j++) {
-                    const course = sem.courses[j];
-                    if (!course || !course.id) continue;
-                    if (course.effective_type === 'none') continue;
-                    if (course.category !== 'Core' && course.category !== 'Area') continue;
-                    const credit = (typeof parseCreditValue === 'function')
-                        ? parseCreditValue(course.SU_credit || '0')
-                        : (parseFloat(course.SU_credit || '0') || 0);
-                    electiveItems.push({
-                        id: course.id,
-                        code: course.code,
-                        staticType: (course.category || '').toLowerCase(),
-                        credit: isNaN(credit) ? 0 : credit,
-                        courseRef: course,
-                    });
-                }
-            }
-
-            const reqCoreMan = reqCore;
-            const reqAreaMan = reqArea;
-
-            const coreCandidates = electiveItems.filter(it => it.staticType === 'core');
-            const selectedCore = new Set();
-            const coreByPrefix = {};
-            for (let i = 0; i < coreCandidates.length; i++) {
-                const it = coreCandidates[i];
-                const prefix = firstMatchingPrefix(it.code, corePrefixes);
-                if (!prefix) continue;
-                if (!coreByPrefix[prefix]) coreByPrefix[prefix] = [];
-                coreByPrefix[prefix].push(it);
-            }
-            let coreCredits = 0;
-            for (let i = 0; i < corePrefixes.length; i++) {
-                const p = corePrefixes[i];
-                const bucket = coreByPrefix[p] || [];
-                if (bucket.length) {
-                    const pick = bucket[0];
-                    if (!selectedCore.has(pick.id)) {
-                        selectedCore.add(pick.id);
-                        coreCredits += pick.credit;
-                    }
-                }
-            }
-            for (let i = 0; i < coreCandidates.length && coreCredits < reqCoreMan; i++) {
-                const it = coreCandidates[i];
-                if (selectedCore.has(it.id)) continue;
-                selectedCore.add(it.id);
-                coreCredits += it.credit;
-            }
-
-            // Area candidates include static area electives plus overflow core
-            // electives not selected as core.
-            const areaCandidates = electiveItems
-                .filter(it => it.staticType === 'area')
-                .concat(coreCandidates.filter(it => !selectedCore.has(it.id)));
-
-            const selectedArea = new Set();
-            const areaByPrefix = {};
-            for (let i = 0; i < areaCandidates.length; i++) {
-                const it = areaCandidates[i];
-                const prefix = firstMatchingPrefix(it.code, areaPrefixes);
-                if (!prefix) continue;
-                if (!areaByPrefix[prefix]) areaByPrefix[prefix] = [];
-                areaByPrefix[prefix].push(it);
-            }
-            let areaCredits = 0;
-            for (let i = 0; i < areaPrefixes.length; i++) {
-                const p = areaPrefixes[i];
-                const bucket = areaByPrefix[p] || [];
-                if (bucket.length) {
-                    const pick = bucket[0];
-                    if (!selectedArea.has(pick.id) && !selectedCore.has(pick.id)) {
-                        selectedArea.add(pick.id);
-                        areaCredits += pick.credit;
-                    }
-                }
-            }
-            for (let i = 0; i < areaCandidates.length && areaCredits < reqAreaMan; i++) {
-                const it = areaCandidates[i];
-                if (selectedCore.has(it.id) || selectedArea.has(it.id)) continue;
-                selectedArea.add(it.id);
-                areaCredits += it.credit;
-            }
-
-            // Apply normalized effective types for elective items only.
-            for (let i = 0; i < electiveItems.length; i++) {
-                const it = electiveItems[i];
-                if (selectedCore.has(it.id)) {
-                    it.courseRef.effective_type = 'core';
-                } else if (selectedArea.has(it.id)) {
-                    it.courseRef.effective_type = 'area';
-                } else {
-                    it.courseRef.effective_type = 'free';
-                }
-            }
-
-            // Recompute semester category totals (core/area/free/required/university)
-            // to match normalized MAN effective types. totalCredit/science/eng/ECTS
-            // remain correct and are not recomputed here.
-            for (let i = 0; i < this.semesters.length; i++) {
-                const sem = this.semesters[i];
-                sem.totalArea = 0;
-                sem.totalCore = 0;
-                sem.totalFree = 0;
-                sem.totalUniversity = 0;
-                sem.totalRequired = 0;
-                for (let j = 0; j < sem.courses.length; j++) {
-                    const course = sem.courses[j];
-                    if (!course) continue;
-                    const et = course.effective_type;
-                    if (!et || et === 'none') continue;
-                    const c = (typeof parseCreditValue === 'function')
-                        ? parseCreditValue(course.SU_credit || '0')
-                        : (parseFloat(course.SU_credit || '0') || 0);
-                    if (et === 'core') sem.totalCore += c;
-                    else if (et === 'area') sem.totalArea += c;
-                    else if (et === 'free') sem.totalFree += c;
-                    else if (et === 'required') sem.totalRequired += c;
-                    else if (et === 'university') sem.totalUniversity += c;
-                }
-            }
+            applyManDiversity(sortedSemesters, this.semesters, MAIN_FIELDS, reqCore, reqArea);
 
             // Update DOM type label for MAN elective normalization (skip if not present).
             try {
@@ -2090,127 +2121,7 @@ function s_curriculum()
         // types to satisfy the per-area constraints while still allowing extra
         // core electives to count as area electives.
         if (this.doubleMajor === 'MAN') {
-            const corePrefixes = ['ACC', 'FIN', 'MGMT', 'MKTG', 'OPIM', 'ORG'];
-            const areaPrefixes = ['ACC', 'FIN', 'MKTG', 'OPIM', 'ORG'];
-            function firstMatchingPrefix(code, prefixes) {
-                for (let i = 0; i < prefixes.length; i++) {
-                    if (code.startsWith(prefixes[i])) return prefixes[i];
-                }
-                return null;
-            }
-
-            const dmElectiveItems = [];
-            for (let i = 0; i < sorted.length; i++) {
-                const sem = sorted[i];
-                for (let j = 0; j < sem.courses.length; j++) {
-                    const course = sem.courses[j];
-                    if (!course || !course.id) continue;
-                    if (course.effective_type_dm === 'none') continue;
-                    if (course.categoryDM !== 'Core' && course.categoryDM !== 'Area') continue;
-                    const credit = (typeof parseCreditValue === 'function')
-                        ? parseCreditValue(course.SU_credit || '0')
-                        : (parseFloat(course.SU_credit || '0') || 0);
-                    dmElectiveItems.push({
-                        id: course.id,
-                        code: course.code,
-                        staticType: (course.categoryDM || '').toLowerCase(),
-                        credit: isNaN(credit) ? 0 : credit,
-                        courseRef: course,
-                    });
-                }
-            }
-
-            const dmCoreCandidates = dmElectiveItems.filter(it => it.staticType === 'core');
-            const dmSelectedCore = new Set();
-            const dmCoreByPrefix = {};
-            for (let i = 0; i < dmCoreCandidates.length; i++) {
-                const it = dmCoreCandidates[i];
-                const prefix = firstMatchingPrefix(it.code, corePrefixes);
-                if (!prefix) continue;
-                if (!dmCoreByPrefix[prefix]) dmCoreByPrefix[prefix] = [];
-                dmCoreByPrefix[prefix].push(it);
-            }
-            let dmCoreCredits = 0;
-            for (let i = 0; i < corePrefixes.length; i++) {
-                const p = corePrefixes[i];
-                const bucket = dmCoreByPrefix[p] || [];
-                if (bucket.length) {
-                    const pick = bucket[0];
-                    if (!dmSelectedCore.has(pick.id)) {
-                        dmSelectedCore.add(pick.id);
-                        dmCoreCredits += pick.credit;
-                    }
-                }
-            }
-            for (let i = 0; i < dmCoreCandidates.length && dmCoreCredits < dmCoreReq; i++) {
-                const it = dmCoreCandidates[i];
-                if (dmSelectedCore.has(it.id)) continue;
-                dmSelectedCore.add(it.id);
-                dmCoreCredits += it.credit;
-            }
-
-            const dmAreaCandidates = dmElectiveItems
-                .filter(it => it.staticType === 'area')
-                .concat(dmCoreCandidates.filter(it => !dmSelectedCore.has(it.id)));
-
-            const dmSelectedArea = new Set();
-            const dmAreaByPrefix = {};
-            for (let i = 0; i < dmAreaCandidates.length; i++) {
-                const it = dmAreaCandidates[i];
-                const prefix = firstMatchingPrefix(it.code, areaPrefixes);
-                if (!prefix) continue;
-                if (!dmAreaByPrefix[prefix]) dmAreaByPrefix[prefix] = [];
-                dmAreaByPrefix[prefix].push(it);
-            }
-            let dmAreaCredits = 0;
-            for (let i = 0; i < areaPrefixes.length; i++) {
-                const p = areaPrefixes[i];
-                const bucket = dmAreaByPrefix[p] || [];
-                if (bucket.length) {
-                    const pick = bucket[0];
-                    if (!dmSelectedArea.has(pick.id) && !dmSelectedCore.has(pick.id)) {
-                        dmSelectedArea.add(pick.id);
-                        dmAreaCredits += pick.credit;
-                    }
-                }
-            }
-            for (let i = 0; i < dmAreaCandidates.length && dmAreaCredits < dmAreaReq; i++) {
-                const it = dmAreaCandidates[i];
-                if (dmSelectedCore.has(it.id) || dmSelectedArea.has(it.id)) continue;
-                dmSelectedArea.add(it.id);
-                dmAreaCredits += it.credit;
-            }
-
-            for (let i = 0; i < dmElectiveItems.length; i++) {
-                const it = dmElectiveItems[i];
-                if (dmSelectedCore.has(it.id)) it.courseRef.effective_type_dm = 'core';
-                else if (dmSelectedArea.has(it.id)) it.courseRef.effective_type_dm = 'area';
-                else it.courseRef.effective_type_dm = 'free';
-            }
-
-            // Recompute DM category totals to match normalized effective types.
-            for (let i = 0; i < this.semesters.length; i++) {
-                const sem = this.semesters[i];
-                sem.totalCoreDM = 0;
-                sem.totalAreaDM = 0;
-                sem.totalFreeDM = 0;
-                sem.totalRequiredDM = 0;
-                sem.totalUniversityDM = 0;
-                for (let j = 0; j < sem.courses.length; j++) {
-                    const course = sem.courses[j];
-                    if (!course) continue;
-                    const et = course.effective_type_dm;
-                    if (!et || et === 'none') continue;
-                    const c = (typeof parseCreditValue === 'function')
-                        ? parseCreditValue(course.SU_credit || '0')
-                        : (parseFloat(course.SU_credit || '0') || 0);
-                    if (et === 'core') sem.totalCoreDM += c;
-                    else if (et === 'area') sem.totalAreaDM += c;
-                    else if (et === 'free') sem.totalFreeDM += c;
-                    else if (et === 'required') sem.totalRequiredDM += c;
-                    else if (et === 'university') sem.totalUniversityDM += c;
-                }
-            }
+            applyManDiversity(sorted, this.semesters, DM_FIELDS, dmCoreReq, dmAreaReq);
         }
 
         // (CS double-major math exclusions are handled BEFORE the allocation
