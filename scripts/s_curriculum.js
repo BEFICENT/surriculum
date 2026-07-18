@@ -399,6 +399,71 @@ const creditOfCourse = (course) => ((typeof parseCreditValue === 'function')
     ? parseCreditValue(course.SU_credit || '0')
     : (parseFloat(course.SU_credit || '0') || 0));
 
+// Tally the student's FACULTY COURSES by pool. `Faculty_Course` is the
+// faculty-course pool marker (only ~10% of courses carry one) — NOT the offering
+// faculty, which is `Faculty`. Conflating the two caused the MAN and DSA bugs, so
+// the distinction is deliberate. Courses the given allocation excludes (its
+// `effField` === 'none' — a failed course, or a math alternative SUIS drops)
+// count toward nothing. `effField` is the effective-type field of the pass being
+// checked: 'effective_type' for the main major, 'effective_type_dm' for the DM.
+//
+// This is the ONE tally the graduation checks share. It was hand-written 22 times
+// across the major blocks and the copies had drifted (only CS/EE skipped excluded
+// courses); every block now calls this via countFacultyCourses().
+function tallyFacultyCourses(semesters, effField) {
+    const eff = effField || MAIN_FIELDS.effective;
+    const tally = { total: 0, fens: 0, fass: 0, sbs: 0, math: 0 };
+    for (let i = 0; i < semesters.length; i++) {
+        const courses = semesters[i].courses || [];
+        for (let a = 0; a < courses.length; a++) {
+            const course = courses[a];
+            if (!course || course[eff] === 'none') continue;
+            const pool = course.Faculty_Course;
+            if (!pool || pool === 'No') continue;
+            tally.total++;
+            if (pool === 'FENS') {
+                tally.fens++;
+                if (String(course.code || '').startsWith('MATH')) tally.math++;
+            } else if (pool === 'FASS') {
+                tally.fass++;
+            } else if (pool === 'SBS') {
+                tally.sbs++;
+            }
+        }
+    }
+    return tally;
+}
+
+// Distinct "areas" spanned by the FACULTY COURSES, for the FASS programs'
+// "span at least 3 different areas" rule (flag 18: ECON/PSIR/PSY/VACD). Same pool
+// marker and none-skip as tallyFacultyCourses. The prefix->area map was copied
+// into all four branches; ECON's copy alone tested a "PSYCH" prefix, which no SU
+// course code carries (psychology is "PSY"), so ECON silently never credited a
+// psychology area — unified here to "PSY".
+function tallyFacultyAreas(semesters, effField) {
+    const eff = effField || MAIN_FIELDS.effective;
+    const areas = new Set();
+    for (let i = 0; i < semesters.length; i++) {
+        const courses = semesters[i].courses || [];
+        for (let a = 0; a < courses.length; a++) {
+            const course = courses[a];
+            if (!course || course[eff] === 'none') continue;
+            const pool = course.Faculty_Course;
+            if (!pool || pool === 'No') continue;
+            const code = String(course.code || '');
+            if (code.startsWith('CULT')) areas.add('CULT');
+            else if (code.startsWith('ECON')) areas.add('ECON');
+            else if (code.startsWith('HART')) areas.add('HART');
+            else if (code.startsWith('PSY')) areas.add('PSYCH');
+            else if (code.startsWith('SPS') || code.startsWith('POLS') || code.startsWith('IR')) areas.add('SPS/POLS/IR');
+            else if (code.startsWith('VA')) areas.add('VA');
+            else if (pool === 'FENS') areas.add('FENS');
+            else if (pool === 'SBS') areas.add('SBS');
+        }
+    }
+    return areas;
+}
+
 // Reset and re-accumulate a program's per-semester category totals from the
 // courses' current effective types. The generic credit/science/engineering/ECTS
 // totals are owned by the main allocation loop and deliberately not touched.
@@ -642,27 +707,13 @@ function s_curriculum()
     // New code should use this rather than hand-rolling the loop: the same tally
     // is currently written out 22 times across the major blocks, and the copies
     // have already drifted (CS skips excluded courses; BIO does not).
-    this.countFacultyCourses = function() {
-        const tally = { total: 0, fens: 0, fass: 0, sbs: 0, math: 0 };
-        for (let i = 0; i < this.semesters.length; i++) {
-            const courses = this.semesters[i].courses || [];
-            for (let a = 0; a < courses.length; a++) {
-                const course = courses[a];
-                if (!course || course.effective_type === 'none') continue;
-                const pool = course.Faculty_Course;
-                if (!pool || pool === 'No') continue;
-                tally.total++;
-                if (pool === 'FENS') {
-                    tally.fens++;
-                    if (String(course.code || '').startsWith('MATH')) tally.math++;
-                } else if (pool === 'FASS') {
-                    tally.fass++;
-                } else if (pool === 'SBS') {
-                    tally.sbs++;
-                }
-            }
-        }
-        return tally;
+    // Thin wrappers over the shared module-level tallies. `fields` selects the
+    // pass (MAIN_FIELDS / DM_FIELDS); default is the main major.
+    this.countFacultyCourses = function(fields) {
+        return tallyFacultyCourses(this.semesters, fields && fields.effective);
+    }
+    this.countFacultyAreas = function(fields) {
+        return tallyFacultyAreas(this.semesters, fields && fields.effective);
     }
     // True when ANY of `codes` is present. For "one of the following" rules.
     this.hasAnyCourse = function(codes) {
@@ -761,35 +812,12 @@ function s_curriculum()
             // credits and trips flag 1 first — but kept as the correct check.)
             if (!this.hasAnyCourse(HUM_ANY_LEVEL)) return 12;
             {
-                // Check faculty course requirements for CS
-                let facultyCoursesCount = 0;
-                let fensCoursesCount = 0;
-                let mathCoursesCount = 0;
-
-                for(let i = 0; i < this.semesters.length; i++) {
-                    for(let a = 0; a < this.semesters[i].courses.length; a++) {
-                        let course = this.semesters[i].courses[a];
-                        if (course && course.effective_type === 'none') continue;
-                        // Count faculty courses using the new Faculty_Course attribute
-                        if(course.Faculty_Course && course.Faculty_Course !== 'No') {
-                            facultyCoursesCount++;
-
-                            // Count FENS courses
-                            if(course.Faculty_Course === "FENS") {
-                                fensCoursesCount++;
-                            }
-
-                            // Count MATH courses from FENS faculty courses
-                            if(course.Faculty_Course === "FENS" && course.code.startsWith("MATH")) {
-                                mathCoursesCount++;
-                            }
-                        }
-                    }
-                }
-
-                if(facultyCoursesCount < 5) return 14;
-                if(mathCoursesCount < 2) return 19;
-                if(fensCoursesCount < 3) return 16;
+                // SUIS (CS Faculty Courses): >=5 faculty courses, >=2 MATH, >=3
+                // from FENS. countFacultyCourses() is the one shared tally.
+                const f = this.countFacultyCourses();
+                if (f.total < 5) return 14;
+                if (f.math < 2) return 19;
+                if (f.fens < 3) return 16;
             }
         }
         else if(this.major == 'IE')
@@ -797,34 +825,12 @@ function s_curriculum()
             // Generic checks apply
             // Additional IE-specific logic can be added here if needed
             {
-                // Check faculty course requirements for IE (same as CS, EE, MAT)
-                let facultyCoursesCount = 0;
-                let fensCoursesCount = 0;
-                let mathCoursesCount = 0;
-
-                for(let i = 0; i < this.semesters.length; i++) {
-                    for(let a = 0; a < this.semesters[i].courses.length; a++) {
-                        let course = this.semesters[i].courses[a];
-                        // Count faculty courses using the new Faculty_Course attribute
-                        if(course.Faculty_Course && course.Faculty_Course !== 'No') {
-                            facultyCoursesCount++;
-
-                            // Count FENS courses
-                            if(course.Faculty_Course === "FENS") {
-                                fensCoursesCount++;
-                            }
-
-                            // Count MATH courses from FENS faculty courses
-                            if(course.Faculty_Course === "FENS" && course.code.startsWith("MATH")) {
-                                mathCoursesCount++;
-                            }
-                        }
-                    }
-                }
-
-                if(facultyCoursesCount < 5) return 14;
-                if(mathCoursesCount < 2) return 19;
-                if(fensCoursesCount < 3) return 16;
+                // SUIS (IE Faculty Courses, same rule as CS/EE/MAT): >=5, >=2
+                // MATH, >=3 FENS.
+                const f = this.countFacultyCourses();
+                if (f.total < 5) return 14;
+                if (f.math < 2) return 19;
+                if (f.fens < 3) return 16;
             }
         }
         else if(this.major == 'EE')
@@ -891,34 +897,12 @@ function s_curriculum()
         {
             // Generic checks apply
             {
-                // Check if student has at least 5 faculty courses with special requirements
-                let facultyCoursesCount = 0;
-                let fensCoursesCount = 0;
-                let mathCoursesCount = 0;
-
-                for(let i = 0; i < this.semesters.length; i++) {
-                    for(let a = 0; a < this.semesters[i].courses.length; a++) {
-                        let course = this.semesters[i].courses[a];
-                        // Count faculty courses using the new Faculty_Course attribute
-                        if(course.Faculty_Course && course.Faculty_Course !== 'No') {
-                            facultyCoursesCount++;
-
-                            // Count FENS courses
-                            if(course.Faculty_Course === "FENS") {
-                                fensCoursesCount++;
-                            }
-
-                            // Count MATH courses from FENS faculty courses
-                            if(course.Faculty_Course === "FENS" && course.code.startsWith("MATH")) {
-                                mathCoursesCount++;
-                            }
-                        }
-                    }
-                }
-
-                if(facultyCoursesCount < 5) return 14;
-                if(mathCoursesCount < 2) return 19;
-                if(fensCoursesCount < 3) return 16;
+                // SUIS (MAT Faculty Courses, same rule as CS/EE/IE): >=5, >=2
+                // MATH, >=3 FENS.
+                const f = this.countFacultyCourses();
+                if (f.total < 5) return 14;
+                if (f.math < 2) return 19;
+                if (f.fens < 3) return 16;
 
             }
         }
@@ -926,34 +910,12 @@ function s_curriculum()
         {
             // Generic checks apply
             {
-                // Check faculty course requirements for BIO
-                let facultyCoursesCount = 0;
-                let fensCoursesCount = 0;
-                let mathCoursesCount = 0;
-
-                for(let i = 0; i < this.semesters.length; i++) {
-                    for(let a = 0; a < this.semesters[i].courses.length; a++) {
-                        let course = this.semesters[i].courses[a];
-                        // Count faculty courses using the new Faculty_Course attribute
-                        if(course.Faculty_Course && course.Faculty_Course !== 'No') {
-                            facultyCoursesCount++;
-
-                            // Count FENS courses
-                            if(course.Faculty_Course === "FENS") {
-                                fensCoursesCount++;
-                            }
-
-                            // Count MATH courses from FENS faculty courses
-                            if(course.Faculty_Course === "FENS" && course.code.startsWith("MATH")) {
-                                mathCoursesCount++;
-                            }
-                        }
-                    }
-                }
-
-                if(facultyCoursesCount < 5) return 14;
-                if(mathCoursesCount < 2) return 19;
-                if(fensCoursesCount < 3) return 16;
+                // SUIS (BIO Faculty Courses, same rule as CS/EE/IE/MAT): >=5,
+                // >=2 MATH, >=3 FENS.
+                const f = this.countFacultyCourses();
+                if (f.total < 5) return 14;
+                if (f.math < 2) return 19;
+                if (f.fens < 3) return 16;
 
             }
         }
@@ -966,34 +928,12 @@ function s_curriculum()
                     if (!(this.hasCourse('CS404') || this.hasCourse('CS412'))) return 2;
                 }
 
-                // Check faculty course requirements for ME (same as CS, EE, MAT, IE)
-                let facultyCoursesCount = 0;
-                let fensCoursesCount = 0;
-                let mathCoursesCount = 0;
-
-                for(let i = 0; i < this.semesters.length; i++) {
-                    for(let a = 0; a < this.semesters[i].courses.length; a++) {
-                        let course = this.semesters[i].courses[a];
-                        // Count faculty courses using the new Faculty_Course attribute
-                        if(course.Faculty_Course && course.Faculty_Course !== 'No') {
-                            facultyCoursesCount++;
-
-                            // Count FENS courses
-                            if(course.Faculty_Course === "FENS") {
-                                fensCoursesCount++;
-                            }
-
-                            // Count MATH courses from FENS faculty courses
-                            if(course.Faculty_Course === "FENS" && course.code.startsWith("MATH")) {
-                                mathCoursesCount++;
-                            }
-                        }
-                    }
-                }
-
-                if(facultyCoursesCount < 5) return 14;
-                if(mathCoursesCount < 2) return 19;
-                if(fensCoursesCount < 3) return 16;
+                // SUIS (ME Faculty Courses, same rule as CS/EE/IE/MAT): >=5, >=2
+                // MATH, >=3 FENS.
+                const f = this.countFacultyCourses();
+                if (f.total < 5) return 14;
+                if (f.math < 2) return 19;
+                if (f.fens < 3) return 16;
             }
         }
         else if(this.major == 'ECON')
@@ -1009,39 +949,14 @@ function s_curriculum()
                 let hasMathRequirement = this.hasAnyCourse(['MATH201', 'MATH202', 'MATH204', 'MATH212']);
                 if (!hasMathRequirement) return 25;
 
-                // Check if at least 5 faculty courses requirement is met
-                let facultyCoursesCount = 0;
-                let fassCount = 0;
-                let areasCount = new Set();
-
-                for(let i = 0; i < this.semesters.length; i++) {
-                    for(let a = 0; a < this.semesters[i].courses.length; a++) {
-                        let course = this.semesters[i].courses[a];
-                        // Count faculty courses using the new Faculty_Course attribute
-                        if(course.Faculty_Course && course.Faculty_Course !== 'No') {
-                            facultyCoursesCount++;
-
-                            // Count FASS courses
-                            if(course.Faculty_Course === "FASS") {
-                                fassCount++;
-                            }
-
-                            // Track areas (simplified check)
-                            if(course.code.startsWith("CULT")) areasCount.add("CULT");
-                            else if(course.code.startsWith("ECON")) areasCount.add("ECON");
-                            else if(course.code.startsWith("HART")) areasCount.add("HART");
-                            else if(course.code.startsWith("PSYCH")) areasCount.add("PSYCH");
-                            else if(course.code.startsWith("SPS") || course.code.startsWith("POLS") || course.code.startsWith("IR")) areasCount.add("SPS/POLS/IR");
-                            else if(course.code.startsWith("VA")) areasCount.add("VA");
-                            else if(course.Faculty_Course === "FENS") areasCount.add("FENS");
-                            else if(course.Faculty_Course === "SBS") areasCount.add("SBS");
-                        }
-                    }
-                }
-
-                if(facultyCoursesCount < 5) return 14;
-                if(fassCount < 3) return 15;
-                if(areasCount.size < 3) return 18;
+                // SUIS (ECON Faculty Courses): >=5 total, >=3 FASS, spanning >=3
+                // areas. (ECON's inline copy tested a dead "PSYCH" prefix; the
+                // shared countFacultyAreas() uses "PSY".)
+                const f = this.countFacultyCourses();
+                const areas = this.countFacultyAreas();
+                if (f.total < 5) return 14;
+                if (f.fass < 3) return 15;
+                if (areas.size < 3) return 18;
 
                 // SUIS: at most 2 Beginning/Basic level language courses may
                 // count toward the free electives.
@@ -1051,27 +966,10 @@ function s_curriculum()
         else if(this.major == 'MAN') {
             // Generic checks apply
             {
-                // Check faculty course requirements for MAN
-                let facultyCoursesCount = 0;
-                let sbsCoursesCount = 0;
-
-                for (let i = 0; i < this.semesters.length; i++) {
-                    for (let a = 0; a < this.semesters[i].courses.length; a++) {
-                        let course = this.semesters[i].courses[a];
-                        // Count faculty courses using the new Faculty_Course attribute
-                        if (course.Faculty_Course && course.Faculty_Course !== 'No') {
-                            facultyCoursesCount++;
-
-                            // Count SBS courses
-                            if (course.Faculty_Course === "SBS") {
-                                sbsCoursesCount++;
-                            }
-                        }
-                    }
-                }
-
-                if (facultyCoursesCount < 5) return 14;
-                if (sbsCoursesCount < 2) return 22;
+                // SUIS (MAN Faculty Courses): >=5 total, >=2 SBS.
+                const f = this.countFacultyCourses();
+                if (f.total < 5) return 14;
+                if (f.sbs < 2) return 22;
 
                 // Core electives requirement: 6 courses from 6 different areas
                 let coreAreas = new Set();
@@ -1155,39 +1053,13 @@ function s_curriculum()
         {
             // Generic checks apply
             {
-                // Check faculty course requirements for PSIR
-                let facultyCoursesCount = 0;
-                let fassCoursesCount = 0;
-                let areasCount = new Set();
-
-                for(let i = 0; i < this.semesters.length; i++) {
-                    for(let a = 0; a < this.semesters[i].courses.length; a++) {
-                        let course = this.semesters[i].courses[a];
-                        // Count faculty courses using the new Faculty_Course attribute
-                        if(course.Faculty_Course && course.Faculty_Course !== 'No') {
-                            facultyCoursesCount++;
-
-                            // Count FASS courses
-                            if(course.Faculty_Course === "FASS") {
-                                fassCoursesCount++;
-                            }
-
-                            // Track areas for PSIR
-                            if(course.code.startsWith("CULT")) areasCount.add("CULT");
-                            else if(course.code.startsWith("ECON")) areasCount.add("ECON");
-                            else if(course.code.startsWith("HART")) areasCount.add("HART");
-                            else if(course.code.startsWith("PSY")) areasCount.add("PSYCH");
-                            else if(course.code.startsWith("SPS") || course.code.startsWith("POLS") || course.code.startsWith("IR")) areasCount.add("SPS/POLS/IR");
-                            else if(course.code.startsWith("VA")) areasCount.add("VA");
-                            else if(course.Faculty_Course === "FENS") areasCount.add("FENS");
-                            else if(course.Faculty_Course === "SBS") areasCount.add("SBS");
-                        }
-                    }
-                }
-
-                if(facultyCoursesCount < 5) return 14;
-                if(fassCoursesCount < 3) return 15;
-                if(areasCount.size < 3) return 18;
+                // SUIS (PSIR Faculty Courses): >=5 total, >=3 FASS, spanning >=3
+                // areas.
+                const f = this.countFacultyCourses();
+                const areas = this.countFacultyAreas();
+                if (f.total < 5) return 14;
+                if (f.fass < 3) return 15;
+                if (areas.size < 3) return 18;
 
                 // Core Electives I (Political Science)
                 let coreElectivesICount = 0;
@@ -1234,39 +1106,13 @@ function s_curriculum()
                 let hasPhilosophy = this.hasCourse("PHIL300") || this.hasCourse("PHIL301");
                 if (!hasPhilosophy) return 26;
 
-                // Check faculty course requirements for PSY
-                let facultyCoursesCount = 0;
-                let fassCoursesCount = 0;
-                let areasCount = new Set();
-
-                for(let i = 0; i < this.semesters.length; i++) {
-                    for(let a = 0; a < this.semesters[i].courses.length; a++) {
-                        let course = this.semesters[i].courses[a];
-                        // Count faculty courses using the new Faculty_Course attribute
-                        if(course.Faculty_Course && course.Faculty_Course !== 'No') {
-                            facultyCoursesCount++;
-
-                            // Count FASS courses
-                            if(course.Faculty_Course === "FASS") {
-                                fassCoursesCount++;
-                            }
-
-                            // Track areas for PSY
-                            if(course.code.startsWith("CULT")) areasCount.add("CULT");
-                            else if(course.code.startsWith("ECON")) areasCount.add("ECON");
-                            else if(course.code.startsWith("HART")) areasCount.add("HART");
-                            else if(course.code.startsWith("PSY")) areasCount.add("PSYCH");
-                            else if(course.code.startsWith("SPS") || course.code.startsWith("POLS") || course.code.startsWith("IR")) areasCount.add("SPS/POLS/IR");
-                            else if(course.code.startsWith("VA")) areasCount.add("VA");
-                            else if(course.Faculty_Course === "FENS") areasCount.add("FENS");
-                            else if(course.Faculty_Course === "SBS") areasCount.add("SBS");
-                        }
-                    }
-                }
-
-                if(facultyCoursesCount < 5) return 14;
-                if(fassCoursesCount < 3) return 15;
-                if(areasCount.size < 3) return 18;
+                // SUIS (PSY Faculty Courses): >=5 total, >=3 FASS, spanning >=3
+                // areas.
+                const f = this.countFacultyCourses();
+                const areas = this.countFacultyAreas();
+                if (f.total < 5) return 14;
+                if (f.fass < 3) return 15;
+                if (areas.size < 3) return 18;
 
                 // SUIS (PSY area electives): "At least 6 courses from all PSY
                 // coded undergraduate courses. At least 2 courses must be from
@@ -1295,39 +1141,13 @@ function s_curriculum()
         {
             // Generic checks apply
             {
-                // Check faculty course requirements for VACD
-                let facultyCoursesCount = 0;
-                let fassCoursesCount = 0;
-                let areasCount = new Set();
-
-                for(let i = 0; i < this.semesters.length; i++) {
-                    for(let a = 0; a < this.semesters[i].courses.length; a++) {
-                        let course = this.semesters[i].courses[a];
-                        // Count faculty courses using the new Faculty_Course attribute
-                        if(course.Faculty_Course && course.Faculty_Course !== 'No') {
-                            facultyCoursesCount++;
-
-                            // Count FASS courses
-                            if(course.Faculty_Course === "FASS") {
-                                fassCoursesCount++;
-                            }
-
-                            // Track areas for VACD
-                            if(course.code.startsWith("CULT")) areasCount.add("CULT");
-                            else if(course.code.startsWith("ECON")) areasCount.add("ECON");
-                            else if(course.code.startsWith("HART")) areasCount.add("HART");
-                            else if(course.code.startsWith("PSY")) areasCount.add("PSYCH");
-                            else if(course.code.startsWith("SPS") || course.code.startsWith("POLS") || course.code.startsWith("IR")) areasCount.add("SPS/POLS/IR");
-                            else if(course.code.startsWith("VA")) areasCount.add("VA");
-                            else if(course.Faculty_Course === "FENS") areasCount.add("FENS");
-                            else if(course.Faculty_Course === "SBS") areasCount.add("SBS");
-                        }
-                    }
-                }
-
-                if(facultyCoursesCount < 5) return 14;
-                if(fassCoursesCount < 3) return 15;
-                if(areasCount.size < 3) return 18;
+                // SUIS (VACD Faculty Courses): >=5 total, >=3 FASS, spanning >=3
+                // areas.
+                const f = this.countFacultyCourses();
+                const areas = this.countFacultyAreas();
+                if (f.total < 5) return 14;
+                if (f.fass < 3) return 15;
+                if (areas.size < 3) return 18;
 
                 // Core Electives I (Art/Design History Courses) for VACD
                 let coreElectivesICount = 0;
@@ -1383,35 +1203,13 @@ function s_curriculum()
         {
             // Generic checks apply
             {
-                // Check faculty course requirements for DSA
-                let facultyCoursesCount = 0;
-                let fensCoursesCount = 0;
-                let fassCoursesCount = 0;
-                let sbsCoursesCount = 0;
-
-                for(let i = 0; i < this.semesters.length; i++) {
-                    for(let a = 0; a < this.semesters[i].courses.length; a++) {
-                        let course = this.semesters[i].courses[a];
-                        // Count faculty courses using the new Faculty_Course attribute
-                        if(course.Faculty_Course && course.Faculty_Course !== 'No') {
-                            facultyCoursesCount++;
-
-                            // Count courses by faculty
-                            if(course.Faculty_Course === "FENS") {
-                                fensCoursesCount++;
-                            } else if(course.Faculty_Course === "FASS") {
-                                fassCoursesCount++;
-                            } else if(course.Faculty_Course === "SBS") {
-                                sbsCoursesCount++;
-                            }
-                        }
-                    }
-                }
-
-                if(facultyCoursesCount < 5) return 14;
-                if(fensCoursesCount < 1) return 20;
-                if(fassCoursesCount < 1) return 21;
-                if(sbsCoursesCount < 1) return 22;
+                // SUIS (DSA Faculty Courses): >=5 total, >=1 each of FENS, FASS,
+                // SBS.
+                const f = this.countFacultyCourses();
+                if (f.total < 5) return 14;
+                if (f.fens < 1) return 20;
+                if (f.fass < 1) return 21;
+                if (f.sbs < 1) return 22;
 
                 // Check core electives requirements
                 // At least 27 SU credits with at least 3 courses from each faculty
@@ -2260,42 +2058,17 @@ function s_curriculum()
             // Any HUM satisfies it — see the main-major pass.
             if (!this.hasAnyCourse(HUM_ANY_LEVEL)) return 12;
             {
-                let facultyCoursesCount = 0;
-                let fensCoursesCount = 0;
-                let mathCoursesCount = 0;
-                for (let i = 0; i < this.semesters.length; i++) {
-                    for (let a = 0; a < this.semesters[i].courses.length; a++) {
-                        const course = this.semesters[i].courses[a];
-                        if (course && course.effective_type_dm === 'none') continue;
-                        if (course.Faculty_Course && course.Faculty_Course !== 'No') {
-                            facultyCoursesCount++;
-                            if (course.Faculty_Course === 'FENS') fensCoursesCount++;
-                            if (course.Faculty_Course === 'FENS' && course.code.startsWith('MATH')) mathCoursesCount++;
-                        }
-                    }
-                }
-                if (facultyCoursesCount < 5) return 14;
-                if (mathCoursesCount < 2) return 19;
-                if (fensCoursesCount < 3) return 16;
+                const f = this.countFacultyCourses(DM_FIELDS);
+                if (f.total < 5) return 14;
+                if (f.math < 2) return 19;
+                if (f.fens < 3) return 16;
             }
         } else if (maj === 'IE') {
             {
-                let facultyCoursesCount = 0;
-                let fensCoursesCount = 0;
-                let mathCoursesCount = 0;
-                for (let i = 0; i < this.semesters.length; i++) {
-                    for (let a = 0; a < this.semesters[i].courses.length; a++) {
-                        const course = this.semesters[i].courses[a];
-                        if (course.Faculty_Course && course.Faculty_Course !== 'No') {
-                            facultyCoursesCount++;
-                            if (course.Faculty_Course === 'FENS') fensCoursesCount++;
-                            if (course.Faculty_Course === 'FENS' && course.code.startsWith('MATH')) mathCoursesCount++;
-                        }
-                    }
-                }
-                if (facultyCoursesCount < 5) return 14;
-                if (mathCoursesCount < 2) return 19;
-                if (fensCoursesCount < 3) return 16;
+                const f = this.countFacultyCourses(DM_FIELDS);
+                if (f.total < 5) return 14;
+                if (f.math < 2) return 19;
+                if (f.fens < 3) return 16;
             }
         } else if (maj === 'EE') {
             {
@@ -2328,41 +2101,17 @@ function s_curriculum()
             }
         } else if (maj === 'MAT') {
             {
-                let facultyCoursesCount = 0;
-                let fensCoursesCount = 0;
-                let mathCoursesCount = 0;
-                for (let i = 0; i < this.semesters.length; i++) {
-                    for (let a = 0; a < this.semesters[i].courses.length; a++) {
-                        const course = this.semesters[i].courses[a];
-                        if (course.Faculty_Course && course.Faculty_Course !== 'No') {
-                            facultyCoursesCount++;
-                            if (course.Faculty_Course === 'FENS') fensCoursesCount++;
-                            if (course.Faculty_Course === 'FENS' && course.code.startsWith('MATH')) mathCoursesCount++;
-                        }
-                    }
-                }
-                if (facultyCoursesCount < 5) return 14;
-                if (mathCoursesCount < 2) return 19;
-                if (fensCoursesCount < 3) return 16;
+                const f = this.countFacultyCourses(DM_FIELDS);
+                if (f.total < 5) return 14;
+                if (f.math < 2) return 19;
+                if (f.fens < 3) return 16;
             }
         } else if (maj === 'BIO') {
             {
-                let facultyCoursesCount = 0;
-                let fensCoursesCount = 0;
-                let mathCoursesCount = 0;
-                for (let i = 0; i < this.semesters.length; i++) {
-                    for (let a = 0; a < this.semesters[i].courses.length; a++) {
-                        const course = this.semesters[i].courses[a];
-                        if (course.Faculty_Course && course.Faculty_Course !== 'No') {
-                            facultyCoursesCount++;
-                            if (course.Faculty_Course === 'FENS') fensCoursesCount++;
-                            if (course.Faculty_Course === 'FENS' && course.code.startsWith('MATH')) mathCoursesCount++;
-                        }
-                    }
-                }
-                if (facultyCoursesCount < 5) return 14;
-                if (mathCoursesCount < 2) return 19;
-                if (fensCoursesCount < 3) return 16;
+                const f = this.countFacultyCourses(DM_FIELDS);
+                if (f.total < 5) return 14;
+                if (f.math < 2) return 19;
+                if (f.fens < 3) return 16;
             }
         } else if (maj === 'ME') {
             {
@@ -2371,69 +2120,29 @@ function s_curriculum()
                     if (!(this.hasCourse('CS404') || this.hasCourse('CS412'))) return 2;
                 }
 
-                let facultyCoursesCount = 0;
-                let fensCoursesCount = 0;
-                let mathCoursesCount = 0;
-                for (let i = 0; i < this.semesters.length; i++) {
-                    for (let a = 0; a < this.semesters[i].courses.length; a++) {
-                        const course = this.semesters[i].courses[a];
-                        if (course.Faculty_Course && course.Faculty_Course !== 'No') {
-                            facultyCoursesCount++;
-                            if (course.Faculty_Course === 'FENS') fensCoursesCount++;
-                            if (course.Faculty_Course === 'FENS' && course.code.startsWith('MATH')) mathCoursesCount++;
-                        }
-                    }
-                }
-                if (facultyCoursesCount < 5) return 14;
-                if (mathCoursesCount < 2) return 19;
-                if (fensCoursesCount < 3) return 16;
+                const f = this.countFacultyCourses(DM_FIELDS);
+                if (f.total < 5) return 14;
+                if (f.math < 2) return 19;
+                if (f.fens < 3) return 16;
             }
         } else if (maj === 'ECON') {
             {
                 let hasMathRequirement = this.hasCourse('MATH201') || this.hasCourse('MATH202') || this.hasCourse('MATH204');
                 if (!hasMathRequirement) return 25;
-                let facultyCoursesCount = 0;
-                let fassCount = 0;
-                let areasCount = new Set();
-                for (let i = 0; i < this.semesters.length; i++) {
-                    for (let a = 0; a < this.semesters[i].courses.length; a++) {
-                        const course = this.semesters[i].courses[a];
-                        if (course.Faculty_Course && course.Faculty_Course !== 'No') {
-                            facultyCoursesCount++;
-                            if (course.Faculty_Course === 'FASS') fassCount++;
-                            if (course.code.startsWith('CULT')) areasCount.add('CULT');
-                            else if (course.code.startsWith('ECON')) areasCount.add('ECON');
-                            else if (course.code.startsWith('HART')) areasCount.add('HART');
-                            else if (course.code.startsWith('PSYCH')) areasCount.add('PSYCH');
-                            else if (course.code.startsWith('SPS') || course.code.startsWith('POLS') || course.code.startsWith('IR')) areasCount.add('SPS/POLS/IR');
-                            else if (course.code.startsWith('VA')) areasCount.add('VA');
-                            else if (course.Faculty_Course === 'FENS') areasCount.add('FENS');
-                            else if (course.Faculty_Course === 'SBS') areasCount.add('SBS');
-                        }
-                    }
-                }
-                if (facultyCoursesCount < 5) return 14;
-                if (fassCount < 3) return 15;
-                if (areasCount.size < 3) return 18;
+                const f = this.countFacultyCourses(DM_FIELDS);
+                const areas = this.countFacultyAreas(DM_FIELDS);
+                if (f.total < 5) return 14;
+                if (f.fass < 3) return 15;
+                if (areas.size < 3) return 18;
                 // SUIS: at most 2 Beginning/Basic level language courses may
                 // count toward the free electives.
                 if (countBasicLanguageInFree(this.semesters, 'effective_type_dm') > BASIC_LANGUAGE_LIMIT) return 40;
             }
         } else if (maj === 'MAN') {
             {
-                let facultyCoursesCount = 0;
-                let sbsCoursesCount = 0;
-                for (let i = 0; i < this.semesters.length; i++) {
-                    for (let a = 0; a < this.semesters[i].courses.length; a++) {
-                        const course = this.semesters[i].courses[a];
-                        if (course.Faculty_Course && course.Faculty_Course !== 'No') {
-                            facultyCoursesCount++;
-                            if (course.Faculty_Course === 'SBS') sbsCoursesCount++;
-                        }
-                    }
-                }
-                if (facultyCoursesCount < 5) return 14;
-                if (sbsCoursesCount < 2) return 22;
+                const f = this.countFacultyCourses(DM_FIELDS);
+                if (f.total < 5) return 14;
+                if (f.sbs < 2) return 22;
                 // Core electives requirement: 6 courses from 6 different areas
                 let coreAreas = new Set();
                 let coreCount = 0;
@@ -2508,29 +2217,11 @@ function s_curriculum()
             }
         } else if (maj === 'PSIR') {
             {
-                let facultyCoursesCount = 0;
-                let fassCoursesCount = 0;
-                let areasCount = new Set();
-                for (let i = 0; i < this.semesters.length; i++) {
-                    for (let a = 0; a < this.semesters[i].courses.length; a++) {
-                        const course = this.semesters[i].courses[a];
-                        if (course.Faculty_Course && course.Faculty_Course !== 'No') {
-                            facultyCoursesCount++;
-                            if (course.Faculty_Course === 'FASS') fassCoursesCount++;
-                            if (course.code.startsWith('CULT')) areasCount.add('CULT');
-                            else if (course.code.startsWith('ECON')) areasCount.add('ECON');
-                            else if (course.code.startsWith('HART')) areasCount.add('HART');
-                            else if (course.code.startsWith('PSY')) areasCount.add('PSYCH');
-                            else if (course.code.startsWith('SPS') || course.code.startsWith('POLS') || course.code.startsWith('IR')) areasCount.add('SPS/POLS/IR');
-                            else if (course.code.startsWith('VA')) areasCount.add('VA');
-                            else if (course.Faculty_Course === 'FENS') areasCount.add('FENS');
-                            else if (course.Faculty_Course === 'SBS') areasCount.add('SBS');
-                        }
-                    }
-                }
-                if (facultyCoursesCount < 5) return 14;
-                if (fassCoursesCount < 3) return 15;
-                if (areasCount.size < 3) return 18;
+                const f = this.countFacultyCourses(DM_FIELDS);
+                const areas = this.countFacultyAreas(DM_FIELDS);
+                if (f.total < 5) return 14;
+                if (f.fass < 3) return 15;
+                if (areas.size < 3) return 18;
 
                 // Core Electives I (Political Science)
                 let coreElectivesICount = 0;
@@ -2571,29 +2262,11 @@ function s_curriculum()
             {
                 let hasPhilosophy = this.hasCourse('PHIL300') || this.hasCourse('PHIL301');
                 if (!hasPhilosophy) return 26;
-                let facultyCoursesCount = 0;
-                let fassCoursesCount = 0;
-                let areasCount = new Set();
-                for (let i = 0; i < this.semesters.length; i++) {
-                    for (let a = 0; a < this.semesters[i].courses.length; a++) {
-                        const course = this.semesters[i].courses[a];
-                        if (course.Faculty_Course && course.Faculty_Course !== 'No') {
-                            facultyCoursesCount++;
-                            if (course.Faculty_Course === 'FASS') fassCoursesCount++;
-                            if (course.code.startsWith('CULT')) areasCount.add('CULT');
-                            else if (course.code.startsWith('ECON')) areasCount.add('ECON');
-                            else if (course.code.startsWith('HART')) areasCount.add('HART');
-                            else if (course.code.startsWith('PSY')) areasCount.add('PSYCH');
-                            else if (course.code.startsWith('SPS') || course.code.startsWith('POLS') || course.code.startsWith('IR')) areasCount.add('SPS/POLS/IR');
-                            else if (course.code.startsWith('VA')) areasCount.add('VA');
-                            else if (course.Faculty_Course === 'FENS') areasCount.add('FENS');
-                            else if (course.Faculty_Course === 'SBS') areasCount.add('SBS');
-                        }
-                    }
-                }
-                if (facultyCoursesCount < 5) return 14;
-                if (fassCoursesCount < 3) return 15;
-                if (areasCount.size < 3) return 18;
+                const f = this.countFacultyCourses(DM_FIELDS);
+                const areas = this.countFacultyAreas(DM_FIELDS);
+                if (f.total < 5) return 14;
+                if (f.fass < 3) return 15;
+                if (areas.size < 3) return 18;
 
                 // SUIS (PSY): area electives need >= 2 PSY 4XX-level courses;
                 // free electives may count at most 2 basic language courses.
@@ -2629,29 +2302,11 @@ function s_curriculum()
             }
         } else if (maj === 'VACD') {
             {
-                let facultyCoursesCount = 0;
-                let fassCoursesCount = 0;
-                let areasCount = new Set();
-                for (let i = 0; i < this.semesters.length; i++) {
-                    for (let a = 0; a < this.semesters[i].courses.length; a++) {
-                        const course = this.semesters[i].courses[a];
-                        if (course.Faculty_Course && course.Faculty_Course !== 'No') {
-                            facultyCoursesCount++;
-                            if (course.Faculty_Course === 'FASS') fassCoursesCount++;
-                            if (course.code.startsWith('CULT')) areasCount.add('CULT');
-                            else if (course.code.startsWith('ECON')) areasCount.add('ECON');
-                            else if (course.code.startsWith('HART')) areasCount.add('HART');
-                            else if (course.code.startsWith('PSY')) areasCount.add('PSYCH');
-                            else if (course.code.startsWith('SPS') || course.code.startsWith('POLS') || course.code.startsWith('IR')) areasCount.add('SPS/POLS/IR');
-                            else if (course.code.startsWith('VA')) areasCount.add('VA');
-                            else if (course.Faculty_Course === 'FENS') areasCount.add('FENS');
-                            else if (course.Faculty_Course === 'SBS') areasCount.add('SBS');
-                        }
-                    }
-                }
-                if (facultyCoursesCount < 5) return 14;
-                if (fassCoursesCount < 3) return 15;
-                if (areasCount.size < 3) return 18;
+                const f = this.countFacultyCourses(DM_FIELDS);
+                const areas = this.countFacultyAreas(DM_FIELDS);
+                if (f.total < 5) return 14;
+                if (f.fass < 3) return 15;
+                if (areas.size < 3) return 18;
 
                 // Core Electives I (Art/Design History Courses) for VACD
                 let coreElectivesICount = 0;
@@ -2704,25 +2359,11 @@ function s_curriculum()
             }
         } else if (maj === 'DSA') {
             {
-                let facultyCoursesCount = 0;
-                let fensCoursesCount = 0;
-                let fassCoursesCount = 0;
-                let sbsCoursesCount = 0;
-                for (let i = 0; i < this.semesters.length; i++) {
-                    for (let a = 0; a < this.semesters[i].courses.length; a++) {
-                        const course = this.semesters[i].courses[a];
-                        if (course.Faculty_Course && course.Faculty_Course !== 'No') {
-                            facultyCoursesCount++;
-                            if (course.Faculty_Course === 'FENS') fensCoursesCount++;
-                            else if (course.Faculty_Course === 'FASS') fassCoursesCount++;
-                            else if (course.Faculty_Course === 'SBS') sbsCoursesCount++;
-                        }
-                    }
-                }
-                if (facultyCoursesCount < 5) return 14;
-                if (fensCoursesCount < 1) return 20;
-                if (fassCoursesCount < 1) return 21;
-                if (sbsCoursesCount < 1) return 22;
+                const f = this.countFacultyCourses(DM_FIELDS);
+                if (f.total < 5) return 14;
+                if (f.fens < 1) return 20;
+                if (f.fass < 1) return 21;
+                if (f.sbs < 1) return 22;
                 // Core electives requirements: at least 27 SU credits with at least 3 courses from each faculty
                 let fensCoreCount = 0;
                 let fassCoreCount = 0;
