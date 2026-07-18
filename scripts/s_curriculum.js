@@ -1958,6 +1958,8 @@ function s_curriculum()
         // main-major pass; see collectAltPairExtras().
         const excludedFromDegreeDM = new Set();
         const typeOverrideDM = new Map();
+        // Courses pinned to core regardless of the core cap (VACD's pools).
+        const forceCoreDM = new Set();
         if (MATH_ALTERNATIVE_MAJORS.has(this.doubleMajor)) {
             // Same rule as the main pass, read off the DOUBLE major's catalog —
             // which of MATH201/MATH202 are `required` differs per program.
@@ -1979,8 +1981,21 @@ function s_curriculum()
                     .forEach((c) => typeOverrideDM.set(c, 'core'));
             }
         } else if (this.doubleMajor === 'VACD') {
+            // Mirror the main-major pass exactly (see recalcEffectiveTypes):
+            // the required-pair extras count toward nothing, and the two core
+            // pools are resolved BEFORE the cascade — pool courses filling a
+            // minimum are pinned to core (forceCoreDM), the extras typed `area`
+            // and spilled area -> free by the cascade. Pinning is required
+            // because VACD core (27) exceeds the pool minimums (9 + 12 = 21),
+            // so non-pool core courses must fill the balance; resolving the
+            // pools after the cascade strands them (bug #21).
             collectAltPairExtras(sorted, VACD_REQUIRED_PAIRS)
                 .forEach((c) => excludedFromDegreeDM.add(c));
+            selectVacdCorePools(sorted, (c) => excludedFromDegreeDM.has(c))
+                .forEach((type, course) => {
+                    if (type === 'core') forceCoreDM.add(course);
+                    else typeOverrideDM.set(course, type);
+                });
         } else if (this.doubleMajor === 'PSY') {
             collectAltPairExtras(sorted, PSY_PHILOSOPHY_PAIR)
                 .forEach((c) => typeOverrideDM.set(c, 'free'));
@@ -2062,7 +2077,11 @@ function s_curriculum()
                         ? parseCreditValue(info['SU_credit'] || '0')
                         : (parseFloat(info['SU_credit'] || '0') || 0);
                     dmType = dmStaticType;
-                    if (dmForceCSCore && course.code === 'CS201') {
+                    if (forceCoreDM.has(course)) {
+                        // VACD core pool course, pinned to core (see above).
+                        dmType = 'core';
+                        currentDMCores += credit;
+                    } else if (dmForceCSCore && course.code === 'CS201') {
                         dmType = 'core';
                         currentDMCores += credit;
                     } else if (dmStaticType === 'core') {
@@ -2280,130 +2299,10 @@ function s_curriculum()
         // The old code here handled only CS404/CS412, and did so after the
         // cascade, which left `required` short.)
 
-        // Special-case VACD double major: enforce mutually-exclusive pair rules
-        // for required and core elective pools and spill extra pool courses into
-        // area/free as specified by VACD requirements.
-        if (this.doubleMajor === 'VACD') {
-            const corePool1 = ['HART292', 'HART293', 'HART380', 'HART413', 'HART426', 'VA315', 'VA420', 'VA430'];
-            const corePool1Min = 9;
-            const corePool2 = ['VA202', 'VA204', 'VA234', 'VA302', 'VA304', 'VA402', 'VA404'];
-            const corePool2Min = 12;
-            const corePool2Pairs = [['VA302', 'VA304'], ['VA402', 'VA404']];
-
-            const corePool1Set = new Set(corePool1);
-            const corePool2Set = new Set(corePool2);
-            const corePairKeyByCode = {};
-            for (let i = 0; i < corePool2Pairs.length; i++) {
-                const key = corePool2Pairs[i].join('|');
-                corePairKeyByCode[corePool2Pairs[i][0]] = key;
-                corePairKeyByCode[corePool2Pairs[i][1]] = key;
-            }
-            function creditOf(course) {
-                return (typeof parseCreditValue === 'function')
-                    ? parseCreditValue(course.SU_credit || '0')
-                    : (parseFloat(course.SU_credit || '0') || 0);
-            }
-
-            // (The required pairs — VACD_REQUIRED_PAIRS — are resolved BEFORE
-            // the allocation loop above via `typeOverrideDM`.)
-
-            // Core pools: pick minimum credits from each pool, respecting the
-            // mutually-exclusive pairs in corePool2. Pool overflow fills area
-            // then free.
-            const selectedCoreIds = new Set();
-            const selectedCorePool2PairKeys = new Set();
-            let pool1Credits = 0;
-            let pool2Credits = 0;
-            const overflowPoolCourses = [];
-
-            for (let i = 0; i < sorted.length; i++) {
-                const sem = sorted[i];
-                for (let j = 0; j < sem.courses.length; j++) {
-                    const course = sem.courses[j];
-                    if (!course || !course.id) continue;
-                    if (course.effective_type_dm === 'none') continue;
-                    const code = course.code;
-                    if (corePool1Set.has(code)) {
-                        if (pool1Credits < corePool1Min) {
-                            selectedCoreIds.add(course.id);
-                            pool1Credits += creditOf(course);
-                        } else {
-                            overflowPoolCourses.push(course);
-                        }
-                    } else if (corePool2Set.has(code)) {
-                        const pairKey = corePairKeyByCode[code] || null;
-                        if (pool2Credits < corePool2Min && (!pairKey || !selectedCorePool2PairKeys.has(pairKey))) {
-                            selectedCoreIds.add(course.id);
-                            pool2Credits += creditOf(course);
-                            if (pairKey) selectedCorePool2PairKeys.add(pairKey);
-                        } else {
-                            overflowPoolCourses.push(course);
-                        }
-                    }
-                }
-            }
-
-            let baseAreaCredits = 0;
-            for (let i = 0; i < this.semesters.length; i++) {
-                const sem = this.semesters[i];
-                for (let j = 0; j < sem.courses.length; j++) {
-                    const course = sem.courses[j];
-                    if (!course || course.effective_type_dm === 'none') continue;
-                    const code = course.code;
-                    if (corePool1Set.has(code) || corePool2Set.has(code)) continue;
-                    if (course.effective_type_dm === 'area') {
-                        baseAreaCredits += creditOf(course);
-                    }
-                }
-            }
-            let areaRemaining = Math.max(0, dmAreaReq - baseAreaCredits);
-
-            for (let i = 0; i < this.semesters.length; i++) {
-                const sem = this.semesters[i];
-                for (let j = 0; j < sem.courses.length; j++) {
-                    const course = sem.courses[j];
-                    if (!course || !course.id) continue;
-                    if (course.effective_type_dm === 'none') continue;
-                    const code = course.code;
-                    if (!corePool1Set.has(code) && !corePool2Set.has(code)) continue;
-                    if (selectedCoreIds.has(course.id)) {
-                        course.effective_type_dm = 'core';
-                    }
-                }
-            }
-            for (let i = 0; i < overflowPoolCourses.length; i++) {
-                const course = overflowPoolCourses[i];
-                if (!course || course.effective_type_dm === 'none') continue;
-                if (areaRemaining > 0) {
-                    course.effective_type_dm = 'area';
-                    areaRemaining -= creditOf(course);
-                } else {
-                    course.effective_type_dm = 'free';
-                }
-            }
-
-            // Recompute DM category totals after VACD normalization.
-            for (let i = 0; i < this.semesters.length; i++) {
-                const sem = this.semesters[i];
-                sem.totalCoreDM = 0;
-                sem.totalAreaDM = 0;
-                sem.totalFreeDM = 0;
-                sem.totalRequiredDM = 0;
-                sem.totalUniversityDM = 0;
-                for (let j = 0; j < sem.courses.length; j++) {
-                    const course = sem.courses[j];
-                    if (!course) continue;
-                    const et = course.effective_type_dm;
-                    if (!et || et === 'none') continue;
-                    const c = creditOf(course);
-                    if (et === 'core') sem.totalCoreDM += c;
-                    else if (et === 'area') sem.totalAreaDM += c;
-                    else if (et === 'free') sem.totalFreeDM += c;
-                    else if (et === 'required') sem.totalRequiredDM += c;
-                    else if (et === 'university') sem.totalUniversityDM += c;
-                }
-            }
-        }
+        // VACD double major: its core pools and required pairs are now resolved
+        // BEFORE the allocation cascade above (see the pre-cascade block), exactly
+        // like the main-major pass. The old post-cascade block that lived here
+        // stranded non-pool core courses in a pool-first order (bug #21); removed.
         // Update DOM to show both primary and double major types
         try {
             for (let i = 0; i < this.semesters.length; i++) {
