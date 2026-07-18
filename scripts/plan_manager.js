@@ -5,8 +5,14 @@
   const INDEX_KEY = 'surriculum.plans.v1';
   const MIGRATED_KEY = 'surriculum.plans.migrated.v1';
   const PLAN_PREFIX = 'surriculum.plan.';
-  const APP_DATA_VERSION = 1;
-  const APP_DATA_VERSION_KEY = 'surriculum.appDataVersion';
+  // Storage-schema version: bumped when the SHAPE of what we persist to
+  // localStorage changes, to drive plan-storage migrations. Distinct from the
+  // DATA version (data/manifest.json — the scrape bundle) and the APP version
+  // (version.js — code/UI). Was misleadingly named APP_DATA_VERSION. The
+  // persisted key STRING is kept as-is so existing installs aren't mistaken for
+  // a fresh run.
+  const STORAGE_SCHEMA_VERSION = 1;
+  const STORAGE_SCHEMA_KEY = 'surriculum.appDataVersion';
   const MAX_PLANS = 10;
   const DEFAULT_PLAN_NAME = 'Default Plan';
   const LEGACY_KEYS = [
@@ -191,53 +197,53 @@
     }
   }
 
-  function initAppDataVersion() {
+  function initStorageSchemaVersion() {
     let storedBefore = 0;
     try {
-      const raw = localStorage.getItem(APP_DATA_VERSION_KEY);
+      const raw = localStorage.getItem(STORAGE_SCHEMA_KEY);
       const parsed = parseInt(String(raw || '0'), 10);
       storedBefore = Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
     } catch (_) {}
 
     try {
-      localStorage.setItem(APP_DATA_VERSION_KEY, String(APP_DATA_VERSION));
+      localStorage.setItem(STORAGE_SCHEMA_KEY, String(STORAGE_SCHEMA_VERSION));
     } catch (_) {}
 
     const info = {
-      current: APP_DATA_VERSION,
+      current: STORAGE_SCHEMA_VERSION,
       storedBefore,
-      firstRunAfterUpgrade: storedBefore > 0 && storedBefore < APP_DATA_VERSION,
+      firstRunAfterUpgrade: storedBefore > 0 && storedBefore < STORAGE_SCHEMA_VERSION,
       firstRunEver: storedBefore <= 0,
     };
 
     const api = {
-      getCurrentAppDataVersion() {
-        return APP_DATA_VERSION;
+      getCurrentSchemaVersion() {
+        return STORAGE_SCHEMA_VERSION;
       },
-      getStoredAppDataVersion() {
+      getStoredSchemaVersion() {
         try {
-          const raw = localStorage.getItem(APP_DATA_VERSION_KEY);
+          const raw = localStorage.getItem(STORAGE_SCHEMA_KEY);
           const parsed = parseInt(String(raw || '0'), 10);
           return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
         } catch (_) {
           return 0;
         }
       },
-      getPreviousAppDataVersion() {
+      getPreviousSchemaVersion() {
         return storedBefore;
       },
       isFirstRunAfterUpgrade() {
         return info.firstRunAfterUpgrade;
       },
-      markCurrentAppDataVersionSeen() {
-        try { localStorage.setItem(APP_DATA_VERSION_KEY, String(APP_DATA_VERSION)); } catch (_) {}
+      markCurrentSchemaVersionSeen() {
+        try { localStorage.setItem(STORAGE_SCHEMA_KEY, String(STORAGE_SCHEMA_VERSION)); } catch (_) {}
       },
     };
 
     try {
-      window.APP_DATA_VERSION = APP_DATA_VERSION;
-      window.appDataVersionInfo = info;
-      window.appDataVersion = api;
+      window.STORAGE_SCHEMA_VERSION = STORAGE_SCHEMA_VERSION;
+      window.storageSchemaInfo = info;
+      window.storageSchema = api;
     } catch (_) {}
   }
 
@@ -916,7 +922,7 @@
   // Boot
   ensureIndex();
   migrateLegacyIfNeeded();
-  initAppDataVersion();
+  initStorageSchemaVersion();
   window.planStorage = planStorage;
   window.uiModal = window.uiModal || uiModal;
 

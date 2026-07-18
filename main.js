@@ -83,8 +83,25 @@ async function uiConfirm(title, bodyHtml, options) {
 }
 
 if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js');
+    window.addEventListener('load', async () => {
+        // Derive the service-worker cache key from the app version (version.js)
+        // and the data version (data/manifest.json) so that a release OR a
+        // re-scrape rotates the cache automatically — no manual cache bump. If the
+        // manifest can't be read, fall back to app version alone, then to a
+        // plain registration.
+        let dataVersion = '';
+        try {
+            const res = await fetch('data/manifest.json', { cache: 'no-store' });
+            if (res.ok) dataVersion = String((await res.json()).dataVersion || '');
+        } catch (_) {}
+        const appVersion = (typeof window.APP_VERSION === 'string') ? window.APP_VERSION : '';
+        const v = [appVersion, dataVersion].filter(Boolean).join('-');
+        const url = v ? ('sw.js?v=' + encodeURIComponent(v)) : 'sw.js';
+        try {
+            navigator.serviceWorker.register(url);
+        } catch (_) {
+            try { navigator.serviceWorker.register('sw.js'); } catch (_) {}
+        }
     });
 }
 

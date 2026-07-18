@@ -1,0 +1,7 @@
+{
+  "//": "Manifest for the scraped data bundle (courses/, requirements/, and the schedule files). This is currently a HAND-AUTHORED BOOTSTRAP. The scraper (fetch_*.py) is intended to OWN and regenerate this file on each run — bumping dataVersion and, later, recording per-term content hashes under `terms` — so a re-scrape becomes visible to the app (and to the service-worker cache key) automatically instead of silently. Until the scraper is taught to write it, bump dataVersion by hand when the data under courses/ or requirements/ changes.",
+  "dataVersion": "2026-07-18",
+  "generatedAt": "2026-07-18",
+  "generatedBy": "bootstrap (hand-authored; scraper will regenerate)",
+  "terms": {}
+}

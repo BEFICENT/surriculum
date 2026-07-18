@@ -1,4 +1,14 @@
-const CACHE_NAME = 'surriculum-cache-v4';
+// The cache key is derived from the app + data version, passed in the
+// registration URL by main.js (e.g. sw.js?v=3.1-2026-07-18). A new app release or
+// a re-scrape changes `v`, which the activate handler below uses to drop every
+// older cache — so the cache no longer needs a manual bump on each ship. Falls
+// back to the historical fixed key if the query is absent (older cached main.js).
+function cacheNameFromSearch(search) {
+  var v = null;
+  try { v = new URLSearchParams(search || '').get('v'); } catch (_) {}
+  return 'surriculum-' + (v || 'cache-v4');
+}
+const CACHE_NAME = cacheNameFromSearch(self.location.search);
 const ASSETS = [
   '/',
   '/index.html',
