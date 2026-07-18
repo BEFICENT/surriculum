@@ -574,8 +574,6 @@ function s_curriculum()
         return {};
     };
 
-    this.getTotalCredits = function ()
-    {};
     this.getSemester = function(id)
     {
         for(let i = 0; i < this.semesters.length; i++)
