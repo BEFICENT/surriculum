@@ -72,6 +72,17 @@ const VACD_CORE_POOL_2 = ['VA202', 'VA204', 'VA234', 'VA302', 'VA304', 'VA402', 
 const VACD_CORE_POOL_2_MIN = 12;
 const VACD_CORE_POOL_2_PAIRS = [['VA302', 'VA304'], ['VA402', 'VA404']];
 
+// Pools / lists referenced by the graduation rule tables (PROGRAM_RULES). Kept as
+// named constants so a rule descriptor reads as data. (VACD's pools reuse the
+// VACD_CORE_POOL_* constants above.)
+const ECON_MATH_REQ = ['MATH201', 'MATH202', 'MATH204', 'MATH212'];
+const EE_SPECIAL_AREA_CODES = ['CS300', 'CS401', 'CS412', 'ME303', 'PHYS302', 'PHYS303'];
+const MAN_CORE_AREA_PREFIXES = ['ACC', 'FIN', 'MGMT', 'MKTG', 'OPIM', 'ORG'];
+const MAN_AREA_AREA_PREFIXES = ['ACC', 'FIN', 'MKTG', 'OPIM', 'ORG'];
+const PSIR_CORE_I_POOL = ['LAW312', 'POLS251', 'POLS353', 'POLS404', 'POLS455', 'POLS483', 'POLS493', 'SOC201'];
+const PSIR_CORE_II_POOL = ['CONF400', 'IR301', 'IR342', 'IR391', 'IR394', 'IR405', 'IR489', 'LAW311', 'POLS492'];
+const PSY_PHILOSOPHY = ['PHIL300', 'PHIL301'];
+
 // Decides each VACD pool course's pool BEFORE the allocation cascade, returning
 // a Map of course -> static type ('core' for the ones filling a pool minimum,
 // 'area' for the extras, which then spill area -> free through the normal
@@ -628,6 +639,109 @@ function evaluateRules(ctx, rules) {
     return 0;
 }
 
+// Required of EVERY undergraduate program (each major's SUIS page carries the
+// identical block). Prepended to every program's rules. The freshman/1XX + PROJ201
+// half is enforced by the generic university-credit check; SPS 303 is the one
+// specific course, so it is the rule here.
+const UNIVERSITY_RULES = [
+    { type: 'hasCourse', code: 'SPS303', flag: 11, suis: 'University Courses (all programs)' },
+];
+
+// Per-program graduation requirements as ORDERED data. Evaluated after the
+// generic credit/GPA checks (which stay in canGraduate), first unmet wins. The
+// same table drives the main and double-major passes. HUM rules live here because
+// they differ by program: the FASS programs need one 2XX then one 3XX (flags
+// 12 then 13); CS needs any single HUM (12); the FENS programs state none.
+const PROGRAM_RULES = {
+    CS: [
+        { type: 'hasAny', codes: HUM_ANY_LEVEL, flag: 12, suis: 'CS > University Courses (one HUM)' },
+        { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'CS > Faculty Courses' },
+        { type: 'facultyCount', pool: 'math', min: 2, flag: 19, suis: 'CS > Faculty Courses' },
+        { type: 'facultyCount', pool: 'fens', min: 3, flag: 16, suis: 'CS > Faculty Courses' },
+    ],
+    IE: [
+        { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'IE > Faculty Courses' },
+        { type: 'facultyCount', pool: 'math', min: 2, flag: 19, suis: 'IE > Faculty Courses' },
+        { type: 'facultyCount', pool: 'fens', min: 3, flag: 16, suis: 'IE > Faculty Courses' },
+    ],
+    EE: [
+        { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'EE > Faculty Courses' },
+        { type: 'facultyCount', pool: 'math', min: 2, flag: 19, suis: 'EE > Faculty Courses' },
+        { type: 'facultyCount', pool: 'fens', min: 3, flag: 16, suis: 'EE > Faculty Courses' },
+        { type: 'levelCreditSum', prefix: 'EE4', category: 'Core', min: 9, flag: 23, suis: 'EE > 400-level EE requirement' },
+        { type: 'specialCourseAny', codes: EE_SPECIAL_AREA_CODES, altPrefix: 'EE48', altCategory: 'Area', flag: 24, suis: 'EE > Area electives (special topics)' },
+    ],
+    MAT: [
+        { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'MAT > Faculty Courses' },
+        { type: 'facultyCount', pool: 'math', min: 2, flag: 19, suis: 'MAT > Faculty Courses' },
+        { type: 'facultyCount', pool: 'fens', min: 3, flag: 16, suis: 'MAT > Faculty Courses' },
+    ],
+    BIO: [
+        { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'BIO > Faculty Courses' },
+        { type: 'facultyCount', pool: 'math', min: 2, flag: 19, suis: 'BIO > Faculty Courses' },
+        { type: 'facultyCount', pool: 'fens', min: 3, flag: 16, suis: 'BIO > Faculty Courses' },
+    ],
+    ME: [
+        { type: 'entryGatedHasAny', minTerm: 202501, codes: ['CS404', 'CS412'], flag: 2, suis: 'ME > 2025 curriculum (CS404/CS412)' },
+        { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'ME > Faculty Courses' },
+        { type: 'facultyCount', pool: 'math', min: 2, flag: 19, suis: 'ME > Faculty Courses' },
+        { type: 'facultyCount', pool: 'fens', min: 3, flag: 16, suis: 'ME > Faculty Courses' },
+    ],
+    ECON: [
+        { type: 'hasAny', codes: ECON_MATH_REQ, flag: 25, suis: 'ECON > Mathematics Requirement' },
+        { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'ECON > Faculty Courses' },
+        { type: 'facultyCount', pool: 'fass', min: 3, flag: 15, suis: 'ECON > Faculty Courses' },
+        { type: 'facultyAreas', min: 3, flag: 18, suis: 'ECON > Faculty Courses (3 areas)' },
+        { type: 'languageCap', max: 2, flag: 40, suis: 'ECON > Free Electives (language cap)' },
+    ],
+    MAN: [
+        { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'MAN > Faculty Courses' },
+        { type: 'facultyCount', pool: 'sbs', min: 2, flag: 22, suis: 'MAN > Faculty Courses' },
+        { type: 'categoryPrefixSpan', category: 'core', prefixes: MAN_CORE_AREA_PREFIXES, min: 6, flag: 35, suis: 'MAN > Core Electives (6 areas)' },
+        { type: 'categoryPrefixSpan', category: 'area', prefixes: MAN_AREA_AREA_PREFIXES, min: 5, flag: 36, suis: 'MAN > Area Electives (5 areas)' },
+        { type: 'freeOfferingFacultyCredits', faculties: ['FASS', 'FENS'], min: 9, flag: 37, suis: 'MAN > Free Electives (9cr FASS/FENS)' },
+        { type: 'languageCap', max: 2, flag: 40, suis: 'MAN > Free Electives (language cap)' },
+    ],
+    PSIR: [
+        { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'PSIR > Faculty Courses' },
+        { type: 'facultyCount', pool: 'fass', min: 3, flag: 15, suis: 'PSIR > Faculty Courses' },
+        { type: 'facultyAreas', min: 3, flag: 18, suis: 'PSIR > Faculty Courses (3 areas)' },
+        { type: 'poolCreditSum', pool: PSIR_CORE_I_POOL, min: 12, flag: 33, suis: 'PSIR > Core Electives I (Political Science)' },
+        { type: 'poolCreditSum', pool: PSIR_CORE_II_POOL, min: 12, flag: 34, suis: 'PSIR > Core Electives II (International Relations)' },
+        { type: 'languageCap', max: 2, flag: 40, suis: 'PSIR > Free Electives (language cap)' },
+    ],
+    PSY: [
+        { type: 'hasAny', codes: PSY_PHILOSOPHY, flag: 26, suis: 'PSY > Philosophy Requirement' },
+        { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'PSY > Faculty Courses' },
+        { type: 'facultyCount', pool: 'fass', min: 3, flag: 15, suis: 'PSY > Faculty Courses' },
+        { type: 'facultyAreas', min: 3, flag: 18, suis: 'PSY > Faculty Courses (3 areas)' },
+        { type: 'psyAdvancedAreaCount', min: 2, flag: 39, suis: 'PSY > Area Electives (2 PSY 4XX)' },
+        { type: 'languageCap', max: 2, flag: 40, suis: 'PSY > Free Electives (language cap)' },
+    ],
+    VACD: [
+        { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'VACD > Faculty Courses' },
+        { type: 'facultyCount', pool: 'fass', min: 3, flag: 15, suis: 'VACD > Faculty Courses' },
+        { type: 'facultyAreas', min: 3, flag: 18, suis: 'VACD > Faculty Courses (3 areas)' },
+        { type: 'poolCreditSum', pool: VACD_CORE_POOL_1, requireCore: true, min: 9, flag: 30, suis: 'VACD > Core Electives I (Art/Design History)' },
+        { type: 'poolCreditSum', pool: VACD_CORE_POOL_2, requireCore: true, pairs: VACD_CORE_POOL_2_PAIRS, min: 12, flag: 31, suis: 'VACD > Core Electives II (Skill Courses)' },
+        { type: 'languageCap', max: 2, flag: 40, suis: 'VACD > Free Electives (language cap)' },
+    ],
+    DSA: [
+        { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'DSA > Faculty Courses' },
+        { type: 'facultyCount', pool: 'fens', min: 1, flag: 20, suis: 'DSA > Faculty Courses' },
+        { type: 'facultyCount', pool: 'fass', min: 1, flag: 21, suis: 'DSA > Faculty Courses' },
+        { type: 'facultyCount', pool: 'sbs', min: 1, flag: 22, suis: 'DSA > Faculty Courses' },
+        { type: 'coreOfferingFacultyCount', faculty: 'FENS', min: 3, flag: 27, suis: 'DSA > Core Electives (3 FENS)' },
+        { type: 'coreOfferingFacultyCount', faculty: 'FASS', min: 3, flag: 28, suis: 'DSA > Core Electives (3 FASS)' },
+        { type: 'coreOfferingFacultyCount', faculty: 'SBS', min: 3, flag: 29, suis: 'DSA > Core Electives (3 SBS)' },
+    ],
+};
+
+// The ordered rule list for a program: the shared university rules then its own.
+function graduationRulesFor(major) {
+    return UNIVERSITY_RULES.concat(PROGRAM_RULES[major] || []);
+}
+
 // Reset and re-accumulate a program's per-semester category totals from the
 // courses' current effective types. The generic credit/science/engineering/ECTS
 // totals are owned by the main allocation loop and deliberately not touched.
@@ -937,478 +1051,11 @@ function s_curriculum()
         if (!isNaN(GPA)){
             if (GPA < gpaThresholdMainMajor) return 38; // Flag for main major
         }
-        // ---- University Courses: SHARED across every undergrad program ----
-        // Every major's SUIS page carries the identical block: "All freshman
-        // courses (1XX coded courses, including PROJ 201) and SPS 303 are
-        // required." These were previously checked for CS only, so a non-CS
-        // student missing SPS 303 was told they could graduate.
-        if (!this.hasCourse('SPS303')) return 11;
-
-        // HUM requirement. FASS/SBS programs: "At least 2 of the below listed
-        // HUM courses must be taken. First the 2xx coded course, then the 3xx
-        // coded course must be taken." — confirmed verbatim on ECON, MAN, PSIR,
-        // PSY and VACD.
-        //
-        // NB this cannot be a count or a credit check: HUM201 + HUM202 is two
-        // HUM courses and reaches the 44-credit university total, yet fails the
-        // rule for want of a 3xx. It has to be compositional — one from each
-        // level. That is exactly what flags 12 and 13 were always for; only the
-        // 12 half was ever written.
-        //
-        // FENS programs require one HUM instead (BIO, DSA: "One of the HUM
-        // coded course listed below is required"). Their exact wording for
-        // CS/EE/IE/MAT/ME is unverified, so their existing behaviour is left
-        // alone here rather than guessed at.
-        if (HUM_TWO_LEVEL_MAJORS.has(this.major)) {
-            if (!this.hasAnyCourse(HUM_200_LEVEL)) return 12;
-            if (!this.hasAnyCourse(HUM_300_LEVEL)) return 13;
-        }
-
-        // Major-specific CS checks (only additional flags beyond generic)
-        if(this.major == 'CS')
-        {
-            // SUIS (CS, a FENS 1-HUM program): "One of the HUM coded course
-            // listed below is required" — the list is all nine, 2xx AND 3xx.
-            // This previously demanded a 2xx specifically, so a CS student whose
-            // single HUM was a 3xx (e.g. HUM311) reached university=41 yet was
-            // told they had not met their HUM. Any HUM satisfies it. (In effect
-            // unreachable — a student with zero HUM is short on university
-            // credits and trips flag 1 first — but kept as the correct check.)
-            if (!this.hasAnyCourse(HUM_ANY_LEVEL)) return 12;
-            {
-                // SUIS (CS Faculty Courses): >=5 faculty courses, >=2 MATH, >=3
-                // from FENS. countFacultyCourses() is the one shared tally.
-                const f = this.countFacultyCourses();
-                if (f.total < 5) return 14;
-                if (f.math < 2) return 19;
-                if (f.fens < 3) return 16;
-            }
-        }
-        else if(this.major == 'IE')
-        {
-            // Generic checks apply
-            // Additional IE-specific logic can be added here if needed
-            {
-                // SUIS (IE Faculty Courses, same rule as CS/EE/MAT): >=5, >=2
-                // MATH, >=3 FENS.
-                const f = this.countFacultyCourses();
-                if (f.total < 5) return 14;
-                if (f.math < 2) return 19;
-                if (f.fens < 3) return 16;
-            }
-        }
-        else if(this.major == 'EE')
-        {
-            // Generic checks apply
-            {
-                // SUIS (EE, Faculty Courses): "a total of at least 5 courses
-                // should be completed from FENS Faculty Courses and/or FASS, SBS
-                // Faculty Courses. At least 2 of these courses must be MATH
-                // coded. In addition, at least 3 of these courses must be from
-                // the pool of FENS Faculty Courses."
-                //
-                // EE had NO faculty-course checks at all — the only major
-                // missing them, though its rule is word-for-word BIO's. EE
-                // students were simply never checked against a requirement they
-                // must meet.
-                const facultyEE = this.countFacultyCourses();
-                if (facultyEE.total < 5) return 14;
-                if (facultyEE.math < 2) return 19;
-                if (facultyEE.fens < 3) return 16;
-
-                // Check for minimum 400-level EE courses requirement (9 credits)
-                let ee400LevelCredits = 0;
-                for(let i = 0; i < this.semesters.length; i++) {
-                    for(let a = 0; a < this.semesters[i].courses.length; a++) {
-                        let course = this.semesters[i].courses[a];
-                        // Check if it's a 400-level EE course in core electives
-                        if(course.code.startsWith("EE4") && course.category === "Core") {
-                            ee400LevelCredits += (typeof parseCreditValue === 'function')
-                                ? parseCreditValue(course.SU_credit || '0')
-                                : (parseFloat(course.SU_credit || '0') || 0);
-                        }
-                    }
-                }
-
-                if (ee400LevelCredits < 9) return 23;
-
-                else
-                {
-
-                    // Check for minimum one course from specific area electives
-                    let hasSpecificAreaCourse = false;
-                    const specificAreaCourses = ["CS300", "CS401", "CS412", "ME303", "PHYS302", "PHYS303"];
-
-                    for(let i = 0; i < this.semesters.length; i++) {
-                        for(let a = 0; a < this.semesters[i].courses.length; a++) {
-                            let course = this.semesters[i].courses[a];
-                            // Check for specific area courses
-                            if(specificAreaCourses.includes(course.code) ||
-                                (course.code.startsWith("EE48") && course.category === "Area")) {
-                                hasSpecificAreaCourse = true;
-                                break;
-                            }
-                        }
-                        if(hasSpecificAreaCourse) break;
-                    }
-
-                    if(!hasSpecificAreaCourse) return 24;
-
-                }
-            }
-        }
-        else if(this.major == 'MAT')
-        {
-            // Generic checks apply
-            {
-                // SUIS (MAT Faculty Courses, same rule as CS/EE/IE): >=5, >=2
-                // MATH, >=3 FENS.
-                const f = this.countFacultyCourses();
-                if (f.total < 5) return 14;
-                if (f.math < 2) return 19;
-                if (f.fens < 3) return 16;
-
-            }
-        }
-        else if(this.major == 'BIO')
-        {
-            // Generic checks apply
-            {
-                // SUIS (BIO Faculty Courses, same rule as CS/EE/IE/MAT): >=5,
-                // >=2 MATH, >=3 FENS.
-                const f = this.countFacultyCourses();
-                if (f.total < 5) return 14;
-                if (f.math < 2) return 19;
-                if (f.fens < 3) return 16;
-
-            }
-        }
-        else if(this.major == 'ME')
-        {
-            // Generic checks apply
-            {
-                const meEntry = parseInt(this.entryTerm || '0', 10);
-                if (!isNaN(meEntry) && meEntry >= 202501) {
-                    if (!(this.hasCourse('CS404') || this.hasCourse('CS412'))) return 2;
-                }
-
-                // SUIS (ME Faculty Courses, same rule as CS/EE/IE/MAT): >=5, >=2
-                // MATH, >=3 FENS.
-                const f = this.countFacultyCourses();
-                if (f.total < 5) return 14;
-                if (f.math < 2) return 19;
-                if (f.fens < 3) return 16;
-            }
-        }
-        else if(this.major == 'ECON')
-        {
-            // Generic checks apply
-            {
-                // Check if Math requirement (3 credits) is fulfilled
-                // SUIS (ECON, "Mathematics Requirement Courses"): 1 course from
-                // MATH201 / MATH202 / MATH204 / MATH212. MATH212 was missing —
-                // it replaces MATH201+MATH202, is `required` in ECON's catalog
-                // (4cr), and a student who satisfied their maths with it was
-                // told they had not.
-                let hasMathRequirement = this.hasAnyCourse(['MATH201', 'MATH202', 'MATH204', 'MATH212']);
-                if (!hasMathRequirement) return 25;
-
-                // SUIS (ECON Faculty Courses): >=5 total, >=3 FASS, spanning >=3
-                // areas. (ECON's inline copy tested a dead "PSYCH" prefix; the
-                // shared countFacultyAreas() uses "PSY".)
-                const f = this.countFacultyCourses();
-                const areas = this.countFacultyAreas();
-                if (f.total < 5) return 14;
-                if (f.fass < 3) return 15;
-                if (areas.size < 3) return 18;
-
-                // SUIS: at most 2 Beginning/Basic level language courses may
-                // count toward the free electives.
-                if (countBasicLanguageInFree(this.semesters, 'effective_type') > BASIC_LANGUAGE_LIMIT) return 40;
-            }
-        }
-        else if(this.major == 'MAN') {
-            // Generic checks apply
-            {
-                // SUIS (MAN Faculty Courses): >=5 total, >=2 SBS.
-                const f = this.countFacultyCourses();
-                if (f.total < 5) return 14;
-                if (f.sbs < 2) return 22;
-
-                // Core electives requirement: 6 courses from 6 different areas
-                let coreAreas = new Set();
-                let coreCount = 0;
-                for (let i = 0; i < this.semesters.length; i++) {
-                    for (let a = 0; a < this.semesters[i].courses.length; a++) {
-                        const course = this.semesters[i].courses[a];
-                        const eff = (course.effective_type || (course.category && course.category.toLowerCase()) || '').toLowerCase();
-                        if (eff === 'core') {
-                            coreCount++;
-                            if (course.code.startsWith('ACC')) coreAreas.add('ACC');
-                            else if (course.code.startsWith('FIN')) coreAreas.add('FIN');
-                            else if (course.code.startsWith('MGMT')) coreAreas.add('MGMT');
-                            else if (course.code.startsWith('MKTG')) coreAreas.add('MKTG');
-                            else if (course.code.startsWith('OPIM')) coreAreas.add('OPIM');
-                            else if (course.code.startsWith('ORG')) coreAreas.add('ORG');
-                        }
-                    }
-                }
-                if (coreAreas.size < 6) return 35;
-
-                // Area electives requirement: 5 courses from 5 different areas
-                let areaAreas = new Set();
-                let areaCount = 0;
-                for (let i = 0; i < this.semesters.length; i++) {
-                    for (let a = 0; a < this.semesters[i].courses.length; a++) {
-                        const course = this.semesters[i].courses[a];
-                        const eff = (course.effective_type || (course.category && course.category.toLowerCase()) || '').toLowerCase();
-                        if (eff === 'area') {
-                            areaCount++;
-                            if (course.code.startsWith('ACC')) areaAreas.add('ACC');
-                            else if (course.code.startsWith('FIN')) areaAreas.add('FIN');
-                            else if (course.code.startsWith('MKTG')) areaAreas.add('MKTG');
-                            else if (course.code.startsWith('OPIM')) areaAreas.add('OPIM');
-                            else if (course.code.startsWith('ORG')) areaAreas.add('ORG');
-                        }
-                    }
-                }
-                if (areaAreas.size < 5) return 36;
-
-                // SUIS (MAN free electives): "26 SU credits are required. 9 out
-                // of these 26 SU credits should be among the courses offered by
-                // FASS or FENS. At most 2 of the Beginning / Basic level
-                // language courses can be used to fulfill the requirements for
-                // this area."
-                let freeElectiveCredits = 0;
-                let fassFensCredits = 0;
-
-                for (let i = 0; i < this.semesters.length; i++) {
-                    for (let a = 0; a < this.semesters[i].courses.length; a++) {
-                        const course = this.semesters[i].courses[a];
-                        const eff = (course.effective_type || (course.category && course.category.toLowerCase()) || '').toLowerCase();
-                        if (eff === 'free') {
-                            const c = (typeof parseCreditValue === 'function')
-                                ? parseCreditValue(course.SU_credit || '0')
-                                : (parseFloat(course.SU_credit || '0') || 0);
-                            freeElectiveCredits += c;
-                            // "offered by FASS or FENS" is the OFFERING faculty
-                            // (`Faculty`), not the faculty-course pool marker
-                            // (`Faculty_Course`, set on only ~66 of 670 courses).
-                            if (course.Faculty === 'FASS' || course.Faculty === 'FENS') {
-                                fassFensCredits += c;
-                            }
-                        }
-                    }
-                }
-
-                // Check Free Electives requirements
-                // The 26-credit condition is redundant with the generic free
-                // check (MAN's `free` requirement IS 26), so it never fires —
-                // kept as a guard in case the two ever diverge.
-                if (freeElectiveCredits < 26) return 37;
-                if (fassFensCredits < 9) return 37;
-                // Its own flag: 37's message only describes the FASS/FENS rule,
-                // so reporting the language cap as 37 told students the wrong
-                // thing entirely.
-                if (countBasicLanguageInFree(this.semesters, 'effective_type') > BASIC_LANGUAGE_LIMIT) return 40;
-            }
-        }
-        else if(this.major == 'PSIR')
-        {
-            // Generic checks apply
-            {
-                // SUIS (PSIR Faculty Courses): >=5 total, >=3 FASS, spanning >=3
-                // areas.
-                const f = this.countFacultyCourses();
-                const areas = this.countFacultyAreas();
-                if (f.total < 5) return 14;
-                if (f.fass < 3) return 15;
-                if (areas.size < 3) return 18;
-
-                // Core Electives I (Political Science)
-                let coreElectivesICount = 0;
-                const coreElectivesIPool = ['LAW312', 'POLS251', 'POLS353', 'POLS404', 'POLS455', 'POLS483', 'POLS493', 'SOC201'];
-                for (let i = 0; i < this.semesters.length; i++) {
-                    for (let a = 0; a < this.semesters[i].courses.length; a++) {
-                        const course = this.semesters[i].courses[a];
-                        const courseCode = course.code || ((course.Major || '') + (course.Code || ''));
-                        if (coreElectivesIPool.includes(courseCode)) {
-                            coreElectivesICount += (typeof parseCreditValue === 'function')
-                                ? parseCreditValue(course.SU_credit || '0')
-                                : (parseFloat(course.SU_credit || '0') || 0);
-                        }
-                    }
-                }
-                if (coreElectivesICount < 12) return 33;
-
-                // Core Electives II (International Relations)
-                let coreElectivesIICount = 0;
-                const coreElectivesIIPool = ['CONF400', 'IR301', 'IR342', 'IR391', 'IR394', 'IR405', 'IR489', 'LAW311', 'POLS492'];
-                for (let i = 0; i < this.semesters.length; i++) {
-                    for (let a = 0; a < this.semesters[i].courses.length; a++) {
-                        const course = this.semesters[i].courses[a];
-                        const courseCode = course.code || ((course.Major || '') + (course.Code || ''));
-                        if (coreElectivesIIPool.includes(courseCode)) {
-                            coreElectivesIICount += (typeof parseCreditValue === 'function')
-                                ? parseCreditValue(course.SU_credit || '0')
-                                : (parseFloat(course.SU_credit || '0') || 0);
-                        }
-                    }
-                }
-                if (coreElectivesIICount < 12) return 34;
-
-                // SUIS: at most 2 Beginning/Basic level language courses may
-                // count toward the free electives.
-                if (countBasicLanguageInFree(this.semesters, 'effective_type') > BASIC_LANGUAGE_LIMIT) return 40;
-            }
-        }
-        else if(this.major == 'PSY')
-        {
-            // Generic checks apply
-            {
-                // Check Philosophy requirement
-                let hasPhilosophy = this.hasCourse("PHIL300") || this.hasCourse("PHIL301");
-                if (!hasPhilosophy) return 26;
-
-                // SUIS (PSY Faculty Courses): >=5 total, >=3 FASS, spanning >=3
-                // areas.
-                const f = this.countFacultyCourses();
-                const areas = this.countFacultyAreas();
-                if (f.total < 5) return 14;
-                if (f.fass < 3) return 15;
-                if (areas.size < 3) return 18;
-
-                // SUIS (PSY area electives): "At least 6 courses from all PSY
-                // coded undergraduate courses. At least 2 courses must be from
-                // PSY 4XX-level advanced Psychology courses."
-                // The 6-course minimum needs no check of its own: the `area`
-                // threshold is 18 credits = 6 x 3cr, and the PSY catalog types
-                // only PSY-coded courses as area, so the generic area check
-                // already enforces it. Only the 4XX rule is left.
-                //
-                // SUIS (PSY free electives): "at most two of the beginning/basic
-                // level second language courses can be used to fulfill the free
-                // elective requirements."
-                let psy4xxAreaCount = 0;
-                for (let i = 0; i < this.semesters.length; i++) {
-                    for (let a = 0; a < this.semesters[i].courses.length; a++) {
-                        const course = this.semesters[i].courses[a];
-                        if ((course.effective_type || '').toLowerCase() === 'area'
-                            && isPsyAdvancedCode(course.code)) psy4xxAreaCount++;
-                    }
-                }
-                if (psy4xxAreaCount < 2) return 39;
-                if (countBasicLanguageInFree(this.semesters, 'effective_type') > BASIC_LANGUAGE_LIMIT) return 40;
-            }
-        }
-        else if(this.major == 'VACD')
-        {
-            // Generic checks apply
-            {
-                // SUIS (VACD Faculty Courses): >=5 total, >=3 FASS, spanning >=3
-                // areas.
-                const f = this.countFacultyCourses();
-                const areas = this.countFacultyAreas();
-                if (f.total < 5) return 14;
-                if (f.fass < 3) return 15;
-                if (areas.size < 3) return 18;
-
-                // Core Electives I (Art/Design History Courses) for VACD
-                let coreElectivesICount = 0;
-                const coreElectivesIPool = ['HART292', 'HART293', 'HART380', 'HART413', 'HART426', 'VA315', 'VA420', 'VA430'];
-                for (let i = 0; i < this.semesters.length; i++) {
-                    for (let a = 0; a < this.semesters[i].courses.length; a++) {
-                        const course = this.semesters[i].courses[a];
-                        const courseCode = course.code || ((course.Major || '') + (course.Code || ''));
-                        const eff = (course.effective_type || (course.category && course.category.toLowerCase()) || '').toLowerCase();
-                        if (eff === 'core' && coreElectivesIPool.includes(courseCode)) {
-                            coreElectivesICount += (typeof parseCreditValue === 'function')
-                                ? parseCreditValue(course.SU_credit || '0')
-                                : (parseFloat(course.SU_credit || '0') || 0);
-                        }
-                    }
-                }
-                if (coreElectivesICount < 9) return 30;
-
-                // Core Electives II (Skill Courses) for VACD
-                let coreElectivesIICount = 0;
-                const coreElectivesIIPool = ['VA202', 'VA204', 'VA234', 'VA302', 'VA304', 'VA402', 'VA404'];
-                const pairKeyByCode = {
-                    VA302: 'VA302|VA304',
-                    VA304: 'VA302|VA304',
-                    VA402: 'VA402|VA404',
-                    VA404: 'VA402|VA404',
-                };
-                const seenPairKeys = new Set();
-                for (let i = 0; i < this.semesters.length; i++) {
-                    for (let a = 0; a < this.semesters[i].courses.length; a++) {
-                        const course = this.semesters[i].courses[a];
-                        const courseCode = course.code || ((course.Major || '') + (course.Code || ''));
-                        const eff = (course.effective_type || (course.category && course.category.toLowerCase()) || '').toLowerCase();
-                        if (eff === 'core' && coreElectivesIIPool.includes(courseCode)) {
-                            const pairKey = pairKeyByCode[courseCode];
-                            if (pairKey) {
-                                if (seenPairKeys.has(pairKey)) continue;
-                                seenPairKeys.add(pairKey);
-                            }
-                            coreElectivesIICount += (typeof parseCreditValue === 'function')
-                                ? parseCreditValue(course.SU_credit || '0')
-                                : (parseFloat(course.SU_credit || '0') || 0);
-                        }
-                    }
-                }
-                if (coreElectivesIICount < 12) return 31;
-                // SUIS: at most 2 Beginning/Basic level language courses may
-                // count toward the free electives.
-                if (countBasicLanguageInFree(this.semesters, 'effective_type') > BASIC_LANGUAGE_LIMIT) return 40;
-            }
-        }
-        else if(this.major == 'DSA')
-        {
-            // Generic checks apply
-            {
-                // SUIS (DSA Faculty Courses): >=5 total, >=1 each of FENS, FASS,
-                // SBS.
-                const f = this.countFacultyCourses();
-                if (f.total < 5) return 14;
-                if (f.fens < 1) return 20;
-                if (f.fass < 1) return 21;
-                if (f.sbs < 1) return 22;
-
-                // Check core electives requirements
-                // At least 27 SU credits with at least 3 courses from each faculty
-                let fensCoreCount = 0;
-                let fassCoreCount = 0;
-                let sbsCoreCount = 0;
-
-                for(let i = 0; i < this.semesters.length; i++) {
-                    for(let a = 0; a < this.semesters[i].courses.length; a++) {
-                        let course = this.semesters[i].courses[a];
-                        if(course.category === "Core") {
-                            // "3 FASS courses in your core electives" means core
-                            // electives OFFERED BY that faculty -> `Faculty`.
-                            // NOT `Faculty_Course`, which marks membership of the
-                            // faculty-course pool and is what flags 14/20/21/22
-                            // above correctly use. They are different attributes:
-                            // every course has a Faculty; only ~10% are faculty
-                            // courses.
-                            if(course.Faculty === "FENS") {
-                                fensCoreCount++;
-                            } else if(course.Faculty === "FASS") {
-                                fassCoreCount++;
-                            } else if(course.Faculty === "SBS") {
-                                sbsCoreCount++;
-                            }
-                        }
-                    }
-                }
-
-                if(fensCoreCount < 3) return 27;
-                if(fassCoreCount < 3) return 28;
-                if(sbsCoreCount < 3) return 29;
-            }
-        }
-        return 0; // No issues found, return 0
+        // SPS 303, the HUM requirement and the per-major requirements are DATA
+        // -- see PROGRAM_RULES -- evaluated in order, first unmet wins. The same
+        // table drives the double-major pass (canGraduateDouble) via DM_FIELDS.
+        const ctx = { curr: this, semesters: this.semesters, fields: MAIN_FIELDS, entryTerm: this.entryTerm };
+        return evaluateRules(ctx, graduationRulesFor(this.major));
     }
 
     /**
