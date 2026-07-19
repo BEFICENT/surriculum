@@ -646,7 +646,6 @@ const UNIVERSITY_RULES = [
 // 12 then 13); CS needs any single HUM (12); the FENS programs state none.
 const PROGRAM_RULES = {
     CS: [
-        { type: 'hasAny', codes: HUM_ANY_LEVEL, flag: 12, suis: 'CS > University Courses (one HUM)' },
         { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'CS > Faculty Courses' },
         { type: 'facultyCount', pool: 'math', min: 2, flag: 19, suis: 'CS > Faculty Courses' },
         { type: 'facultyCount', pool: 'fens', min: 3, flag: 16, suis: 'CS > Faculty Courses' },
@@ -680,8 +679,6 @@ const PROGRAM_RULES = {
         { type: 'facultyCount', pool: 'fens', min: 3, flag: 16, suis: 'ME > Faculty Courses' },
     ],
     ECON: [
-        { type: 'hasAny', codes: HUM_200_LEVEL, flag: 12, suis: 'ECON > University Courses (HUM 2XX)' },
-        { type: 'hasAny', codes: HUM_300_LEVEL, flag: 13, suis: 'ECON > University Courses (HUM 3XX)' },
         { type: 'hasAny', codes: ECON_MATH_REQ, flag: 25, suis: 'ECON > Mathematics Requirement' },
         { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'ECON > Faculty Courses' },
         { type: 'facultyCount', pool: 'fass', min: 3, flag: 15, suis: 'ECON > Faculty Courses' },
@@ -689,8 +686,6 @@ const PROGRAM_RULES = {
         { type: 'languageCap', max: 2, flag: 40, suis: 'ECON > Free Electives (language cap)' },
     ],
     MAN: [
-        { type: 'hasAny', codes: HUM_200_LEVEL, flag: 12, suis: 'MAN > University Courses (HUM 2XX)' },
-        { type: 'hasAny', codes: HUM_300_LEVEL, flag: 13, suis: 'MAN > University Courses (HUM 3XX)' },
         { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'MAN > Faculty Courses' },
         { type: 'facultyCount', pool: 'sbs', min: 2, flag: 22, suis: 'MAN > Faculty Courses' },
         { type: 'categoryPrefixSpan', category: 'core', prefixes: MAN_CORE_AREA_PREFIXES, min: 6, flag: 35, suis: 'MAN > Core Electives (6 areas)' },
@@ -699,8 +694,6 @@ const PROGRAM_RULES = {
         { type: 'languageCap', max: 2, flag: 40, suis: 'MAN > Free Electives (language cap)' },
     ],
     PSIR: [
-        { type: 'hasAny', codes: HUM_200_LEVEL, flag: 12, suis: 'PSIR > University Courses (HUM 2XX)' },
-        { type: 'hasAny', codes: HUM_300_LEVEL, flag: 13, suis: 'PSIR > University Courses (HUM 3XX)' },
         { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'PSIR > Faculty Courses' },
         { type: 'facultyCount', pool: 'fass', min: 3, flag: 15, suis: 'PSIR > Faculty Courses' },
         { type: 'facultyAreas', min: 3, flag: 18, suis: 'PSIR > Faculty Courses (3 areas)' },
@@ -709,8 +702,6 @@ const PROGRAM_RULES = {
         { type: 'languageCap', max: 2, flag: 40, suis: 'PSIR > Free Electives (language cap)' },
     ],
     PSY: [
-        { type: 'hasAny', codes: HUM_200_LEVEL, flag: 12, suis: 'PSY > University Courses (HUM 2XX)' },
-        { type: 'hasAny', codes: HUM_300_LEVEL, flag: 13, suis: 'PSY > University Courses (HUM 3XX)' },
         { type: 'hasAny', codes: PSY_PHILOSOPHY, flag: 26, suis: 'PSY > Philosophy Requirement' },
         { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'PSY > Faculty Courses' },
         { type: 'facultyCount', pool: 'fass', min: 3, flag: 15, suis: 'PSY > Faculty Courses' },
@@ -719,8 +710,6 @@ const PROGRAM_RULES = {
         { type: 'languageCap', max: 2, flag: 40, suis: 'PSY > Free Electives (language cap)' },
     ],
     VACD: [
-        { type: 'hasAny', codes: HUM_200_LEVEL, flag: 12, suis: 'VACD > University Courses (HUM 2XX)' },
-        { type: 'hasAny', codes: HUM_300_LEVEL, flag: 13, suis: 'VACD > University Courses (HUM 3XX)' },
         { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'VACD > Faculty Courses' },
         { type: 'facultyCount', pool: 'fass', min: 3, flag: 15, suis: 'VACD > Faculty Courses' },
         { type: 'facultyAreas', min: 3, flag: 18, suis: 'VACD > Faculty Courses (3 areas)' },
@@ -739,9 +728,27 @@ const PROGRAM_RULES = {
     ],
 };
 
-// The ordered rule list for a program: the shared university rules then its own.
-function graduationRulesFor(major) {
-    return UNIVERSITY_RULES.concat(PROGRAM_RULES[major] || []);
+// The HUM university requirement, built from the program's scraped `humRequired`
+// (requirements data, via fetch_requirements.py): 2 = one 2XX AND one 3XX HUM
+// (flags 12 then 13); 1 = any single HUM (flag 12); 0 / absent = none. Kept out of
+// PROGRAM_RULES so the rule is data rather than hand-listed per program.
+function humRules(humRequired) {
+    if (humRequired >= 2) {
+        return [
+            { type: 'hasAny', codes: HUM_200_LEVEL, flag: 12, suis: 'University Courses (HUM 2XX)' },
+            { type: 'hasAny', codes: HUM_300_LEVEL, flag: 13, suis: 'University Courses (HUM 3XX)' },
+        ];
+    }
+    if (humRequired >= 1) {
+        return [{ type: 'hasAny', codes: HUM_ANY_LEVEL, flag: 12, suis: 'University Courses (one HUM)' }];
+    }
+    return [];
+}
+
+// The ordered rule list for a program: the shared university rules, the HUM rule
+// (from the program's humRequired), then the program's own rules.
+function graduationRulesFor(major, humRequired) {
+    return UNIVERSITY_RULES.concat(humRules(humRequired), PROGRAM_RULES[major] || []);
 }
 
 // Render the allocation result to the DOM: each course's `.course_type` label
@@ -1131,7 +1138,7 @@ function s_curriculum()
         // -- see PROGRAM_RULES -- evaluated in order, first unmet wins. The same
         // table drives the double-major pass (canGraduateDouble) via DM_FIELDS.
         const ctx = { curr: this, semesters: this.semesters, fields: MAIN_FIELDS, entryTerm: this.entryTerm };
-        return evaluateRules(ctx, graduationRulesFor(this.major));
+        return evaluateRules(ctx, graduationRulesFor(this.major, req.humRequired));
     }
 
     /**
@@ -1795,7 +1802,7 @@ function s_curriculum()
         // grown their own incomplete copies (non-CS missing SPS303/HUM, EE with
         // no faculty check, ECON without MATH212).
         const ctx = { curr: this, semesters: this.semesters, fields: DM_FIELDS, entryTerm: this.entryTermDM };
-        return evaluateRules(ctx, graduationRulesFor(this.doubleMajor));
+        return evaluateRules(ctx, graduationRulesFor(this.doubleMajor, req.humRequired));
     };
 
     // end of s_curriculum constructor

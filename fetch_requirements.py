@@ -134,6 +134,18 @@ def fetch_requirements(program, term, offline_dir=None, timeout_s: float = 30.0)
 
     return req
 
+def hum_required(major, university):
+    """HUM graduation requirement, materialized as data so the app's rule tables
+    don't hard-list it (flags 12/13). FASS/SBS programs — university credit 44 —
+    require one 2xx AND one 3xx HUM (returns 2); the FENS programs (41) require
+    one. Only CS's SUIS states the single-HUM rule explicitly, so the other FENS
+    programs carry none (0) rather than an unverified check. The `university == 44`
+    split matches the two-HUM set exactly (the extra 3 SU is that second HUM)."""
+    if university == 44:
+        return 2
+    return 1 if major == "CS" else 0
+
+
 def main():
     parser = argparse.ArgumentParser(description="Fetch and regenerate graduation requirement summaries.")
     parser.add_argument("--timeout", type=float, default=30.0, help="HTTP timeout in seconds.")
@@ -165,6 +177,7 @@ def main():
                 print(f"Failed {major} {term}: {e}")
                 data = {}
             if data:
+                data['humRequired'] = hum_required(major, data.get('university'))
                 out[major] = data
         if out:
             with open(os.path.join(REQUIREMENTS_DIR, f'{term}.jsonl'), 'w', encoding='utf-8') as f:

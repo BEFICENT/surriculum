@@ -135,13 +135,16 @@ test('every program requires SPS303 (flag 11) — DM non-CS used to skip it', ()
   }
 });
 
-test('FASS programs carry the two-level HUM rule (flags 12 AND 13)', () => {
-  for (const m of FASS_MAJORS) {
-    const f = flagsOf(m);
-    assert.ok(f.includes(12) && f.includes(13), `${m} should require a 2xx and a 3xx HUM`);
-  }
-  // The FENS single-HUM programs need only one (flag 12), never 13.
-  assert.ok(flagsOf('CS').includes(12) && !flagsOf('CS').includes(13), 'CS: one HUM only');
+test('HUM rule is generated from humRequired (scraped data), not hard-listed', () => {
+  // 2 -> one 2XX AND one 3XX (flags 12 then 13); 1 -> any single HUM (12);
+  // 0/absent -> none. It is a university rule, so it does not depend on the major.
+  // Spread into a test-realm array (the rule list is built inside the vm sandbox).
+  const humFlags = (major, humRequired) =>
+    [...graduationRulesFor(major, humRequired).map((r) => r.flag).filter((f) => f === 12 || f === 13)];
+  assert.deepEqual(humFlags('ECON', 2), [12, 13], 'humRequired 2 -> 12 then 13');
+  assert.deepEqual(humFlags('CS', 1), [12], 'humRequired 1 -> flag 12 only');
+  assert.deepEqual(humFlags('IE', 0), [], 'humRequired 0 -> no HUM');
+  assert.deepEqual(humFlags('ECON', undefined), [], 'absent -> no HUM');
 });
 
 test('EE carries the faculty-course check (14/19/16) — EE-DM used to lack it', () => {
@@ -155,9 +158,9 @@ test("ECON's mathematics requirement accepts MATH212 — ECON-DM used to omit it
   assert.ok(mathRule.codes.includes('MATH212'), 'MATH212 satisfies the ECON math requirement');
 });
 
-test('every rule carries a SUIS citation', () => {
+test('every rule carries a SUIS citation (incl. the generated HUM rules)', () => {
   for (const m of ALL_MAJORS) {
-    for (const r of graduationRulesFor(m)) {
+    for (const r of graduationRulesFor(m, 2)) {
       assert.equal(typeof r.suis, 'string', `${m} flag ${r.flag} needs a suis citation`);
       assert.ok(r.suis.length > 0);
     }
