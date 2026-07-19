@@ -10,7 +10,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { loadScriptGlobals } = require('./helpers/load-script');
 
-const { evaluateRules, sumPoolCredits, graduationRulesFor } = loadScriptGlobals('scripts/s_curriculum.js');
+const { evaluateRules, sumPoolCredits, graduationRulesFor, facultyRules, groupRules } = loadScriptGlobals('scripts/s_curriculum.js');
 
 const FIELDS = { effective: 'effective_type', category: 'category' };
 
@@ -140,7 +140,7 @@ test('HUM rule is generated from humRequired (scraped data), not hard-listed', (
   // 0/absent -> none. It is a university rule, so it does not depend on the major.
   // Spread into a test-realm array (the rule list is built inside the vm sandbox).
   const humFlags = (major, humRequired) =>
-    [...graduationRulesFor(major, humRequired).map((r) => r.flag).filter((f) => f === 12 || f === 13)];
+    [...graduationRulesFor(major, { humRequired }).map((r) => r.flag).filter((f) => f === 12 || f === 13)];
   assert.deepEqual(humFlags('ECON', 2), [12, 13], 'humRequired 2 -> 12 then 13');
   assert.deepEqual(humFlags('CS', 1), [12], 'humRequired 1 -> flag 12 only');
   assert.deepEqual(humFlags('IE', 0), [], 'humRequired 0 -> no HUM');
@@ -160,9 +160,59 @@ test("ECON's mathematics requirement accepts MATH212 — ECON-DM used to omit it
 
 test('every rule carries a SUIS citation (incl. the generated HUM rules)', () => {
   for (const m of ALL_MAJORS) {
-    for (const r of graduationRulesFor(m, 2)) {
+    for (const r of graduationRulesFor(m, { humRequired: 2 })) {
       assert.equal(typeof r.suis, 'string', `${m} flag ${r.flag} needs a suis citation`);
       assert.ok(r.suis.length > 0);
     }
   }
+});
+
+// ---- Requirement-groups phase 2: generators from scraped data -----------------
+
+test('facultyRules generates the ticker in order, with threshold-specific flags', () => {
+  // Spread the outer .map into a test-realm array (facultyRules builds it in the vm).
+  const tuples = (facultyReq) => [...facultyRules(facultyReq).map((r) => [r.type, r.pool || 'areas', r.min, r.flag])];
+  // VACD: total, fass(≥3 → 15), areas → 18
+  assert.deepEqual(tuples({ total: 5, fass: 3, areas: 3 }),
+    [['facultyCount', 'total', 5, 14], ['facultyCount', 'fass', 3, 15], ['facultyAreas', 'areas', 3, 18]]);
+  // CS-style: total, math, fens(≥3 → 16)
+  assert.deepEqual(tuples({ total: 5, math: 2, fens: 3 }),
+    [['facultyCount', 'total', 5, 14], ['facultyCount', 'math', 2, 19], ['facultyCount', 'fens', 3, 16]]);
+  // DSA-style: the ≥1 minimums map to the "1 X" messages (20/21/22)
+  assert.deepEqual(tuples({ total: 5, fens: 1, fass: 1, sbs: 1 }),
+    [['facultyCount', 'total', 5, 14], ['facultyCount', 'fens', 1, 20], ['facultyCount', 'fass', 1, 21], ['facultyCount', 'sbs', 1, 22]]);
+});
+
+test('groupRules maps credits (with base/pairs) and languageCap groups to evaluators', () => {
+  const rules = groupRules([
+    { rule: 'credits', base: 'core', min: 9, members: ['A', 'B'], flag: 30, suis: 's' },
+    { rule: 'credits', base: 'core', min: 12, members: ['C'], exclusivePairs: [['C', 'D']], flag: 31, suis: 's' },
+    { rule: 'languageCap', base: 'free', max: 2, flag: 40, suis: 's' },
+  ]);
+  assert.equal(rules[0].type, 'poolCreditSum');
+  assert.equal(rules[0].requireCore, true, 'base:core -> requireCore');
+  assert.deepEqual(rules[0].pool, ['A', 'B']);
+  assert.equal(rules[0].min, 9);
+  assert.equal(rules[0].flag, 30);
+  assert.deepEqual(rules[1].pairs, [['C', 'D']]);
+  assert.equal(rules[2].type, 'languageCap');
+  assert.equal(rules[2].max, 2);
+});
+
+test('graduationRulesFor uses groups+facultyReq when present, PROGRAM_RULES otherwise', () => {
+  // A VACD-shaped req reproduces the exact order/flags the old hard-listed table had.
+  const vacdReq = {
+    humRequired: 2,
+    facultyReq: { total: 5, fass: 3, areas: 3 },
+    groups: [
+      { rule: 'credits', base: 'core', min: 9, members: ['X'], flag: 30, suis: 's' },
+      { rule: 'credits', base: 'core', min: 12, members: ['Y'], flag: 31, suis: 's' },
+      { rule: 'languageCap', base: 'free', max: 2, flag: 40, suis: 's' },
+    ],
+  };
+  assert.deepEqual([...graduationRulesFor('VACD', vacdReq).map((r) => r.flag)],
+    [11, 12, 13, 14, 15, 18, 30, 31, 40]);
+  // A program with no groups data falls back to its PROGRAM_RULES entry.
+  const cs = [...graduationRulesFor('CS', { humRequired: 1 }).map((r) => r.flag)];
+  assert.ok(cs.includes(11) && cs.includes(12) && cs.includes(14) && cs.includes(16));
 });

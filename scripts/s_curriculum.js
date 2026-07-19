@@ -709,14 +709,9 @@ const PROGRAM_RULES = {
         { type: 'psyAdvancedAreaCount', min: 2, flag: 39, suis: 'PSY > Area Electives (2 PSY 4XX)' },
         { type: 'languageCap', max: 2, flag: 40, suis: 'PSY > Free Electives (language cap)' },
     ],
-    VACD: [
-        { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'VACD > Faculty Courses' },
-        { type: 'facultyCount', pool: 'fass', min: 3, flag: 15, suis: 'VACD > Faculty Courses' },
-        { type: 'facultyAreas', min: 3, flag: 18, suis: 'VACD > Faculty Courses (3 areas)' },
-        { type: 'poolCreditSum', pool: VACD_CORE_POOL_1, requireCore: true, min: 9, flag: 30, suis: 'VACD > Core Electives I (Art/Design History)' },
-        { type: 'poolCreditSum', pool: VACD_CORE_POOL_2, requireCore: true, pairs: VACD_CORE_POOL_2_PAIRS, min: 12, flag: 31, suis: 'VACD > Core Electives II (Skill Courses)' },
-        { type: 'languageCap', max: 2, flag: 40, suis: 'VACD > Free Electives (language cap)' },
-    ],
+    // VACD is migrated to the requirement-groups model — its special rules are
+    // generated from req.groups + req.facultyReq (see graduationRulesFor), so it
+    // has no hard-listed entry here.
     DSA: [
         { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'DSA > Faculty Courses' },
         { type: 'facultyCount', pool: 'fens', min: 1, flag: 20, suis: 'DSA > Faculty Courses' },
@@ -745,10 +740,64 @@ function humRules(humRequired) {
     return [];
 }
 
-// The ordered rule list for a program: the shared university rules, the HUM rule
-// (from the program's humRequired), then the program's own rules.
-function graduationRulesFor(major, humRequired) {
-    return UNIVERSITY_RULES.concat(humRules(humRequired), PROGRAM_RULES[major] || []);
+// The faculty-course TICKER, generated from the program's scraped `facultyReq`.
+// Faculty-course-ness is a cross-cutting tag (`Faculty_Course`) a course carries
+// alongside its base type, so this is a plain count, not a base-inheriting group.
+// Emitted in a fixed order (first-unmet-wins) with the flag each threshold implies
+// — the message wording is threshold-specific (e.g. "3 FENS" is flag 16, "1 FENS"
+// is flag 20).
+const FACULTY_POOL_ORDER = ['total', 'math', 'fens', 'fass', 'sbs'];
+function facultyPoolFlag(pool, min) {
+    switch (pool) {
+        case 'total': return 14;
+        case 'math': return 19;
+        case 'fens': return min >= 3 ? 16 : 20;
+        case 'fass': return min >= 3 ? 15 : 21;
+        case 'sbs': return 22;
+        default: return 0;
+    }
+}
+function facultyRules(facultyReq) {
+    if (!facultyReq) return [];
+    const rules = [];
+    for (let i = 0; i < FACULTY_POOL_ORDER.length; i++) {
+        const pool = FACULTY_POOL_ORDER[i];
+        const min = facultyReq[pool];
+        if (min != null) rules.push({ type: 'facultyCount', pool, min, flag: facultyPoolFlag(pool, min), suis: 'Faculty Courses' });
+    }
+    if (facultyReq.areas != null) rules.push({ type: 'facultyAreas', min: facultyReq.areas, flag: 18, suis: 'Faculty Courses (areas)' });
+    return rules;
+}
+
+// Graduation rules generated from a program's `groups` (named subsets of a base
+// type). Each rule maps to a step-4 evaluator; a `base:'core'` credits group
+// measures core-effective credit (requireCore). Rule types are wired in as
+// programs migrate; an unknown one is skipped (the program's data is incomplete).
+function groupRules(groups) {
+    const out = [];
+    for (let i = 0; i < (groups ? groups.length : 0); i++) {
+        const g = groups[i];
+        if (g.rule === 'credits') {
+            out.push({ type: 'poolCreditSum', pool: g.members, requireCore: g.base === 'core', pairs: g.exclusivePairs, min: g.min, flag: g.flag, suis: g.suis });
+        } else if (g.rule === 'languageCap') {
+            out.push({ type: 'languageCap', max: g.max, flag: g.flag, suis: g.suis });
+        }
+    }
+    return out;
+}
+
+// The ordered rule list for a program. `req` is its requirements record. When it
+// carries the requirement-groups data (`groups`/`facultyReq`), the program's
+// special rules are GENERATED from that data; otherwise the app falls back to the
+// hard-listed PROGRAM_RULES entry (programs not yet migrated). Either way, prefixed
+// by the shared university rules and the HUM rule (from `humRequired`).
+function graduationRulesFor(major, req) {
+    const r = req || {};
+    const shared = UNIVERSITY_RULES.concat(humRules(r.humRequired));
+    if (r.groups || r.facultyReq) {
+        return shared.concat(facultyRules(r.facultyReq), groupRules(r.groups));
+    }
+    return shared.concat(PROGRAM_RULES[major] || []);
 }
 
 // Render the allocation result to the DOM: each course's `.course_type` label
@@ -1138,7 +1187,7 @@ function s_curriculum()
         // -- see PROGRAM_RULES -- evaluated in order, first unmet wins. The same
         // table drives the double-major pass (canGraduateDouble) via DM_FIELDS.
         const ctx = { curr: this, semesters: this.semesters, fields: MAIN_FIELDS, entryTerm: this.entryTerm };
-        return evaluateRules(ctx, graduationRulesFor(this.major, req.humRequired));
+        return evaluateRules(ctx, graduationRulesFor(this.major, req));
     }
 
     /**
@@ -1802,7 +1851,7 @@ function s_curriculum()
         // grown their own incomplete copies (non-CS missing SPS303/HUM, EE with
         // no faculty check, ECON without MATH212).
         const ctx = { curr: this, semesters: this.semesters, fields: DM_FIELDS, entryTerm: this.entryTermDM };
-        return evaluateRules(ctx, graduationRulesFor(this.doubleMajor, req.humRequired));
+        return evaluateRules(ctx, graduationRulesFor(this.doubleMajor, req));
     };
 
     // end of s_curriculum constructor
