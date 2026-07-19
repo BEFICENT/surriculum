@@ -10,7 +10,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { loadScriptGlobals } = require('./helpers/load-script');
 
-const { evaluateRules, sumPoolCredits } = loadScriptGlobals('scripts/s_curriculum.js');
+const { evaluateRules, sumPoolCredits, graduationRulesFor } = loadScriptGlobals('scripts/s_curriculum.js');
 
 const FIELDS = { effective: 'effective_type', category: 'category' };
 
@@ -119,4 +119,47 @@ test('evaluateRules returns the FIRST unmet flag (order matters)', () => {
   ];
   assert.equal(evaluateRules(ctx, rules), 4);
   assert.equal(evaluateRules(ctxOf([C('SPS303'), C('PROJ201'), C('MATH101')]), rules), 0, 'all met -> 0');
+});
+
+// The double-major pass and the main pass BOTH evaluate graduationRulesFor(major),
+// so the table's contents are the single source for both. These pin the specific
+// requirements the double-major pass used to be missing (its own incomplete
+// copies) — asserting them on the shared table proves both passes now enforce them.
+const ALL_MAJORS = ['CS', 'IE', 'EE', 'MAT', 'BIO', 'ME', 'ECON', 'MAN', 'PSIR', 'PSY', 'VACD', 'DSA'];
+const FASS_MAJORS = ['ECON', 'MAN', 'PSIR', 'PSY', 'VACD'];
+const flagsOf = (major) => graduationRulesFor(major).map((r) => r.flag);
+
+test('every program requires SPS303 (flag 11) — DM non-CS used to skip it', () => {
+  for (const m of ALL_MAJORS) {
+    assert.ok(flagsOf(m).includes(11), `${m} should require SPS303`);
+  }
+});
+
+test('FASS programs carry the two-level HUM rule (flags 12 AND 13)', () => {
+  for (const m of FASS_MAJORS) {
+    const f = flagsOf(m);
+    assert.ok(f.includes(12) && f.includes(13), `${m} should require a 2xx and a 3xx HUM`);
+  }
+  // The FENS single-HUM programs need only one (flag 12), never 13.
+  assert.ok(flagsOf('CS').includes(12) && !flagsOf('CS').includes(13), 'CS: one HUM only');
+});
+
+test('EE carries the faculty-course check (14/19/16) — EE-DM used to lack it', () => {
+  const f = flagsOf('EE');
+  for (const flag of [14, 19, 16]) assert.ok(f.includes(flag), `EE should carry flag ${flag}`);
+});
+
+test("ECON's mathematics requirement accepts MATH212 — ECON-DM used to omit it", () => {
+  const mathRule = graduationRulesFor('ECON').find((r) => r.flag === 25);
+  assert.ok(mathRule, 'ECON has a math requirement rule (25)');
+  assert.ok(mathRule.codes.includes('MATH212'), 'MATH212 satisfies the ECON math requirement');
+});
+
+test('every rule carries a SUIS citation', () => {
+  for (const m of ALL_MAJORS) {
+    for (const r of graduationRulesFor(m)) {
+      assert.equal(typeof r.suis, 'string', `${m} flag ${r.flag} needs a suis citation`);
+      assert.ok(r.suis.length > 0);
+    }
+  }
 });
