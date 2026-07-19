@@ -744,6 +744,80 @@ function graduationRulesFor(major) {
     return UNIVERSITY_RULES.concat(PROGRAM_RULES[major] || []);
 }
 
+// Render the allocation result to the DOM: each course's `.course_type` label
+// (single, or dual MAIN/DM parts for a double major) and each semester's
+// total-credit text. Reads ONLY the model the allocation sets (effective_type /
+// category / totalCredit), so it runs as a separate pass AFTER allocation rather
+// than being interleaved into it — the domain/UI split for the engine. No-ops
+// safely outside a browser. Pinned by allocation-render.spec.js.
+function renderAllocationLabels(curriculum) {
+    if (typeof document === 'undefined') return;
+    const isDouble = !!curriculum.doubleMajor;
+    const label = (v) => (String(v || '').toLowerCase() === 'none' ? 'N/A' : String(v || '').toUpperCase());
+    const movedDown = (base, eff) => {
+        const b = String(base || '').toLowerCase();
+        const e = String(eff || '').toLowerCase();
+        return !!(b && e && b !== e && e !== 'none');
+    };
+    const sems = curriculum.semesters || [];
+    for (let i = 0; i < sems.length; i++) {
+        const sem = sems[i];
+        const courses = sem.courses || [];
+        for (let j = 0; j < courses.length; j++) {
+            const course = courses[j];
+            if (!course || !course.id) continue;
+            let typeSpan = null;
+            try {
+                const elem = document.getElementById(course.id);
+                typeSpan = elem ? elem.querySelector('.course_type') : null;
+            } catch (_) {}
+            if (!typeSpan) continue;
+            if (isDouble && course.effective_type_dm) {
+                const mt = label(course.effective_type);
+                const dt = label(course.effective_type_dm);
+                const mainCls = movedDown(course.category, course.effective_type) ? 'is-overflow-type' : '';
+                const dmCls = movedDown(course.categoryDM, course.effective_type_dm) ? 'is-overflow-type' : '';
+                try {
+                    typeSpan.innerHTML =
+                        '<span class="course_type_part ct-main ' + mainCls + '">' + mt + '</span>' +
+                        '<span class="ct-sep"> / </span>' +
+                        '<span class="course_type_part ct-dm ' + dmCls + '">' + dt + '</span>';
+                } catch (_) {
+                    typeSpan.textContent = mt + ' / ' + dt;
+                }
+                // Dual labels colour per part, so clear any whole-span class.
+                try { typeSpan.classList.remove('is-overflow-type'); } catch (_) {}
+            } else {
+                // Single label. In double-major mode overflow is coloured per
+                // part, so the whole-span class is cleared (matches the old DM
+                // render); in single-major mode it toggles with the main overflow.
+                typeSpan.textContent = label(course.effective_type);
+                try {
+                    if (isDouble) typeSpan.classList.remove('is-overflow-type');
+                    else typeSpan.classList.toggle('is-overflow-type', movedDown(course.category, course.effective_type));
+                } catch (_) {}
+            }
+        }
+        // Per-semester total-credit text.
+        try {
+            const semElem = document.getElementById(sem.id);
+            let containerElem = semElem && semElem.closest ? semElem.closest('.container_semester') : null;
+            if (!containerElem && semElem) {
+                let parent = semElem.parentNode;
+                while (parent && !(parent.classList && parent.classList.contains('container_semester'))) {
+                    parent = parent.parentNode;
+                }
+                containerElem = parent;
+            }
+            const span = containerElem && containerElem.querySelector('.total_credit_text span');
+            if (span) {
+                span.innerHTML = 'Total: ' + sem.totalCredit + ' credits';
+                try { span.classList.toggle('is-overlimit', (sem.totalCredit || 0) > 20); } catch (_) {}
+            }
+        } catch (_) {}
+    }
+}
+
 // Reset and re-accumulate a program's per-semester category totals from the
 // courses' current effective types. The generic credit/science/engineering/ECTS
 // totals are owned by the main allocation loop and deliberately not touched.
@@ -1169,13 +1243,6 @@ function s_curriculum()
                 } catch (_) {}
                 if (gradeText === 'F') {
                     course.effective_type = 'none';
-                    try {
-                        const courseElem = document.getElementById(course.id);
-                        if (courseElem) {
-                            const typeElem = courseElem.querySelector('.course_type');
-                            if (typeElem) typeElem.textContent = 'N/A';
-                        }
-                    } catch (_) {}
                     continue;
                 }
                 // Excluded alternative (SUIS rule): counts toward no pool, and
@@ -1183,11 +1250,6 @@ function s_curriculum()
                 // any of the totals below are touched.
                 if (excludedFromDegree.has(course)) {
                     course.effective_type = 'none';
-                    try {
-                        const courseElem = document.getElementById(course.id);
-                        const typeElem = courseElem ? courseElem.querySelector('.course_type') : null;
-                        if (typeElem) typeElem.textContent = 'N/A';
-                    } catch (_) {}
                     continue;
                 }
                 // Attempt to find course information in the primary major's
@@ -1291,16 +1353,6 @@ function s_curriculum()
                     course.ECTS = ectsVal;
                     course.Faculty_Course = (dmInfo && dmInfo['Faculty_Course']) ? dmInfo['Faculty_Course'] : (course.Faculty_Course || 'No');
                     course.Faculty = (dmInfo && dmInfo['Faculty']) ? dmInfo['Faculty'] : (course.Faculty || '');
-                    // Update DOM label to N/A
-                    try {
-                        const courseElem = document.getElementById(course.id);
-                        if (courseElem) {
-                            const typeElem = courseElem.querySelector('.course_type');
-                            if (typeElem) {
-                                typeElem.textContent = 'N/A';
-                            }
-                        }
-                    } catch (_) {}
                     continue;
                 }
                 // Use information from the main major catalog
@@ -1322,11 +1374,6 @@ function s_curriculum()
                 // scientists and engineers — for the non-engineering majors.
                 if (staticType === 'unknown') {
                     course.effective_type = 'none';
-                    try {
-                        const courseElem = document.getElementById(course.id);
-                        const typeElem = courseElem ? courseElem.querySelector('.course_type') : null;
-                        if (typeElem) typeElem.textContent = 'N/A';
-                    } catch (_) {}
                     continue;
                 }
                 credit = (typeof parseCreditValue === 'function')
@@ -1382,30 +1429,8 @@ function s_curriculum()
                 } else if (effectiveType === 'required') {
                     sem.totalRequired += credit;
                 }
-
-                // Update the course type displayed in the DOM if possible. The
-                // course element has id equal to course.id (e.g., 'c3'). It
-                // contains a child with class 'course_type' that shows the
-                // static type. We update its text content to reflect the
-                // effective type. If the element does not exist (e.g., during
-                // server-side tests), this call will silently fail.
-                try {
-                    const courseElem = document.getElementById(course.id);
-                    if (courseElem) {
-                        const typeElem = courseElem.querySelector('.course_type');
-                        if (typeElem) {
-                            typeElem.textContent = effectiveType.toUpperCase();
-                            try {
-                                const base = (staticType || '').toLowerCase();
-                                const eff = (effectiveType || '').toLowerCase();
-                                const movedDown = !!(base && eff && base !== eff && eff !== 'none');
-                                typeElem.classList.toggle('is-overflow-type', movedDown);
-                            } catch (_) {}
-                        }
-                    }
-                } catch (err) {
-                    // Ignore DOM errors in non-browser contexts
-                }
+                // The DOM label for this course is written by renderAllocationLabels
+                // after allocation, from course.effective_type — not here.
             }
         }
 
@@ -1441,76 +1466,22 @@ function s_curriculum()
         if (this.major === 'MAN') {
             applyManDiversity(sortedSemesters, this.semesters, MAIN_FIELDS, reqCore, reqArea);
 
-            // Update DOM type label for MAN elective normalization (skip if not present).
-            try {
-                for (let i = 0; i < this.semesters.length; i++) {
-                    const sem = this.semesters[i];
-                    for (let j = 0; j < sem.courses.length; j++) {
-                        const course = sem.courses[j];
-                        if (!course || !course.id) continue;
-                        const courseElem = document.getElementById(course.id);
-                        if (!courseElem) continue;
-                        const typeElem = courseElem.querySelector('.course_type');
-                        if (typeElem && course.effective_type) {
-                            typeElem.textContent = course.effective_type.toUpperCase();
-                            try {
-                                const base = (course.category || '').toString().toLowerCase();
-                                const eff = (course.effective_type || '').toString().toLowerCase();
-                                const movedDown = !!(base && eff && base !== eff && eff !== 'none');
-                                typeElem.classList.toggle('is-overflow-type', movedDown);
-                            } catch (_) {}
-                        }
-                    }
-                }
-            } catch (_) {}
-        }
-        // After reallocation, update the displayed total credits for each
-        // semester in the user interface. Each semester element has an id
-        // (e.g., 's1') and resides within a container with class
-        // 'container_semester' which contains a span showing the total.
-        try {
-            for (let i = 0; i < this.semesters.length; i++) {
-                const sem = this.semesters[i];
-                const semElem = document.getElementById(sem.id);
-                if (semElem) {
-                    // Traverse up to the nearest container_semester
-                    let containerElem = semElem.closest && semElem.closest('.container_semester');
-                    if (!containerElem) {
-                        // Fallback manual traversal if closest isn't available
-                        let parent = semElem.parentNode;
-                        while (parent && !parent.classList.contains('container_semester')) {
-                            parent = parent.parentNode;
-                        }
-                        containerElem = parent;
-                    }
-                    if (containerElem) {
-                        const span = containerElem.querySelector('.total_credit_text span');
-                        if (span) {
-                            span.innerHTML = 'Total: ' + sem.totalCredit + ' credits';
-                            try {
-                                span.classList.toggle('is-overlimit', (sem.totalCredit || 0) > 20);
-                            } catch (_) {}
-                        }
-                    }
-                }
-            }
-        } catch (err) {
-            // Ignore DOM errors in non-browser contexts
         }
 
-        // If a double major is active on this curriculum, trigger
-        // recalculation of effective types for the second major using
-        // whatever course data array has been stored on the
-        // curriculum instance.  This ensures that DM categories are
-        // updated whenever the primary allocation runs (e.g., after
-        // adding or removing courses/semesters).
+        // Recalculate the double major's effective types too, if active, so its
+        // categories stay in sync whenever the primary allocation runs. That pass
+        // renders the (dual) labels itself; a single major renders here. Rendering
+        // is a separate pass over the model — see renderAllocationLabels.
+        let renderedByDouble = false;
         try {
             if (this.doubleMajor && Array.isArray(this.doubleMajorCourseData)) {
                 this.recalcEffectiveTypesDouble(this.doubleMajorCourseData);
+                renderedByDouble = true;
             }
         } catch (ex) {
             // ignore errors if DM recalc fails
         }
+        if (!renderedByDouble) renderAllocationLabels(this);
 
         // After DM recalculation, update the course selection datalist to
         // include any DM-only courses.  This requires a global helper
@@ -1745,54 +1716,8 @@ function s_curriculum()
         // BEFORE the allocation cascade above (see the pre-cascade block), exactly
         // like the main-major pass. The old post-cascade block that lived here
         // stranded non-pool core courses in a pool-first order (bug #21); removed.
-        // Update DOM to show both primary and double major types
-        try {
-            for (let i = 0; i < this.semesters.length; i++) {
-                const sem = this.semesters[i];
-                for (let j = 0; j < sem.courses.length; j++) {
-                    const course = sem.courses[j];
-                    if (!course || !course.id) continue;
-                    const elem = document.getElementById(course.id);
-                    if (!elem) continue;
-                    const typeSpan = elem.querySelector('.course_type');
-                    if (!typeSpan) continue;
-                    const mainType = course.effective_type || (typeSpan.textContent && typeSpan.textContent.trim().toLowerCase());
-                    const dmTypeLabel = course.effective_type_dm;
-                    if (this.doubleMajor && dmTypeLabel) {
-                        // Compose both types, capitalize each
-                        const mt = (mainType === 'none' ? 'N/A' : (mainType || '').toString().toUpperCase());
-                        const dt = (dmTypeLabel === 'none' ? 'N/A' : dmTypeLabel.toUpperCase());
-                        try {
-                            const baseMain = (course.category || '').toString().toLowerCase();
-                            const effMain = (course.effective_type || '').toString().toLowerCase();
-                            const movedDownMain = !!(baseMain && effMain && baseMain !== effMain && effMain !== 'none');
-                            const baseDM = (course.categoryDM || '').toString().toLowerCase();
-                            const effDM = (course.effective_type_dm || '').toString().toLowerCase();
-                            const movedDownDM = !!(baseDM && effDM && baseDM !== effDM && effDM !== 'none');
-
-                            const mainCls = movedDownMain ? 'is-overflow-type' : '';
-                            const dmCls = movedDownDM ? 'is-overflow-type' : '';
-                            // Types are controlled values (CORE/AREA/FREE/etc.). Render as spans so
-                            // overflow coloring can be applied per-major independently.
-                            typeSpan.innerHTML =
-                                `<span class="course_type_part ct-main ${mainCls}">${mt}</span>` +
-                                `<span class="ct-sep"> / </span>` +
-                                `<span class="course_type_part ct-dm ${dmCls}">${dt}</span>`;
-                        } catch (_) {
-                            typeSpan.textContent = mt + ' / ' + dt;
-                        }
-                    } else {
-                        // Only main type
-                        typeSpan.textContent = (mainType === 'none' ? 'N/A' : (mainType || '').toString().toUpperCase());
-                    }
-                    // When showing combined main/DM types we color per-part; do not
-                    // apply a single overflow class to the whole label.
-                    try { typeSpan.classList.remove('is-overflow-type'); } catch (_) {}
-                }
-            }
-        } catch (err) {
-            // Ignore DOM errors
-        }
+        // Render the (dual main/DM) labels + total credits from the model.
+        renderAllocationLabels(this);
     };
 
     /**
