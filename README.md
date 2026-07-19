@@ -191,6 +191,15 @@ Scrape course pages for metadata (including Basic Science/Engineering credit bre
 python scrape_coursepages.py
 ```
 
+Regenerate the data manifest after **any** data update (no network requests). It
+writes `data/manifest.json`, whose content-derived `dataVersion` keys the app's
+service-worker cache — so returning users automatically pick up changed data, with
+no manual cache bump:
+
+```bash
+python build_manifest.py
+```
+
 Update schedule data from the current term onward:
 
 ```bash

@@ -1,7 +1,30 @@
 {
-  "//": "Manifest for the scraped data bundle (courses/, requirements/, and the schedule files). This is currently a HAND-AUTHORED BOOTSTRAP. The scraper (fetch_*.py) is intended to OWN and regenerate this file on each run — bumping dataVersion and, later, recording per-term content hashes under `terms` — so a re-scrape becomes visible to the app (and to the service-worker cache key) automatically instead of silently. Until the scraper is taught to write it, bump dataVersion by hand when the data under courses/ or requirements/ changes.",
-  "dataVersion": "2026-07-18",
-  "generatedAt": "2026-07-18",
-  "generatedBy": "bootstrap (hand-authored; scraper will regenerate)",
-  "terms": {}
+  "dataVersion": "6f8c80299354ac41",
+  "generatedAt": "2026-07-19T13:35:57Z",
+  "generatedBy": "build_manifest.py",
+  "terms": {
+    "201901": "783c5b87f0bea198",
+    "201902": "72b597a4579a3feb",
+    "201903": "5b6dae0dabb163ec",
+    "202001": "094a5fa8b4c48e7a",
+    "202002": "daad2d7e2eb20fda",
+    "202003": "76b72e790d2848d7",
+    "202101": "e768db01857628da",
+    "202102": "ec6968a281a8d443",
+    "202103": "3fe472d7add2c151",
+    "202201": "e34e7f9324badf87",
+    "202202": "5782f55b868e864e",
+    "202203": "b503e91fb29b0b6f",
+    "202301": "e85a27e396d1f247",
+    "202302": "5df682cd8bcb4d9d",
+    "202303": "0fa48ba30042ad7d",
+    "202401": "6f36bd4db955e7e8",
+    "202402": "a9a77aa908f5fa5e",
+    "202403": "862d74dd2278593e",
+    "202501": "ea414b96d72c3a46",
+    "202502": "2049fc7d306d3ba8",
+    "202503": "cc268a561c730453",
+    "202601": "ff88cbf914216e6c",
+    "202602": "03f267ee93d5dfdf"
+  }
 }
