@@ -146,6 +146,55 @@ def hum_required(major, university):
     return 1 if major == "CS" else 0
 
 
+# Hand-authored special-requirement data, materializing the constants currently in
+# the app (s_curriculum.js) as scraped data. See docs/requirement-groups-design.md.
+# Phase-1 target: VACD only. Until the scraper learns to parse these off SUIS, they
+# are hand-authored here.
+#   groups     — named SUBSETS of a base type (a course is `core` AND in Core-I).
+#                Evaluated as a graduation check; `base` drives cascade inheritance.
+#   facultyReq — the CROSS-CUTTING faculty-course ticker minimums (a course carries
+#                the `Faculty_Course` tag alongside its base type), kept simple.
+PROGRAM_GROUPS = {
+    "VACD": [
+        {
+            "id": "core_arthistory",
+            "label": "Core Electives I — Art/Design History",
+            "base": "core", "rule": "credits", "min": 9,
+            "members": ["HART292", "HART293", "HART380", "HART413", "HART426", "VA315", "VA420", "VA430"],
+            "flag": 30, "suis": "VACD > Core Electives I (Art/Design History)",
+        },
+        {
+            "id": "core_skill",
+            "label": "Core Electives II — Skill",
+            "base": "core", "rule": "credits", "min": 12,
+            "members": ["VA202", "VA204", "VA234", "VA302", "VA304", "VA402", "VA404"],
+            "exclusivePairs": [["VA302", "VA304"], ["VA402", "VA404"]],
+            "flag": 31, "suis": "VACD > Core Electives II (Skill Courses)",
+        },
+        {
+            "id": "lang_cap",
+            "label": "Free Electives — beginning/basic language cap",
+            "base": "free", "rule": "languageCap", "max": 2,
+            "flag": 40, "suis": "VACD > Free Electives (language cap)",
+        },
+    ],
+}
+PROGRAM_FACULTY_REQ = {
+    "VACD": {"total": 5, "fass": 3, "areas": 3},
+}
+
+
+def special_requirements(major):
+    """Groups + faculty ticker to merge into a program's requirements record
+    (phase-1: VACD only; empty for programs not yet migrated)."""
+    out = {}
+    if major in PROGRAM_GROUPS:
+        out["groups"] = PROGRAM_GROUPS[major]
+    if major in PROGRAM_FACULTY_REQ:
+        out["facultyReq"] = PROGRAM_FACULTY_REQ[major]
+    return out
+
+
 def main():
     parser = argparse.ArgumentParser(description="Fetch and regenerate graduation requirement summaries.")
     parser.add_argument("--timeout", type=float, default=30.0, help="HTTP timeout in seconds.")
@@ -178,6 +227,7 @@ def main():
                 data = {}
             if data:
                 data['humRequired'] = hum_required(major, data.get('university'))
+                data.update(special_requirements(major))
                 out[major] = data
         if out:
             with open(os.path.join(REQUIREMENTS_DIR, f'{term}.jsonl'), 'w', encoding='utf-8') as f:
