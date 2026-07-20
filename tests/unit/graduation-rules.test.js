@@ -185,12 +185,12 @@ test('facultyRules generates the ticker in order, with threshold-specific flags'
 
 test('groupRules maps credits (with base/pairs) and languageCap groups to evaluators', () => {
   const rules = groupRules([
-    { rule: 'credits', base: 'core', min: 9, members: ['A', 'B'], flag: 30, suis: 's' },
-    { rule: 'credits', base: 'core', min: 12, members: ['C'], exclusivePairs: [['C', 'D']], flag: 31, suis: 's' },
+    { rule: 'credits', base: 'core', requireBase: true, min: 9, members: ['A', 'B'], flag: 30, suis: 's' },
+    { rule: 'credits', base: 'core', requireBase: true, min: 12, members: ['C'], exclusivePairs: [['C', 'D']], flag: 31, suis: 's' },
     { rule: 'languageCap', base: 'free', max: 2, flag: 40, suis: 's' },
   ]);
   assert.equal(rules[0].type, 'poolCreditSum');
-  assert.equal(rules[0].requireCore, true, 'base:core -> requireCore');
+  assert.equal(rules[0].requireCore, true, 'requireBase -> requireCore');
   assert.deepEqual(rules[0].pool, ['A', 'B']);
   assert.equal(rules[0].min, 9);
   assert.equal(rules[0].flag, 30);
@@ -212,7 +212,10 @@ test('graduationRulesFor uses groups+facultyReq when present, PROGRAM_RULES othe
   };
   assert.deepEqual([...graduationRulesFor('VACD', vacdReq).map((r) => r.flag)],
     [11, 12, 13, 14, 15, 18, 30, 31, 40]);
-  // A program with no groups data falls back to its PROGRAM_RULES entry.
-  const cs = [...graduationRulesFor('CS', { humRequired: 1 }).map((r) => r.flag)];
-  assert.ok(cs.includes(11) && cs.includes(12) && cs.includes(14) && cs.includes(16));
+  // A faculty-ticker-only program (CS) generates just the ticker from facultyReq.
+  const cs = [...graduationRulesFor('CS', { humRequired: 1, facultyReq: { total: 5, math: 2, fens: 3 } }).map((r) => r.flag)];
+  assert.deepEqual(cs, [11, 12, 14, 19, 16]);
+  // A program with no groups/facultyReq data still falls back to PROGRAM_RULES.
+  const econ = [...graduationRulesFor('ECON', { humRequired: 2 }).map((r) => r.flag)];
+  assert.ok(econ.includes(25) && econ.includes(14), 'ECON still from PROGRAM_RULES');
 });

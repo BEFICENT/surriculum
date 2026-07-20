@@ -645,32 +645,14 @@ const UNIVERSITY_RULES = [
 // they differ by program: the FASS programs need one 2XX then one 3XX (flags
 // 12 then 13); CS needs any single HUM (12); the FENS programs state none.
 const PROGRAM_RULES = {
-    CS: [
-        { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'CS > Faculty Courses' },
-        { type: 'facultyCount', pool: 'math', min: 2, flag: 19, suis: 'CS > Faculty Courses' },
-        { type: 'facultyCount', pool: 'fens', min: 3, flag: 16, suis: 'CS > Faculty Courses' },
-    ],
-    IE: [
-        { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'IE > Faculty Courses' },
-        { type: 'facultyCount', pool: 'math', min: 2, flag: 19, suis: 'IE > Faculty Courses' },
-        { type: 'facultyCount', pool: 'fens', min: 3, flag: 16, suis: 'IE > Faculty Courses' },
-    ],
+    // CS/IE/MAT/BIO are migrated to the requirement-groups model — faculty-ticker
+    // only (req.facultyReq), no groups — so they have no hard-listed entry here.
     EE: [
         { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'EE > Faculty Courses' },
         { type: 'facultyCount', pool: 'math', min: 2, flag: 19, suis: 'EE > Faculty Courses' },
         { type: 'facultyCount', pool: 'fens', min: 3, flag: 16, suis: 'EE > Faculty Courses' },
         { type: 'levelCreditSum', prefix: 'EE4', category: 'Core', min: 9, flag: 23, suis: 'EE > 400-level EE requirement' },
         { type: 'specialCourseAny', codes: EE_SPECIAL_AREA_CODES, altPrefix: 'EE48', altCategory: 'Area', flag: 24, suis: 'EE > Area electives (special topics)' },
-    ],
-    MAT: [
-        { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'MAT > Faculty Courses' },
-        { type: 'facultyCount', pool: 'math', min: 2, flag: 19, suis: 'MAT > Faculty Courses' },
-        { type: 'facultyCount', pool: 'fens', min: 3, flag: 16, suis: 'MAT > Faculty Courses' },
-    ],
-    BIO: [
-        { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'BIO > Faculty Courses' },
-        { type: 'facultyCount', pool: 'math', min: 2, flag: 19, suis: 'BIO > Faculty Courses' },
-        { type: 'facultyCount', pool: 'fens', min: 3, flag: 16, suis: 'BIO > Faculty Courses' },
     ],
     ME: [
         { type: 'entryGatedHasAny', minTerm: 202501, codes: ['CS404', 'CS412'], flag: 2, suis: 'ME > 2025 curriculum (CS404/CS412)' },
@@ -778,7 +760,7 @@ function groupRules(groups) {
     for (let i = 0; i < (groups ? groups.length : 0); i++) {
         const g = groups[i];
         if (g.rule === 'credits') {
-            out.push({ type: 'poolCreditSum', pool: g.members, requireCore: g.base === 'core', pairs: g.exclusivePairs, min: g.min, flag: g.flag, suis: g.suis });
+            out.push({ type: 'poolCreditSum', pool: g.members, requireCore: !!g.requireBase, pairs: g.exclusivePairs, min: g.min, flag: g.flag, suis: g.suis });
         } else if (g.rule === 'languageCap') {
             out.push({ type: 'languageCap', max: g.max, flag: g.flag, suis: g.suis });
         }

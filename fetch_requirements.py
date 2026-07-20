@@ -154,19 +154,27 @@ def hum_required(major, university):
 #                Evaluated as a graduation check; `base` drives cascade inheritance.
 #   facultyReq — the CROSS-CUTTING faculty-course ticker minimums (a course carries
 #                the `Faculty_Course` tag alongside its base type), kept simple.
+# Group fields:
+#   base        — the base course type the group is a subset of (cascade/display).
+#   overflowTo  — where credits beyond `min` go, scraped from the SUIS sentence
+#                 "The extra courses taken from this pool are directly counted
+#                 towards [X] requirements." (metadata for now; the cascade is
+#                 unchanged — see docs/requirement-groups-design.md §11.)
+#   requireBase — whether the graduation measure counts only base-effective credit
+#                 (VACD's pools do; preserves current per-program behavior).
 PROGRAM_GROUPS = {
     "VACD": [
         {
             "id": "core_arthistory",
             "label": "Core Electives I — Art/Design History",
-            "base": "core", "rule": "credits", "min": 9,
+            "base": "core", "overflowTo": "area", "rule": "credits", "min": 9, "requireBase": True,
             "members": ["HART292", "HART293", "HART380", "HART413", "HART426", "VA315", "VA420", "VA430"],
             "flag": 30, "suis": "VACD > Core Electives I (Art/Design History)",
         },
         {
             "id": "core_skill",
             "label": "Core Electives II — Skill",
-            "base": "core", "rule": "credits", "min": 12,
+            "base": "core", "overflowTo": "area", "rule": "credits", "min": 12, "requireBase": True,
             "members": ["VA202", "VA204", "VA234", "VA302", "VA304", "VA402", "VA404"],
             "exclusivePairs": [["VA302", "VA304"], ["VA402", "VA404"]],
             "flag": 31, "suis": "VACD > Core Electives II (Skill Courses)",
@@ -181,6 +189,11 @@ PROGRAM_GROUPS = {
 }
 PROGRAM_FACULTY_REQ = {
     "VACD": {"total": 5, "fass": 3, "areas": 3},
+    # FENS programs with no group requirements — the faculty ticker only.
+    "CS": {"total": 5, "math": 2, "fens": 3},
+    "IE": {"total": 5, "math": 2, "fens": 3},
+    "MAT": {"total": 5, "math": 2, "fens": 3},
+    "BIO": {"total": 5, "math": 2, "fens": 3},
 }
 
 
