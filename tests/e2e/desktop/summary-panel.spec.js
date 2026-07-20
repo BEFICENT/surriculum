@@ -166,6 +166,45 @@ test.describe('summary panel', () => {
     await expect(overlay.locator('.summary_cards_row'), 'back should restore the overview').not.toHaveClass(/is-hidden/);
   });
 
+  test('the detailed summary shows per-group progress that agrees with the engine (VACD)', async ({ page }) => {
+    // Phase 4: programs with requirement groups get a "Special requirements"
+    // section in the detailed view. It must show the SAME numbers the graduation
+    // engine measures (requirementGroupProgress) — the drift guard, applied to
+    // the group model this time.
+    await seedPlan(page, {
+      major: 'VACD',
+      entryTerm: TERM_NAME,
+      curriculum: [['HART292', 'HART293', 'VA202', 'VA204', 'ECON201']],
+      grades: [['A', 'A', 'A', 'A', 'A']],
+      dates: [TERM_NAME],
+    });
+    const overlay = await openSummary(page);
+    await overlay.locator('.summary_detail_btn').first().click();
+
+    const section = overlay.locator('.ms-groups-section');
+    await expect(section, 'VACD carries groups, so the section renders').toBeVisible();
+    await expect(section.locator('.ms-header .ms-title')).toHaveText('SPECIAL REQUIREMENTS');
+
+    // What the student reads on each group row...
+    const rendered = await section.locator('.ms-group').evaluateAll((els) => els.map((g) => ({
+      label: g.querySelector('.ms-group-label').textContent,
+      nums: g.querySelector('.ms-group-nums').textContent,
+      met: g.classList.contains('is-met'),
+    })));
+    // ...must equal the engine's own group progress, row for row and in order.
+    const engine = await page.evaluate(() => window.curriculum.requirementGroupProgress('main').map((g) => ({
+      label: g.label, nums: `${g.current}/${g.target}`, met: !!g.ok,
+    })));
+    expect(rendered, 'the summary must not derive its own group numbers').toEqual(engine);
+
+    // A concrete anchor: the art/design-history pool measures base-effective SU,
+    // so HART292 + HART293 = 6 of the 9 required.
+    const art = rendered.find((r) => r.label === 'Art/Design History');
+    expect(art, 'the art/design history pool row is present').toBeTruthy();
+    expect(art.nums).toBe('6/9');
+    expect(art.met, '6 < 9 is not met').toBe(false);
+  });
+
   test('a double major renders a second card with its own limits', async ({ page }) => {
     await seedPlan(page, {
       major: 'CS',

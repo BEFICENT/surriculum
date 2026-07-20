@@ -741,6 +741,153 @@ function groupRules(groups, facultyReq) {
     return out;
 }
 
+// ---- Requirement-group PROGRESS (summary UI) --------------------------------
+// The graduation check only needs "met / first-unmet flag". The Summary panel
+// wants the numbers behind each rule ("Core I: 6/9 SU"), so groupProgressFor
+// measures the SAME quantity each evaluator compares, and reports it as an
+// ordered list of progress rows. It mirrors groupRules one-for-one so the two can
+// never disagree about what a group means; `ok` is derived from the same compare
+// (>= min, or <= max for a cap).
+
+const FACULTY_POOL_LABELS = {
+    total: 'Faculty courses',
+    math: 'MATH faculty courses',
+    fens: 'FENS faculty courses',
+    fass: 'FASS faculty courses',
+    sbs: 'SBS faculty courses',
+};
+
+// Progress rows for the faculty-course ticker, mirroring facultyRules' order.
+function facultyProgress(ctx, facultyReq) {
+    if (!facultyReq) return [];
+    const tally = tallyFacultyCourses(ctx.semesters, ctx.fields.effective);
+    const rows = [];
+    for (let i = 0; i < FACULTY_POOL_ORDER.length; i++) {
+        const pool = FACULTY_POOL_ORDER[i];
+        const min = facultyReq[pool];
+        if (min == null) continue;
+        const current = tally[pool] || 0;
+        rows.push({ id: 'faculty_' + pool, label: FACULTY_POOL_LABELS[pool] || pool,
+            suis: 'Faculty Courses', current, target: min, unit: 'course', ok: current >= min });
+    }
+    if (facultyReq.areas != null) {
+        const current = tallyFacultyAreas(ctx.semesters, ctx.fields.effective).size;
+        rows.push({ id: 'faculty_areas', label: 'Faculty-course areas', suis: 'Faculty Courses (areas)',
+            current, target: facultyReq.areas, unit: 'area', ok: current >= facultyReq.areas });
+    }
+    return rows;
+}
+
+// Per-group progress rows for a program's ordered `groups` list (the faculty
+// marker expands to facultyProgress at its position). Each row:
+//   { id, label, suis, base, current, target, unit, ok, isCap?, note? }
+// A boolean group ("one of …") reports current 0/1 against target 1.
+function groupProgressFor(ctx, groups, facultyReq) {
+    const out = [];
+    const fields = ctx.fields;
+    const catField = fields.category;
+    for (let i = 0; i < (groups ? groups.length : 0); i++) {
+        const g = groups[i];
+        const base = { id: g.id, label: g.label, suis: g.suis, base: g.base };
+        switch (g.rule) {
+            case 'faculty':
+                Array.prototype.push.apply(out, facultyProgress(ctx, facultyReq));
+                break;
+            case 'credits': {
+                const current = sumPoolCredits(ctx.semesters, g.members, {
+                    effField: fields.effective, catField, requireCore: !!g.requireBase, pairs: g.exclusivePairs });
+                out.push({ ...base, current, target: g.min, unit: 'SU', ok: current >= g.min });
+                break;
+            }
+            case 'oneOf': {
+                const current = ctx.curr.hasAnyCourse(g.members) ? 1 : 0;
+                out.push({ ...base, current, target: 1, unit: 'course', ok: current >= 1 });
+                break;
+            }
+            case 'entryGatedOneOf': {
+                const entry = parseInt(ctx.entryTerm || '0', 10);
+                if (isNaN(entry) || entry < g.minTerm) {
+                    out.push({ ...base, current: 1, target: 1, unit: 'course', ok: true,
+                        note: 'Not required for your admit term' });
+                } else {
+                    const current = ctx.curr.hasAnyCourse(g.members) ? 1 : 0;
+                    out.push({ ...base, current, target: 1, unit: 'course', ok: current >= 1 });
+                }
+                break;
+            }
+            case 'levelCredits': {
+                let sum = 0;
+                forEachCourse(ctx.semesters, (course) => {
+                    if (String(course.code || '').startsWith(g.prefix) && course[catField] === g.category) {
+                        sum += creditOfCourse(course);
+                    }
+                });
+                out.push({ ...base, current: sum, target: g.min, unit: 'SU', ok: sum >= g.min });
+                break;
+            }
+            case 'specialAny': {
+                let found = false;
+                forEachCourse(ctx.semesters, (course) => {
+                    if (found) return;
+                    const code = String(course.code || '');
+                    if (g.members && g.members.includes(course.code)) found = true;
+                    else if (g.altPrefix && code.startsWith(g.altPrefix) && course[catField] === g.altCategory) found = true;
+                });
+                out.push({ ...base, current: found ? 1 : 0, target: 1, unit: 'course', ok: found });
+                break;
+            }
+            case 'prefixSpan': {
+                const seen = new Set();
+                forEachCourse(ctx.semesters, (course) => {
+                    if (effectiveCategory(course, fields) !== g.category) return;
+                    const code = String(course.code || '');
+                    for (let k = 0; k < g.prefixes.length; k++) {
+                        if (code.startsWith(g.prefixes[k])) { seen.add(g.prefixes[k]); break; }
+                    }
+                });
+                out.push({ ...base, current: seen.size, target: g.min, unit: 'area', ok: seen.size >= g.min });
+                break;
+            }
+            case 'offeringCredits': {
+                let sum = 0;
+                forEachCourse(ctx.semesters, (course) => {
+                    if (String(course[fields.effective] || '').toLowerCase() === 'free'
+                        && g.faculties.includes(course.Faculty)) {
+                        sum += creditOfCourse(course);
+                    }
+                });
+                out.push({ ...base, current: sum, target: g.min, unit: 'SU', ok: sum >= g.min });
+                break;
+            }
+            case 'offeringCount': {
+                let n = 0;
+                forEachCourse(ctx.semesters, (course) => {
+                    if (course[catField] === 'Core' && course.Faculty === g.faculty) n++;
+                });
+                out.push({ ...base, current: n, target: g.min, unit: 'course', ok: n >= g.min });
+                break;
+            }
+            case 'advancedCount': {
+                let n = 0;
+                forEachCourse(ctx.semesters, (course) => {
+                    if (String(course[fields.effective] || '').toLowerCase() === 'area'
+                        && isPsyAdvancedCode(course.code)) n++;
+                });
+                out.push({ ...base, current: n, target: g.min, unit: 'course', ok: n >= g.min });
+                break;
+            }
+            case 'languageCap': {
+                const current = countBasicLanguageInFree(ctx.semesters, fields.effective);
+                out.push({ ...base, current, target: g.max, unit: 'course', isCap: true, ok: current <= g.max });
+                break;
+            }
+            default:
+                break;
+        }
+    }
+    return out;
+}
+
 // The ordered rule list for a program. `req` is its requirements record. When it
 // carries the requirement-groups data, the special rules are GENERATED from it:
 // `groups` (ordered, with the faculty marker) drives programs with special
@@ -1091,6 +1238,26 @@ function s_curriculum()
         }
         return false;
     }
+
+    // Per-requirement-group progress for the Summary panel (Phase 4). Returns an
+    // ordered list of progress rows for the given pass ('dm' → double major, else
+    // the main major) — the same groups graduationRulesFor evaluates, measured as
+    // current/target so the UI can show "Core I: 6/9 SU". Empty for programs with
+    // no requirement-groups data. Reads the effective types the allocation set, so
+    // call it after recalcEffectiveTypes(Double).
+    this.requirementGroupProgress = function(view) {
+        const isDM = view === 'dm';
+        const major = isDM ? this.doubleMajor : this.major;
+        if (!major) return [];
+        const term = isDM ? this.entryTermDM : this.entryTerm;
+        const req = getReq(major, term) || {};
+        const fields = isDM ? DM_FIELDS : MAIN_FIELDS;
+        const ctx = { curr: this, semesters: this.semesters, fields, entryTerm: term };
+        if (req.groups) return groupProgressFor(ctx, req.groups, req.facultyReq);
+        if (req.facultyReq) return facultyProgress(ctx, req.facultyReq);
+        return [];
+    };
+
     this.canGraduate = function()
     {
         let area = 0;

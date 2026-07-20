@@ -1084,6 +1084,59 @@ function displaySummary(curriculum, major_chosen_by_user) {
             <div class="ms-legend-item"><span class="ms-dot ms-dot-gray"></span>Not taken</div>
           </div>`;
 
+        // Special requirements (requirement-groups model): each program's scraped
+        // pools / tickers, shown as current/target progress. Empty for programs
+        // that carry no groups (the section is simply omitted).
+        let groupRows = [];
+        try {
+            if (typeof curriculum.requirementGroupProgress === 'function') {
+                groupRows = curriculum.requirementGroupProgress(view) || [];
+            }
+        } catch (_) { groupRows = []; }
+
+        const unitLabel = (unit, n) => {
+            if (unit === 'SU') return 'SU';
+            if (unit === 'area') return n === 1 ? 'area' : 'areas';
+            return n === 1 ? 'course' : 'courses';
+        };
+        const renderGroupRow = (g) => {
+            const target = Number(g.target) || 0;
+            const current = Number(g.current) || 0;
+            const isCap = !!g.isCap;
+            const ok = !!g.ok;
+            const ratio = target > 0 ? Math.max(0, Math.min(1, current / target)) : (ok ? 1 : 0);
+            const stateClass = ok ? 'is-met' : (isCap ? 'is-over' : 'is-unmet');
+            const badge = isCap ? (ok ? 'OK' : 'Over limit') : (ok ? 'Met' : 'Not met');
+            const capNote = isCap ? ' (max)' : '';
+            const suis = g.suis ? `<div class="ms-group-suis">${esc(g.suis)}</div>` : '';
+            const note = g.note ? `<div class="ms-group-suis">${esc(g.note)}</div>` : '';
+            return `
+              <div class="ms-group ${stateClass}">
+                <div class="ms-group-top">
+                  <div class="ms-group-labels">
+                    <div class="ms-group-label">${esc(g.label || g.id || '')}</div>
+                    ${suis}${note}
+                  </div>
+                  <div class="ms-group-count">
+                    <span class="ms-group-nums">${esc(String(current))}/${esc(String(target))}</span>
+                    <span class="ms-group-unit">${esc(unitLabel(g.unit, target))}${capNote}</span>
+                    <span class="ms-group-badge">${esc(badge)}</span>
+                  </div>
+                </div>
+                <div class="ms-group-bar"><span class="ms-group-fill" style="width:${Math.round(ratio * 100)}%"></span></div>
+              </div>
+            `;
+        };
+
+        if (groupRows.length) {
+            const metCount = groupRows.filter(g => g.ok).length;
+            body += `<div class="ms-section ms-groups-section">`;
+            body += `<div class="ms-header"><div class="ms-title">SPECIAL REQUIREMENTS</div><div class="ms-req">${metCount}/${groupRows.length} met</div></div>`;
+            body += `<div class="ms-rules">Program-specific pools and faculty-course tickers from your SUIS degree page.</div>`;
+            body += `<div class="ms-group-list">${groupRows.map(renderGroupRow).join('')}</div>`;
+            body += `</div>`;
+        }
+
         for (const cat of catOrder) {
             const needS = parseInt0(reqRec[cat] || 0);
             const have = totals[cat] || { courses: 0, credits: 0 };

@@ -1663,6 +1663,115 @@ html, body {
     padding: 6px 2px;
 }
 
+/* Requirement-group progress (Summary → Special requirements section) */
+.major-summary .ms-group-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.major-summary .ms-group {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 8px 10px;
+    background: var(--bg-card);
+}
+
+.major-summary .ms-group.is-met {
+    border-color: rgba(22, 163, 74, 0.45);
+    background: rgba(22, 163, 74, 0.08);
+}
+
+.major-summary .ms-group.is-unmet,
+.major-summary .ms-group.is-over {
+    border-color: rgba(220, 38, 38, 0.40);
+    background: rgba(220, 38, 38, 0.06);
+}
+
+.major-summary .ms-group-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.major-summary .ms-group-labels {
+    min-width: 0;
+}
+
+.major-summary .ms-group-label {
+    font-weight: 700;
+}
+
+.major-summary .ms-group-suis {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    margin-top: 1px;
+}
+
+.major-summary .ms-group-count {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    white-space: nowrap;
+    flex: 0 0 auto;
+}
+
+.major-summary .ms-group-nums {
+    font-weight: 700;
+}
+
+.major-summary .ms-group-unit {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.major-summary .ms-group-badge {
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+}
+
+.major-summary .ms-group.is-met .ms-group-badge {
+    color: #16A34A;
+    border-color: rgba(22, 163, 74, 0.55);
+    background: rgba(22, 163, 74, 0.12);
+}
+
+.major-summary .ms-group.is-unmet .ms-group-badge,
+.major-summary .ms-group.is-over .ms-group-badge {
+    color: #DC2626;
+    border-color: rgba(220, 38, 38, 0.55);
+    background: rgba(220, 38, 38, 0.12);
+}
+
+.major-summary .ms-group-bar {
+    margin-top: 8px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--bg-surface);
+    overflow: hidden;
+}
+
+.major-summary .ms-group-fill {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: #16A34A;
+    transition: width 0.2s ease;
+}
+
+.major-summary .ms-group.is-unmet .ms-group-fill {
+    background: #F59E0B;
+}
+
+.major-summary .ms-group.is-over .ms-group-fill {
+    background: #DC2626;
+}
+
 
 /* === UTILITIES === */
 .hidden {
