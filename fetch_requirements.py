@@ -132,7 +132,75 @@ def fetch_requirements(program, term, offline_dir=None, timeout_s: float = 30.0)
         if major == 'PSY' and re.search(r'PSY\s*395', text, re.I):
             req['internshipCourse'] = 'PSY300'
 
+    # The enumerable Core-Elective pools (VACD/PSIR) drift term-to-term as courses
+    # are added/removed, so scrape their live member lists / minimums / overflow
+    # off the page. special_requirements() merges these into the hand-authored
+    # group skeleton (which owns the app-semantic fields the page doesn't carry:
+    # flag, rule, base, exclusivePairs). Stashed under a private key main() pops
+    # before writing the record. Only attached to a non-empty record so it can't
+    # mask an otherwise-failed parse (the emptiness check in main).
+    if req:
+        req['_pools'] = parse_core_pools(soup)
+
     return req
+
+
+# Course code like "HART 292" / "VA302" -> ("HART","292"). The catalog prints a
+# space between subject and number; the app stores them joined.
+_CODE_RE = re.compile(r"\b([A-Z]{2,4})\s?(\d{3})\b")
+
+
+def _pool_member_codes(table):
+    """Course code of each member row in a pool's course table. The leading cell
+    is often empty or a '*' note marker, so scan cells left-to-right and take the
+    first code; the header row has none and is skipped naturally."""
+    out = []
+    for tr in table.find_all('tr'):
+        for td in tr.find_all('td'):
+            m = _CODE_RE.search(td.get_text(' ', strip=True))
+            if m:
+                out.append(m.group(1) + m.group(2))
+                break
+    return out
+
+
+def parse_core_pools(soup):
+    """Parse the enumerable Core-Elective pools off a degree-detail page.
+
+    Returns an ORDERED list of ``{"poolno", "name", "min", "overflowTo",
+    "members"}`` — one per ``Core Electives I/II (Name)`` section. Each such
+    section is a ``table.t_kategori`` heading followed (until the next heading)
+    by a rule-line table (``Min. N SU credits …`` + the overflow sentence) and a
+    member table. Empty for programs without these enumerated pools. The page
+    carries only this volatile data; the rule type / flag / base stay
+    hand-authored (see PROGRAM_GROUPS)."""
+    tables = soup.find_all('table')
+    kat = [i for i, t in enumerate(tables) if 't_kategori' in (t.get('class') or [])]
+    pools = []
+    for k, start in enumerate(kat):
+        heading = re.sub(r"\s+", " ", tables[start].get_text(' ', strip=True))
+        m = re.match(r"Core Electives\s+(I{1,3})\b\s*\(([^)]*)\)", heading)
+        if not m:
+            continue
+        poolno, name = m.group(1), m.group(2).strip()
+        end = kat[k + 1] if k + 1 < len(kat) else len(tables)
+        minimum = overflow = None
+        members = []
+        for t in tables[start + 1:end]:
+            txt = re.sub(r"\s+", " ", t.get_text(' ', strip=True))
+            if minimum is None:
+                mm = re.search(r"Min(?:imum)?\.?\s*(\d+)\s*SU credits", txt, re.I)
+                if mm:
+                    minimum = int(mm.group(1))
+            if overflow is None:
+                ov = re.search(r"counted towards\s+(Area|Free)\s+Elective", txt, re.I)
+                if ov:
+                    overflow = ov.group(1).lower()
+            if 'Course Name' in txt and 'SU Credits' in txt:
+                members += _pool_member_codes(t)
+        pools.append({"poolno": poolno, "name": name, "min": minimum,
+                      "overflowTo": overflow, "members": members})
+    return pools
 
 def hum_required(major, university):
     """HUM graduation requirement, materialized as data so the app's rule tables
@@ -146,17 +214,23 @@ def hum_required(major, university):
     return 1 if major == "CS" else 0
 
 
-# Hand-authored special-requirement data, materializing the constants currently in
-# the app (s_curriculum.js) as scraped data. See docs/requirement-groups-design.md.
-# Until the scraper learns to parse these off SUIS, they are hand-authored here.
+# Hand-authored special-requirement SKELETON, materializing the app's constants
+# (s_curriculum.js) as data. See docs/requirement-groups-design.md.
+# This carries the app-semantic fields the SUIS page does NOT state — rule type,
+# flag (an app message id), base, exclusivePairs. For the enumerable Core-Elective
+# pools (VACD/PSIR, rule "credits"), the VOLATILE data — member list, min credits,
+# overflowTo — is scraped off the page at fetch time and supersedes the copies here
+# (parse_core_pools + _merge_scraped_pool); the copies below are the fallback used
+# when the parse finds no pool. The non-pool rules (EE/ME/ECON/MAN/PSY/DSA) are not
+# enumerated pools, so they stay fully hand-authored.
 #   groups     — the program's ORDERED special rules (first-unmet-wins). Each is a
 #                named subset of a base type, OR the {"rule": "faculty"} marker that
 #                splices the cross-cutting faculty ticker in at its position.
 #   facultyReq — the faculty-course ticker minimums (a course carries the
 #                `Faculty_Course` tag alongside its base type). All programs have it.
 # Group fields: base (the base type / cascade+display); overflowTo (where credits
-# beyond `min` go — scraped from "The extra courses taken from this pool are
-# directly counted towards [X] requirements", metadata for now, §11); requireBase
+# beyond `min` go — from "The extra courses taken from this pool are directly counted
+# towards [X] requirements", §11; scraped for the credits pools); requireBase
 # (measure only base-effective credit — the pools do, per that same overflow rule);
 # rule + its params (see groupRules in s_curriculum.js).
 _FACULTY = {"rule": "faculty"}
@@ -264,12 +338,39 @@ PROGRAM_FACULTY_REQ = {
 }
 
 
-def special_requirements(major):
-    """Groups + faculty ticker to merge into a program's requirements record
-    (phase-1: VACD only; empty for programs not yet migrated)."""
+def _pool_number_of(group):
+    m = re.search(r"Core Electives\s+(\w+)\s*\(", group.get("suis", ""))
+    return m.group(1) if m else None
+
+
+def _merge_scraped_pool(group, scraped_pools):
+    """Refresh an enumerable Core-Elective pool group with the live page data,
+    keeping the hand-authored app-semantics. Matched to a scraped pool by its
+    roman numeral (Core Electives I/II). On a parse miss the hand-authored members
+    are kept as the fallback, so a page-format change can't blank a pool."""
+    if group.get("rule") != "credits" or not scraped_pools:
+        return group
+    poolno = _pool_number_of(group)
+    match = next((p for p in scraped_pools if p.get("poolno") == poolno), None)
+    if not match or not match.get("members"):
+        return group
+    merged = dict(group)
+    merged["members"] = match["members"]
+    if match.get("min") is not None:
+        merged["min"] = match["min"]
+    if match.get("overflowTo"):
+        merged["overflowTo"] = match["overflowTo"]
+    return merged
+
+
+def special_requirements(major, scraped_pools=None):
+    """Groups + faculty ticker to merge into a program's requirements record.
+    The hand-authored PROGRAM_GROUPS is the skeleton (rule/flag/base/pairs); when
+    the scrape found the program's Core-Elective pools, their live members / min /
+    overflow supersede the hand-authored copies (see _merge_scraped_pool)."""
     out = {}
     if major in PROGRAM_GROUPS:
-        out["groups"] = PROGRAM_GROUPS[major]
+        out["groups"] = [_merge_scraped_pool(g, scraped_pools) for g in PROGRAM_GROUPS[major]]
     if major in PROGRAM_FACULTY_REQ:
         out["facultyReq"] = PROGRAM_FACULTY_REQ[major]
     return out
@@ -307,7 +408,8 @@ def main():
                 data = {}
             if data:
                 data['humRequired'] = hum_required(major, data.get('university'))
-                data.update(special_requirements(major))
+                scraped_pools = data.pop('_pools', None)
+                data.update(special_requirements(major, scraped_pools))
                 out[major] = data
         if out:
             with open(os.path.join(REQUIREMENTS_DIR, f'{term}.jsonl'), 'w', encoding='utf-8') as f:
