@@ -558,6 +558,11 @@ function computeCourseSuggestionScore(courseCode, opts) {
             return isFinite(n) ? n : 0;
         };
         const typeScore = { university: 36, required: 28, core: 18, area: 12, free: 0 };
+        // Bonus for a course that is a member of an UNMET enumerable requirement
+        // group (Core I/II pool, math/philosophy one-of, …). Sized to lift a
+        // pool-filling course above its plain type-mates (core 18 -> 24) without
+        // leaping a tier (required 28). Suppressed once the group is met (below).
+        const GROUP_BONUS = 6;
 
         const lookupReq = (majorCode, termCode) => {
             const allReq = (typeof globalThis !== 'undefined' && globalThis.requirements)
@@ -655,6 +660,36 @@ function computeCourseSuggestionScore(courseCode, opts) {
             return { uni, req };
         };
 
+        // A compact "which groups are met" signature for the cache key, so a
+        // course's group bonus turns off the moment its pool becomes met (the
+        // uni/req credit signals in the key don't capture one-of / pool met-ness).
+        const groupSignature = (view) => {
+            try {
+                if (!cur || typeof cur.requirementGroupProgress !== 'function') return '';
+                return cur.requirementGroupProgress(view).map((r) => r.id + (r.ok ? '1' : '0')).join(',');
+            } catch (_) {
+                return '';
+            }
+        };
+        // The set of course codes belonging to an UNMET enumerable group (a group
+        // with an explicit `members` list — credits pools + the one-of rules).
+        // Prefix/faculty/level rules have no member list and contribute none.
+        const groupBonusCodes = (view, req) => {
+            const set = new Set();
+            try {
+                if (!cur || typeof cur.requirementGroupProgress !== 'function') return set;
+                if (!req || !Array.isArray(req.groups)) return set;
+                const okById = {};
+                cur.requirementGroupProgress(view).forEach((r) => { okById[r.id] = r.ok; });
+                req.groups.forEach((g) => {
+                    if (Array.isArray(g.members) && g.members.length && okById[g.id] === false) {
+                        g.members.forEach((c) => set.add(canonicalize(c)));
+                    }
+                });
+            } catch (_) {}
+            return set;
+        };
+
         // Cache contexts + maps based on current program config and progress so
         // we can score hundreds of courses quickly.
         const cacheKey = (() => {
@@ -687,6 +722,7 @@ function computeCourseSuggestionScore(courseCode, opts) {
                 Math.round(progMain.req * 10) / 10,
                 Math.round(progDm.uni * 10) / 10,
                 Math.round(progDm.req * 10) / 10,
+                groupSignature('main'), groupSignature('dm'),
             ].join('|');
         })();
 
@@ -722,6 +758,7 @@ function computeCourseSuggestionScore(courseCode, opts) {
                         includeEngWeights: isEng && currentSciEng.eng < parseNum(req.engineering),
                         includeUniversityWeights: (reqUni > 0) ? (prog.uni < reqUni) : true,
                         includeRequiredWeights: (reqReq > 0) ? (prog.req < reqReq) : true,
+                        groupBonusCodes: groupBonusCodes('main', req),
                         map: buildMap(course_data),
                     });
                 } else {
@@ -751,6 +788,7 @@ function computeCourseSuggestionScore(courseCode, opts) {
                         includeEngWeights: isEng && currentSciEng.eng < parseNum(req.engineering),
                         includeUniversityWeights: (reqUni > 0) ? (prog.uni < reqUni) : true,
                         includeRequiredWeights: (reqReq > 0) ? (prog.req < reqReq) : true,
+                        groupBonusCodes: groupBonusCodes('dm', req),
                         map: buildMap(cur.doubleMajorCourseData),
                     });
                 }
@@ -780,8 +818,8 @@ function computeCourseSuggestionScore(courseCode, opts) {
         const scoreFromRecord = (rec, ctx) => {
             if (!rec) return 0;
             let baseType = String(rec.EL_Type || '').toLowerCase();
+            const recCode = canonicalize((rec.Major || '') + (rec.Code || ''));
             try {
-                const recCode = canonicalize((rec.Major || '') + (rec.Code || ''));
                 const majorCode = String((ctx && ctx.majorCode) || '').toUpperCase();
                 const termNum = parseInt(String((ctx && ctx.termCode) || '0'), 10);
                 if (majorCode === 'ME' && !isNaN(termNum) && termNum >= 202501) {
@@ -813,6 +851,10 @@ function computeCourseSuggestionScore(courseCode, opts) {
                 s += (typeScore[baseType] || 0);
             }
             s += su * 0.1;
+            // Reward a course that fills an unmet enumerable requirement group
+            // (its pool is still short). Suppressed automatically once the group
+            // is met — groupBonusCodes only holds unmet groups' members.
+            if (ctx && ctx.groupBonusCodes && ctx.groupBonusCodes.has(recCode)) s += GROUP_BONUS;
             if (ctx && ctx.includeBsWeights) s += bs * 2;
             if (ctx && ctx.includeEngWeights) s += eng * 1;
             return s;

@@ -120,6 +120,38 @@ test.describe('course suggestion scoring', () => {
     expect(after, `required weight should be suppressed once met (was ${before})`).toBeLessThan(before);
   });
 
+  test('a course filling an unmet requirement-group pool is rewarded, then suppressed once met (VACD)', async ({ page }) => {
+    // Phase 6: group-awareness. A member of an unmet enumerable pool (VACD Core I,
+    // "Art/Design History") gets a bonus so the scheduler steers toward filling it;
+    // once the pool is met the bonus turns off — the same suppression the
+    // university/required weights have, keyed through the same progress cache.
+    const POOL_MEMBER = 'HART426'; // a Core I member, untaken in both plans below
+
+    // Core I unmet: 6 of 9 SU (two art-history members).
+    await seedPlan(page, {
+      major: 'VACD', entryTerm: TERM_NAME,
+      curriculum: [['HART292', 'HART293']], grades: [['A', 'A']], dates: [TERM_NAME],
+    });
+    const unmet = await page.evaluate(() =>
+      window.curriculum.requirementGroupProgress('main').find((g) => g.id === 'core_arthistory'));
+    expect(unmet.ok, 'Core I is unmet at 6/9').toBe(false);
+    const rewarded = await score(page, POOL_MEMBER);
+
+    // Core I met: 9 of 9 SU (three art-history members).
+    await seedPlan(page, {
+      major: 'VACD', entryTerm: TERM_NAME,
+      curriculum: [['HART292', 'HART293', 'HART413']], grades: [['A', 'A', 'A']], dates: [TERM_NAME],
+    });
+    const met = await page.evaluate(() =>
+      window.curriculum.requirementGroupProgress('main').find((g) => g.id === 'core_arthistory'));
+    expect(met.ok, 'Core I is met at 9/9').toBe(true);
+    const suppressed = await score(page, POOL_MEMBER);
+
+    expect(rewarded, 'an unmet-pool member is rewarded above its suppressed self').toBeGreaterThan(suppressed);
+    // The gap is exactly the group bonus scaled by the main-major context weight.
+    expect(rewarded - suppressed, 'gap is GROUP_BONUS(6) * mainWeight(1.2)').toBeCloseTo(6 * 1.2, 1);
+  });
+
   test('the score reflects new progress rather than a stale cache', async ({ page }) => {
     // Scores come from a cache keyed on program config AND progress. Every other
     // test here starts on a fresh page, where the cache is empty — so a cache
