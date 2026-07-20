@@ -64,16 +64,10 @@ const VACD_CORE_POOL_2 = ['VA202', 'VA204', 'VA234', 'VA302', 'VA304', 'VA402', 
 const VACD_CORE_POOL_2_MIN = 12;
 const VACD_CORE_POOL_2_PAIRS = [['VA302', 'VA304'], ['VA402', 'VA404']];
 
-// Pools / lists referenced by the graduation rule tables (PROGRAM_RULES). Kept as
-// named constants so a rule descriptor reads as data. (VACD's pools reuse the
-// VACD_CORE_POOL_* constants above.)
-const ECON_MATH_REQ = ['MATH201', 'MATH202', 'MATH204', 'MATH212'];
-const EE_SPECIAL_AREA_CODES = ['CS300', 'CS401', 'CS412', 'ME303', 'PHYS302', 'PHYS303'];
-const MAN_CORE_AREA_PREFIXES = ['ACC', 'FIN', 'MGMT', 'MKTG', 'OPIM', 'ORG'];
-const MAN_AREA_AREA_PREFIXES = ['ACC', 'FIN', 'MKTG', 'OPIM', 'ORG'];
-const PSIR_CORE_I_POOL = ['LAW312', 'POLS251', 'POLS353', 'POLS404', 'POLS455', 'POLS483', 'POLS493', 'SOC201'];
-const PSIR_CORE_II_POOL = ['CONF400', 'IR301', 'IR342', 'IR391', 'IR394', 'IR405', 'IR489', 'LAW311', 'POLS492'];
-const PSY_PHILOSOPHY = ['PHIL300', 'PHIL301'];
+// (The former ECON_MATH_REQ / EE_SPECIAL_AREA_CODES / MAN_*_PREFIXES /
+// PSIR_CORE_*_POOL / PSY_PHILOSOPHY graduation constants now live as scraped group
+// data in the requirements records — see fetch_requirements.py + graduationRulesFor.
+// VACD_CORE_POOL_* and MAN_*_PREFIXES remain: still used by the allocation engine.)
 
 // Decides each VACD pool course's pool BEFORE the allocation cascade, returning
 // a Map of course -> static type ('core' for the ones filling a pool minimum,
@@ -644,66 +638,11 @@ const UNIVERSITY_RULES = [
 // same table drives the main and double-major passes. HUM rules live here because
 // they differ by program: the FASS programs need one 2XX then one 3XX (flags
 // 12 then 13); CS needs any single HUM (12); the FENS programs state none.
-const PROGRAM_RULES = {
-    // CS/IE/MAT/BIO are migrated to the requirement-groups model — faculty-ticker
-    // only (req.facultyReq), no groups — so they have no hard-listed entry here.
-    EE: [
-        { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'EE > Faculty Courses' },
-        { type: 'facultyCount', pool: 'math', min: 2, flag: 19, suis: 'EE > Faculty Courses' },
-        { type: 'facultyCount', pool: 'fens', min: 3, flag: 16, suis: 'EE > Faculty Courses' },
-        { type: 'levelCreditSum', prefix: 'EE4', category: 'Core', min: 9, flag: 23, suis: 'EE > 400-level EE requirement' },
-        { type: 'specialCourseAny', codes: EE_SPECIAL_AREA_CODES, altPrefix: 'EE48', altCategory: 'Area', flag: 24, suis: 'EE > Area electives (special topics)' },
-    ],
-    ME: [
-        { type: 'entryGatedHasAny', minTerm: 202501, codes: ['CS404', 'CS412'], flag: 2, suis: 'ME > 2025 curriculum (CS404/CS412)' },
-        { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'ME > Faculty Courses' },
-        { type: 'facultyCount', pool: 'math', min: 2, flag: 19, suis: 'ME > Faculty Courses' },
-        { type: 'facultyCount', pool: 'fens', min: 3, flag: 16, suis: 'ME > Faculty Courses' },
-    ],
-    ECON: [
-        { type: 'hasAny', codes: ECON_MATH_REQ, flag: 25, suis: 'ECON > Mathematics Requirement' },
-        { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'ECON > Faculty Courses' },
-        { type: 'facultyCount', pool: 'fass', min: 3, flag: 15, suis: 'ECON > Faculty Courses' },
-        { type: 'facultyAreas', min: 3, flag: 18, suis: 'ECON > Faculty Courses (3 areas)' },
-        { type: 'languageCap', max: 2, flag: 40, suis: 'ECON > Free Electives (language cap)' },
-    ],
-    MAN: [
-        { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'MAN > Faculty Courses' },
-        { type: 'facultyCount', pool: 'sbs', min: 2, flag: 22, suis: 'MAN > Faculty Courses' },
-        { type: 'categoryPrefixSpan', category: 'core', prefixes: MAN_CORE_AREA_PREFIXES, min: 6, flag: 35, suis: 'MAN > Core Electives (6 areas)' },
-        { type: 'categoryPrefixSpan', category: 'area', prefixes: MAN_AREA_AREA_PREFIXES, min: 5, flag: 36, suis: 'MAN > Area Electives (5 areas)' },
-        { type: 'freeOfferingFacultyCredits', faculties: ['FASS', 'FENS'], min: 9, flag: 37, suis: 'MAN > Free Electives (9cr FASS/FENS)' },
-        { type: 'languageCap', max: 2, flag: 40, suis: 'MAN > Free Electives (language cap)' },
-    ],
-    PSIR: [
-        { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'PSIR > Faculty Courses' },
-        { type: 'facultyCount', pool: 'fass', min: 3, flag: 15, suis: 'PSIR > Faculty Courses' },
-        { type: 'facultyAreas', min: 3, flag: 18, suis: 'PSIR > Faculty Courses (3 areas)' },
-        { type: 'poolCreditSum', pool: PSIR_CORE_I_POOL, min: 12, flag: 33, suis: 'PSIR > Core Electives I (Political Science)' },
-        { type: 'poolCreditSum', pool: PSIR_CORE_II_POOL, min: 12, flag: 34, suis: 'PSIR > Core Electives II (International Relations)' },
-        { type: 'languageCap', max: 2, flag: 40, suis: 'PSIR > Free Electives (language cap)' },
-    ],
-    PSY: [
-        { type: 'hasAny', codes: PSY_PHILOSOPHY, flag: 26, suis: 'PSY > Philosophy Requirement' },
-        { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'PSY > Faculty Courses' },
-        { type: 'facultyCount', pool: 'fass', min: 3, flag: 15, suis: 'PSY > Faculty Courses' },
-        { type: 'facultyAreas', min: 3, flag: 18, suis: 'PSY > Faculty Courses (3 areas)' },
-        { type: 'psyAdvancedAreaCount', min: 2, flag: 39, suis: 'PSY > Area Electives (2 PSY 4XX)' },
-        { type: 'languageCap', max: 2, flag: 40, suis: 'PSY > Free Electives (language cap)' },
-    ],
-    // VACD is migrated to the requirement-groups model — its special rules are
-    // generated from req.groups + req.facultyReq (see graduationRulesFor), so it
-    // has no hard-listed entry here.
-    DSA: [
-        { type: 'facultyCount', pool: 'total', min: 5, flag: 14, suis: 'DSA > Faculty Courses' },
-        { type: 'facultyCount', pool: 'fens', min: 1, flag: 20, suis: 'DSA > Faculty Courses' },
-        { type: 'facultyCount', pool: 'fass', min: 1, flag: 21, suis: 'DSA > Faculty Courses' },
-        { type: 'facultyCount', pool: 'sbs', min: 1, flag: 22, suis: 'DSA > Faculty Courses' },
-        { type: 'coreOfferingFacultyCount', faculty: 'FENS', min: 3, flag: 27, suis: 'DSA > Core Electives (3 FENS)' },
-        { type: 'coreOfferingFacultyCount', faculty: 'FASS', min: 3, flag: 28, suis: 'DSA > Core Electives (3 FASS)' },
-        { type: 'coreOfferingFacultyCount', faculty: 'SBS', min: 3, flag: 29, suis: 'DSA > Core Electives (3 SBS)' },
-    ],
-};
+// All 12 programs are now migrated to the requirement-groups model — their special
+// rules are generated from the scraped `groups` / `facultyReq` data (see
+// graduationRulesFor). This is the fallback for a program whose data has not been
+// authored yet; it is intentionally empty.
+const PROGRAM_RULES = {};
 
 // The HUM university requirement, built from the program's scraped `humRequired`
 // (requirements data, via fetch_requirements.py): 2 = one 2XX AND one 3XX HUM
@@ -751,33 +690,71 @@ function facultyRules(facultyReq) {
     return rules;
 }
 
-// Graduation rules generated from a program's `groups` (named subsets of a base
-// type). Each rule maps to a step-4 evaluator; a `base:'core'` credits group
-// measures core-effective credit (requireCore). Rule types are wired in as
-// programs migrate; an unknown one is skipped (the program's data is incomplete).
-function groupRules(groups) {
+// Graduation rules generated from a program's ORDERED `groups` list (each a named
+// subset of a base type, or the special `faculty` marker that splices in the
+// cross-cutting faculty ticker at its position in the order — so first-unmet-wins
+// matches the program's SUIS order). Each `rule` maps to a step-4 evaluator; a
+// credits group measures base-effective credit when `requireBase` is set. An
+// unknown rule is skipped (incomplete data rather than a thrown check).
+function groupRules(groups, facultyReq) {
     const out = [];
     for (let i = 0; i < (groups ? groups.length : 0); i++) {
         const g = groups[i];
-        if (g.rule === 'credits') {
-            out.push({ type: 'poolCreditSum', pool: g.members, requireCore: !!g.requireBase, pairs: g.exclusivePairs, min: g.min, flag: g.flag, suis: g.suis });
-        } else if (g.rule === 'languageCap') {
-            out.push({ type: 'languageCap', max: g.max, flag: g.flag, suis: g.suis });
+        switch (g.rule) {
+            case 'faculty':
+                Array.prototype.push.apply(out, facultyRules(facultyReq));
+                break;
+            case 'credits':
+                out.push({ type: 'poolCreditSum', pool: g.members, requireCore: !!g.requireBase, pairs: g.exclusivePairs, min: g.min, flag: g.flag, suis: g.suis });
+                break;
+            case 'oneOf':
+                out.push({ type: 'hasAny', codes: g.members, flag: g.flag, suis: g.suis });
+                break;
+            case 'entryGatedOneOf':
+                out.push({ type: 'entryGatedHasAny', minTerm: g.minTerm, codes: g.members, flag: g.flag, suis: g.suis });
+                break;
+            case 'levelCredits':
+                out.push({ type: 'levelCreditSum', prefix: g.prefix, category: g.category, min: g.min, flag: g.flag, suis: g.suis });
+                break;
+            case 'specialAny':
+                out.push({ type: 'specialCourseAny', codes: g.members, altPrefix: g.altPrefix, altCategory: g.altCategory, flag: g.flag, suis: g.suis });
+                break;
+            case 'prefixSpan':
+                out.push({ type: 'categoryPrefixSpan', category: g.category, prefixes: g.prefixes, min: g.min, flag: g.flag, suis: g.suis });
+                break;
+            case 'offeringCredits':
+                out.push({ type: 'freeOfferingFacultyCredits', faculties: g.faculties, min: g.min, flag: g.flag, suis: g.suis });
+                break;
+            case 'offeringCount':
+                out.push({ type: 'coreOfferingFacultyCount', faculty: g.faculty, min: g.min, flag: g.flag, suis: g.suis });
+                break;
+            case 'advancedCount':
+                out.push({ type: 'psyAdvancedAreaCount', min: g.min, flag: g.flag, suis: g.suis });
+                break;
+            case 'languageCap':
+                out.push({ type: 'languageCap', max: g.max, flag: g.flag, suis: g.suis });
+                break;
+            default:
+                break;
         }
     }
     return out;
 }
 
 // The ordered rule list for a program. `req` is its requirements record. When it
-// carries the requirement-groups data (`groups`/`facultyReq`), the program's
-// special rules are GENERATED from that data; otherwise the app falls back to the
-// hard-listed PROGRAM_RULES entry (programs not yet migrated). Either way, prefixed
-// by the shared university rules and the HUM rule (from `humRequired`).
+// carries the requirement-groups data, the special rules are GENERATED from it:
+// `groups` (ordered, with the faculty marker) drives programs with special
+// requirements; a bare `facultyReq` (no groups) covers the faculty-ticker-only
+// programs. Otherwise the app falls back to the hard-listed PROGRAM_RULES entry
+// (unmigrated). Always prefixed by the shared university rules + the HUM rule.
 function graduationRulesFor(major, req) {
     const r = req || {};
     const shared = UNIVERSITY_RULES.concat(humRules(r.humRequired));
-    if (r.groups || r.facultyReq) {
-        return shared.concat(facultyRules(r.facultyReq), groupRules(r.groups));
+    if (r.groups) {
+        return shared.concat(groupRules(r.groups, r.facultyReq));
+    }
+    if (r.facultyReq) {
+        return shared.concat(facultyRules(r.facultyReq));
     }
     return shared.concat(PROGRAM_RULES[major] || []);
 }

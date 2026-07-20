@@ -126,8 +126,15 @@ test('evaluateRules returns the FIRST unmet flag (order matters)', () => {
 // requirements the double-major pass used to be missing (its own incomplete
 // copies) — asserting them on the shared table proves both passes now enforce them.
 const ALL_MAJORS = ['CS', 'IE', 'EE', 'MAT', 'BIO', 'ME', 'ECON', 'MAN', 'PSIR', 'PSY', 'VACD', 'DSA'];
-const FASS_MAJORS = ['ECON', 'MAN', 'PSIR', 'PSY', 'VACD'];
-const flagsOf = (major) => graduationRulesFor(major).map((r) => r.flag);
+// Each program's rules are generated from its scraped requirements record, so read
+// the real data and evaluate graduationRulesFor against it (PROGRAM_RULES is empty).
+const fs = require('node:fs');
+const path = require('node:path');
+const reqByMajor = Object.fromEntries(
+  fs.readFileSync(path.join(__dirname, '..', '..', 'requirements', '202301.jsonl'), 'utf8')
+    .trim().split('\n').map((l) => JSON.parse(l)).map((r) => [r.major, r]),
+);
+const flagsOf = (major) => [...graduationRulesFor(major, reqByMajor[major]).map((r) => r.flag)];
 
 test('every program requires SPS303 (flag 11) — DM non-CS used to skip it', () => {
   for (const m of ALL_MAJORS) {
@@ -153,14 +160,14 @@ test('EE carries the faculty-course check (14/19/16) — EE-DM used to lack it',
 });
 
 test("ECON's mathematics requirement accepts MATH212 — ECON-DM used to omit it", () => {
-  const mathRule = graduationRulesFor('ECON').find((r) => r.flag === 25);
+  const mathRule = graduationRulesFor('ECON', reqByMajor.ECON).find((r) => r.flag === 25);
   assert.ok(mathRule, 'ECON has a math requirement rule (25)');
   assert.ok(mathRule.codes.includes('MATH212'), 'MATH212 satisfies the ECON math requirement');
 });
 
-test('every rule carries a SUIS citation (incl. the generated HUM rules)', () => {
+test('every generated rule carries a SUIS citation (shared + HUM + faculty)', () => {
   for (const m of ALL_MAJORS) {
-    for (const r of graduationRulesFor(m, { humRequired: 2 })) {
+    for (const r of graduationRulesFor(m, { humRequired: 2, facultyReq: { total: 5, fass: 3 } })) {
       assert.equal(typeof r.suis, 'string', `${m} flag ${r.flag} needs a suis citation`);
       assert.ok(r.suis.length > 0);
     }
@@ -205,8 +212,9 @@ test('graduationRulesFor uses groups+facultyReq when present, PROGRAM_RULES othe
     humRequired: 2,
     facultyReq: { total: 5, fass: 3, areas: 3 },
     groups: [
-      { rule: 'credits', base: 'core', min: 9, members: ['X'], flag: 30, suis: 's' },
-      { rule: 'credits', base: 'core', min: 12, members: ['Y'], flag: 31, suis: 's' },
+      { rule: 'faculty' }, // marker -> faculty ticker spliced in at this position
+      { rule: 'credits', base: 'core', requireBase: true, min: 9, members: ['X'], flag: 30, suis: 's' },
+      { rule: 'credits', base: 'core', requireBase: true, min: 12, members: ['Y'], flag: 31, suis: 's' },
       { rule: 'languageCap', base: 'free', max: 2, flag: 40, suis: 's' },
     ],
   };
@@ -215,7 +223,7 @@ test('graduationRulesFor uses groups+facultyReq when present, PROGRAM_RULES othe
   // A faculty-ticker-only program (CS) generates just the ticker from facultyReq.
   const cs = [...graduationRulesFor('CS', { humRequired: 1, facultyReq: { total: 5, math: 2, fens: 3 } }).map((r) => r.flag)];
   assert.deepEqual(cs, [11, 12, 14, 19, 16]);
-  // A program with no groups/facultyReq data still falls back to PROGRAM_RULES.
-  const econ = [...graduationRulesFor('ECON', { humRequired: 2 }).map((r) => r.flag)];
-  assert.ok(econ.includes(25) && econ.includes(14), 'ECON still from PROGRAM_RULES');
+  // No special-requirement data -> only the shared university + HUM rules
+  // (PROGRAM_RULES is now empty; every program is data-driven).
+  assert.deepEqual([...graduationRulesFor('ZZZ', { humRequired: 1 }).map((r) => r.flag)], [11, 12]);
 });

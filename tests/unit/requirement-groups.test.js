@@ -24,8 +24,10 @@ test('VACD carries its faculty ticker minimums', () => {
 
 test('VACD carries its three groups with the expected shape', () => {
   const groups = byMajor.VACD.groups;
-  assert.equal(groups.length, 3);
-  assert.deepEqual(groups.map((g) => g.id), ['core_arthistory', 'core_skill', 'lang_cap']);
+  // The faculty marker positions the ticker in the order; the real groups follow.
+  assert.equal(groups[0].rule, 'faculty', 'faculty marker leads the ordered list');
+  const named = groups.filter((g) => g.rule !== 'faculty');
+  assert.deepEqual(named.map((g) => g.id), ['core_arthistory', 'core_skill', 'lang_cap']);
 
   const arthistory = groups.find((g) => g.id === 'core_arthistory');
   assert.equal(arthistory.base, 'core');
@@ -48,17 +50,34 @@ test('VACD carries its three groups with the expected shape', () => {
   assert.equal(lang.flag, 40);
 });
 
-test('every group is well-formed (id/label/base/rule/flag/suis)', () => {
-  for (const g of byMajor.VACD.groups) {
-    for (const key of ['id', 'label', 'base', 'rule', 'flag', 'suis']) {
-      assert.ok(g[key] !== undefined && g[key] !== '', `group ${g.id} missing ${key}`);
+test('every non-marker group is well-formed (id/label/base/rule/flag/suis)', () => {
+  for (const m of Object.keys(byMajor)) {
+    for (const g of byMajor[m].groups || []) {
+      if (g.rule === 'faculty') continue; // the marker carries no fields of its own
+      for (const key of ['id', 'label', 'base', 'rule', 'flag', 'suis']) {
+        assert.ok(g[key] !== undefined && g[key] !== '', `${m}/${g.id} missing ${key}`);
+      }
+      assert.ok(['core', 'area', 'free', 'required', 'university'].includes(g.base),
+        `${m}/${g.id} has a real base type`);
     }
-    assert.ok(['core', 'area', 'free', 'required', 'university'].includes(g.base),
-      `group ${g.id} has a real base type`);
   }
 });
 
-test('phase-1 is VACD-only: unmigrated programs carry no groups yet', () => {
-  assert.equal(byMajor.CS.groups, undefined);
-  assert.equal(byMajor.ECON.groups, undefined);
+test('every program is migrated: has facultyReq; the group programs have groups', () => {
+  const ALL = ['CS', 'IE', 'EE', 'MAT', 'BIO', 'ME', 'ECON', 'MAN', 'PSIR', 'PSY', 'VACD', 'DSA'];
+  for (const m of ALL) assert.ok(byMajor[m].facultyReq, `${m} has a facultyReq ticker`);
+  // Faculty-ticker-only programs carry no groups; the rest do.
+  for (const m of ['CS', 'IE', 'MAT', 'BIO']) assert.equal(byMajor[m].groups, undefined, `${m} is ticker-only`);
+  for (const m of ['EE', 'ME', 'ECON', 'MAN', 'PSIR', 'PSY', 'VACD', 'DSA']) {
+    assert.ok(Array.isArray(byMajor[m].groups) && byMajor[m].groups.length, `${m} has groups`);
+  }
+});
+
+test('PSIR core pools require base-effective credit (same wording as VACD)', () => {
+  // The bug the SUIS wording fixes: PSIR's pools overflow extras to Area exactly
+  // like VACD's, so they measure base-effective credit — requireBase true.
+  for (const g of byMajor.PSIR.groups.filter((x) => x.rule === 'credits')) {
+    assert.equal(g.requireBase, true, `PSIR ${g.id} requireBase`);
+    assert.equal(g.overflowTo, 'area', `PSIR ${g.id} overflowTo area`);
+  }
 });

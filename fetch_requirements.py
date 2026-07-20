@@ -148,52 +148,119 @@ def hum_required(major, university):
 
 # Hand-authored special-requirement data, materializing the constants currently in
 # the app (s_curriculum.js) as scraped data. See docs/requirement-groups-design.md.
-# Phase-1 target: VACD only. Until the scraper learns to parse these off SUIS, they
-# are hand-authored here.
-#   groups     — named SUBSETS of a base type (a course is `core` AND in Core-I).
-#                Evaluated as a graduation check; `base` drives cascade inheritance.
-#   facultyReq — the CROSS-CUTTING faculty-course ticker minimums (a course carries
-#                the `Faculty_Course` tag alongside its base type), kept simple.
-# Group fields:
-#   base        — the base course type the group is a subset of (cascade/display).
-#   overflowTo  — where credits beyond `min` go, scraped from the SUIS sentence
-#                 "The extra courses taken from this pool are directly counted
-#                 towards [X] requirements." (metadata for now; the cascade is
-#                 unchanged — see docs/requirement-groups-design.md §11.)
-#   requireBase — whether the graduation measure counts only base-effective credit
-#                 (VACD's pools do; preserves current per-program behavior).
+# Until the scraper learns to parse these off SUIS, they are hand-authored here.
+#   groups     — the program's ORDERED special rules (first-unmet-wins). Each is a
+#                named subset of a base type, OR the {"rule": "faculty"} marker that
+#                splices the cross-cutting faculty ticker in at its position.
+#   facultyReq — the faculty-course ticker minimums (a course carries the
+#                `Faculty_Course` tag alongside its base type). All programs have it.
+# Group fields: base (the base type / cascade+display); overflowTo (where credits
+# beyond `min` go — scraped from "The extra courses taken from this pool are
+# directly counted towards [X] requirements", metadata for now, §11); requireBase
+# (measure only base-effective credit — the pools do, per that same overflow rule);
+# rule + its params (see groupRules in s_curriculum.js).
+_FACULTY = {"rule": "faculty"}
+
+
+def _lang_cap(major):
+    return {
+        "id": "lang_cap", "label": "Free Electives — beginning/basic language cap",
+        "base": "free", "rule": "languageCap", "max": 2, "flag": 40,
+        "suis": major + " > Free Electives (language cap)",
+    }
+
+
+def _core_pool(program, gid, label, poolno, members, minimum, flag, pairs=None):
+    g = {
+        "id": gid, "label": label, "base": "core", "overflowTo": "area",
+        "rule": "credits", "min": minimum, "requireBase": True, "members": members,
+        "flag": flag, "suis": program + " > Core Electives " + poolno + " (" + label + ")",
+    }
+    if pairs:
+        g["exclusivePairs"] = pairs
+    return g
+
+
 PROGRAM_GROUPS = {
+    "EE": [
+        _FACULTY,
+        {"id": "ee400", "label": "400-level EE requirement", "base": "core", "rule": "levelCredits",
+         "prefix": "EE4", "category": "Core", "min": 9, "flag": 23, "suis": "EE > 400-level EE requirement"},
+        {"id": "special_area", "label": "Area electives — special topics", "base": "area", "rule": "specialAny",
+         "members": ["CS300", "CS401", "CS412", "ME303", "PHYS302", "PHYS303"],
+         "altPrefix": "EE48", "altCategory": "Area", "flag": 24, "suis": "EE > Area electives (special topics)"},
+    ],
+    "ME": [
+        {"id": "cs_alt", "label": "2025 curriculum — CS404/CS412", "base": "required", "rule": "entryGatedOneOf",
+         "minTerm": 202501, "members": ["CS404", "CS412"], "flag": 2, "suis": "ME > 2025 curriculum (CS404/CS412)"},
+        _FACULTY,
+    ],
+    "ECON": [
+        {"id": "math_req", "label": "Mathematics Requirement", "base": "required", "rule": "oneOf",
+         "members": ["MATH201", "MATH202", "MATH204", "MATH212"], "flag": 25, "suis": "ECON > Mathematics Requirement"},
+        _FACULTY,
+        _lang_cap("ECON"),
+    ],
+    "MAN": [
+        _FACULTY,
+        {"id": "core_areas", "label": "Core Electives — 6 areas", "base": "core", "rule": "prefixSpan",
+         "category": "core", "prefixes": ["ACC", "FIN", "MGMT", "MKTG", "OPIM", "ORG"], "min": 6,
+         "flag": 35, "suis": "MAN > Core Electives (6 areas)"},
+        {"id": "area_areas", "label": "Area Electives — 5 areas", "base": "area", "rule": "prefixSpan",
+         "category": "area", "prefixes": ["ACC", "FIN", "MKTG", "OPIM", "ORG"], "min": 5,
+         "flag": 36, "suis": "MAN > Area Electives (5 areas)"},
+        {"id": "free_fassfens", "label": "Free Electives — 9cr FASS/FENS", "base": "free", "rule": "offeringCredits",
+         "faculties": ["FASS", "FENS"], "min": 9, "flag": 37, "suis": "MAN > Free Electives (9cr FASS/FENS)"},
+        _lang_cap("MAN"),
+    ],
+    "PSIR": [
+        _FACULTY,
+        _core_pool("PSIR", "core_polisci", "Political Science", "I",
+                   ["LAW312", "POLS251", "POLS353", "POLS404", "POLS455", "POLS483", "POLS493", "SOC201"], 12, 33),
+        _core_pool("PSIR", "core_ir", "International Relations", "II",
+                   ["CONF400", "IR301", "IR342", "IR391", "IR394", "IR405", "IR489", "LAW311", "POLS492"], 12, 34),
+        _lang_cap("PSIR"),
+    ],
+    "PSY": [
+        {"id": "philosophy", "label": "Philosophy Requirement", "base": "required", "rule": "oneOf",
+         "members": ["PHIL300", "PHIL301"], "flag": 26, "suis": "PSY > Philosophy Requirement"},
+        _FACULTY,
+        {"id": "psy_advanced", "label": "Area Electives — 2 PSY 4XX", "base": "area", "rule": "advancedCount",
+         "min": 2, "flag": 39, "suis": "PSY > Area Electives (2 PSY 4XX)"},
+        _lang_cap("PSY"),
+    ],
     "VACD": [
-        {
-            "id": "core_arthistory",
-            "label": "Core Electives I — Art/Design History",
-            "base": "core", "overflowTo": "area", "rule": "credits", "min": 9, "requireBase": True,
-            "members": ["HART292", "HART293", "HART380", "HART413", "HART426", "VA315", "VA420", "VA430"],
-            "flag": 30, "suis": "VACD > Core Electives I (Art/Design History)",
-        },
-        {
-            "id": "core_skill",
-            "label": "Core Electives II — Skill",
-            "base": "core", "overflowTo": "area", "rule": "credits", "min": 12, "requireBase": True,
-            "members": ["VA202", "VA204", "VA234", "VA302", "VA304", "VA402", "VA404"],
-            "exclusivePairs": [["VA302", "VA304"], ["VA402", "VA404"]],
-            "flag": 31, "suis": "VACD > Core Electives II (Skill Courses)",
-        },
-        {
-            "id": "lang_cap",
-            "label": "Free Electives — beginning/basic language cap",
-            "base": "free", "rule": "languageCap", "max": 2,
-            "flag": 40, "suis": "VACD > Free Electives (language cap)",
-        },
+        _FACULTY,
+        _core_pool("VACD", "core_arthistory", "Art/Design History", "I",
+                   ["HART292", "HART293", "HART380", "HART413", "HART426", "VA315", "VA420", "VA430"], 9, 30),
+        _core_pool("VACD", "core_skill", "Skill Courses", "II",
+                   ["VA202", "VA204", "VA234", "VA302", "VA304", "VA402", "VA404"], 12, 31,
+                   pairs=[["VA302", "VA304"], ["VA402", "VA404"]]),
+        _lang_cap("VACD"),
+    ],
+    "DSA": [
+        _FACULTY,
+        {"id": "core_fens", "label": "Core Electives — 3 FENS", "base": "core", "rule": "offeringCount",
+         "faculty": "FENS", "min": 3, "flag": 27, "suis": "DSA > Core Electives (3 FENS)"},
+        {"id": "core_fass", "label": "Core Electives — 3 FASS", "base": "core", "rule": "offeringCount",
+         "faculty": "FASS", "min": 3, "flag": 28, "suis": "DSA > Core Electives (3 FASS)"},
+        {"id": "core_sbs", "label": "Core Electives — 3 SBS", "base": "core", "rule": "offeringCount",
+         "faculty": "SBS", "min": 3, "flag": 29, "suis": "DSA > Core Electives (3 SBS)"},
     ],
 }
 PROGRAM_FACULTY_REQ = {
-    "VACD": {"total": 5, "fass": 3, "areas": 3},
-    # FENS programs with no group requirements — the faculty ticker only.
     "CS": {"total": 5, "math": 2, "fens": 3},
     "IE": {"total": 5, "math": 2, "fens": 3},
     "MAT": {"total": 5, "math": 2, "fens": 3},
     "BIO": {"total": 5, "math": 2, "fens": 3},
+    "EE": {"total": 5, "math": 2, "fens": 3},
+    "ME": {"total": 5, "math": 2, "fens": 3},
+    "ECON": {"total": 5, "fass": 3, "areas": 3},
+    "MAN": {"total": 5, "sbs": 2},
+    "PSIR": {"total": 5, "fass": 3, "areas": 3},
+    "PSY": {"total": 5, "fass": 3, "areas": 3},
+    "VACD": {"total": 5, "fass": 3, "areas": 3},
+    "DSA": {"total": 5, "fens": 1, "fass": 1, "sbs": 1},
 }
 
 
