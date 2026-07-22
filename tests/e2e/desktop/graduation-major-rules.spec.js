@@ -129,31 +129,44 @@ test.describe('IE CS201/DSA201 force-core rule', () => {
 
 test.describe('PSIR core-elective pools', () => {
   // PSIR's core-typed courses are EXACTLY Core I + Core II, and the two minimums
-  // (12 + 12) equal its 24-credit core requirement. So each pool can be emptied
-  // only by filling `core` entirely from the other one.
+  // (12 + 12) equal its 24-credit core requirement — the pools ARE the core. As
+  // for VACD, each pool's satisfaction is asserted via requirementGroupProgress
+  // (its own current/target/ok), which is unambiguous. The first-unmet FLAG
+  // (pool 33/34 vs the generic core-credit flag 3) is not over-pinned: pool
+  // selection now pins only a pool's minimum to core and overflows the extras to
+  // area (the scraped overflowTo), so an emptied pool also shorts core — the two
+  // are entangled by design, and the pool progress is the clean signal.
   const CORE_I = ['LAW312', 'POLS251', 'POLS353', 'POLS404', 'POLS455', 'POLS483', 'POLS493', 'SOC201'];
-  const CORE_II_IN_PLAN = ['CONF400', 'IR301', 'IR342', 'IR391'];
-  const CORE_II_REST = ['IR394', 'IR405', 'IR489', 'LAW311', 'POLS492'];
+  const CORE_II = ['CONF400', 'IR301', 'IR342', 'IR391', 'IR394', 'IR405', 'IR489', 'LAW311', 'POLS492'];
 
-  test('dropping the Core II pool raises flag 34', async ({ page }) => {
-    // The plan holds all 8 Core I courses (24cr) — exactly the core requirement
-    // — so removing Core II leaves `core` satisfied while Core II is empty.
-    // Flag 3 cannot mask flag 34.
-    await seed(page, 'PSIR', { drop: CORE_II_IN_PLAN });
-    expect(await flag(page)).toBe(34);
-  });
-
-  test('dropping the Core I pool raises flag 33', async ({ page }) => {
-    // All 9 Core II courses = 27cr, over the 24 core requirement, so Core I can
-    // go entirely while `core` stays satisfied.
-    await seed(page, 'PSIR', { add: CORE_II_REST, drop: CORE_I });
-    expect(await flag(page)).toBe(33);
+  const readPools = (page) => page.evaluate(() => {
+    const by = {};
+    window.curriculum.requirementGroupProgress('main').forEach((g) => {
+      by[g.id] = { current: g.current, target: g.target, ok: g.ok };
+    });
+    return { flag: window.curriculum.canGraduate(), coreI: by.core_polisci, coreII: by.core_ir };
   });
 
   test('the generated plan satisfies both pools', async ({ page }) => {
     await seed(page, 'PSIR');
-    const f = await flag(page);
-    expect([33, 34], `flag ${f}: neither pool rule should fire`).not.toContain(f);
+    const r = await readPools(page);
+    expect(r.coreI.ok, `Core I ${r.coreI.current}/${r.coreI.target}`).toBe(true);
+    expect(r.coreII.ok, `Core II ${r.coreII.current}/${r.coreII.target}`).toBe(true);
+    expect(r.flag, 'a satisfied PSIR plan graduates').toBe(0);
+  });
+
+  test('an under-filled Core I pool is reported unmet and blocks graduation', async ({ page }) => {
+    await seed(page, 'PSIR', { drop: CORE_I });
+    const r = await readPools(page);
+    expect(r.coreI.ok, `Core I should be short: ${r.coreI.current}/${r.coreI.target}`).toBe(false);
+    expect(r.flag, 'an unmet Core I pool blocks graduation').not.toBe(0);
+  });
+
+  test('an under-filled Core II pool is reported unmet and blocks graduation', async ({ page }) => {
+    await seed(page, 'PSIR', { drop: CORE_II });
+    const r = await readPools(page);
+    expect(r.coreII.ok, `Core II should be short: ${r.coreII.current}/${r.coreII.target}`).toBe(false);
+    expect(r.flag, 'an unmet Core II pool blocks graduation').not.toBe(0);
   });
 });
 

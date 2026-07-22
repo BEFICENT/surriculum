@@ -55,70 +55,61 @@ function isPsyAdvancedCode(code) {
     return /^PSY\s?4\d{2}$/.test(String(code || '').toUpperCase().replace(/\s+/g, ''));
 }
 
-// VACD's core requirement is two named pools with their own minimums, and the
-// pools contain mutually-exclusive pairs. Courses beyond a pool's minimum are
-// EXTRA: they spill into area electives, then free — they do not count as core.
-const VACD_CORE_POOL_1 = ['HART292', 'HART293', 'HART380', 'HART413', 'HART426', 'VA315', 'VA420', 'VA430'];
-const VACD_CORE_POOL_1_MIN = 9;
-const VACD_CORE_POOL_2 = ['VA202', 'VA204', 'VA234', 'VA302', 'VA304', 'VA402', 'VA404'];
-const VACD_CORE_POOL_2_MIN = 12;
-const VACD_CORE_POOL_2_PAIRS = [['VA302', 'VA304'], ['VA402', 'VA404']];
-
 // (The former ECON_MATH_REQ / EE_SPECIAL_AREA_CODES / MAN_*_PREFIXES /
-// PSIR_CORE_*_POOL / PSY_PHILOSOPHY graduation constants now live as scraped group
-// data in the requirements records — see fetch_requirements.py + graduationRulesFor.
-// VACD_CORE_POOL_* and MAN_*_PREFIXES remain: still used by the allocation engine.)
+// PSIR_CORE_*_POOL / PSY_PHILOSOPHY graduation constants — and the VACD_CORE_POOL_*
+// allocation constants — now live as scraped group data in the requirements records
+// (see fetch_requirements.py + graduationRulesFor + selectCorePools). MAN_*_PREFIXES
+// remain: still used by the allocation engine.)
 
-// Decides each VACD pool course's pool BEFORE the allocation cascade, returning
-// a Map of course -> static type ('core' for the ones filling a pool minimum,
-// 'area' for the extras, which then spill area -> free through the normal
-// cascade).
+// Decides each Core-Elective pool course's allocation BEFORE the cascade, from
+// the program's SCRAPED `credits` groups (members / min / exclusivePairs /
+// overflowTo — see fetch_requirements.py). Returns a Map course -> target type:
+// 'core' for the courses filling a pool's minimum (pinned to core so a non-pool
+// core elective cannot take the slot the pool graduation check counts), and the
+// pool's `overflowTo` (e.g. 'area') for the extras, which then spill onward
+// through the normal cascade. Data-driven and per-term, this replaced the hard-
+// coded VACD_CORE_POOL_* constants: it tracks the real per-term minimums (VACD's
+// Core II was 18 SU pre-2024, 12 after) and generalises to every pooled program
+// (VACD, PSIR).
 //
-// Must run pre-cascade for the usual reason (see collectAltPairExtras): doing it
+// Must run pre-cascade for the usual reason (see collectAltPairExtras): deciding
 // afterwards demoted an extra out of `core` once the cascade had already capped
 // core and pushed the surplus down, so the freed core slot was never refilled.
-// VACD's core requirement (27) EXCEEDS its pool minimums (9+12=21), so the
-// balance must come from core-typed courses outside both pools — and those were
-// exactly the ones left stranded in `free`.
-function selectVacdCorePools(sortedSems, isExcluded) {
-    const pool1 = new Set(VACD_CORE_POOL_1);
-    const pool2 = new Set(VACD_CORE_POOL_2);
-    const pairKeyByCode = {};
-    VACD_CORE_POOL_2_PAIRS.forEach((pair) => {
-        pairKeyByCode[pair[0]] = pair.join('|');
-        pairKeyByCode[pair[1]] = pair.join('|');
+function selectCorePools(sortedSems, creditGroups, isExcluded) {
+    const pools = (creditGroups || []).map((g) => {
+        const pairKeyByCode = {};
+        (g.exclusivePairs || []).forEach((pair) => {
+            const key = pair.join('|');
+            pair.forEach((code) => { pairKeyByCode[code] = key; });
+        });
+        return {
+            members: new Set(g.members || []),
+            min: g.min || 0,
+            overflowTo: g.overflowTo || 'area',
+            pairKeyByCode,
+            takenPairKeys: new Set(),
+            credits: 0,
+        };
     });
-    const creditOf = (c) => ((typeof parseCreditValue === 'function')
-        ? parseCreditValue(c.SU_credit || '0')
-        : (parseFloat(c.SU_credit || '0') || 0));
 
     const out = new Map();
-    const takenPairKeys = new Set();
-    let pool1Credits = 0;
-    let pool2Credits = 0;
-
     for (let i = 0; i < sortedSems.length; i++) {
         const courses = sortedSems[i].courses || [];
         for (let j = 0; j < courses.length; j++) {
             const course = courses[j];
             if (!course || (isExcluded && isExcluded(course))) continue;
-            const code = course.code;
-            if (pool1.has(code)) {
-                if (pool1Credits < VACD_CORE_POOL_1_MIN) {
+            for (let p = 0; p < pools.length; p++) {
+                const pool = pools[p];
+                if (!pool.members.has(course.code)) continue;
+                const pairKey = pool.pairKeyByCode[course.code] || null;
+                if (pool.credits < pool.min && (!pairKey || !pool.takenPairKeys.has(pairKey))) {
                     out.set(course, 'core');
-                    pool1Credits += creditOf(course);
+                    pool.credits += creditOfCourse(course);
+                    if (pairKey) pool.takenPairKeys.add(pairKey);
                 } else {
-                    out.set(course, 'area');
+                    out.set(course, pool.overflowTo);
                 }
-            } else if (pool2.has(code)) {
-                const pairKey = pairKeyByCode[code] || null;
-                if (pool2Credits < VACD_CORE_POOL_2_MIN && (!pairKey || !takenPairKeys.has(pairKey))) {
-                    out.set(course, 'core');
-                    pool2Credits += creditOf(course);
-                    if (pairKey) takenPairKeys.add(pairKey);
-                } else {
-                    out.set(course, 'area');
-                }
+                break; // a course belongs to at most one pool
             }
         }
     }
@@ -315,7 +306,7 @@ function allocateCascade(staticType, credit, counters, reqs, pinCore) {
 // `courseData` select the program (main major or double major). `sortedSems` is
 // the chronological order the pair/pool rules depend on; `allSems` is used only
 // for the order-independent math-exclusion sweep. `hasCourse` takes a code.
-function resolveAlternativeRules(major, entryTerm, sortedSems, allSems, getInfoFn, courseData, hasCourse) {
+function resolveAlternativeRules(major, entryTerm, sortedSems, allSems, getInfoFn, courseData, hasCourse, groups) {
     const excluded = new Set();
     const typeOverride = new Map();
     const forceCore = new Set();
@@ -346,24 +337,31 @@ function resolveAlternativeRules(major, entryTerm, sortedSems, allSems, getInfoF
     } else if (major === 'VACD') {
         // SUIS: "Only one ... will be counted towards the degree" — unlike ME's
         // rule, this one does not count the extra at all, so it is excluded
-        // outright rather than allowed to fill a free-elective slot. The two core
-        // pools are then resolved: courses filling a minimum are pinned to core
-        // (the cascade's core cap must not let a non-pool course take the slot,
-        // since flags 30/31 count pool courses that actually landed in core);
-        // extras are typed `area` and spill area -> free via the cascade. Pinning
-        // is safe — the two minimums total 21, under the 27-credit core need.
+        // outright rather than allowed to fill a free-elective slot. (The core
+        // pools themselves are resolved by the data-driven block below.)
         collectAltPairExtras(sortedSems, VACD_REQUIRED_PAIRS)
             .forEach((c) => excluded.add(c));
-        selectVacdCorePools(sortedSems, (c) => excluded.has(c))
-            .forEach((type, course) => {
-                if (type === 'core') forceCore.add(course);
-                else typeOverride.set(course, type);
-            });
     } else if (major === 'PSY') {
         // No published rule for taking both; the extra counts as free by agreed
         // assumption. See PSY_PHILOSOPHY_PAIR.
         collectAltPairExtras(sortedSems, PSY_PHILOSOPHY_PAIR)
             .forEach((c) => typeOverride.set(c, 'free'));
+    }
+
+    // Core-Elective pool selection, driven by the program's SCRAPED `credits`
+    // groups (VACD's two core pools, PSIR's). Runs for ANY pooled program, after
+    // the program-specific exclusions above so an excluded course cannot fill a
+    // pool. Courses filling a pool minimum are pinned to core — the cascade's
+    // core cap must not let a non-pool core elective take the slot, since the pool
+    // graduation checks count pool courses that actually landed in core — and the
+    // extras take the pool's `overflowTo` and spill on through the cascade.
+    const creditGroups = (groups || []).filter((g) => g.rule === 'credits');
+    if (creditGroups.length) {
+        selectCorePools(sortedSems, creditGroups, (c) => excluded.has(c))
+            .forEach((type, course) => {
+                if (type === 'core') forceCore.add(course);
+                else typeOverride.set(course, type);
+            });
     }
 
     return { excluded, typeOverride, forceCore };
@@ -1405,7 +1403,7 @@ function s_curriculum()
         // run afterwards). Shared with the double-major pass.
         const { excluded: excludedFromDegree, typeOverride, forceCore } = resolveAlternativeRules(
             this.major, this.entryTerm, sortedSemesters, this.semesters,
-            getInfoFn, course_data, (c) => this.hasCourse(c),
+            getInfoFn, course_data, (c) => this.hasCourse(c), req.groups,
         );
 
         // Iterate semesters in chronological order
@@ -1624,16 +1622,14 @@ function s_curriculum()
         // kept course fills `required` and the extra is allocated as a core
         // elective.)
 
-        // (VACD's core pools are resolved BEFORE the allocation cascade above
-        // via selectVacdCorePools() + `typeOverride`: pool courses filling a
-        // minimum are typed `core`, extras are typed `area` and spill to free
-        // through the normal cascade. Doing it afterwards demoted an extra out
-        // of core once the cascade had already capped core and pushed the
-        // surplus down, and nothing refilled the freed slot from the
-        // core-typed courses stranded in `free` — VACD's core requirement (27)
-        // exceeds its pool minimums (9+12), so that balance MUST come from
-        // outside the pools. The cascade now handles allocation, totals and
-        // DOM labels uniformly.)
+        // (Core-Elective pools — VACD's two, PSIR's two — are resolved BEFORE the
+        // allocation cascade above via selectCorePools() from the scraped `credits`
+        // groups: courses filling a pool's minimum are pinned to core, extras take
+        // the pool's `overflowTo` and spill on through the normal cascade. Doing it
+        // afterwards demoted an extra out of core once the cascade had already
+        // capped core and pushed the surplus down, and nothing refilled the freed
+        // slot. The cascade then handles allocation, totals and DOM labels
+        // uniformly.)
 
         // Special-case MAN: core/area electives have additional "at least one
         // from each area" constraints, and extra core electives can be counted
@@ -1755,7 +1751,7 @@ function s_curriculum()
         const { excluded: excludedFromDegreeDM, typeOverride: typeOverrideDM, forceCore: forceCoreDM } =
             resolveAlternativeRules(
                 this.doubleMajor, this.entryTermDM, sorted, this.semesters,
-                getInfoFnDM, course_data_dm, (c) => this.hasCourse(c),
+                getInfoFnDM, course_data_dm, (c) => this.hasCourse(c), dmReq.groups,
             );
 
         // Walk semesters and courses allocating DM categories
