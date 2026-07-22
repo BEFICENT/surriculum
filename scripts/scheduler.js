@@ -5524,6 +5524,7 @@
   }
 
   if (typeof window !== 'undefined') {
+    window.loadTermScheduleIndex = loadTermScheduleIndex;
     window.openSchedulerModal = openSchedulerModal;
   }
 })();

@@ -67,6 +67,15 @@ def term_code_from_name(name: str) -> str:
     return f"{year}{suf}" if suf else ""
 
 
+def term_name_from_code(code: str) -> str:
+    parsed = _parse_term_code(code)
+    if not parsed:
+        return ""
+    year, suffix = parsed
+    term = {value: name for name, value in _TERM_SUFFIX.items()}.get(suffix, "")
+    return f"{term} {year}-{year + 1}" if term else ""
+
+
 def term_code_from_date(d: _dt.date) -> str:
     return term_code_from_name(term_name_from_date(d))
 

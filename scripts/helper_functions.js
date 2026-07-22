@@ -876,15 +876,40 @@ if (typeof window !== 'undefined') {
     window.computeCourseSuggestionScore = computeCourseSuggestionScore;
 }
 
-// Lazy-load the course page scrape index so we can check whether a course has
-// been offered in the current term. This is used for optional filtering in the
-// course dropdown (Add Course).
+// Lazy-load the cumulative course info index so we can check whether a course
+// has been offered in the current term. Current/future entries are reconciled
+// from the authoritative term schedules after every schedule refresh.
+function loadCurrentTermScheduleOfferings() {
+    try {
+        if (typeof window === 'undefined') return Promise.resolve(null);
+        if (window.__currentTermScheduleOfferingsPromise) return window.__currentTermScheduleOfferingsPromise;
+        window.__currentTermScheduleOfferingsPromise = (async () => {
+            try {
+                const termCode = String(window.currentTermCode || '').trim();
+                if (!termCode || typeof window.loadTermScheduleIndex !== 'function') return null;
+                const scheduleIndex = await window.loadTermScheduleIndex(termCode);
+                if (!scheduleIndex || typeof scheduleIndex.keys !== 'function') return null;
+                if (typeof scheduleIndex.size === 'number' && scheduleIndex.size === 0) return null;
+                const offered = new Set(Array.from(scheduleIndex.keys(), code => String(code || '').replace(/\s+/g, '').toUpperCase()));
+                window.currentTermScheduledCourseIds = offered;
+                return offered;
+            } catch (_) {
+                return null;
+            }
+        })();
+        return window.__currentTermScheduleOfferingsPromise;
+    } catch (_) {
+        return Promise.resolve(null);
+    }
+}
+
 function loadCourseOfferingsIndex() {
     try {
         if (typeof window === 'undefined') return Promise.resolve(null);
         if (window.__courseOfferingsPromise) return window.__courseOfferingsPromise;
 
         window.__courseOfferingsPromise = (async () => {
+            const schedulePromise = loadCurrentTermScheduleOfferings();
             const tryReadText = async () => {
                 const isFile = (() => {
                     try { return typeof location !== 'undefined' && location && location.protocol === 'file:'; } catch (_) { return false; }
@@ -919,6 +944,7 @@ function loadCourseOfferingsIndex() {
             const byCode = new Map();
             if (!text) {
                 window.courseOfferingsByCode = byCode;
+                await schedulePromise;
                 return byCode;
             }
             const lines = text.split(/\r?\n/);
@@ -927,7 +953,7 @@ function loadCourseOfferingsIndex() {
                 if (!line) continue;
                 try {
                     const obj = JSON.parse(line);
-                    const id = obj && obj.course_id ? String(obj.course_id) : '';
+                    const id = obj && obj.course_id ? String(obj.course_id).replace(/\s+/g, '').toUpperCase() : '';
                     if (!id) continue;
                     const termsArr = Array.isArray(obj.last_offered_terms) ? obj.last_offered_terms : [];
                     const set = new Set();
@@ -941,6 +967,7 @@ function loadCourseOfferingsIndex() {
                 }
             }
             window.courseOfferingsByCode = byCode;
+            await schedulePromise;
             return byCode;
         })();
 
@@ -955,9 +982,14 @@ if (typeof window !== 'undefined') {
         try {
             const ctName = window.currentTermName || '';
             const ctCode = window.currentTermCode || '';
+            const normalizedCode = String(code || '').replace(/\s+/g, '').toUpperCase();
+            const scheduled = window.currentTermScheduledCourseIds;
+            if (scheduled && typeof scheduled.has === 'function') {
+                return scheduled.has(normalizedCode);
+            }
             const idx = window.courseOfferingsByCode;
             if ((!ctName && !ctCode) || !idx) return true; // if unknown/unloaded, don't filter out
-            const set = idx.get(String(code)) || null;
+            const set = idx.get(normalizedCode) || null;
             if (!set) return true;
             return (ctCode && set.has(ctCode)) || (ctName && set.has(ctName));
         } catch (_) {

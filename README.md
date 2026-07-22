@@ -67,7 +67,7 @@ If a course is missing from the catalog (or you want placeholders), you can add 
 The “Add course” dropdown has several optional helpers:
 
 - **Hide taken courses**: hides courses you’ve already taken/added (and also respects currently selected sections in the scheduler for the current term).
-- **Only show offered courses for … term**: filters the dropdown only for the **current term** (using `courses/all_coursepage_info.jsonl` coursepage history).
+- **Only show offered courses for … term**: filters the dropdown only for the **current term** using the same term schedule as the scheduler (with reconciled course-page history as a fallback).
 - **Smart Sort**: sorts the dropdown by a per-course “suggestion score” (highest first).
 
 ### How “Smart Sort” works
@@ -156,7 +156,7 @@ Schedule data files:
 - The scheduler reads from `courses/schedule/<TERM>.jsonl`.
 - Course details also lazily read `courses/course_instructor_history.jsonl`, which is derived from all saved schedule files.
 - Course details can also read `courses/course_section_history.jsonl` for per-section instructors and seat counts.
-- Generate/update these files using `python fetch_schedule.py` (defaults to all terms from the current term onward and rebuilds derived history automatically).
+- Generate/update these files using `python fetch_schedule.py` (defaults to all terms from the current term onward, reconciles those offerings into `courses/all_coursepage_info.jsonl`, and rebuilds derived history automatically).
 
 Mobile note:
 
@@ -190,6 +190,10 @@ Scrape course pages for metadata (including Basic Science/Engineering credit bre
 ```bash
 python scrape_coursepages.py
 ```
+
+Use `python scrape_coursepages.py --refresh` for a genuine full refresh of
+existing records. Full refreshes bypass the local HTML cache; the automated data
+workflow performs one every Monday and remains incremental on other days.
 
 Regenerate the data manifest after **any** data update (no network requests). It
 writes `data/manifest.json`, whose content-derived `dataVersion` keys the app's
@@ -247,7 +251,6 @@ python migrate_to_jsonl.py --delete-json
 
 - **Graduation logic is complex**: requirements are scraped and normalized, but edge cases exist. Always confirm with official program rules.
 - **Scheduler scraping reliability**: the university schedule endpoints can occasionally return server errors; re-run later or with delays.
-- **Course offering filter quality**: “Only show offered courses for … term” depends on `courses/all_coursepage_info.jsonl` and may be incomplete if the scraper hasn’t been run recently.
 - **Minor rule parsing**: minor pages vary; some rules are simplified into structured checks and may miss special cases.
 
 ## Roadmap

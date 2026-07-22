@@ -41,7 +41,14 @@ jobs:
 
       - name: Refresh course page info (credits + offered-term history)
         run: |
-          python scrape_coursepages.py --workers 1 --max-inflight 1
+          args=(--workers 1 --max-inflight 1)
+          if [ "$(date -u +%u)" = "1" ]; then
+            args+=(--refresh)
+            echo "Course page mode: full"
+          else
+            echo "Course page mode: incremental"
+          fi
+          python scrape_coursepages.py "${args[@]}"
 
       - name: Refresh schedule data (best-effort)
         run: |
@@ -77,6 +84,14 @@ jobs:
 
           normalize_terms_jsonl(Path("courses/terms.jsonl"))
           PY
+
+      - name: Rebuild the data cache manifest when data changed
+        run: |
+          if [ -n "$(git status --porcelain -- courses requirements)" ]; then
+            python build_manifest.py
+          else
+            echo "Data files unchanged; keeping the existing manifest."
+          fi
 
       - name: Create pull request if anything changed
         uses: peter-evans/create-pull-request@v8

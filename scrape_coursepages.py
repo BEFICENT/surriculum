@@ -8,11 +8,14 @@ import concurrent.futures
 import threading
 import random
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 from urllib.parse import urlencode
 
 import requests
 from bs4 import BeautifulSoup
+
+from sync_coursepage_offerings import available_current_future_terms, reconcile_coursepage_offerings
 
 
 BASE = "https://suis.sabanciuniv.edu/prod/"
@@ -356,11 +359,13 @@ def fetch_coursepage_html(
     retries: int = 3,
     backoff_s: float = 0.5,
     net_semaphore: Optional[threading.Semaphore] = None,
+    read_cache: bool = True,
+    write_cache: bool = True,
 ) -> Tuple[str, str]:
     url = build_coursepage_url(course.subj_code, course.crse_numb)
     cache_path = os.path.join(cache_dir, f"{course.course_id}.html") if cache_dir else None
 
-    if cache_path and os.path.exists(cache_path):
+    if read_cache and cache_path and os.path.exists(cache_path):
         with open(cache_path, "r", encoding="utf-8") as f:
             return f.read(), url
 
@@ -385,7 +390,7 @@ def fetch_coursepage_html(
     else:
         raise last_err if last_err else RuntimeError("failed to fetch course page")
 
-    if cache_path:
+    if write_cache and cache_path:
         os.makedirs(os.path.dirname(cache_path), exist_ok=True)
         with open(cache_path, "w", encoding="utf-8") as f:
             f.write(html)
@@ -443,7 +448,11 @@ def main() -> int:
     parser.add_argument("--out-all-info", default=DEFAULT_OUT_ALL_INFO)
     parser.add_argument("--cache-dir", default=DEFAULT_CACHE_DIR)
     parser.add_argument("--no-cache", action="store_true")
-    parser.add_argument("--refresh", action="store_true", help="Re-scrape even if a course_id exists in the output files.")
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Re-fetch every course even if it exists in the output files (bypasses the HTML cache).",
+    )
     parser.add_argument("--timeout", type=float, default=30.0)
     parser.add_argument("--workers", type=int, default=6, help="Number of parallel workers for scraping course pages.")
     parser.add_argument(
@@ -494,6 +503,12 @@ def main() -> int:
     if args.max_courses and args.max_courses > 0:
         needed = needed[: args.max_courses]
 
+    known_valid_attempts = {
+        course.course_id
+        for course in needed
+        if (existing_info.get(course.course_id) or {}).get("scrape_ok") is True
+    }
+
     tls = threading.local()
 
     def get_session() -> requests.Session:
@@ -511,7 +526,26 @@ def main() -> int:
     cache_dir = None if args.no_cache else args.cache_dir
     net_semaphore = threading.Semaphore(max(1, int(args.max_inflight)))
 
-    newly_scraped = 0
+    accepted_scrapes = 0
+    successful_scrapes = 0
+    successful_course_ids: set[str] = set()
+
+    def store_scrape_result(
+        course_id: str,
+        info_record: Dict[str, Any],
+        credit_record: Dict[str, Any],
+    ) -> bool:
+        previous_info = existing_info.get(course_id)
+        previous_credits = existing_credits.get(course_id)
+        if info_record.get("scrape_ok") is False and (
+            (previous_info and previous_info.get("scrape_ok") is not False)
+            or (previous_credits and previous_credits.get("scrape_ok") is not False)
+        ):
+            print(f"[warn] retaining last known-good course-page data for {course_id}")
+            return False
+        existing_info[course_id] = info_record
+        existing_credits[course_id] = credit_record
+        return True
 
     def scrape_one(course: CourseKey) -> Tuple[str, Dict[str, Any], Dict[str, Any]]:
         attempts = max(0, int(args.retries)) + 1
@@ -528,14 +562,21 @@ def main() -> int:
                     timeout_s=args.timeout,
                     retries=0,
                     net_semaphore=net_semaphore,
+                    read_cache=not args.refresh,
+                    write_cache=not args.refresh,
                 )
                 parsed = parse_coursepage_html(html, source_url=url)
                 if _is_valid_scrape(parsed, course):
+                    if args.refresh and cache_dir:
+                        cache_path = os.path.join(cache_dir, f"{course.course_id}.html")
+                        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+                        with open(cache_path, "w", encoding="utf-8") as f:
+                            f.write(html)
                     valid_parsed = parsed
                     break
                 last_parsed = parsed
                 last_err = ValueError("invalid coursepage response (code mismatch or missing header)")
-                if cache_dir:
+                if cache_dir and not args.refresh:
                     cache_path = os.path.join(cache_dir, f"{course.course_id}.html")
                     try:
                         if os.path.exists(cache_path):
@@ -549,7 +590,7 @@ def main() -> int:
                 continue
             except Exception as e:
                 last_err = e
-                if cache_dir:
+                if cache_dir and not args.refresh:
                     cache_path = os.path.join(cache_dir, f"{course.course_id}.html")
                     try:
                         if os.path.exists(cache_path):
@@ -616,9 +657,11 @@ def main() -> int:
                 except Exception as e:
                     print(f"[warn] failed to scrape {course.course_id}: {e}")
                     continue
-                existing_info[course_id] = info_record
-                existing_credits[course_id] = credit_record
-                newly_scraped += 1
+                if store_scrape_result(course_id, info_record, credit_record):
+                    accepted_scrapes += 1
+                if info_record.get("scrape_ok") is True:
+                    successful_scrapes += 1
+                    successful_course_ids.add(course_id)
         else:
             with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
                 futures = {executor.submit(scrape_one, course): course for course in needed}
@@ -630,16 +673,43 @@ def main() -> int:
                     except Exception as e:
                         print(f"[warn] failed to scrape {course.course_id}: {e}")
                         continue
-                    existing_info[course_id] = info_record
-                    existing_credits[course_id] = credit_record
-                    newly_scraped += 1
+                    if store_scrape_result(course_id, info_record, credit_record):
+                        accepted_scrapes += 1
+                    if info_record.get("scrape_ok") is True:
+                        successful_scrapes += 1
+                        successful_course_ids.add(course_id)
                     completed += 1
                     if completed % 200 == 0:
                         print(f"... scraped {completed}/{len(needed)}")
 
+    if args.refresh and known_valid_attempts:
+        known_valid_successes = len(successful_course_ids.intersection(known_valid_attempts))
+        success_rate = known_valid_successes / len(known_valid_attempts)
+        if success_rate < 0.8:
+            print(
+                f"[error] full course-page refresh recovered only "
+                f"{known_valid_successes}/{len(known_valid_attempts)} previously valid pages "
+                f"({success_rate:.1%}); preserving the existing output files"
+            )
+            return 1
+
     # Write cumulative outputs (deterministic ordering).
     write_jsonl(args.out_all_info, [existing_info[k] for k in sorted(existing_info.keys())])
     write_jsonl(args.out_basic_science, [existing_credits[k] for k in sorted(existing_credits.keys())])
+
+    schedule_dir = Path(courses_dir) / "schedule"
+    schedule_terms = available_current_future_terms(schedule_dir)
+    if schedule_terms:
+        stats = reconcile_coursepage_offerings(
+            coursepage_info_path=Path(args.out_all_info),
+            schedule_dir=schedule_dir,
+            terms=schedule_terms,
+            remove_absent=False,
+        )
+        print(
+            "Restored schedule-proven course-page offerings: "
+            f"terms={','.join(stats.terms)} changed_records={stats.changed_records}"
+        )
 
     credits_by_course_id: Dict[str, Dict[str, float]] = {}
     for course_id, rec in existing_credits.items():
@@ -663,7 +733,8 @@ def main() -> int:
         update_course_json_files(courses_dir, credits_by_course_id)
 
     print(
-        f"Scraped {newly_scraped} course pages. "
+        f"Accepted {accepted_scrapes} course-page updates "
+        f"({successful_scrapes} valid responses). "
         f"Wrote {len(existing_info)} records to {args.out_all_info} and "
         f"{len(existing_credits)} records to {args.out_basic_science}."
     )
