@@ -389,6 +389,520 @@
       .replace(/'/g, '&#39;');
   }
 
+  const IMPORT_MAX_FILE_BYTES = 2 * 1024 * 1024;
+  const IMPORT_MAX_SEMESTERS = 80;
+  const IMPORT_MAX_COURSES_PER_SEMESTER = 100;
+  const IMPORT_MAX_CUSTOM_COURSES = 2000;
+  const IMPORT_MAX_SCHEDULER_TERMS = 40;
+  const IMPORT_MAX_SELECTED_SECTIONS = 200;
+  const IMPORT_MAX_BLOCKED_RANGES = 100;
+  const IMPORT_MAX_SCHEDULES_PER_TERM = 10;
+  const IMPORT_MAX_SCHEDULE_NAME_LENGTH = 200;
+  const IMPORT_MAX_SNAPSHOT_TEXT_LENGTH = 4000;
+  const IMPORT_COURSE_TYPES = new Set(['core', 'area', 'university', 'free', 'required', 'none']);
+  const IMPORT_FACULTIES = new Set(['', 'FENS', 'FASS', 'SBS', 'SL']);
+  const IMPORT_GRADES = new Set(['', 'S', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'F', 'T', 'P', 'I', 'U', 'W', 'NA']);
+  const IMPORT_STATE_FIELDS = new Set([
+    'major', 'doubleMajor',
+    'entryTerm', 'entryTermDM',
+    'entryTermMinor', 'entryTermMinor1', 'entryTermMinor2', 'entryTermMinor3',
+    'minor1', 'minor2', 'minor3',
+    'schedulerSelectedTerm',
+    'curriculum', 'grades', 'dates', 'customCourses', 'schedulerStates',
+  ]);
+
+  function importError(path, message) {
+    throw new Error(`Invalid plan data at ${path}: ${message}.`);
+  }
+
+  function isPlainObject(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    const proto = Object.getPrototypeOf(value);
+    return proto === Object.prototype || proto === null;
+  }
+
+  function requirePlainObject(value, path) {
+    if (!isPlainObject(value)) importError(path, 'expected an object');
+    return value;
+  }
+
+  function requireKnownFields(value, allowed, path) {
+    Object.keys(value).forEach((key) => {
+      if (!allowed.has(key)) importError(path, `unknown field "${String(key).slice(0, 80)}"`);
+    });
+  }
+
+  function hasOwn(value, key) {
+    return Object.prototype.hasOwnProperty.call(value, key);
+  }
+
+  function normalizeImportedText(value, path, options) {
+    const opts = options || {};
+    if (typeof value !== 'string') importError(path, 'expected text');
+    if (/\u0000|[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(value)) {
+      importError(path, 'contains unsupported control characters');
+    }
+    let normalized = opts.collapseWhitespace ? value.trim().replace(/\s+/g, ' ') : value.trim();
+    const maxLength = Number.isInteger(opts.maxLength) ? opts.maxLength : 120;
+    if (!opts.allowEmpty && !normalized) importError(path, 'must not be empty');
+    if (normalized.length > maxLength) {
+      if (opts.truncate) normalized = normalized.slice(0, maxLength);
+      else importError(path, `must be at most ${maxLength} characters`);
+    }
+    return normalized;
+  }
+
+  function normalizeProgramCode(value, path) {
+    const normalized = normalizeImportedText(value, path, { maxLength: 16 }).toUpperCase();
+    if (!/^[A-Z][A-Z0-9]{1,15}$/.test(normalized)) importError(path, 'has an invalid program code');
+    return normalized;
+  }
+
+  function normalizeMinorCode(value, path) {
+    const normalized = normalizeImportedText(value, path, { maxLength: 48 }).toUpperCase();
+    if (!/^[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(normalized)) importError(path, 'has an invalid minor code');
+    return normalized;
+  }
+
+  function normalizeCourseCode(value, path) {
+    if (typeof value !== 'string') importError(path, 'expected a course code');
+    const normalized = value.toUpperCase().replace(/\s+/g, '');
+    if (!/^[A-Z]{1,12}\d{1,6}[A-Z0-9]{0,3}$/.test(normalized)) importError(path, 'has an invalid course code');
+    return normalized;
+  }
+
+  function normalizeTermName(value, path) {
+    const normalized = normalizeImportedText(value, path, { maxLength: 32, collapseWhitespace: true });
+    if (!/^(Fall|Spring|Summer) \d{4}-\d{4}$/.test(normalized)) importError(path, 'has an invalid academic term');
+    return normalized;
+  }
+
+  function normalizeTermCode(value, path) {
+    const normalized = normalizeImportedText(value, path, { maxLength: 6 });
+    if (!/^\d{6}$/.test(normalized)) importError(path, 'has an invalid term code');
+    return normalized;
+  }
+
+  function normalizeFiniteNumber(value, path, maxValue) {
+    let raw = value;
+    if (typeof raw === 'string') {
+      raw = raw.trim().replace(',', '.');
+      if (!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(raw)) importError(path, 'expected a non-negative number');
+    } else if (typeof raw !== 'number') {
+      importError(path, 'expected a non-negative number');
+    }
+    const number = Number(raw);
+    if (!Number.isFinite(number) || number < 0 || number > maxValue) {
+      importError(path, `must be between 0 and ${maxValue}`);
+    }
+    return Object.is(number, -0) ? 0 : number;
+  }
+
+  function normalizeIsoTimestamp(value, path) {
+    if (value === null) return null;
+    const normalized = normalizeImportedText(value, path, { maxLength: 40 });
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(normalized)
+        || !Number.isFinite(Date.parse(normalized))) {
+      importError(path, 'has an invalid timestamp');
+    }
+    return normalized;
+  }
+
+  function validateCurriculum(value, path) {
+    if (value === null) return null;
+    if (!Array.isArray(value)) importError(path, 'expected an array of semesters');
+    if (value.length > IMPORT_MAX_SEMESTERS) importError(path, `supports at most ${IMPORT_MAX_SEMESTERS} semesters`);
+    let totalCourses = 0;
+    return value.map((semester, semesterIndex) => {
+      const semesterPath = `${path}[${semesterIndex}]`;
+      if (!Array.isArray(semester)) importError(semesterPath, 'expected an array of course codes');
+      if (semester.length > IMPORT_MAX_COURSES_PER_SEMESTER) {
+        importError(semesterPath, `supports at most ${IMPORT_MAX_COURSES_PER_SEMESTER} courses`);
+      }
+      totalCourses += semester.length;
+      if (totalCourses > IMPORT_MAX_CUSTOM_COURSES) importError(path, 'contains too many courses');
+      return semester.map((courseCode, courseIndex) => normalizeCourseCode(courseCode, `${semesterPath}[${courseIndex}]`));
+    });
+  }
+
+  function validateGrades(value, curriculum, path) {
+    if (value === null) return null;
+    if (!Array.isArray(value)) importError(path, 'expected an array of semesters');
+    if (!Array.isArray(curriculum)) {
+      if (value.length === 0) return [];
+      importError(path, 'requires curriculum data');
+    }
+    if (value.length !== curriculum.length) importError(path, 'must have one entry per curriculum semester');
+    return value.map((semester, semesterIndex) => {
+      const semesterPath = `${path}[${semesterIndex}]`;
+      if (!Array.isArray(semester)) importError(semesterPath, 'expected an array of grades');
+      if (semester.length !== curriculum[semesterIndex].length) {
+        importError(semesterPath, 'must have one grade per course');
+      }
+      return semester.map((grade, gradeIndex) => {
+        if (typeof grade !== 'string') importError(`${semesterPath}[${gradeIndex}]`, 'expected a grade');
+        let normalized = grade.trim().toUpperCase();
+        if (normalized === 'REGISTERED') normalized = '';
+        if (!IMPORT_GRADES.has(normalized)) importError(`${semesterPath}[${gradeIndex}]`, 'has an unsupported grade');
+        return normalized;
+      });
+    });
+  }
+
+  function validateDates(value, curriculum, path) {
+    if (value === null) return null;
+    if (!Array.isArray(value)) importError(path, 'expected an array of semester labels');
+    if (!Array.isArray(curriculum)) {
+      if (value.length === 0) return [];
+      importError(path, 'requires curriculum data');
+    }
+    if (value.length !== curriculum.length) importError(path, 'must have one label per curriculum semester');
+    return value.map((label, index) => normalizeImportedText(label, `${path}[${index}]`, {
+      maxLength: 80,
+      collapseWhitespace: true,
+    }));
+  }
+
+  function validateCustomCourse(value, path) {
+    const course = requirePlainObject(value, path);
+    requireKnownFields(course, new Set([
+      'Major', 'Code', 'Course_Name', 'ECTS', 'Engineering', 'Basic_Science',
+      'SU_credit', 'Faculty', 'Faculty_Course', 'EL_Type',
+    ]), path);
+
+    if (!hasOwn(course, 'Major')) importError(`${path}.Major`, 'is required');
+    if (!hasOwn(course, 'Code')) importError(`${path}.Code`, 'is required');
+    const major = normalizeImportedText(course.Major, `${path}.Major`, { maxLength: 12 }).toUpperCase();
+    const code = normalizeImportedText(course.Code, `${path}.Code`, { maxLength: 9 }).toUpperCase();
+    const combined = normalizeCourseCode(major + code, path);
+    const majorMatch = combined.match(/^([A-Z]{1,12})(\d[A-Z0-9]*)$/);
+    if (!majorMatch || majorMatch[1] !== major || majorMatch[2] !== code) importError(path, 'has inconsistent course-code fields');
+
+    const name = hasOwn(course, 'Course_Name')
+      ? normalizeImportedText(course.Course_Name, `${path}.Course_Name`, {
+          maxLength: 200,
+          collapseWhitespace: true,
+          truncate: true,
+        })
+      : combined;
+    const ects = hasOwn(course, 'ECTS') ? normalizeFiniteNumber(course.ECTS, `${path}.ECTS`, 100) : 0;
+    const engineering = hasOwn(course, 'Engineering') ? normalizeFiniteNumber(course.Engineering, `${path}.Engineering`, 100) : 0;
+    const basicScience = hasOwn(course, 'Basic_Science') ? normalizeFiniteNumber(course.Basic_Science, `${path}.Basic_Science`, 100) : 0;
+    const suCredit = hasOwn(course, 'SU_credit') ? normalizeFiniteNumber(course.SU_credit, `${path}.SU_credit`, 100) : 0;
+
+    let faculty = '';
+    if (hasOwn(course, 'Faculty')) {
+      if (typeof course.Faculty !== 'string') importError(`${path}.Faculty`, 'expected text');
+      const candidate = course.Faculty.trim().toUpperCase();
+      faculty = IMPORT_FACULTIES.has(candidate) ? candidate : '';
+    }
+
+    let courseType = 'none';
+    if (hasOwn(course, 'EL_Type')) {
+      if (typeof course.EL_Type !== 'string') importError(`${path}.EL_Type`, 'expected text');
+      const candidate = course.EL_Type.trim().toLowerCase();
+      // Old exports could contain a free-form category. Keep the course but
+      // fail closed by assigning it to no graduation bucket.
+      courseType = IMPORT_COURSE_TYPES.has(candidate) ? candidate : 'none';
+    }
+
+    if (hasOwn(course, 'Faculty_Course') && typeof course.Faculty_Course !== 'string') {
+      importError(`${path}.Faculty_Course`, 'expected text');
+    }
+
+    return {
+      Major: major,
+      Code: code,
+      Course_Name: name,
+      ECTS: String(ects),
+      Engineering: engineering,
+      Basic_Science: basicScience,
+      SU_credit: String(suCredit),
+      Faculty: faculty,
+      // User-defined courses cannot claim membership in the catalog's faculty
+      // course pool, even if an imported file says otherwise.
+      Faculty_Course: 'No',
+      EL_Type: courseType,
+    };
+  }
+
+  function validateCustomCourses(value, path) {
+    if (value === null) return {};
+    const map = requirePlainObject(value, path);
+    const programs = Object.keys(map);
+    if (programs.length > 40) importError(path, 'contains too many program groups');
+    let totalCourses = 0;
+    const out = {};
+    programs.forEach((programKey) => {
+      const program = normalizeProgramCode(programKey, `${path}.${String(programKey).slice(0, 80)}`);
+      if (hasOwn(out, program)) importError(path, 'contains duplicate normalized program codes');
+      const list = map[programKey];
+      if (!Array.isArray(list)) importError(`${path}.${program}`, 'expected an array of custom courses');
+      totalCourses += list.length;
+      if (totalCourses > IMPORT_MAX_CUSTOM_COURSES) importError(path, `supports at most ${IMPORT_MAX_CUSTOM_COURSES} custom courses`);
+      out[program] = list.map((course, index) => validateCustomCourse(course, `${path}.${program}[${index}]`));
+    });
+    return out;
+  }
+
+  function validateSelectedSections(value, path) {
+    if (value === undefined || value === null) return {};
+    const selected = requirePlainObject(value, path);
+    const keys = Object.keys(selected);
+    if (keys.length > IMPORT_MAX_SELECTED_SECTIONS) importError(path, 'contains too many selected sections');
+    const out = {};
+    keys.forEach((key) => {
+      const courseCode = normalizeCourseCode(key, `${path}.${String(key).slice(0, 80)}`);
+      if (hasOwn(out, courseCode)) importError(path, 'contains duplicate normalized course codes');
+      const entryPath = `${path}.${courseCode}`;
+      const entry = requirePlainObject(selected[key], entryPath);
+      requireKnownFields(entry, new Set(['course_id', 'crn']), entryPath);
+      const entryCode = normalizeCourseCode(entry.course_id, `${entryPath}.course_id`);
+      if (entryCode !== courseCode) importError(`${entryPath}.course_id`, 'must match its selected-course key');
+      const crn = normalizeImportedText(entry.crn, `${entryPath}.crn`, { maxLength: 12 });
+      if (!/^\d{1,12}$/.test(crn)) importError(`${entryPath}.crn`, 'has an invalid CRN');
+      out[courseCode] = { course_id: courseCode, crn };
+    });
+    return out;
+  }
+
+  function validateBlockedRanges(value, path) {
+    if (value === undefined || value === null) return [];
+    if (!Array.isArray(value)) importError(path, 'expected an array of blocked ranges');
+    if (value.length > IMPORT_MAX_BLOCKED_RANGES) importError(path, 'contains too many blocked ranges');
+    return value.map((item, index) => {
+      const itemPath = `${path}[${index}]`;
+      const block = requirePlainObject(item, itemPath);
+      requireKnownFields(block, new Set(['id', 'dayKey', 'start', 'end']), itemPath);
+      const id = normalizeImportedText(block.id, `${itemPath}.id`, { maxLength: 100 });
+      if (!/^[A-Za-z0-9._-]+$/.test(id)) importError(`${itemPath}.id`, 'has invalid characters');
+      const dayKey = normalizeImportedText(block.dayKey, `${itemPath}.dayKey`, { maxLength: 1 }).toUpperCase();
+      if (!/^[MTWRF]$/.test(dayKey)) importError(`${itemPath}.dayKey`, 'has an invalid day');
+      const start = normalizeFiniteNumber(block.start, `${itemPath}.start`, 1440);
+      const end = normalizeFiniteNumber(block.end, `${itemPath}.end`, 1440);
+      if (!Number.isInteger(start) || !Number.isInteger(end) || end <= start) {
+        importError(itemPath, 'must contain increasing whole-minute bounds');
+      }
+      return { id, dayKey, start, end };
+    });
+  }
+
+  function validateSchedulerUi(value, path) {
+    if (value === undefined || value === null) return {};
+    const ui = requirePlainObject(value, path);
+    const allowed = new Set(['planCollapsed', 'selectedCollapsed', 'blockedCollapsed', 'sidebarCollapsed']);
+    requireKnownFields(ui, allowed, path);
+    const out = {};
+    Object.keys(ui).forEach((key) => {
+      if (typeof ui[key] !== 'boolean') importError(`${path}.${key}`, 'expected true or false');
+      out[key] = ui[key];
+    });
+    return out;
+  }
+
+  function normalizeScheduleId(value, path) {
+    const id = normalizeImportedText(value, path, { maxLength: 100 });
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id)
+        || ['__proto__', 'prototype', 'constructor'].includes(id.toLowerCase())) {
+      importError(path, 'has invalid characters');
+    }
+    return id;
+  }
+
+  function validateScheduleEntry(value, expectedId, path) {
+    const entry = requirePlainObject(value, path);
+    requireKnownFields(entry, new Set(['id', 'name', 'selected', 'blocked', 'ui']), path);
+    const id = normalizeScheduleId(entry.id, `${path}.id`);
+    if (id !== expectedId) importError(`${path}.id`, 'must match its schedule key');
+    return {
+      id,
+      name: normalizeImportedText(entry.name, `${path}.name`, {
+        maxLength: IMPORT_MAX_SCHEDULE_NAME_LENGTH,
+        collapseWhitespace: true,
+        truncate: true,
+      }),
+      selected: validateSelectedSections(entry.selected, `${path}.selected`),
+      blocked: validateBlockedRanges(entry.blocked, `${path}.blocked`),
+      ui: validateSchedulerUi(entry.ui, `${path}.ui`),
+    };
+  }
+
+  function validateSchedules(value, path) {
+    const schedules = requirePlainObject(value, path);
+    requireKnownFields(schedules, new Set(['activeId', 'order', 'items']), path);
+    if (!Array.isArray(schedules.order) || schedules.order.length < 1
+        || schedules.order.length > IMPORT_MAX_SCHEDULES_PER_TERM) {
+      importError(`${path}.order`, `must contain 1-${IMPORT_MAX_SCHEDULES_PER_TERM} schedule IDs`);
+    }
+    const order = schedules.order.map((id, index) => normalizeScheduleId(id, `${path}.order[${index}]`));
+    if (new Set(order).size !== order.length) importError(`${path}.order`, 'contains duplicate schedule IDs');
+    const activeId = normalizeScheduleId(schedules.activeId, `${path}.activeId`);
+    if (!order.includes(activeId)) importError(`${path}.activeId`, 'must identify an ordered schedule');
+    const items = requirePlainObject(schedules.items, `${path}.items`);
+    const itemKeys = Object.keys(items);
+    if (itemKeys.length !== order.length || itemKeys.some((id) => !order.includes(id))) {
+      importError(`${path}.items`, 'must exactly match the ordered schedules');
+    }
+    const normalizedItems = {};
+    order.forEach((id) => {
+      normalizedItems[id] = validateScheduleEntry(items[id], id, `${path}.items.${id}`);
+    });
+    return { activeId, order, items: normalizedItems };
+  }
+
+  function validateScheduleSnapshots(value, path) {
+    if (value === undefined || value === null) return {};
+    const snapshots = requirePlainObject(value, path);
+    const scheduleIds = Object.keys(snapshots);
+    if (scheduleIds.length > IMPORT_MAX_SCHEDULES_PER_TERM) {
+      importError(path, `supports at most ${IMPORT_MAX_SCHEDULES_PER_TERM} schedules`);
+    }
+    const out = {};
+    scheduleIds.forEach((rawScheduleId) => {
+      const scheduleId = normalizeScheduleId(rawScheduleId, `${path}.${String(rawScheduleId).slice(0, 80)}`);
+      if (hasOwn(out, scheduleId)) importError(path, 'contains duplicate normalized schedule IDs');
+      const schedulePath = `${path}.${scheduleId}`;
+      const courseSnapshots = requirePlainObject(snapshots[rawScheduleId], schedulePath);
+      const courseCodes = Object.keys(courseSnapshots);
+      if (courseCodes.length > IMPORT_MAX_SELECTED_SECTIONS) {
+        importError(schedulePath, 'contains too many section snapshots');
+      }
+      const normalizedCourseSnapshots = {};
+      courseCodes.forEach((rawCourseCode) => {
+        const courseCode = normalizeCourseCode(rawCourseCode, `${schedulePath}.${String(rawCourseCode).slice(0, 80)}`);
+        if (hasOwn(normalizedCourseSnapshots, courseCode)) {
+          importError(schedulePath, 'contains duplicate normalized course codes');
+        }
+        const snapshotPath = `${schedulePath}.${courseCode}`;
+        const snapshot = requirePlainObject(courseSnapshots[rawCourseCode], snapshotPath);
+        requireKnownFields(snapshot, new Set([
+          'crn', 'meetingKey', 'instrKey', 'meetingSummary', 'instrSummary',
+        ]), snapshotPath);
+        if (!hasOwn(snapshot, 'crn')) importError(`${snapshotPath}.crn`, 'is required');
+        const crn = normalizeImportedText(snapshot.crn, `${snapshotPath}.crn`, { maxLength: 12 });
+        if (!/^\d{1,12}$/.test(crn)) importError(`${snapshotPath}.crn`, 'has an invalid CRN');
+        const textField = (key) => hasOwn(snapshot, key)
+          ? normalizeImportedText(snapshot[key], `${snapshotPath}.${key}`, {
+              allowEmpty: true,
+              maxLength: IMPORT_MAX_SNAPSHOT_TEXT_LENGTH,
+            })
+          : '';
+        normalizedCourseSnapshots[courseCode] = {
+          crn,
+          meetingKey: textField('meetingKey'),
+          instrKey: textField('instrKey'),
+          meetingSummary: textField('meetingSummary'),
+          instrSummary: textField('instrSummary'),
+        };
+      });
+      out[scheduleId] = normalizedCourseSnapshots;
+    });
+    return out;
+  }
+
+  function validateSchedulerState(value, path) {
+    const state = requirePlainObject(value, path);
+    requireKnownFields(state, new Set([
+      'selected', 'blocked', 'ui', 'schedules', 'lastSeenScheduleSnapshots',
+    ]), path);
+    const legacySelected = validateSelectedSections(state.selected, `${path}.selected`);
+    const legacyBlocked = validateBlockedRanges(state.blocked, `${path}.blocked`);
+    const legacyUi = validateSchedulerUi(state.ui, `${path}.ui`);
+    const snapshots = hasOwn(state, 'lastSeenScheduleSnapshots')
+      ? validateScheduleSnapshots(state.lastSeenScheduleSnapshots, `${path}.lastSeenScheduleSnapshots`)
+      : undefined;
+    if (!hasOwn(state, 'schedules') || state.schedules === null) {
+      const legacy = { selected: legacySelected, blocked: legacyBlocked, ui: legacyUi };
+      if (snapshots !== undefined) legacy.lastSeenScheduleSnapshots = snapshots;
+      return legacy;
+    }
+    const schedules = validateSchedules(state.schedules, `${path}.schedules`);
+    const active = schedules.items[schedules.activeId];
+    const normalized = {
+      schedules,
+      // Canonicalize the legacy mirror to the validated active schedule.
+      selected: active.selected,
+      blocked: active.blocked,
+      ui: active.ui,
+    };
+    if (snapshots !== undefined) normalized.lastSeenScheduleSnapshots = snapshots;
+    return normalized;
+  }
+
+  function validateSchedulerStates(value, path) {
+    if (value === null) return {};
+    const states = requirePlainObject(value, path);
+    const terms = Object.keys(states);
+    if (terms.length > IMPORT_MAX_SCHEDULER_TERMS) importError(path, 'contains too many scheduler terms');
+    const out = {};
+    terms.forEach((termKey) => {
+      const term = normalizeTermCode(termKey, `${path}.${String(termKey).slice(0, 80)}`);
+      if (hasOwn(out, term)) importError(path, 'contains duplicate normalized term codes');
+      out[term] = validateSchedulerState(states[termKey], `${path}.${term}`);
+    });
+    return out;
+  }
+
+  function validatePlanState(value, path) {
+    if (value === undefined || value === null) return {};
+    const state = requirePlainObject(value, path);
+    requireKnownFields(state, IMPORT_STATE_FIELDS, path);
+    const out = {};
+
+    const programFields = ['major', 'doubleMajor'];
+    programFields.forEach((key) => {
+      if (hasOwn(state, key) && state[key] !== null && state[key] !== '') {
+        out[key] = normalizeProgramCode(state[key], `${path}.${key}`);
+      }
+    });
+    const termFields = ['entryTerm', 'entryTermDM', 'entryTermMinor', 'entryTermMinor1', 'entryTermMinor2', 'entryTermMinor3'];
+    termFields.forEach((key) => {
+      if (hasOwn(state, key) && state[key] !== null && state[key] !== '') {
+        out[key] = normalizeTermName(state[key], `${path}.${key}`);
+      }
+    });
+    ['minor1', 'minor2', 'minor3'].forEach((key) => {
+      if (hasOwn(state, key) && state[key] !== null && state[key] !== '') {
+        out[key] = normalizeMinorCode(state[key], `${path}.${key}`);
+      }
+    });
+    if (hasOwn(state, 'schedulerSelectedTerm') && state.schedulerSelectedTerm !== null && state.schedulerSelectedTerm !== '') {
+      out.schedulerSelectedTerm = normalizeTermCode(state.schedulerSelectedTerm, `${path}.schedulerSelectedTerm`);
+    }
+
+    const curriculum = hasOwn(state, 'curriculum') ? validateCurriculum(state.curriculum, `${path}.curriculum`) : undefined;
+    if (curriculum !== undefined) out.curriculum = curriculum;
+    if (hasOwn(state, 'grades')) out.grades = validateGrades(state.grades, curriculum, `${path}.grades`);
+    if (hasOwn(state, 'dates')) out.dates = validateDates(state.dates, curriculum, `${path}.dates`);
+    if (hasOwn(state, 'customCourses')) out.customCourses = validateCustomCourses(state.customCourses, `${path}.customCourses`);
+    if (hasOwn(state, 'schedulerStates')) out.schedulerStates = validateSchedulerStates(state.schedulerStates, `${path}.schedulerStates`);
+    return out;
+  }
+
+  function validateImportObject(obj) {
+    const root = requirePlainObject(obj, 'file');
+    requireKnownFields(root, new Set(['type', 'version', 'exportedAt', 'plan']), 'file');
+    if (root.type !== 'surriculum_plan' || root.version !== 1) throw new Error('Unsupported file');
+    if (hasOwn(root, 'exportedAt') && root.exportedAt !== null) normalizeIsoTimestamp(root.exportedAt, 'file.exportedAt');
+
+    const plan = requirePlainObject(root.plan, 'file.plan');
+    requireKnownFields(plan, new Set(['id', 'name', 'order', 'createdAt', 'updatedAt', 'state']), 'file.plan');
+    if (hasOwn(plan, 'id') && plan.id !== null) normalizeScheduleId(plan.id, 'file.plan.id');
+    if (hasOwn(plan, 'order') && plan.order !== null
+        && (!Number.isInteger(plan.order) || plan.order < 0 || plan.order >= MAX_PLANS)) {
+      importError('file.plan.order', `must be an integer from 0 to ${MAX_PLANS - 1}`);
+    }
+    if (hasOwn(plan, 'createdAt')) normalizeIsoTimestamp(plan.createdAt, 'file.plan.createdAt');
+    if (hasOwn(plan, 'updatedAt')) normalizeIsoTimestamp(plan.updatedAt, 'file.plan.updatedAt');
+
+    let name = 'Imported Plan';
+    if (hasOwn(plan, 'name') && plan.name !== null) {
+      const rawName = normalizeImportedText(plan.name, 'file.plan.name', { maxLength: 500, collapseWhitespace: true });
+      name = normalizePlanName(rawName) || 'Imported Plan';
+    }
+    return { name, state: validatePlanState(plan.state, 'file.plan.state') };
+  }
+
   function downloadJson(filename, obj) {
     const text = JSON.stringify(obj, null, 2);
     const blob = new Blob([text], { type: 'application/json' });
@@ -441,7 +955,15 @@
         const raw = localStorage.getItem(k);
         const parsed = safeJsonParse(raw || 'null', null);
         if (Array.isArray(parsed)) {
-          state.customCourses[majorKey.replace(/^customCourses_/, '')] = parsed;
+          const program = majorKey.replace(/^customCourses_/, '');
+          try {
+            state.customCourses[program] = validateCustomCourses(
+              { [program]: parsed },
+              `stored custom courses.${program}`
+            )[normalizeProgramCode(program, 'stored custom-course program')];
+          } catch (err) {
+            try { console.warn('Ignoring invalid stored custom courses during export:', err); } catch (_) {}
+          }
         }
         continue;
       }
@@ -458,8 +980,9 @@
     return state;
   }
 
-  function writePlanState(planId, state) {
+  function writePlanState(planId, state, options) {
     if (!state || typeof state !== 'object') return;
+    const writeOptions = options || {};
     const setRaw = (k, v) => localStorage.setItem(planKey(planId, k), v);
     const setJson = (k, v) => setRaw(k, JSON.stringify(v));
 
@@ -496,7 +1019,7 @@
       }
     }
 
-    touchUpdated(planId);
+    if (!writeOptions.skipTouch) touchUpdated(planId);
   }
 
   function buildExportObject(planId) {
@@ -521,19 +1044,29 @@
 
   function importExportObject(obj, opts) {
     const options = opts || {};
-    if (!obj || typeof obj !== 'object') throw new Error('Invalid file');
-    if (obj.type !== 'surriculum_plan' || obj.version !== 1 || !obj.plan) throw new Error('Unsupported file');
-
-    const name = normalizePlanName(obj.plan.name) || 'Imported Plan';
+    const validated = validateImportObject(obj);
     const idx = ensureIndex();
     if (idx.plans.length >= MAX_PLANS) throw new Error(`Plan limit reached (${MAX_PLANS}).`);
 
     const id = createId();
-    idx.plans.push({ id, name, createdAt: nowIso(), updatedAt: nowIso() });
-    if (options.activate) idx.activeId = id;
-    saveIndex(idx);
-
-    writePlanState(id, obj.plan.state || {});
+    const createdAt = nowIso();
+    const prefix = planKey(id, '');
+    try {
+      // Persist the already-normalized state first. The plan is not added to
+      // the visible index until every state write succeeds, so malformed data
+      // or a storage-quota failure cannot leave a partial active plan behind.
+      writePlanState(id, validated.state, { skipTouch: true });
+      idx.plans.push({ id, name: validated.name, createdAt, updatedAt: createdAt });
+      if (options.activate) idx.activeId = id;
+      saveIndex(idx);
+    } catch (err) {
+      try {
+        listLocalStorageKeys().forEach((key) => {
+          if (key.startsWith(prefix)) localStorage.removeItem(key);
+        });
+      } catch (_) {}
+      throw err;
+    }
     return id;
   }
 
@@ -793,11 +1326,28 @@
     },
     getItem(key, planId) {
       const pid = planId || getActivePlanId();
-      return localStorage.getItem(planKey(pid, key));
+      const raw = localStorage.getItem(planKey(pid, key));
+      if (raw == null || !String(key || '').startsWith('customCourses_')) return raw;
+      try {
+        const program = String(key).slice('customCourses_'.length);
+        const parsed = JSON.parse(raw);
+        const normalized = validateCustomCourses({ [program]: parsed }, `stored custom courses.${program}`);
+        return JSON.stringify(normalized[normalizeProgramCode(program, 'stored custom-course program')]);
+      } catch (err) {
+        try { console.warn('Ignoring invalid stored custom courses:', err); } catch (_) {}
+        return '[]';
+      }
     },
     setItem(key, value, planId) {
       const pid = planId || getActivePlanId();
-      localStorage.setItem(planKey(pid, key), value);
+      let storedValue = value;
+      if (String(key || '').startsWith('customCourses_')) {
+        const program = String(key).slice('customCourses_'.length);
+        const parsed = JSON.parse(String(value || ''));
+        const normalized = validateCustomCourses({ [program]: parsed }, `custom courses.${program}`);
+        storedValue = JSON.stringify(normalized[normalizeProgramCode(program, 'custom-course program')]);
+      }
+      localStorage.setItem(planKey(pid, key), storedValue);
       touchUpdated(pid);
     },
     removeItem(key, planId) {
@@ -906,17 +1456,31 @@
       return true;
     },
     async importPlanFile(file, options) {
+      if (!file || typeof file !== 'object') throw new Error('Invalid file');
+      if (Number.isFinite(file.size) && file.size > IMPORT_MAX_FILE_BYTES) {
+        throw new Error('Plan file is too large (maximum 2 MB).');
+      }
       const text = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(String(reader.result || ''));
         reader.onerror = () => reject(new Error('Failed to read file'));
         reader.readAsText(file);
       });
+      if (text.length > IMPORT_MAX_FILE_BYTES) throw new Error('Plan file is too large (maximum 2 MB).');
       const obj = safeJsonParse(text, null);
       const id = importExportObject(obj, options || { activate: true });
       return id;
     },
     importPlanObject: importExportObject,
+    validateImportObject,
+    normalizeCustomCourse(course) {
+      return validateCustomCourse(course, 'custom course');
+    },
+    normalizeCustomCourseList(program, list) {
+      const programCode = normalizeProgramCode(program, 'custom course program');
+      const normalized = validateCustomCourses({ [programCode]: list }, 'custom courses');
+      return normalized[programCode];
+    },
   };
 
   // Boot

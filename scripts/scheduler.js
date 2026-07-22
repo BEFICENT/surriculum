@@ -557,6 +557,7 @@
       input.className = 'select-control';
       input.placeholder = placeholder || '';
       input.value = String(initialValue || '');
+      input.maxLength = 200;
       input.style.width = '100%';
       input.style.marginTop = bodyHtml ? '10px' : '0';
       body.appendChild(input);
@@ -5120,6 +5121,7 @@
 
     // Multiple schedules (within the current term, per saved plan).
     const newScheduleId = () => `sched_${Date.now().toString(16)}_${Math.random().toString(16).slice(2)}`;
+    const normalizeScheduleName = (value) => String(value || '').trim().replace(/\s+/g, ' ').slice(0, 200);
     const maxSchedules = 10;
 
     const applyActiveScheduleFromRoot = async (root) => {
@@ -5202,7 +5204,7 @@
           const copy = (res.action === 'dup');
           const next = {
             id,
-            name: copy ? `${String(active && active.name ? active.name : 'Schedule')} (copy)` : 'New schedule',
+            name: copy ? normalizeScheduleName(`${String(active && active.name ? active.name : 'Schedule')} (copy)`) : 'New schedule',
             selected: copy && active && active.selected ? JSON.parse(JSON.stringify(active.selected)) : {},
             blocked: copy && Array.isArray(active && active.blocked) ? JSON.parse(JSON.stringify(active.blocked)) : [],
             ui: copy && active && active.ui ? JSON.parse(JSON.stringify(active.ui)) : (active && active.ui ? JSON.parse(JSON.stringify(active.ui)) : {}),
@@ -5222,7 +5224,9 @@
             placeholder: 'Schedule name',
             okLabel: 'Rename',
           });
-          const name = (promptRes && promptRes.action === 'ok') ? String(promptRes.value || '').trim() : '';
+          const name = (promptRes && promptRes.action === 'ok')
+            ? normalizeScheduleName(promptRes.value)
+            : '';
           if (!name) continue;
           try { items[activeId].name = name; } catch (_) {}
           saveSchedulerRoot(root);

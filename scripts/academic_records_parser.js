@@ -667,7 +667,7 @@ function importParsedCourses(parsedCourses, courseData, curriculum) {
                 // available. Default to zero if missing.
                 const su = (typeof course.suCredits === 'number' && !isNaN(course.suCredits)) ? course.suCredits : 0;
                 const ectsVal = (typeof course.ects === 'number' && !isNaN(course.ects)) ? course.ects : 0;
-                const newCourse = {
+                let newCourse = {
                     Major: prefix,
                     Code: num,
                     Course_Name: course.title || code,
@@ -679,6 +679,16 @@ function importParsedCourses(parsedCourses, courseData, curriculum) {
                     EL_Type: elType,
                     Faculty_Course: 'No'
                 };
+                try {
+                    const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+                    if (!storage || typeof storage.normalizeCustomCourse !== 'function') {
+                        throw new Error('Custom-course validation is unavailable.');
+                    }
+                    newCourse = storage.normalizeCustomCourse(newCourse);
+                } catch (validationError) {
+                    stats.notFoundCourses.push(course.code);
+                    return;
+                }
                 // Append to course data so future imports recognize it
                 courseData.push(newCourse);
                 // Persist to storage under the current major (plan-scoped when available)
@@ -691,7 +701,9 @@ function importParsedCourses(parsedCourses, courseData, curriculum) {
                         return null;
                     };
                     const set = (k, v) => {
-                        try { return ps ? ps.setItem(k, v) : localStorage.setItem(k, v); } catch (_) {}
+                        if (ps) {
+                            try { return ps.setItem(k, v); } catch (_) { return null; }
+                        }
                         try { return localStorage.setItem(k, v); } catch (_) {}
                         return null;
                     };

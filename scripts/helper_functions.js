@@ -404,6 +404,16 @@ for(let i = 0; i < letter_grades_global.length; i++)
 }
 
 
+function escapeCourseOptionHtml(value)
+{
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function getCoursesDataList(course_data)
 {
     // Build a combined list of courses. If a double major is selected,
@@ -459,8 +469,9 @@ function getCoursesDataList(course_data)
     let datalistInnerHTML = '';
     for (let i = 0; i < combined.length; i++) {
         const item = combined[i];
-        const text = item['Major'] + item['Code'] + ' ' + item['Course_Name'];
-        datalistInnerHTML += `<option value='${text}'>${text}</option>`;
+        const text = String(item['Major'] || '') + String(item['Code'] || '') + ' ' + String(item['Course_Name'] || '');
+        const escaped = escapeCourseOptionHtml(text);
+        datalistInnerHTML += `<option value="${escaped}">${escaped}</option>`;
     }
     return datalistInnerHTML;
 }
@@ -903,6 +914,26 @@ function loadCurrentTermScheduleOfferings() {
     }
 }
 
+// Preferred datalist renderer. User-defined course names remain plain text and
+// never pass through the HTML parser. `getCoursesDataList` stays available for
+// legacy callers, but it now escapes both attribute and text contexts too.
+function populateCourseDataList(datalist, course_data)
+{
+    if (!datalist || typeof document === 'undefined') return;
+    datalist.replaceChildren();
+    const fragment = document.createDocumentFragment();
+    const options = getCoursesList(course_data);
+    for (let i = 0; i < options.length; i++) {
+        const item = options[i] || {};
+        const text = String(item.code || '') + ' ' + String(item.name || '');
+        const option = document.createElement('option');
+        option.value = text;
+        option.textContent = text;
+        fragment.appendChild(option);
+    }
+    datalist.appendChild(fragment);
+}
+
 function loadCourseOfferingsIndex() {
     try {
         if (typeof window === 'undefined') return Promise.resolve(null);
@@ -1193,20 +1224,10 @@ function adjustSemesterTotals(semesterObj, courseInfo, multiplier) {
 
 function serializator(curriculum)
 {
-    let result = '[';
-    for (let i = 0; i < curriculum.semesters.length; i++)
-    {
-        result = result + '[';
-        for (let n = 0; n < curriculum.semesters[i].courses.length; n++)
-        {
-            result = result + '"' + curriculum.semesters[i].courses[n].code + '"';
-            if((n+1) !=curriculum.semesters[i].courses.length) result = result + ','
-        }
-        result = result + ']';
-        if((i+1) != curriculum.semesters.length) result = result + ",";
-    }
-    result = result + ']';
-    return result;
+    const semesters = curriculum && Array.isArray(curriculum.semesters) ? curriculum.semesters : [];
+    return JSON.stringify(semesters.map((semester) =>
+        (semester && Array.isArray(semester.courses) ? semester.courses : [])
+            .map((course) => String((course && course.code) || ''))));
 }
 
 function grades_serializator(curriculum)
@@ -1242,22 +1263,11 @@ function grades_serializator(curriculum)
 
 function dates_serializator()
 {
-    let result = '[';
-    let dates = document.querySelectorAll('.date');
-    dates.forEach((date)=>{
-        try
-        {
-            let date_val = date.querySelector('p').innerHTML;
-            result = result + '"' + date_val + '"' + ',';
-        }
-        catch
-        {
-            result = result + '"' + '...' + '"' + ',';
-        }
-    })
-    if(result[result.length-1] == ',') result = result.slice(0,-1)
-    result = result + ']';
-    return result;
+    const dates = Array.from(document.querySelectorAll('.date')).map((date) => {
+        const label = date.querySelector('p');
+        return label ? String(label.textContent || '') : '...';
+    });
+    return JSON.stringify(dates);
 }
 
 function reload(curriculum, course_data)

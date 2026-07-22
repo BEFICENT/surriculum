@@ -1,6 +1,6 @@
 # SUrriculum 3.1 release-readiness tracker
 
-Last updated: 2026-07-22
+Last updated: 2026-07-23
 
 This is the working backlog for the 3.1 release. Items should be handled one at
 a time and checked off only after the fix and its verification are complete.
@@ -76,10 +76,15 @@ a time and checked off only after the fix and its verification are complete.
   affected versions. The relevant browser-origin assets are locally stored
   plans/preferences and any data currently rendered in the page; this is not a
   server takeover risk for this static app.
-- [ ] Validate every nested field in imported plan JSON and custom courses.
-- [ ] Replace unescaped `innerHTML` rendering of imported/custom values with
-  safe text rendering, then add an import-XSS regression test during the future
-  coverage pass.
+- [x] Validate every nested field in imported plan JSON and custom courses.
+  Completed on 2026-07-23: imports are size- and shape-bounded, nested plan,
+  scheduler, and custom-course fields are normalized before storage, unknown or
+  invalid fields fail closed, and a rejected import cannot leave a partial plan.
+- [x] Replace unescaped `innerHTML` rendering of imported/custom values with
+  safe text rendering. Completed on 2026-07-23: planner cards, semester labels,
+  course selectors, datalists, and dual-degree labels now treat imported text as
+  text. An ad-hoc malicious-import check passed; add its permanent regression
+  coverage during the future coverage pass.
 - [ ] Consider self-hosting runtime third-party assets and adding a restrictive
   Content Security Policy.
 

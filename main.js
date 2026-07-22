@@ -21,22 +21,27 @@ const _planIdForSession = (() => {
 })();
 
 function planGetItem(key) {
-    try {
-        if (typeof window !== 'undefined' && window.planStorage && typeof window.planStorage.getItem === 'function') {
+    if (typeof window !== 'undefined' && window.planStorage && typeof window.planStorage.getItem === 'function') {
+        try {
             return window.planStorage.getItem(key, _planIdForSession || undefined);
+        } catch (err) {
+            try { console.error('Failed to read plan data:', err); } catch (_) {}
+            return null;
         }
-    } catch (_) {}
+    }
     try { return localStorage.getItem(key); } catch (_) {}
     return null;
 }
 
 function planSetItem(key, value) {
-    try {
-        if (typeof window !== 'undefined' && window.planStorage && typeof window.planStorage.setItem === 'function') {
+    if (typeof window !== 'undefined' && window.planStorage && typeof window.planStorage.setItem === 'function') {
+        try {
             window.planStorage.setItem(key, value, _planIdForSession || undefined);
-            return;
+        } catch (err) {
+            try { console.error('Failed to save plan data:', err); } catch (_) {}
         }
-    } catch (_) {}
+        return;
+    }
     try { localStorage.setItem(key, value); } catch (_) {}
 }
 
@@ -57,6 +62,22 @@ function escapeHtml(value) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+}
+
+function normalizeCustomCourseForStorage(course) {
+    const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+    if (!storage || typeof storage.normalizeCustomCourse !== 'function') {
+        throw new Error('Custom-course validation is unavailable.');
+    }
+    return storage.normalizeCustomCourse(course);
+}
+
+function normalizeCustomCourseListForStorage(program, list) {
+    const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+    if (!storage || typeof storage.normalizeCustomCourseList !== 'function') {
+        throw new Error('Custom-course validation is unavailable.');
+    }
+    return storage.normalizeCustomCourseList(program, list);
 }
 
 async function uiAlert(title, bodyHtml) {
@@ -690,7 +711,7 @@ function SUrriculum(major_chosen_by_user) {
         if (stored) {
             const parsed = JSON.parse(stored);
             if (Array.isArray(parsed)) {
-                course_data = course_data.concat(parsed);
+                course_data = course_data.concat(normalizeCustomCourseListForStorage(major_chosen_by_user, parsed));
             }
         }
     } catch (err) {
@@ -716,7 +737,7 @@ function SUrriculum(major_chosen_by_user) {
             if (storedDM) {
                 const parsedDM = JSON.parse(storedDM);
                 if (Array.isArray(parsedDM)) {
-                    doubleMajorCourseData = doubleMajorCourseData.concat(parsedDM);
+                    doubleMajorCourseData = doubleMajorCourseData.concat(normalizeCustomCourseListForStorage(savedDMPref, parsedDM));
                 }
             }
         } catch (_) {}
@@ -1194,7 +1215,9 @@ function SUrriculum(major_chosen_by_user) {
             try {
                 const key = 'customCourses_' + String(majorCode || '').toUpperCase();
                 const parsed = JSON.parse(planGetItem(key) || '[]');
-                return Array.isArray(parsed) ? parsed : [];
+                return Array.isArray(parsed)
+                    ? normalizeCustomCourseListForStorage(majorCode, parsed)
+                    : [];
             } catch (_) {
                 return [];
             }
@@ -1203,15 +1226,15 @@ function SUrriculum(major_chosen_by_user) {
         function saveCustomCoursesForMajor(majorCode, list) {
             try {
                 const key = 'customCourses_' + String(majorCode || '').toUpperCase();
-                planSetItem(key, JSON.stringify(Array.isArray(list) ? list : []));
+                const normalized = normalizeCustomCourseListForStorage(majorCode, Array.isArray(list) ? list : []);
+                planSetItem(key, JSON.stringify(normalized));
             } catch (_) {}
         }
 
         function refreshCourseDatalistsAndTypes() {
             try {
-                const optionsHTML = getCoursesDataList(course_data);
                 document.querySelectorAll('datalist.course_list').forEach(function(dl) {
-                    dl.innerHTML = optionsHTML;
+                    populateCourseDataList(dl, course_data);
                 });
             } catch (_) {}
             try {
@@ -1432,10 +1455,12 @@ function SUrriculum(major_chosen_by_user) {
 
             // Course Code input (e.g., CS101)
             const { row: codeRow, input: codeInput } = createInputRow('Course Code:', 'text', 'e.g. CS300');
+            codeInput.maxLength = 21;
             modal.appendChild(codeRow);
 
             // Course Name input
             const { row: nameRow, input: nameInput } = createInputRow('Course Name:', 'text', 'Course name');
+            nameInput.maxLength = 200;
             modal.appendChild(nameRow);
 
             // SU Credits input
@@ -1455,6 +1480,12 @@ function SUrriculum(major_chosen_by_user) {
             const { row: engRow, input: engInput } = createInputRow('Engineering credits:', 'number', 'e.g. 0');
             engInput.value = '0';
             modal.appendChild(engRow);
+
+            [suInput, ectsInput, bsInput, engInput].forEach(function(input) {
+                input.min = '0';
+                input.max = '100';
+                input.step = 'any';
+            });
 
             // EL Type dropdown
             const typeRow = document.createElement('div');
@@ -1683,18 +1714,28 @@ function SUrriculum(major_chosen_by_user) {
                 // Determine if we're updating an existing course or creating a new one
                 if (courseObj) {
                     // Update fields on the existing course object
-                    const updatedCourse = {
-                        ...courseObj,
-                        Major: parsedMajor,
-                        Code: parsedCode,
-                        Course_Name: nameInput.value.trim() || rawCode,
-                        ECTS: ectsInput.value.toString() || '0',
-                        Engineering: parseInt(engInput.value || '0') || 0,
-                        Basic_Science: parseInt(bsInput.value || '0') || 0,
-                        SU_credit: suInput.value.toString() || '0',
-                        Faculty: facultySelect.value,
-                        EL_Type: typeSelect.value
-                    };
+                    let updatedCourse;
+                    try {
+                        updatedCourse = normalizeCustomCourseForStorage({
+                            Major: parsedMajor,
+                            Code: parsedCode,
+                            Course_Name: nameInput.value.trim() || rawCode,
+                            ECTS: ectsInput.value.toString() || '0',
+                            Engineering: engInput.value.toString() || '0',
+                            Basic_Science: bsInput.value.toString() || '0',
+                            SU_credit: suInput.value.toString() || '0',
+                            Faculty: facultySelect.value,
+                            EL_Type: typeSelect.value,
+                            Faculty_Course: 'No'
+                        });
+                    } catch (validationError) {
+                        uiAlert(
+                            'Invalid custom course',
+                            `<p>${escapeHtml(validationError && validationError.message ? validationError.message : 'Please check the course fields.')}</p>`
+                        );
+                        return;
+                    }
+                    Object.keys(courseObj).forEach(function(key) { delete courseObj[key]; });
                     Object.assign(courseObj, updatedCourse);
                     const newCombinedCode = getCombinedCodeFromCourseObj(updatedCourse);
                     // Persist update to localStorage
@@ -1745,20 +1786,29 @@ function SUrriculum(major_chosen_by_user) {
                     sourceForDM = updatedCourse;
                 } else {
                     // Build course object
-                    const newCourse = {
-                        Major: parsedMajor,
-                        Code: parsedCode,
-                        Course_Name: nameInput.value.trim() || rawCode,
-                        ECTS: ectsInput.value.toString() || '0',
-                        Engineering: parseInt(engInput.value || '0') || 0,
-                        Basic_Science: parseInt(bsInput.value || '0') || 0,
-                        SU_credit: suInput.value.toString() || '0',
-                        Faculty: facultySelect.value,
-                        EL_Type: typeSelect.value,
-                        // A custom course is never part of the faculty-course
-                        // pool; that is a separate attribute from `Faculty`.
-                        Faculty_Course: 'No'
-                    };
+                    let newCourse;
+                    try {
+                        newCourse = normalizeCustomCourseForStorage({
+                            Major: parsedMajor,
+                            Code: parsedCode,
+                            Course_Name: nameInput.value.trim() || rawCode,
+                            ECTS: ectsInput.value.toString() || '0',
+                            Engineering: engInput.value.toString() || '0',
+                            Basic_Science: bsInput.value.toString() || '0',
+                            SU_credit: suInput.value.toString() || '0',
+                            Faculty: facultySelect.value,
+                            EL_Type: typeSelect.value,
+                            // A custom course is never part of the faculty-course
+                            // pool; that is a separate attribute from `Faculty`.
+                            Faculty_Course: 'No'
+                        });
+                    } catch (validationError) {
+                        uiAlert(
+                            'Invalid custom course',
+                            `<p>${escapeHtml(validationError && validationError.message ? validationError.message : 'Please check the course fields.')}</p>`
+                        );
+                        return;
+                    }
                     // Append to in-memory course_data
                     course_data.push(newCourse);
                     sourceForDM = newCourse;
@@ -2294,7 +2344,7 @@ function SUrriculum(major_chosen_by_user) {
                     if (storedDM) {
                         const parsedDM = JSON.parse(storedDM);
                         if (Array.isArray(parsedDM)) {
-                            dmCustomCourses = parsedDM;
+                            dmCustomCourses = normalizeCustomCourseListForStorage(dm, parsedDM);
                         }
                     }
                 } catch (ex) {}
@@ -2398,9 +2448,8 @@ function SUrriculum(major_chosen_by_user) {
             try {
                 // If no double major is selected, reset to primary data
                 if (!curriculum.doubleMajor) {
-                    const optionsHTML = getCoursesDataList(course_data);
                     document.querySelectorAll('datalist.course_list').forEach(function(dl) {
-                        dl.innerHTML = optionsHTML;
+                        populateCourseDataList(dl, course_data);
                     });
                     return;
                 }
@@ -2416,9 +2465,8 @@ function SUrriculum(major_chosen_by_user) {
                 });
                 // Combine arrays
                 const combined = course_data.concat(dmUnique);
-                const html = getCoursesDataList(combined);
                 document.querySelectorAll('datalist.course_list').forEach(function(dl) {
-                    dl.innerHTML = html;
+                    populateCourseDataList(dl, combined);
                 });
             } catch (ex) {
                 // ignore errors
@@ -2505,9 +2553,8 @@ function SUrriculum(major_chosen_by_user) {
                 if (curriculum.doubleMajor && typeof curriculum.recalcEffectiveTypesDouble === 'function') {
                     curriculum.recalcEffectiveTypesDouble(doubleMajorCourseData);
                 }
-                const optionsHTML = getCoursesDataList(course_data);
                 document.querySelectorAll('datalist.course_list').forEach(function(dl) {
-                    dl.innerHTML = optionsHTML;
+                    populateCourseDataList(dl, course_data);
                 });
                 if (curriculum.doubleMajor && typeof updateDatalistForDoubleMajor === 'function') {
                     updateDatalistForDoubleMajor();

@@ -78,7 +78,7 @@ function dynamic_click(e, curriculum, course_data)
         let datalist = document.createElement('datalist');
         datalist.id = listId;
         datalist.classList.add('course_list');
-        datalist.innerHTML = getCoursesDataList(course_data);
+        populateCourseDataList(datalist, course_data);
 
         // Custom dropdown container
         let dropdown = document.createElement('div');
@@ -176,8 +176,11 @@ function dynamic_click(e, curriculum, course_data)
             return str.charAt(0).toUpperCase() + str.slice(1);
         }
 
-        function formatOption(item) {
-            const title = `<div class="course-option-title">${item.code} ${item.name}</div>`;
+        function renderOptionContent(container, item) {
+            const title = document.createElement('div');
+            title.className = 'course-option-title';
+            title.textContent = `${String(item.code || '')} ${String(item.name || '')}`;
+            container.appendChild(title);
             if (window.showCourseDetails) {
                 const parts = [
                     `SU Credits: ${item.credit}`,
@@ -185,10 +188,15 @@ function dynamic_click(e, curriculum, course_data)
                 ];
                 if (item.type) parts.push(`Course Type: ${capitalizeFirst(item.type)}`);
                 if (item.dmType) parts.push(`CT for DM: ${capitalizeFirst(item.dmType)}`);
-                const details = parts.map(p => `<div>${p}</div>`).join('');
-                return title + `<div class="course-option-details">${details}</div>`;
+                const details = document.createElement('div');
+                details.className = 'course-option-details';
+                parts.forEach((part) => {
+                    const row = document.createElement('div');
+                    row.textContent = String(part);
+                    details.appendChild(row);
+                });
+                container.appendChild(details);
             }
-            return title;
         }
 
         function renderOptions(filter) {
@@ -247,7 +255,7 @@ function dynamic_click(e, curriculum, course_data)
                 opt.className = 'course-option';
                 opt.dataset.code = o.code;
                 opt.dataset.name = o.name || '';
-                opt.innerHTML = formatOption(o);
+                renderOptionContent(opt, o);
                 frag.appendChild(opt);
                 count++;
             }
@@ -322,7 +330,7 @@ function dynamic_click(e, curriculum, course_data)
         });
         document.addEventListener('hideTakenCoursesToggleChanged', () => {
             options = getCoursesList(course_data);
-            datalist.innerHTML = getCoursesDataList(course_data);
+            populateCourseDataList(datalist, course_data);
             try { scoreOptions.apply(); } catch (_) {}
             optionsSortedByScore = false;
             renderOptions(input.value);
@@ -487,24 +495,47 @@ function dynamic_click(e, curriculum, course_data)
             c_container.classList.add("course_container");
             let c_label = document.createElement("div");
             c_label.classList.add("course_label");
-            c_label.innerHTML =
-                '<div class="course_code">' + myCourse.code + '</div>' +
-                '<div class="course_actions">' +
-                '<button class="details_course" type="button" title="Details" aria-label="Course details">' +
-                '<i class="fa-solid fa-circle-info"></i>' +
-                '</button>' +
-                '<button class="delete_course" type="button" title="Delete" aria-label="Delete course"></button>' +
-                '</div>';
+            const codeDiv = document.createElement('div');
+            codeDiv.className = 'course_code';
+            codeDiv.textContent = String(myCourse.code || '');
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = 'course_actions';
+            const detailsButton = document.createElement('button');
+            detailsButton.className = 'details_course';
+            detailsButton.type = 'button';
+            detailsButton.title = 'Details';
+            detailsButton.setAttribute('aria-label', 'Course details');
+            const detailsIcon = document.createElement('i');
+            detailsIcon.className = 'fa-solid fa-circle-info';
+            detailsButton.appendChild(detailsIcon);
+            const deleteButton = document.createElement('button');
+            deleteButton.className = 'delete_course';
+            deleteButton.type = 'button';
+            deleteButton.title = 'Delete';
+            deleteButton.setAttribute('aria-label', 'Delete course');
+            actionsDiv.appendChild(detailsButton);
+            actionsDiv.appendChild(deleteButton);
+            c_label.appendChild(codeDiv);
+            c_label.appendChild(actionsDiv);
             let c_info = document.createElement("div");
             c_info.classList.add("course_info");
             // Use getInfo to fetch course details (works for DM-only courses)
             const info = getInfo(courseCode, course_data) || getInfo(originalCourseCode, course_data);
-            c_info.innerHTML = '<div class="course_name">'+ info['Course_Name'] +'</div>';
-            c_info.innerHTML += '<div class="course_type">'+ info['EL_Type'].toUpperCase() + '</div>';
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'course_name';
+            nameDiv.textContent = String(info['Course_Name'] || '');
+            c_info.appendChild(nameDiv);
+            const typeDiv = document.createElement('div');
+            typeDiv.className = 'course_type';
+            typeDiv.textContent = String(info['EL_Type'] || '').toUpperCase();
+            c_info.appendChild(typeDiv);
             const creditText = (typeof formatCreditValue === 'function')
                 ? formatCreditValue(info['SU_credit'])
                 : (Number(parseFloat(info['SU_credit'] || '0') || 0).toFixed(1));
-            c_info.innerHTML += '<div class="course_credit">' + creditText + ' credits </div>';
+            const creditDiv = document.createElement('div');
+            creditDiv.className = 'course_credit';
+            creditDiv.textContent = String(creditText) + ' credits';
+            c_info.appendChild(creditDiv);
             const bsDiv = document.createElement('div');
             bsDiv.classList.add('course_bs_credit');
             bsDiv.textContent = 'BS: ' + (info['Basic_Science'] || '0') + ' credits';
@@ -514,7 +545,7 @@ function dynamic_click(e, curriculum, course_data)
             c_info.appendChild(bsDiv);
             let grade = document.createElement('div');
             grade.classList.add('grade');
-            grade.innerHTML = 'Add grade';
+            grade.textContent = 'Add grade';
             c_container.appendChild(c_label);
             c_container.appendChild(c_info);
             c_container.appendChild(grade);
@@ -528,7 +559,7 @@ function dynamic_click(e, curriculum, course_data)
             const totalText = (typeof formatCreditValue === 'function')
                 ? formatCreditValue(sem.totalCredit)
                 : (Number(sem.totalCredit || 0).toFixed(1));
-            dom_tc.innerHTML = 'Total: ' + totalText + ' credits';
+            dom_tc.textContent = 'Total: ' + totalText + ' credits';
             try {
                 dom_tc.classList.toggle('is-overlimit', (sem.totalCredit || 0) > 20);
             } catch (_) {}
@@ -908,7 +939,7 @@ function dynamic_click(e, curriculum, course_data)
             const totalText = (typeof formatCreditValue === 'function')
                 ? formatCreditValue(semObj.totalCredit)
                 : (Number(semObj.totalCredit || 0).toFixed(1));
-            if (dom_tc) dom_tc.innerHTML = 'Total: ' + totalText + ' credits';
+            if (dom_tc) dom_tc.textContent = 'Total: ' + totalText + ' credits';
         }
         try {
             if (dom_tc) dom_tc.classList.toggle('is-overlimit', (semObj.totalCredit || 0) > 20);
@@ -954,7 +985,11 @@ function dynamic_click(e, curriculum, course_data)
     else if(e.target.classList.contains("tick"))
     {
         let date = e.target.parentNode;
-        date.innerHTML = '<p>' + date.querySelector("select").value + '</p>';
+        const selectedTerm = String(date.querySelector("select").value || '');
+        date.replaceChildren();
+        const termLabel = document.createElement('p');
+        termLabel.textContent = selectedTerm;
+        date.appendChild(termLabel);
         let closebtn = document.createElement("button");
         closebtn.classList.add("delete_semester");
         let drag = document.createElement("div");
@@ -973,7 +1008,7 @@ function dynamic_click(e, curriculum, course_data)
         // the subcontainer, which also contains the semester div.
         try {
             const newDateTextElem = date.querySelector('p');
-            const newDateText = newDateTextElem ? newDateTextElem.innerHTML : '';
+            const newDateText = newDateTextElem ? newDateTextElem.textContent : '';
             // Locate the semester corresponding to this date element
             const semElem = date.parentNode.querySelector('.semester');
             if (semElem) {
@@ -1043,7 +1078,7 @@ function dynamic_click(e, curriculum, course_data)
 
                 // Use stored reference instead of e.target
                 let sem = gradeElement.parentNode.parentNode.parentNode;
-                let courseName = gradeElement.parentNode.querySelector('.course_label').firstChild.innerHTML;
+                let courseName = gradeElement.parentNode.querySelector('.course_label').firstChild.textContent;
                 let credit = (typeof parseCreditValue === 'function')
                     ? parseCreditValue(getInfo(courseName, course_data)['SU_credit'])
                     : (parseFloat(getInfo(courseName, course_data)['SU_credit']) || 0);
@@ -1106,7 +1141,7 @@ function dynamic_click(e, curriculum, course_data)
             if (!gradeElement.contains(evt.target)) {
                 // Handle empty selection
                 let sem = gradeElement.parentNode.parentNode.parentNode;
-                let courseName = gradeElement.parentNode.querySelector('.course_label').firstChild.innerHTML;
+                let courseName = gradeElement.parentNode.querySelector('.course_label').firstChild.textContent;
                 let semObj = curriculum.getSemester(sem.id);
                 let credit = (typeof parseCreditValue === 'function')
                     ? parseCreditValue(getInfo(courseName, course_data)['SU_credit'])

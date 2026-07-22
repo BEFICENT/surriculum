@@ -40,6 +40,7 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
     let date = document.createElement("div");
     date.classList.add("date");
 
+    const dateText = document.createElement('p');
     //DATE DEFAULT:
     if(!date_custom) {
         // Find next logical semester to add
@@ -114,13 +115,14 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
             nextTermIndex = (idx !== -1) ? idx : terms.length - 1;
         }
 
-        date.innerHTML = '<p>' + terms[nextTermIndex] + '</p>';
+        dateText.textContent = String(terms[nextTermIndex] || '');
     }
     //DATE CUSTOM:
     else 
     {
-        date.innerHTML = '<p>' + date_custom + '</p>';
+        dateText.textContent = String(date_custom);
     }
+    date.appendChild(dateText);
 
     let closebtn = document.createElement("button");
     closebtn.classList.add("delete_semester");
@@ -154,8 +156,8 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
     // within the global `terms` array (defined in helper_functions.js).
     try {
         const dateTextElem = date.querySelector('p');
-        const dateText = dateTextElem ? dateTextElem.innerHTML : '';
-        newsem.termIndex = terms.indexOf(dateText);
+        const semesterLabel = dateTextElem ? dateTextElem.textContent : '';
+        newsem.termIndex = terms.indexOf(semesterLabel);
     } catch (err) {
         // If date or terms are unavailable, leave termIndex as null
         newsem.termIndex = null;
@@ -221,19 +223,39 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
             c_container.classList.add("course_container");
             let c_label = document.createElement("div");
             c_label.classList.add("course_label");
-            c_label.innerHTML =
-                '<div class="course_code">' + courseList[i] + '</div>' +
-                '<div class="course_actions">' +
-                '<button class="details_course" type="button" title="Details" aria-label="Course details">' +
-                '<i class="fa-solid fa-circle-info"></i>' +
-                '</button>' +
-                '<button class="delete_course" type="button" title="Delete" aria-label="Delete course"></button>' +
-                '</div>';
+            const codeDiv = document.createElement('div');
+            codeDiv.className = 'course_code';
+            codeDiv.textContent = String(courseList[i] || '');
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = 'course_actions';
+            const detailsButton = document.createElement('button');
+            detailsButton.className = 'details_course';
+            detailsButton.type = 'button';
+            detailsButton.title = 'Details';
+            detailsButton.setAttribute('aria-label', 'Course details');
+            const detailsIcon = document.createElement('i');
+            detailsIcon.className = 'fa-solid fa-circle-info';
+            detailsButton.appendChild(detailsIcon);
+            const deleteButton = document.createElement('button');
+            deleteButton.className = 'delete_course';
+            deleteButton.type = 'button';
+            deleteButton.title = 'Delete';
+            deleteButton.setAttribute('aria-label', 'Delete course');
+            actionsDiv.appendChild(detailsButton);
+            actionsDiv.appendChild(deleteButton);
+            c_label.appendChild(codeDiv);
+            c_label.appendChild(actionsDiv);
             let c_info = document.createElement("div");
             c_info.classList.add("course_info");
-            c_info.innerHTML = '<div class="course_name">'+ getInfo(courseCode, course_data)['Course_Name'] +'</div>';
-            //console.log(getInfo(courseCode, course_data)['EL_Type']);
-            c_info.innerHTML += '<div class="course_type">'+getInfo(courseCode, course_data)['EL_Type'].toUpperCase() + '</div>';
+            const courseInfo = getInfo(courseCode, course_data);
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'course_name';
+            nameDiv.textContent = String(courseInfo['Course_Name'] || '');
+            c_info.appendChild(nameDiv);
+            const typeDiv = document.createElement('div');
+            typeDiv.className = 'course_type';
+            typeDiv.textContent = String(courseInfo['EL_Type'] || '').toUpperCase();
+            c_info.appendChild(typeDiv);
 
             //let gr_container = document.createElement('div');
             //gr_container.classList.add('grade_container');
@@ -241,7 +263,10 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
             const creditText = (typeof formatCreditValue === 'function')
                 ? formatCreditValue(courseCredit)
                 : (Number(courseCredit).toFixed(1));
-            c_info.innerHTML += '<div class="course_credit">' + creditText + ' credits </div>';
+            const creditDiv = document.createElement('div');
+            creditDiv.className = 'course_credit';
+            creditDiv.textContent = String(creditText) + ' credits';
+            c_info.appendChild(creditDiv);
             const bsDiv = document.createElement('div');
             bsDiv.classList.add('course_bs_credit');
             bsDiv.textContent = 'BS: ' + (getInfo(courseCode, course_data)['Basic_Science'] || '0') + ' credits';
@@ -294,7 +319,7 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
             const totalText = (typeof formatCreditValue === 'function')
                 ? formatCreditValue(curriculum.getSemester(semester.id).totalCredit)
                 : (Number(curriculum.getSemester(semester.id).totalCredit || 0).toFixed(1));
-            dom_tc.innerHTML = 'Total: ' + totalText + ' credits';
+            dom_tc.textContent = 'Total: ' + totalText + ' credits';
             try {
                 const tc = curriculum.getSemester(semester.id).totalCredit || 0;
                 dom_tc.classList.toggle('is-overlimit', tc > 20);

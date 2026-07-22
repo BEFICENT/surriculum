@@ -1005,10 +1005,19 @@ function renderAllocationLabels(curriculum) {
                 const mainCls = movedDown(course.category, course.effective_type) ? 'is-overflow-type' : '';
                 const dmCls = movedDown(course.categoryDM, course.effective_type_dm) ? 'is-overflow-type' : '';
                 try {
-                    typeSpan.innerHTML =
-                        '<span class="course_type_part ct-main ' + mainCls + '">' + mt + '</span>' +
-                        '<span class="ct-sep"> / </span>' +
-                        '<span class="course_type_part ct-dm ' + dmCls + '">' + dt + '</span>';
+                    typeSpan.replaceChildren();
+                    const mainPart = document.createElement('span');
+                    mainPart.className = 'course_type_part ct-main' + (mainCls ? ' ' + mainCls : '');
+                    mainPart.textContent = mt;
+                    const separator = document.createElement('span');
+                    separator.className = 'ct-sep';
+                    separator.textContent = ' / ';
+                    const dmPart = document.createElement('span');
+                    dmPart.className = 'course_type_part ct-dm' + (dmCls ? ' ' + dmCls : '');
+                    dmPart.textContent = dt;
+                    typeSpan.appendChild(mainPart);
+                    typeSpan.appendChild(separator);
+                    typeSpan.appendChild(dmPart);
                 } catch (_) {
                     typeSpan.textContent = mt + ' / ' + dt;
                 }
@@ -1038,7 +1047,7 @@ function renderAllocationLabels(curriculum) {
             }
             const span = containerElem && containerElem.querySelector('.total_credit_text span');
             if (span) {
-                span.innerHTML = 'Total: ' + sem.totalCredit + ' credits';
+                span.textContent = 'Total: ' + sem.totalCredit + ' credits';
                 try { span.classList.toggle('is-overlimit', (sem.totalCredit || 0) > 20); } catch (_) {}
             }
         } catch (_) {}
