@@ -6,6 +6,7 @@ import datetime
 import re
 import argparse
 import subprocess
+import tempfile
 
 from term_utils import generate_terms
 
@@ -28,6 +29,17 @@ PROGRAM_CODES = {
     'BAPSY': 'PSY',
     'BAVACD': 'VACD',
 }
+
+EXPECTED_MAJORS = tuple(sorted(PROGRAM_CODES.values()))
+REQUIRED_CREDIT_FIELDS = ('university', 'required', 'core', 'area', 'free')
+REQUIRED_NUMERIC_FIELDS = REQUIRED_CREDIT_FIELDS + ('ects', 'total', 'humRequired')
+ENGINEERING_REQUIREMENT_MAJORS = frozenset({'CS', 'EE', 'IE', 'MAT', 'ME'})
+INTERNSHIP_MAJORS = frozenset({'BIO', 'CS', 'DSA', 'EE', 'IE', 'MAT', 'ME'})
+REQUIREMENT_GROUP_RULES = frozenset({
+    'faculty', 'credits', 'oneOf', 'entryGatedOneOf', 'languageCap',
+    'levelCredits', 'specialAny', 'prefixSpan', 'offeringCredits',
+    'offeringCount', 'advancedCount',
+})
 
 _session = None
 
@@ -376,6 +388,94 @@ def special_requirements(major, scraped_pools=None):
     return out
 
 
+def _is_nonnegative_int(value):
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def validate_requirement_record(major, data):
+    """Reject incomplete scraper output before it can replace known-good data."""
+    if major not in EXPECTED_MAJORS:
+        raise ValueError(f'unknown major {major!r}')
+    if not isinstance(data, dict):
+        raise ValueError('record is not an object')
+
+    for field in REQUIRED_NUMERIC_FIELDS:
+        if not _is_nonnegative_int(data.get(field)):
+            raise ValueError(f'{field} must be a non-negative integer')
+    if data['total'] <= 0 or data['ects'] <= 0:
+        raise ValueError('total and ects must be positive')
+    if sum(data[field] for field in REQUIRED_CREDIT_FIELDS) != data['total']:
+        raise ValueError('credit buckets do not add up to total')
+    if data['humRequired'] not in (0, 1, 2):
+        raise ValueError('humRequired must be 0, 1, or 2')
+
+    faculty_req = data.get('facultyReq')
+    if not isinstance(faculty_req, dict) or not faculty_req:
+        raise ValueError('facultyReq is missing or empty')
+    for field, value in faculty_req.items():
+        if not isinstance(field, str) or not _is_nonnegative_int(value):
+            raise ValueError('facultyReq values must be non-negative integers')
+
+    if major in ENGINEERING_REQUIREMENT_MAJORS:
+        for field in ('science', 'engineering'):
+            if not _is_nonnegative_int(data.get(field)) or data[field] <= 0:
+                raise ValueError(f'{field} is missing for {major}')
+    else:
+        for field in ('science', 'engineering'):
+            if field in data and not _is_nonnegative_int(data[field]):
+                raise ValueError(f'{field} must be a non-negative integer')
+
+    if major in INTERNSHIP_MAJORS:
+        internship = data.get('internshipCourse')
+        if not isinstance(internship, str) or not internship.strip():
+            raise ValueError(f'internshipCourse is missing for {major}')
+
+    if major in PROGRAM_GROUPS:
+        groups = data.get('groups')
+        if not isinstance(groups, list) or not groups:
+            raise ValueError(f'groups are missing for {major}')
+    if 'groups' in data:
+        groups = data['groups']
+        if not isinstance(groups, list):
+            raise ValueError('groups must be a list')
+        for group in groups:
+            if not isinstance(group, dict) or group.get('rule') not in REQUIREMENT_GROUP_RULES:
+                raise ValueError('groups contain an unknown or malformed rule')
+
+
+def write_requirements_term_atomic(term, records):
+    """Write one complete term without exposing a truncated intermediate file."""
+    if set(records) != set(EXPECTED_MAJORS):
+        missing = sorted(set(EXPECTED_MAJORS) - set(records))
+        extra = sorted(set(records) - set(EXPECTED_MAJORS))
+        raise ValueError(f'incomplete major set (missing={missing}, extra={extra})')
+    for major in EXPECTED_MAJORS:
+        validate_requirement_record(major, records[major])
+
+    target = os.path.join(REQUIREMENTS_DIR, f'{term}.jsonl')
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode='w',
+            encoding='utf-8',
+            newline='\n',
+            dir=REQUIREMENTS_DIR,
+            prefix=f'.{term}.',
+            suffix='.tmp',
+            delete=False,
+        ) as fh:
+            temp_path = fh.name
+            for major in EXPECTED_MAJORS:
+                fh.write(json.dumps({"major": major, **records[major]}, ensure_ascii=False) + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(temp_path, target)
+        temp_path = None
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.unlink(temp_path)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Fetch and regenerate graduation requirement summaries.")
     parser.add_argument("--timeout", type=float, default=30.0, help="HTTP timeout in seconds.")
@@ -396,25 +496,45 @@ def main():
     if args.max_terms and args.max_terms > 0:
         terms = terms[: int(args.max_terms)]
 
+    failed_terms = []
     for term in terms:
         out = {}
+        failures = []
         for prog, major in PROGRAM_CODES.items():
             try:
                 data = fetch_requirements(prog, term, None, timeout_s=args.timeout)
                 if not data:
                     raise ValueError('no data parsed')
-            except Exception as e:
-                print(f"Failed {major} {term}: {e}")
-                data = {}
-            if data:
                 data['humRequired'] = hum_required(major, data.get('university'))
                 scraped_pools = data.pop('_pools', None)
                 data.update(special_requirements(major, scraped_pools))
+                validate_requirement_record(major, data)
                 out[major] = data
-        if out:
-            with open(os.path.join(REQUIREMENTS_DIR, f'{term}.jsonl'), 'w', encoding='utf-8') as f:
-                for major in sorted(out.keys()):
-                    f.write(json.dumps({"major": major, **out[major]}, ensure_ascii=False) + "\n")
+            except Exception as e:
+                failures.append((major, str(e)))
+                print(f"Failed {major} {term}: {e}")
+
+        if failures:
+            failed_terms.append(term)
+            print(
+                f"Skipped {term}: {len(failures)} of {len(EXPECTED_MAJORS)} programs failed; "
+                "the existing requirements file was preserved."
+            )
+            continue
+
+        try:
+            write_requirements_term_atomic(term, out)
+            print(f"Wrote complete requirements for {term} ({len(out)} programs).")
+        except Exception as e:
+            failed_terms.append(term)
+            print(f"Failed to publish {term}: {e}; the existing requirements file was preserved.")
+
+    if failed_terms:
+        print(
+            "Requirement refresh failed for: " + ", ".join(failed_terms) +
+            ". No incomplete term file was published."
+        )
+        return 1
 
     if not args.skip_minors:
         # Keep minors in sync with the same term set as major requirements.
@@ -448,5 +568,7 @@ def main():
         except Exception as e:
             print(f"Warning: failed to fetch minors: {e}")
 
+    return 0
+
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main())

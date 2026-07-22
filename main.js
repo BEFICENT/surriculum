@@ -341,6 +341,18 @@ function SUrriculum(major_chosen_by_user) {
     const entryTermMinor2Code = termNameToCode(entryTermMinor2Name);
     const entryTermMinor3Code = termNameToCode(entryTermMinor3Name);
 
+    // requirements.js runs before this deferred entry point. On a first visit
+    // the plan has no stored admit term yet, so its initial default load cannot
+    // be used for graduation. Reload the exact main/DM term files now that the
+    // validated selections are known.
+    try {
+        if (typeof window.initializeRequirements === 'function') {
+            window.initializeRequirements(entryTermCode, entryTermDMCode);
+        }
+    } catch (error) {
+        console.error('Unable to initialize graduation requirements:', error);
+    }
+
     // Storage for the double major's course data.  It will be populated when
     // the user selects a double major via setDoubleMajor().
     let doubleMajorCourseData = [];

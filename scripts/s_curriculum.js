@@ -2,10 +2,12 @@
 // be attached to the global window so that other scripts can instantiate
 // curricula without using ES module imports.
 
+const REQUIREMENTS_UNAVAILABLE_FLAG = 99;
 
 // Expose s_curriculum constructor globally when running in a browser.
 if (typeof window !== 'undefined') {
     window.s_curriculum = s_curriculum;
+    window.REQUIREMENTS_UNAVAILABLE_FLAG = REQUIREMENTS_UNAVAILABLE_FLAG;
 }
 
 // SUIS rule (VACD): "Only one of the following course pairs will be counted
@@ -1145,12 +1147,29 @@ function s_curriculum()
     // lookup so both formats are supported during the transition to
     // term-based data.
     const getReq = (major, term) => {
+        if (typeof getRequirementRecord === 'function') {
+            return getRequirementRecord(major, term) || {};
+        }
         if (typeof requirements === 'undefined') return {};
         if (requirements[term] && requirements[term][major]) {
             return requirements[term][major];
         }
         if (requirements[major]) return requirements[major];
         return {};
+    };
+
+    const requirementRecordIsValid = (major, record) => {
+        if (typeof isValidRequirementRecord === 'function') {
+            return isValidRequirementRecord(record, major);
+        }
+        if (!record || typeof record !== 'object' || Array.isArray(record)) return false;
+        const fields = ['university', 'required', 'core', 'area', 'free', 'ects', 'total', 'humRequired'];
+        return fields.every(field => Number.isInteger(record[field]) && record[field] >= 0)
+            && record.total > 0
+            && record.ects > 0
+            && record.facultyReq
+            && typeof record.facultyReq === 'object'
+            && !Array.isArray(record.facultyReq);
     };
 
     this.getSemester = function(id)
@@ -1249,6 +1268,7 @@ function s_curriculum()
         if (!major) return [];
         const term = isDM ? this.entryTermDM : this.entryTerm;
         const req = getReq(major, term) || {};
+        if (!requirementRecordIsValid(major, req)) return [];
         const fields = isDM ? DM_FIELDS : MAIN_FIELDS;
         const ctx = { curr: this, semesters: this.semesters, fields, entryTerm: term };
         if (req.groups) return groupProgressFor(ctx, req.groups, req.facultyReq);
@@ -1258,6 +1278,9 @@ function s_curriculum()
 
     this.canGraduate = function()
     {
+        const req = getReq(this.major, this.entryTerm);
+        if (!requirementRecordIsValid(this.major, req)) return REQUIREMENTS_UNAVAILABLE_FLAG;
+
         let area = 0;
         let core = 0;
         let free = 0;
@@ -1285,7 +1308,6 @@ function s_curriculum()
             gpaValue += this.semesters[i].totalGPA;
         }
         // Generic requirement checks
-        const req = getReq(this.major, this.entryTerm);
         if (university < req.university) return 1;
         if (req.internshipCourse && !this.hasCourse(req.internshipCourse)) return 4;
         if (total < req.total) return 5;
@@ -1339,6 +1361,7 @@ function s_curriculum()
         // requirement), default to 0 so no credits are allocated to that
         // category.
         const req = getReq(this.major, this.entryTerm);
+        if (!requirementRecordIsValid(this.major, req)) return;
         const reqCore = req.core || 0;
         const reqArea = req.area || 0;
         const reqRequired = req.required || 0;
@@ -1695,6 +1718,7 @@ function s_curriculum()
         // core and area requirements are drawn from the second major's
         // requirements.
         const dmReq = getReq(this.doubleMajor, this.entryTermDM);
+        if (!requirementRecordIsValid(this.doubleMajor, dmReq)) return;
         const dmCoreReq = dmReq.core || 0;
         const dmAreaReq = dmReq.area || 0;
         const dmReqRequired = dmReq.required || 0;
@@ -1913,6 +1937,9 @@ function s_curriculum()
      */
     this.canGraduateDouble = function() {
         if (!this.doubleMajor) return 0;
+        const req = getReq(this.doubleMajor, this.entryTermDM);
+        if (!requirementRecordIsValid(this.doubleMajor, req)) return REQUIREMENTS_UNAVAILABLE_FLAG;
+
         // Accumulate totals for the double major
         let area = 0;
         let core = 0;
@@ -1944,7 +1971,6 @@ function s_curriculum()
             gpaValueDM += sem.totalGPA;
         }
         // Fetch requirements for double major and adjust SU/ECTS thresholds
-        const req = getReq(this.doubleMajor, this.entryTermDM);
         const totalReq = (req.total || 0) + 30;
         const ectsReq = (req.ects || 0) + 60;
         // Generic checks

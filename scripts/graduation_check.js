@@ -310,9 +310,9 @@ function displayGraduationResults(curriculum) {
             }).join('')}</div>`;
         };
 
-        const renderStatusCard = ({ label, title, ok, message, details, compact = false }) => {
+        const renderStatusCard = ({ label, title, ok, unavailable = false, message, details, compact = false }) => {
             const stateClass = ok ? 'is-complete' : 'is-incomplete';
-            const badgeText = ok ? 'Complete' : 'Incomplete';
+            const badgeText = unavailable ? 'Unavailable' : (ok ? 'Complete' : 'Incomplete');
             const cardClass = compact ? ' graduation_card--compact' : '';
             const messageClass = ok ? ' graduation_card_message--success' : ' graduation_card_message--danger';
             const badgeStyle = badgeStyleFor(ok);
@@ -336,6 +336,9 @@ function displayGraduationResults(curriculum) {
         };
 
         const majorCards = [];
+        const requirementsUnavailableFlag = (typeof globalThis !== 'undefined' && globalThis.REQUIREMENTS_UNAVAILABLE_FLAG)
+            ? globalThis.REQUIREMENTS_UNAVAILABLE_FLAG
+            : 99;
         const flagMain = curriculum.canGraduate();
         const msgMain = buildFlagMessages(curriculum.major) || {};
         const mainMsg = flagMain === 0
@@ -345,6 +348,7 @@ function displayGraduationResults(curriculum) {
             label: 'Major',
             title: curriculum.major,
             ok: flagMain === 0,
+            unavailable: flagMain === requirementsUnavailableFlag,
             message: mainMsg,
         }));
 
@@ -358,6 +362,7 @@ function displayGraduationResults(curriculum) {
                 label: 'Double Major',
                 title: curriculum.doubleMajor,
                 ok: flagDM === 0,
+                unavailable: flagDM === requirementsUnavailableFlag,
                 message: dmMsg,
             }));
         }
@@ -1251,7 +1256,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
     };
 
     // Helper to build a summary modal for a given set of totals and limits.
-    function buildSummaryModal(totals, limits, gpa, majorCode, view) {
+    function buildSummaryModal(totals, limits, gpa, majorCode, view, requirementsAvailable = true) {
         const modal = document.createElement('div');
         modal.classList.add('summary_modal');
         cardsRowEl.appendChild(modal);
@@ -1260,6 +1265,13 @@ function displaySummary(curriculum, major_chosen_by_user) {
             header.classList.add('summary_modal_title');
             header.textContent = majorNames[majorCode] || majorCode;
             modal.appendChild(header);
+        }
+        if (!requirementsAvailable) {
+            const unavailable = document.createElement('div');
+            unavailable.classList.add('summary_modal_child');
+            unavailable.textContent = 'Graduation requirements are unavailable for this program and admit term. No completion result was calculated.';
+            modal.appendChild(unavailable);
+            return modal;
         }
         // Build content
         const labels = ['GPA: ', 'SU Credits: ', 'ECTS: ', 'University: ',  'Required: ', 'Core: ', 'Area: ', 'Free: ',  'Basic Science: ', 'Engineering: '];
@@ -1322,29 +1334,40 @@ function displaySummary(curriculum, major_chosen_by_user) {
         : {};
 
     function lookupReq(major, term) {
-        if (allReq[major]) return allReq[major];
-        if (term && allReq[term] && allReq[term][major]) return allReq[term][major];
-        for (const t of Object.keys(allReq)) {
-            if (allReq[t] && allReq[t][major]) return allReq[t][major];
+        if (typeof globalThis !== 'undefined' && typeof globalThis.getRequirementRecord === 'function') {
+            return globalThis.getRequirementRecord(major, term);
         }
-        return {};
+        if (term && allReq[term] && allReq[term][major]) return allReq[term][major];
+        if (allReq[major]) return allReq[major];
+        return null;
+    }
+
+    function requirementRecordAvailable(major, record) {
+        if (typeof globalThis !== 'undefined' && typeof globalThis.isValidRequirementRecord === 'function') {
+            return globalThis.isValidRequirementRecord(record, major);
+        }
+        if (!record || typeof record !== 'object' || Array.isArray(record)) return false;
+        const fields = ['university', 'required', 'core', 'area', 'free', 'ects', 'total', 'humRequired'];
+        return fields.every(field => Number.isInteger(record[field]) && record[field] >= 0);
     }
 
     const reqMain = lookupReq(major_chosen_by_user, curriculum.entryTerm);
+    const reqMainAvailable = requirementRecordAvailable(major_chosen_by_user, reqMain);
+    const safeReqMain = reqMain || {};
     const limitsMain = [
         '4.0',
-        String(reqMain.total || 0),
-        String(reqMain.ects || 0),
-        String(reqMain.university || 0),
-        String(reqMain.required || 0),
-        String(reqMain.core || 0),
-        String(reqMain.area || 0),
-        String(reqMain.free || 0),
-        String(reqMain.science || 0),
-        String(reqMain.engineering || 0)
+        String(safeReqMain.total || 0),
+        String(safeReqMain.ects || 0),
+        String(safeReqMain.university || 0),
+        String(safeReqMain.required || 0),
+        String(safeReqMain.core || 0),
+        String(safeReqMain.area || 0),
+        String(safeReqMain.free || 0),
+        String(safeReqMain.science || 0),
+        String(safeReqMain.engineering || 0)
     ];
     // Build primary summary modal
-    buildSummaryModal(totalsMain, limitsMain, gpaMain, major_chosen_by_user, 'main');
+    buildSummaryModal(totalsMain, limitsMain, gpaMain, major_chosen_by_user, 'main', reqMainAvailable);
     // If a double major exists, compute totals for DM and show a second modal
     if (curriculum.doubleMajor) {
         let totalsDM = {
@@ -1377,19 +1400,21 @@ function displaySummary(curriculum, major_chosen_by_user) {
         const gpaDM = gpaCreditsDM ? (gpaValueDM / gpaCreditsDM).toFixed(3) : '0.000';
         // Determine limits for DM (SU +30, ECTS +60)
         const dmReq = lookupReq(curriculum.doubleMajor, curriculum.entryTermDM);
+        const dmReqAvailable = requirementRecordAvailable(curriculum.doubleMajor, dmReq);
+        const safeDmReq = dmReq || {};
         const limitsDM = [
             '4.0',
-            String((dmReq.total || 0) + 30),
-            String((dmReq.ects || 0) + 60),
-            String(dmReq.university || 0),
-            String(dmReq.required || 0),
-            String(dmReq.core || 0),
-            String(dmReq.area || 0),
-            String(dmReq.free || 0),
-            String(dmReq.science || 0),
-            String(dmReq.engineering || 0)
+            String((safeDmReq.total || 0) + 30),
+            String((safeDmReq.ects || 0) + 60),
+            String(safeDmReq.university || 0),
+            String(safeDmReq.required || 0),
+            String(safeDmReq.core || 0),
+            String(safeDmReq.area || 0),
+            String(safeDmReq.free || 0),
+            String(safeDmReq.science || 0),
+            String(safeDmReq.engineering || 0)
         ];
-        buildSummaryModal(totalsDM, limitsDM, gpaDM, curriculum.doubleMajor, 'dm');
+        buildSummaryModal(totalsDM, limitsDM, gpaDM, curriculum.doubleMajor, 'dm', dmReqAvailable);
     }
 }
 

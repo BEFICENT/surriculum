@@ -569,13 +569,11 @@ function computeCourseSuggestionScore(courseCode, opts) {
                 ? globalThis.requirements
                 : (window.requirements ? window.requirements : {});
             if (!majorCode) return {};
-            if (allReq && allReq[majorCode]) return allReq[majorCode];
+            if (typeof globalThis !== 'undefined' && typeof globalThis.getRequirementRecord === 'function') {
+                return globalThis.getRequirementRecord(majorCode, termCode) || {};
+            }
             if (termCode && allReq && allReq[termCode] && allReq[termCode][majorCode]) return allReq[termCode][majorCode];
-            try {
-                for (const t of Object.keys(allReq || {})) {
-                    if (allReq[t] && allReq[t][majorCode]) return allReq[t][majorCode];
-                }
-            } catch (_) {}
+            if (allReq && allReq[majorCode]) return allReq[majorCode];
             return {};
         };
         const isEngineeringMajor = (majorCode, termCode) => {

@@ -12,24 +12,19 @@ export function buildFlagMessages(major) {
   const allReq = (typeof globalThis !== 'undefined' && globalThis.requirements)
     ? globalThis.requirements
     : {};
-  let req = allReq[major];
-  if (!req) {
-    // When requirements are organized by term code, determine the correct
-    // term using the global curriculum object.
-    const curr = (typeof globalThis !== 'undefined' && globalThis.curriculum)
-      ? globalThis.curriculum
-      : {};
-    let term = '';
-    if (curr.major === major) term = curr.entryTerm;
-    else if (curr.doubleMajor === major) term = curr.entryTermDM;
-    if (term && allReq[term] && allReq[term][major]) {
-      req = allReq[term][major];
-    } else {
-      // Fallback: search all term groups
-      for (const t of Object.keys(allReq)) {
-        if (allReq[t] && allReq[t][major]) { req = allReq[t][major]; break; }
-      }
-    }
+  const curr = (typeof globalThis !== 'undefined' && globalThis.curriculum)
+    ? globalThis.curriculum
+    : {};
+  let term = '';
+  if (curr.major === major) term = curr.entryTerm;
+  else if (curr.doubleMajor === major) term = curr.entryTermDM;
+  let req = null;
+  if (typeof globalThis !== 'undefined' && typeof globalThis.getRequirementRecord === 'function') {
+    req = globalThis.getRequirementRecord(major, term);
+  } else if (term && allReq[term] && allReq[term][major]) {
+    req = allReq[term][major];
+  } else if (allReq[major]) {
+    req = allReq[major];
   }
   req = req || {};
 
@@ -77,6 +72,7 @@ export function buildFlagMessages(major) {
       37: () => `You need at least 9 credits from FASS & FENS courses in your Free electives!`,
       39: () => `You need at least 2 PSY 4XX-level courses among your Area electives!`,
       40: () => `At most 2 Beginning/Basic level language courses can count towards your Free electives!`,
+      99: () => `Graduation requirements are unavailable for this program and admit term. No completion result was calculated.`,
       77: () => `You need at least 7 Core Elective courses!`,
 
   };
