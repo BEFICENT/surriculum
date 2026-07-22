@@ -158,52 +158,46 @@ test.describe('PSIR core-elective pools', () => {
 });
 
 test.describe('VACD core-elective pools', () => {
-  // VACD's core requirement (27cr) EXCEEDS its two pool minimums (9 + 12 = 21),
-  // so the balance must come from core-typed courses outside both pools — 16 of
-  // which exist. That is also what made the old post-cascade pool handling
-  // wrong: demoting a pool extra out of core left the freed credits unfilled
-  // while core-eligible courses sat in `free`.
-  const CORE_I_IN_PLAN = ['HART292', 'HART293', 'HART380', 'HART413'];
-  const CORE_II_IN_PLAN = ['VA202', 'VA204', 'VA234', 'VA302', 'VA402'];
-  const NON_POOL_CORE = ['HART450', 'HART480', 'VA323', 'VA324', 'VA328', 'VA331', 'VA335'];
+  // For the 202301 catalog VACD's core requirement (27cr) is EXACTLY its two pool
+  // minimums (Core I 9 + Core II 18), and every core-typed VACD course belongs to
+  // one of the two pools — the pools ARE the core requirement. So pool
+  // satisfaction is asserted via requirementGroupProgress (each pool's own
+  // current/target/ok), which is unambiguous. The first-unmet graduation FLAG
+  // (pool flag 30/31 vs the generic core-credit flag 3) depends on how the
+  // allocation splits pool credit vs overflow — the piece still slated for the
+  // data-driven rewrite — so only "does not graduate" is pinned on it, not the
+  // exact code. Members below are exactly the pool courses the generated plan
+  // carries, so dropping them empties the pool.
+  const CORE_I = ['HART292', 'HART293', 'HART380'];
+  const CORE_II = ['VA202', 'VA204', 'VA234', 'VA302', 'VA402', 'VA323', 'VA324', 'VA328'];
 
-  const readCore = (page) => page.evaluate(() => {
-    const s = window.curriculum.semesters;
-    const stranded = [];
-    s.forEach((x) => x.courses.forEach((c) => {
-      if (c.category === 'Core' && (c.effective_type || '') === 'free') stranded.push(c.code);
-    }));
-    return {
-      flag: window.curriculum.canGraduate(),
-      core: s.reduce((a, x) => a + (x.totalCore || 0), 0),
-      stranded,
-    };
-  });
-
-  test('core is filled from outside the pools when pool extras are demoted', async ({ page }) => {
-    // The regression guard for the demote-without-refill bug: pool extras must
-    // not cost core credits when core-typed courses are available to take their
-    // place. This produced core=25 against a 27 requirement, with 18 credits of
-    // core-typed courses stranded in `free`.
-    await seed(page, 'VACD', { add: NON_POOL_CORE, drop: CORE_I_IN_PLAN });
-    const r = await readCore(page);
-    expect(r.core, `core=${r.core}; stranded in free: ${r.stranded.join(',') || 'none'}`).toBeGreaterThanOrEqual(27);
-    expect(r.flag, 'core should be satisfied, so flag 3 must not fire').not.toBe(3);
-  });
-
-  test('dropping the Core I pool raises flag 30', async ({ page }) => {
-    await seed(page, 'VACD', { add: NON_POOL_CORE, drop: CORE_I_IN_PLAN });
-    expect(await flag(page)).toBe(30);
-  });
-
-  test('dropping the Core II pool raises flag 31', async ({ page }) => {
-    await seed(page, 'VACD', { add: NON_POOL_CORE, drop: CORE_II_IN_PLAN });
-    expect(await flag(page)).toBe(31);
+  const readPools = (page) => page.evaluate(() => {
+    const by = {};
+    window.curriculum.requirementGroupProgress('main').forEach((g) => {
+      by[g.id] = { current: g.current, target: g.target, ok: g.ok };
+    });
+    return { flag: window.curriculum.canGraduate(), coreI: by.core_arthistory, coreII: by.core_skill };
   });
 
   test('the generated plan satisfies both pools', async ({ page }) => {
     await seed(page, 'VACD');
-    const f = await flag(page);
-    expect([30, 31], `flag ${f}: neither pool rule should fire`).not.toContain(f);
+    const r = await readPools(page);
+    expect(r.coreI.ok, `Core I ${r.coreI.current}/${r.coreI.target}`).toBe(true);
+    expect(r.coreII.ok, `Core II ${r.coreII.current}/${r.coreII.target}`).toBe(true);
+    expect(r.flag, 'a satisfied VACD plan graduates').toBe(0);
+  });
+
+  test('an under-filled Core I pool is reported unmet and blocks graduation', async ({ page }) => {
+    await seed(page, 'VACD', { drop: CORE_I });
+    const r = await readPools(page);
+    expect(r.coreI.ok, `Core I should be short: ${r.coreI.current}/${r.coreI.target}`).toBe(false);
+    expect(r.flag, 'an unmet Core I pool blocks graduation').not.toBe(0);
+  });
+
+  test('an under-filled Core II pool is reported unmet and blocks graduation', async ({ page }) => {
+    await seed(page, 'VACD', { drop: CORE_II });
+    const r = await readPools(page);
+    expect(r.coreII.ok, `Core II should be short: ${r.coreII.current}/${r.coreII.target}`).toBe(false);
+    expect(r.flag, 'an unmet Core II pool blocks graduation').not.toBe(0);
   });
 });

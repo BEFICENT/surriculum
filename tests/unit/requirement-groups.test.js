@@ -29,17 +29,24 @@ test('VACD carries its three groups with the expected shape', () => {
   const named = groups.filter((g) => g.rule !== 'faculty');
   assert.deepEqual(named.map((g) => g.id), ['core_arthistory', 'core_skill', 'lang_cap']);
 
+  // The pool members / min are SCRAPED per acceptance term off SUIS (phase 5), so
+  // these pin the frozen 202301 catalog specifically — which differs from the
+  // current (2024+) one: 202301's Core II required 18 SU, and both pools listed
+  // more courses before the ~2024 curriculum trim. The app-semantic fields
+  // (base/rule/flag/overflowTo/pairs) come from the hand-authored skeleton.
   const arthistory = groups.find((g) => g.id === 'core_arthistory');
   assert.equal(arthistory.base, 'core');
   assert.equal(arthistory.rule, 'credits');
   assert.equal(arthistory.min, 9);
   assert.equal(arthistory.flag, 30);
+  assert.equal(arthistory.overflowTo, 'area');
   assert.deepEqual(arthistory.members,
-    ['HART292', 'HART293', 'HART380', 'HART413', 'HART426', 'VA315', 'VA420', 'VA430']);
+    ['HART292', 'HART293', 'HART380', 'HART392', 'HART411', 'HART413', 'HART414',
+      'HART426', 'HART450', 'HART480', 'PHIL322', 'VA315', 'VA420', 'VA430', 'VIS412']);
 
   const skill = groups.find((g) => g.id === 'core_skill');
   assert.equal(skill.base, 'core');
-  assert.equal(skill.min, 12);
+  assert.equal(skill.min, 18); // 202301 catalog; the current catalog is 12
   assert.equal(skill.flag, 31);
   assert.deepEqual(skill.exclusivePairs, [['VA302', 'VA304'], ['VA402', 'VA404']]);
 
