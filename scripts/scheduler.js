@@ -2817,6 +2817,8 @@
           if (!semObj || !Array.isArray(semObj.courses)) continue;
           for (let j = 0; j < semObj.courses.length; j++) {
             const cc = semObj.courses[j];
+            if (typeof cur.isDegreeEligibleCourse === 'function'
+                && !cur.isDegreeEligibleCourse(cc)) continue;
             const cid = normalizeCourseId(cc && cc.code);
             if (cid) out.add(cid);
           }

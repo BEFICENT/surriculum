@@ -4,6 +4,66 @@
 
 const REQUIREMENTS_UNAVAILABLE_FLAG = 99;
 
+// A curriculum is both a record and a forward-looking plan, so ungraded,
+// in-progress and incomplete courses remain projected parts of the plan. An
+// explicitly unsuccessful/non-credit attempt must not satisfy any degree rule
+// or influence allocation. W/NA are normally removed by transcript import, but
+// keeping them here also makes plan imports fail closed.
+const DEGREE_INELIGIBLE_GRADES = new Set(['F', 'U', 'NA', 'W']);
+
+function normalizeCourseGrade(grade) {
+    const normalized = String(grade || '').trim().toUpperCase();
+    return normalized === 'REGISTERED' ? '' : normalized;
+}
+
+function gradeForCourse(course) {
+    if (!course) return '';
+    // New and reloaded courses always carry a model grade. The DOM fallback is
+    // for legacy/plain objects created outside s_course (including old plans).
+    if (typeof course.grade === 'string') return normalizeCourseGrade(course.grade);
+    try {
+        const elem = document.getElementById(course.id);
+        const grade = elem ? elem.querySelector('.grade') : null;
+        return normalizeCourseGrade(grade ? grade.textContent : '');
+    } catch (_) {
+        return '';
+    }
+}
+
+function isDegreeEligibleCourse(course) {
+    return !!course && !DEGREE_INELIGIBLE_GRADES.has(gradeForCourse(course));
+}
+
+function normalizeCourseCode(code) {
+    return String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function canonicalCourseCode(code) {
+    const normalized = normalizeCourseCode(code);
+    // CS210 was renamed to DSA210; treat them as the same course.
+    return normalized === 'CS210' || normalized === 'DSA210' ? 'DSA210' : normalized;
+}
+
+function hasDegreeEligibleCourse(semesters, code) {
+    const target = canonicalCourseCode(code);
+    for (let i = 0; i < semesters.length; i++) {
+        const courses = semesters[i].courses || [];
+        for (let j = 0; j < courses.length; j++) {
+            const course = courses[j];
+            if (course && isDegreeEligibleCourse(course)
+                && canonicalCourseCode(course.code) === target) return true;
+        }
+    }
+    return false;
+}
+
+function hasAnyDegreeEligibleCourse(semesters, codes) {
+    for (let i = 0; i < codes.length; i++) {
+        if (hasDegreeEligibleCourse(semesters, codes[i])) return true;
+    }
+    return false;
+}
+
 // Expose s_curriculum constructor globally when running in a browser.
 if (typeof window !== 'undefined') {
     window.s_curriculum = s_curriculum;
@@ -77,7 +137,7 @@ function isPsyAdvancedCode(code) {
 // Must run pre-cascade for the usual reason (see collectAltPairExtras): deciding
 // afterwards demoted an extra out of `core` once the cascade had already capped
 // core and pushed the surplus down, so the freed core slot was never refilled.
-function selectCorePools(sortedSems, creditGroups, isExcluded) {
+function selectCorePools(sortedSems, creditGroups, isExcluded, isEligible) {
     const pools = (creditGroups || []).map((g) => {
         const pairKeyByCode = {};
         (g.exclusivePairs || []).forEach((pair) => {
@@ -99,7 +159,8 @@ function selectCorePools(sortedSems, creditGroups, isExcluded) {
         const courses = sortedSems[i].courses || [];
         for (let j = 0; j < courses.length; j++) {
             const course = courses[j];
-            if (!course || (isExcluded && isExcluded(course))) continue;
+            if (!course || (isEligible && !isEligible(course))
+                || (isExcluded && isExcluded(course))) continue;
             for (let p = 0; p < pools.length; p++) {
                 const pool = pools[p];
                 if (!pool.members.has(course.code)) continue;
@@ -140,7 +201,7 @@ function countBasicLanguageInFree(semesters, effField) {
         const courses = semesters[i].courses || [];
         for (let j = 0; j < courses.length; j++) {
             const course = courses[j];
-            if (!course) continue;
+            if (!course || !isDegreeEligibleCourse(course)) continue;
             if (String(course[effField] || '').toLowerCase() !== 'free') continue;
             if (BASIC_LANGUAGE_COURSES.has(course.code)) count++;
         }
@@ -165,7 +226,7 @@ function countBasicLanguageInFree(semesters, effField) {
 //
 // Shared by both allocation passes: the double-major copy of this rule drifted
 // from the main one and kept a bug the main one had already fixed.
-function collectAltPairExtras(sortedSems, pairs) {
+function collectAltPairExtras(sortedSems, pairs, isEligible) {
     const norm = (v) => String(v || '').toUpperCase().replace(/\s+/g, '');
     const extras = [];
     for (let p = 0; p < pairs.length; p++) {
@@ -174,7 +235,8 @@ function collectAltPairExtras(sortedSems, pairs) {
             const courses = sortedSems[i].courses || [];
             for (let j = 0; j < courses.length; j++) {
                 const c = courses[j];
-                if (c && pairs[p].indexOf(norm(c.code)) !== -1) taken.push(c);
+                if (c && (!isEligible || isEligible(c))
+                    && pairs[p].indexOf(norm(c.code)) !== -1) taken.push(c);
             }
         }
         for (let k = 1; k < taken.length; k++) extras.push(taken[k]);
@@ -308,7 +370,8 @@ function allocateCascade(staticType, credit, counters, reqs, pinCore) {
 // `courseData` select the program (main major or double major). `sortedSems` is
 // the chronological order the pair/pool rules depend on; `allSems` is used only
 // for the order-independent math-exclusion sweep. `hasCourse` takes a code.
-function resolveAlternativeRules(major, entryTerm, sortedSems, allSems, getInfoFn, courseData, hasCourse, groups) {
+function resolveAlternativeRules(major, entryTerm, sortedSems, allSems, getInfoFn, courseData,
+    hasCourse, groups, isEligible) {
     const excluded = new Set();
     const typeOverride = new Map();
     const forceCore = new Set();
@@ -322,7 +385,9 @@ function resolveAlternativeRules(major, entryTerm, sortedSems, allSems, getInfoF
         };
         const shouldSkipMath = mathAlternativeSkipPredicate(entryTerm, hasCourse, elTypeOf);
         allSems.forEach((sem) => {
-            (sem.courses || []).forEach((c) => { if (c && shouldSkipMath(c.code)) excluded.add(c); });
+            (sem.courses || []).forEach((c) => {
+                if (c && (!isEligible || isEligible(c)) && shouldSkipMath(c.code)) excluded.add(c);
+            });
         });
     }
 
@@ -333,7 +398,7 @@ function resolveAlternativeRules(major, entryTerm, sortedSems, allSems, getInfoF
         // SUIS: the extra of an ME pair IS counted — toward Core Elective.
         const entry = parseInt(entryTerm || '0', 10);
         if (!isNaN(entry) && entry >= 202501) {
-            collectAltPairExtras(sortedSems, ME_2025_ALT_PAIRS)
+            collectAltPairExtras(sortedSems, ME_2025_ALT_PAIRS, isEligible)
                 .forEach((c) => typeOverride.set(c, 'core'));
         }
     } else if (major === 'VACD') {
@@ -341,12 +406,12 @@ function resolveAlternativeRules(major, entryTerm, sortedSems, allSems, getInfoF
         // rule, this one does not count the extra at all, so it is excluded
         // outright rather than allowed to fill a free-elective slot. (The core
         // pools themselves are resolved by the data-driven block below.)
-        collectAltPairExtras(sortedSems, VACD_REQUIRED_PAIRS)
+        collectAltPairExtras(sortedSems, VACD_REQUIRED_PAIRS, isEligible)
             .forEach((c) => excluded.add(c));
     } else if (major === 'PSY') {
         // No published rule for taking both; the extra counts as free by agreed
         // assumption. See PSY_PHILOSOPHY_PAIR.
-        collectAltPairExtras(sortedSems, PSY_PHILOSOPHY_PAIR)
+        collectAltPairExtras(sortedSems, PSY_PHILOSOPHY_PAIR, isEligible)
             .forEach((c) => typeOverride.set(c, 'free'));
     }
 
@@ -359,7 +424,7 @@ function resolveAlternativeRules(major, entryTerm, sortedSems, allSems, getInfoF
     // extras take the pool's `overflowTo` and spill on through the cascade.
     const creditGroups = (groups || []).filter((g) => g.rule === 'credits');
     if (creditGroups.length) {
-        selectCorePools(sortedSems, creditGroups, (c) => excluded.has(c))
+        selectCorePools(sortedSems, creditGroups, (c) => excluded.has(c), isEligible)
             .forEach((type, course) => {
                 if (type === 'core') forceCore.add(course);
                 else typeOverride.set(course, type);
@@ -414,7 +479,7 @@ function tallyFacultyCourses(semesters, effField) {
         const courses = semesters[i].courses || [];
         for (let a = 0; a < courses.length; a++) {
             const course = courses[a];
-            if (!course || course[eff] === 'none') continue;
+            if (!course || !isDegreeEligibleCourse(course) || course[eff] === 'none') continue;
             const pool = course.Faculty_Course;
             if (!pool || pool === 'No') continue;
             tally.total++;
@@ -444,7 +509,7 @@ function tallyFacultyAreas(semesters, effField) {
         const courses = semesters[i].courses || [];
         for (let a = 0; a < courses.length; a++) {
             const course = courses[a];
-            if (!course || course[eff] === 'none') continue;
+            if (!course || !isDegreeEligibleCourse(course) || course[eff] === 'none') continue;
             const pool = course.Faculty_Course;
             if (!pool || pool === 'No') continue;
             const code = String(course.code || '');
@@ -475,7 +540,7 @@ function forEachCourse(semesters, fn) {
     for (let i = 0; i < semesters.length; i++) {
         const courses = semesters[i].courses || [];
         for (let a = 0; a < courses.length; a++) {
-            if (courses[a]) fn(courses[a]);
+            if (courses[a] && isDegreeEligibleCourse(courses[a])) fn(courses[a]);
         }
     }
 }
@@ -519,9 +584,9 @@ function sumPoolCredits(semesters, pool, opts) {
 // `ctx` = { curr, semesters, fields, entryTerm }.
 const RULE_EVALUATORS = {
     // A specific course is present.
-    hasCourse: (ctx, r) => ctx.curr.hasCourse(r.code),
+    hasCourse: (ctx, r) => hasDegreeEligibleCourse(ctx.semesters, r.code),
     // At least one of a list is present ("one of the following").
-    hasAny: (ctx, r) => ctx.curr.hasAnyCourse(r.codes),
+    hasAny: (ctx, r) => hasAnyDegreeEligibleCourse(ctx.semesters, r.codes),
     // A faculty-course pool count meets its minimum (see tallyFacultyCourses).
     facultyCount: (ctx, r) => tallyFacultyCourses(ctx.semesters, ctx.fields.effective)[r.pool] >= r.min,
     // Faculty courses span at least `min` distinct areas (flag 18).
@@ -609,7 +674,7 @@ const RULE_EVALUATORS = {
     entryGatedHasAny: (ctx, r) => {
         const entry = parseInt(ctx.entryTerm || '0', 10);
         if (isNaN(entry) || entry < r.minTerm) return true;
-        return ctx.curr.hasAnyCourse(r.codes);
+        return hasAnyDegreeEligibleCourse(ctx.semesters, r.codes);
     },
 };
 
@@ -800,7 +865,7 @@ function groupProgressFor(ctx, groups, facultyReq) {
                 break;
             }
             case 'oneOf': {
-                const current = ctx.curr.hasAnyCourse(g.members) ? 1 : 0;
+                const current = hasAnyDegreeEligibleCourse(ctx.semesters, g.members) ? 1 : 0;
                 out.push({ ...base, current, target: 1, unit: 'course', ok: current >= 1 });
                 break;
             }
@@ -810,7 +875,7 @@ function groupProgressFor(ctx, groups, facultyReq) {
                     out.push({ ...base, current: 1, target: 1, unit: 'course', ok: true,
                         note: 'Not required for your admit term' });
                 } else {
-                    const current = ctx.curr.hasAnyCourse(g.members) ? 1 : 0;
+                    const current = hasAnyDegreeEligibleCourse(ctx.semesters, g.members) ? 1 : 0;
                     out.push({ ...base, current, target: 1, unit: 'course', ok: current >= 1 });
                 }
                 break;
@@ -1208,22 +1273,14 @@ function s_curriculum()
     }
     this.hasCourse = function(course)
     {
-        // Use a strict normalizer (strip anything that's not A-Z/0-9). This
-        // prevents subtle mismatches from PDFs/HTMLs that may contain
-        // non-standard whitespace or punctuation in extracted course codes.
-        const normalize = (c) => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-        const canonicalize = (c) => {
-            const n = normalize(c);
-            // CS210 was renamed to DSA210; treat them as the same course.
-            if (n === 'CS210' || n === 'DSA210') return 'DSA210';
-            return n;
-        };
-        const target = canonicalize(course);
+        // Structural presence intentionally remains separate from degree-plan
+        // eligibility. The planner uses this method for duplicate prevention.
+        const target = canonicalCourseCode(course);
         for(let i = 0; i < this.semesters.length; i++)
         {
             for(let a = 0; a < this.semesters[i].courses.length; a++)
             {
-                if(canonicalize(this.semesters[i].courses[a].code) === target)
+                if(canonicalCourseCode(this.semesters[i].courses[a].code) === target)
                 {return true;}
             }
         }
@@ -1254,6 +1311,18 @@ function s_curriculum()
             if (this.hasCourse(codes[i])) return true;
         }
         return false;
+    }
+    // Degree-plan eligibility is grade-based and shared by allocation,
+    // graduation, double-major, minor and summary calculations. A failed
+    // attempt can therefore remain visible/present without satisfying a rule.
+    this.isDegreeEligibleCourse = function(course) {
+        return isDegreeEligibleCourse(course);
+    }
+    this.hasDegreeEligibleCourse = function(code) {
+        return hasDegreeEligibleCourse(this.semesters, code);
+    }
+    this.hasAnyDegreeEligibleCourse = function(codes) {
+        return hasAnyDegreeEligibleCourse(this.semesters, codes);
     }
 
     // Per-requirement-group progress for the Summary panel (Phase 4). Returns an
@@ -1309,7 +1378,7 @@ function s_curriculum()
         }
         // Generic requirement checks
         if (university < req.university) return 1;
-        if (req.internshipCourse && !this.hasCourse(req.internshipCourse)) return 4;
+        if (req.internshipCourse && !this.hasDegreeEligibleCourse(req.internshipCourse)) return 4;
         if (total < req.total) return 5;
         if (science < req.science) return 8;
         if (engineering < req.engineering) return 9;
@@ -1417,8 +1486,8 @@ function s_curriculum()
         // allocation loop without repeated lookups.
         const forceCSCore = (
             this.major === 'IE' &&
-            this.hasCourse('CS201') &&
-            this.hasCourse('DSA201')
+            this.hasDegreeEligibleCourse('CS201') &&
+            this.hasDegreeEligibleCourse('DSA201')
         );
 
         // Alternative-course rules, resolved BEFORE the allocation cascade below
@@ -1426,7 +1495,8 @@ function s_curriculum()
         // run afterwards). Shared with the double-major pass.
         const { excluded: excludedFromDegree, typeOverride, forceCore } = resolveAlternativeRules(
             this.major, this.entryTerm, sortedSemesters, this.semesters,
-            getInfoFn, course_data, (c) => this.hasCourse(c), req.groups,
+            getInfoFn, course_data, (c) => this.hasDegreeEligibleCourse(c), req.groups,
+            (course) => this.isDegreeEligibleCourse(course),
         );
 
         // Iterate semesters in chronological order
@@ -1435,17 +1505,11 @@ function s_curriculum()
             // Iterate courses in the order they appear within the semester.
             for (let j = 0; j < sem.courses.length; j++) {
                 const course = sem.courses[j];
-                // Skip credit calculations for courses with grade F
-                let gradeText = '';
-                try {
-                    const elem = document.getElementById(course.id);
-                    if (elem) {
-                        const gr = elem.querySelector('.grade');
-                        gradeText = gr ? gr.textContent.trim() : '';
-                    }
-                } catch (_) {}
-                if (gradeText === 'F') {
+                // Failed/unsuccessful attempts remain in the plan but do not
+                // take credits, categories, pair positions or requirement slots.
+                if (!this.isDegreeEligibleCourse(course)) {
                     course.effective_type = 'none';
+                    delete course.category;
                     continue;
                 }
                 // Excluded alternative (SUIS rule): counts toward no pool, and
@@ -1736,8 +1800,8 @@ function s_curriculum()
         // of course order.
         const dmForceCSCore = (
             this.doubleMajor === 'IE' &&
-            this.hasCourse('CS201') &&
-            this.hasCourse('DSA201')
+            this.hasDegreeEligibleCourse('CS201') &&
+            this.hasDegreeEligibleCourse('DSA201')
         );
         // Reset per-semester DM totals.  In addition to core/area/free, we
         // maintain separate totals for required and university courses for
@@ -1775,7 +1839,8 @@ function s_curriculum()
         const { excluded: excludedFromDegreeDM, typeOverride: typeOverrideDM, forceCore: forceCoreDM } =
             resolveAlternativeRules(
                 this.doubleMajor, this.entryTermDM, sorted, this.semesters,
-                getInfoFnDM, course_data_dm, (c) => this.hasCourse(c), dmReq.groups,
+                getInfoFnDM, course_data_dm, (c) => this.hasDegreeEligibleCourse(c), dmReq.groups,
+                (course) => this.isDegreeEligibleCourse(course),
             );
 
         // Walk semesters and courses allocating DM categories
@@ -1783,16 +1848,9 @@ function s_curriculum()
             const sem = sorted[i];
             for (let j = 0; j < sem.courses.length; j++) {
                 const course = sem.courses[j];
-                let gradeText = '';
-                try {
-                    const elem = document.getElementById(course.id);
-                    if (elem) {
-                        const gr = elem.querySelector('.grade');
-                        gradeText = gr ? gr.textContent.trim() : '';
-                    }
-                } catch (_) {}
-                if (gradeText === 'F') {
+                if (!this.isDegreeEligibleCourse(course)) {
                     course.effective_type_dm = 'none';
+                    delete course.categoryDM;
                     continue;
                 }
                 // Excluded alternative (SUIS rule): counts toward no DM pool.
@@ -1975,7 +2033,7 @@ function s_curriculum()
         const ectsReq = (req.ects || 0) + 60;
         // Generic checks
         if (university < (req.university || 0)) return 1;
-        if (req.internshipCourse && !this.hasCourse(req.internshipCourse)) return 4;
+        if (req.internshipCourse && !this.hasDegreeEligibleCourse(req.internshipCourse)) return 4;
         if (total < totalReq) return 5;
         if (science < (req.science || 0)) return 8;
         if (engineering < (req.engineering || 0)) return 9;

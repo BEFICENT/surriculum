@@ -872,14 +872,20 @@ function dynamic_click(e, curriculum, course_data)
         let credit = (typeof parseCreditValue === 'function')
             ? parseCreditValue(getInfo(courseName, course_data)['SU_credit'])
             : (parseFloat(getInfo(courseName, course_data)['SU_credit']) || 0);
-        let grade = '';
-        try {
-            const gr = courseElem.querySelector('.grade');
-            grade = gr ? gr.innerHTML : '';
-        } catch (_) {}
+        const courseObj = semObj.courses.find((course) => course.id === courseElem.id) || null;
+        let grade = courseObj ? String(courseObj.grade || '') : '';
+        if (!courseObj) {
+            try {
+                const gr = courseElem.querySelector('.grade');
+                grade = gr ? String(gr.textContent || '').trim() : '';
+            } catch (_) {}
+        }
 
-        // If this course had grade F we previously removed its credits. Add them back before deletion
-        if(grade == 'F'){
+        // Ineligible attempts were already removed from totals. Restore their
+        // static contribution before deleteCourse subtracts the course itself.
+        const degreeEligible = typeof curriculum.isDegreeEligibleCourse !== 'function'
+            || curriculum.isDegreeEligibleCourse(courseObj || { grade });
+        if(!degreeEligible){
             let info = getInfo(courseName, course_data);
             if(info){
                 adjustSemesterTotals(semObj, info, 1);
@@ -996,26 +1002,12 @@ function dynamic_click(e, curriculum, course_data)
 //CLICKED ADD GRADE:
     else if(e.target.classList.contains("grade"))
     {
-        var prevGrade;
+        var prevGrade = '';
         var gradeElement = e.target; // Store reference to the grade element
 
         if(e.target.innerHTML.length <= 2)
         {
             prevGrade = e.target.innerHTML;
-
-            let sem = e.target.parentNode.parentNode.parentNode;
-            let courseName = e.target.parentNode.querySelector('.course_label').firstChild.innerHTML;
-            let credit = (typeof parseCreditValue === 'function')
-                ? parseCreditValue(getInfo(courseName, course_data)['SU_credit'])
-                : (parseFloat(getInfo(courseName, course_data)['SU_credit']) || 0);
-
-            const prevGradeValue = letter_grades_global_dic[prevGrade];
-            if (prevGradeValue !== undefined) {
-                curriculum.getSemester(sem.id).totalGPA -= prevGradeValue * credit;
-                if (prevGrade !== 'T') {
-                    curriculum.getSemester(sem.id).totalGPACredits -= credit;
-                }
-            }
         }
 
         // Create modern dropdown
@@ -1056,6 +1048,11 @@ function dynamic_click(e, curriculum, course_data)
                     ? parseCreditValue(getInfo(courseName, course_data)['SU_credit'])
                     : (parseFloat(getInfo(courseName, course_data)['SU_credit']) || 0);
                 let semObj = curriculum.getSemester(sem.id);
+                const prevGradeValue = letter_grades_global_dic[prevGrade];
+                if (prevGradeValue !== undefined) {
+                    semObj.totalGPA -= prevGradeValue * credit;
+                    if (prevGrade !== 'T') semObj.totalGPACredits -= credit;
+                }
                 const gradeValue = letter_grades_global_dic[grade];
                 if (gradeValue !== undefined) {
                     semObj.totalGPA += gradeValue * credit;
@@ -1064,16 +1061,29 @@ function dynamic_click(e, curriculum, course_data)
                     }
                 }
 
-                // Adjust earned credits
+                const courseElem = gradeElement.closest('.course');
+                const courseObj = semObj && courseElem
+                    ? semObj.courses.find((course) => course.id === courseElem.id)
+                    : null;
+                const wasDegreeEligible = typeof curriculum.isDegreeEligibleCourse === 'function'
+                    ? curriculum.isDegreeEligibleCourse({ grade: prevGrade })
+                    : prevGrade !== 'F';
+                const isDegreeEligible = typeof curriculum.isDegreeEligibleCourse === 'function'
+                    ? curriculum.isDegreeEligibleCourse({ grade })
+                    : grade !== 'F';
+
+                // Adjust earned/projected credits when crossing the eligibility
+                // boundary, then keep the model grade authoritative.
                 let info = getInfo(courseName, course_data);
-                if(prevGrade === 'F' && grade !== 'F'){
+                if(!wasDegreeEligible && isDegreeEligible){
                     adjustSemesterTotals(semObj, info, 1);
-                } else if(prevGrade !== 'F' && grade === 'F'){
+                } else if(wasDegreeEligible && !isDegreeEligible){
                     adjustSemesterTotals(semObj, info, -1);
                 }
+                if (courseObj) courseObj.grade = grade;
 
                 // Update display
-                gradeElement.innerHTML = grade;
+                gradeElement.textContent = grade;
                 gradeElement.classList.remove('grade-active');
 
                 // Remove the outside click listener
@@ -1098,13 +1108,29 @@ function dynamic_click(e, curriculum, course_data)
                 let sem = gradeElement.parentNode.parentNode.parentNode;
                 let courseName = gradeElement.parentNode.querySelector('.course_label').firstChild.innerHTML;
                 let semObj = curriculum.getSemester(sem.id);
+                let credit = (typeof parseCreditValue === 'function')
+                    ? parseCreditValue(getInfo(courseName, course_data)['SU_credit'])
+                    : (parseFloat(getInfo(courseName, course_data)['SU_credit']) || 0);
+                const prevGradeValue = letter_grades_global_dic[prevGrade];
+                if (prevGradeValue !== undefined) {
+                    semObj.totalGPA -= prevGradeValue * credit;
+                    if (prevGrade !== 'T') semObj.totalGPACredits -= credit;
+                }
+                const courseElem = gradeElement.closest('.course');
+                const courseObj = semObj && courseElem
+                    ? semObj.courses.find((course) => course.id === courseElem.id)
+                    : null;
 
-                if(prevGrade === 'F'){
+                const wasDegreeEligible = typeof curriculum.isDegreeEligibleCourse === 'function'
+                    ? curriculum.isDegreeEligibleCourse({ grade: prevGrade })
+                    : prevGrade !== 'F';
+                if(!wasDegreeEligible){
                     let info = getInfo(courseName, course_data);
                     adjustSemesterTotals(semObj, info, 1);
                 }
+                if (courseObj) courseObj.grade = '';
 
-                gradeElement.innerHTML = 'Add grade';
+                gradeElement.textContent = 'Add grade';
                 gradeElement.classList.remove('grade-active');
 
                 document.removeEventListener('click', closeDropdown);

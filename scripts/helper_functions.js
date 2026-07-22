@@ -1177,8 +1177,17 @@ function serializator(curriculum)
     return result;
 }
 
-function grades_serializator()
+function grades_serializator(curriculum)
 {
+    // The course model is authoritative. In particular, opening the grade
+    // picker temporarily replaces the DOM text with dropdown markup; serializing
+    // that transient UI used to turn a saved F into a blank grade on reload.
+    if (curriculum && Array.isArray(curriculum.semesters)) {
+        return JSON.stringify(curriculum.semesters.map((semester) =>
+            (semester.courses || []).map((course) => String(course.grade || ''))));
+    }
+
+    // Legacy fallback for callers that do not yet have a curriculum instance.
     let containers = document.querySelectorAll('.container_semester');
 
 

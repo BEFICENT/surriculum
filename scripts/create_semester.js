@@ -189,7 +189,11 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
     for(let i = 0; i < courseList.length; i++)
     {
         curriculum.course_id++;
-        let myCourse = new s_course(courseList[i], 'c' + curriculum.course_id);
+        let myCourse = new s_course(
+            courseList[i],
+            'c' + curriculum.course_id,
+            (grade_list && grade_list[i]) || '',
+        );
         let courseCode = myCourse.code;
         try
         {
@@ -249,26 +253,30 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
             //c_info.appendChild(gr_container);
             var grade = document.createElement('div');
             grade.classList.add('grade');
-            if(!grade_list.length || !grade_list[i].length)
+            if(!myCourse.grade)
             {
-                grade.innerHTML = 'Add grade';
+                grade.textContent = 'Add grade';
             }
             else
             {
-                grade.innerHTML = grade_list[i];
-                const gradeValue = letter_grades_global_dic[grade_list[i]];
+                grade.textContent = myCourse.grade;
+                const gradeValue = letter_grades_global_dic[myCourse.grade];
                 if (gradeValue !== undefined) {
                     // GPA is affected by all letter grades except transfers (T)
                     curriculum.getSemester(semester.id).totalGPA += courseCredit * gradeValue;
-                    if (grade_list[i] !== 'T') {
+                    if (myCourse.grade !== 'T') {
                         curriculum.getSemester(semester.id).totalGPACredits += courseCredit;
                     }
-                    // If grade is F, the course should not count towards earned credits
-                    if (grade_list[i] === 'F') {
-                        let info = getInfo(courseCode, course_data);
-                        if (info) {
-                            adjustSemesterTotals(curriculum.getSemester(semester.id), info, -1);
-                        }
+                }
+                // Explicitly unsuccessful attempts do not count toward the
+                // degree plan. The full allocation pass below recomputes these
+                // totals too; this keeps the pre-allocation display consistent.
+                const degreeEligible = typeof curriculum.isDegreeEligibleCourse !== 'function'
+                    || curriculum.isDegreeEligibleCourse(myCourse);
+                if (!degreeEligible) {
+                    let info = getInfo(courseCode, course_data);
+                    if (info) {
+                        adjustSemesterTotals(curriculum.getSemester(semester.id), info, -1);
                     }
                 }
             }

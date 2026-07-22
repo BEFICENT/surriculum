@@ -3,6 +3,20 @@
 // requirements). This is necessary when running under the file:// scheme
 // where ES module imports may not be available.
 
+function courseCountsTowardDegreePlan(curriculum, course) {
+    try {
+        if (curriculum && typeof curriculum.isDegreeEligibleCourse === 'function') {
+            return curriculum.isDegreeEligibleCourse(course);
+        }
+        const elem = document.getElementById(course && course.id);
+        const grade = elem ? elem.querySelector('.grade') : null;
+        const value = String(grade ? grade.textContent : '').trim().toUpperCase();
+        return !['F', 'U', 'NA', 'W'].includes(value);
+    } catch (_) {
+        return true;
+    }
+}
+
 // Compute how taken courses are allocated for a minor, including the
 // "overflow" behavior (Core → Area → Free) and equivalence rules.
 function computeMinorAllocation(curriculum, minorCode) {
@@ -71,13 +85,7 @@ function computeMinorAllocation(curriculum, minorCode) {
             for (let j = 0; j < sem.courses.length; j++) {
                 const c = sem.courses[j];
                 if (!c || !c.code) continue;
-                let gradeText = '';
-                try {
-                    const elem = document.getElementById(c.id);
-                    const gr = elem ? elem.querySelector('.grade') : null;
-                    gradeText = gr ? gr.textContent.trim() : '';
-                } catch (_) {}
-                if (gradeText === 'F') continue;
+                if (!courseCountsTowardDegreePlan(curriculum, c)) continue;
                 taken.add(normalizeCode(c.code));
             }
         }
@@ -493,13 +501,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
                 for (let j = 0; j < sem.courses.length; j++) {
                     const c = sem.courses[j];
                     if (!c || !c.code) continue;
-                    let gradeText = '';
-                    try {
-                        const elem = document.getElementById(c.id);
-                        const gr = elem ? elem.querySelector('.grade') : null;
-                        gradeText = gr ? gr.textContent.trim() : '';
-                    } catch (_) {}
-                    if (gradeText === 'F') continue;
+                    if (!courseCountsTowardDegreePlan(curriculum, c)) continue;
                     taken.add(String(c.code).toUpperCase().replace(/\s+/g, ''));
                 }
             }
@@ -893,13 +895,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
                 for (let j = 0; j < sem.courses.length; j++) {
                     const c = sem.courses[j];
                     if (!c || !c.code) continue;
-                    let gradeText = '';
-                    try {
-                        const elem = document.getElementById(c.id);
-                        const gr = elem ? elem.querySelector('.grade') : null;
-                        gradeText = gr ? gr.textContent.trim() : '';
-                    } catch (_) {}
-                    if (gradeText === 'F') continue;
+                    if (!courseCountsTowardDegreePlan(curriculum, c)) continue;
 
                     const code = normalizeCode(c.code);
                     const eff = String((c && c[effField]) || '').toLowerCase();

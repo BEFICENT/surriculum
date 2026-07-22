@@ -2000,7 +2000,7 @@ function SUrriculum(major_chosen_by_user) {
     //Save:
     saveInterval = setInterval(function() {
         planSetItem("curriculum", serializator(curriculum));
-        planSetItem("grades", grades_serializator());
+        planSetItem("grades", grades_serializator(curriculum));
         planSetItem("dates", dates_serializator());
     }, 2000);
 
@@ -2009,7 +2009,7 @@ function SUrriculum(major_chosen_by_user) {
         if (typeof window !== 'undefined' && window.planStorage && typeof window.planStorage.registerSaveHook === 'function') {
             window.planStorage.registerSaveHook(function() {
                 planSetItem("curriculum", serializator(curriculum));
-                planSetItem("grades", grades_serializator());
+                planSetItem("grades", grades_serializator(curriculum));
                 planSetItem("dates", dates_serializator());
             });
         }

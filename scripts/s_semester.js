@@ -108,10 +108,16 @@ function s_semester(id, course_data)
 }
 
 //struct representing course:
-function s_course(code, id = 0)
+function s_course(code, id = 0, grade = '')
 {
     this.code = code.toUpperCase().trim();
     this.id = id
+    // Keep the grade on the model as well as in the UI. Graduation and
+    // allocation rules must not depend on reading rendered DOM text, and the
+    // model value also prevents an open grade picker from being autosaved as a
+    // blank grade. "Registered" is the persisted label for a planned course.
+    const normalizedGrade = String(grade || '').trim().toUpperCase();
+    this.grade = normalizedGrade === 'REGISTERED' ? '' : normalizedGrade;
     // Effective type of the course after category reallocation. Initially null and
     // will be set by curriculum.recalcEffectiveTypes().
     this.effective_type = null;
