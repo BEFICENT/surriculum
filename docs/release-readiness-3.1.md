@@ -11,8 +11,9 @@ a time and checked off only after the fix and its verification are complete.
   consented to their use. This substantially changes the privacy assessment.
   They are nevertheless public downloads and remain recoverable from Git
   history, so retaining real records should remain an explicit release decision.
-- The PDF.js risk should be discussed and calibrated before choosing between an
-  upgrade, mitigations, or formally accepting the risk.
+- PDF.js 2.10.377 is formally affected by CVE-2024-4367. The disclosed exploit
+  path appears to require glyph rendering, while SUrriculum only extracts text,
+  but that reduced reachability is an inference rather than a vendor guarantee.
 - Do not expand test coverage yet. A dedicated coverage pass will happen before
   release when requested.
 - The `surriculum-3.1` branch is published but has not been merged into `main`.
@@ -70,12 +71,28 @@ a time and checked off only after the fix and its verification are complete.
 
 - [ ] Decide whether the consented real academic-record PDFs should remain in a
   public repository or be replaced by synthetic fixtures before release.
-- [ ] Calibrate and resolve the PDF.js issue. The app loads PDF.js 2.10.377 and
-  processes user-selected PDFs without `isEvalSupported: false`. GitHub's
-  advisory covers arbitrary JavaScript execution from a malicious PDF in
-  affected versions. The relevant browser-origin assets are locally stored
-  plans/preferences and any data currently rendered in the page; this is not a
-  server takeover risk for this static app.
+- [x] Apply the official interim PDF.js mitigation. Completed on 2026-07-23:
+  user-selected PDFs are opened with `isEvalSupported: false`, Mozilla's
+  documented workaround for affected releases. The app remains on 2.10.377, so
+  this is defense in depth rather than an upgrade or a claim that the old
+  dependency is fully resolved.
+- [ ] Upgrade and self-host PDF.js before release. The CDN-loaded main library
+  and local worker currently match at 2.10.377, but releases through 4.1.392 are
+  covered by CVE-2024-4367 and the external CDN script has no integrity
+  check. The investigated target is a matched, locally vendored 6.1.200 legacy
+  ESM main/worker pair, lazy-loaded only when a PDF is selected. PDF.js 6.1.200
+  targets Safari 18 or newer; if Safari 16.4-17 support is required, 5.7.284 is
+  a possible compatibility bridge but is neither current nor an LTS release.
+  Decide the browser floor before migrating.
+
+  The migration must replace the classic global script with `import()`, set a
+  subpath-safe worker URL, preserve `isEvalSupported: false`, dispose of the
+  loading task/document after extraction, and choose either `useWasm: false`
+  for this text-only path or locally ship the matching WASM assets and licenses.
+  Add sensible file/page/text limits. Before accepting the upgrade, compare the
+  extracted text and parsed courses from both consented example PDFs, remove the
+  test harness's ignored `pdfjsLib is not defined` error, and include the local
+  PDF assets in the eventual service-worker/offline fix.
 - [x] Validate every nested field in imported plan JSON and custom courses.
   Completed on 2026-07-23: imports are size- and shape-bounded, nested plan,
   scheduler, and custom-course fields are normalized before storage, unknown or
@@ -140,8 +157,16 @@ a time and checked off only after the fix and its verification are complete.
   20:30, outside the scheduler's Monday-Friday 08:40-19:30 grid.
 - [ ] Make scheduler replacement transactional so a rendering/build failure
   cannot leave the plan partially cleared.
-- [ ] Replace origin-wide `localStorage.clear()` with deletion of only known
-  SUrriculum keys.
+- [x] Replace origin-wide `localStorage.clear()` with deletion of only known
+  SUrriculum keys. Completed on 2026-07-23: reset now removes namespaced plan
+  data plus the explicit legacy, preference, scheduler, and valid dynamic keys;
+  it reloads only after a successful reset. A browser check confirmed that an
+  unrelated origin key and a near-match legacy key survive while SUrriculum data
+  is removed and legacy migration does not restore it.
+- [ ] Namespace the still-global SUrriculum preference and scheduler keys, then
+  migrate their existing values. Scoped reset is safe now, but namespacing keys
+  such as `theme` will also prevent ordinary writes from colliding with another
+  app on a shared origin.
 - [ ] Save on mutations with a short debounce and flush on `pagehide` or hidden
   visibility so quick closes/mobile backgrounding do not lose recent edits.
 

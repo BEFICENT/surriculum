@@ -2004,25 +2004,28 @@ function SUrriculum(major_chosen_by_user) {
         resetLocalBtn.addEventListener('click', async function() {
             const ok = await uiConfirm(
                 'Reset local data?',
-                '<p>Are you sure you want to reset <strong>all</strong> local data?</p>' +
+                '<p>Are you sure you want to reset <strong>all SUrriculum data</strong> stored in this browser?</p>' +
                 '<p>This will remove saved semesters, custom courses, grades, and your saved plans.</p>',
                 { confirmText: 'Reset', danger: true }
             );
             if (ok) {
+                let resetComplete = false;
                 try {
-                    // Explicitly remove all relevant keys from localStorage
-                    planRemoveItem('curriculum');
-                    planRemoveItem('grades');
-                    planRemoveItem('dates');
-                    const customKey = 'customCourses_' + major_chosen_by_user;
-                    planRemoveItem(customKey);
                     clearInterval(saveInterval);
-                    localStorage.clear();
+                    const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+                    if (!storage || typeof storage.clearAllAppData !== 'function') {
+                        throw new Error('SUrriculum storage management is unavailable.');
+                    }
+                    storage.clearAllAppData();
+                    resetComplete = true;
                 } catch (ex) {
-                    console.error('Failed to clear localStorage:', ex);
+                    console.error('Failed to reset SUrriculum data:', ex);
+                    await uiAlert(
+                        'Reset failed',
+                        `<p>${escapeHtml(ex && ex.message ? ex.message : 'Could not reset SUrriculum data.')}</p>`
+                    );
                 }
-                // Reload the page to reflect the cleared state
-                location.reload();
+                if (resetComplete) location.reload();
             }
         });
     }
@@ -2666,7 +2669,13 @@ function SUrriculum(major_chosen_by_user) {
 
                 if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
                     const arrayBuffer = await file.arrayBuffer();
-                    const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
+                    const pdf = await pdfjsLib.getDocument({
+                        data: new Uint8Array(arrayBuffer),
+                        // Defense in depth for PDF.js versions affected by
+                        // CVE-2024-4367. This importer only extracts text and
+                        // does not need eval-based font rendering.
+                        isEvalSupported: false
+                    }).promise;
                     let text = '';
                     let totalTextItems = 0;
 

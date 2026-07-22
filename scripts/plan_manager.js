@@ -23,6 +23,35 @@
     'minor1', 'minor2', 'minor3',
     'curriculum', 'grades', 'dates'
   ];
+  const APP_GLOBAL_STORAGE_KEYS = new Set([
+    ...LEGACY_KEYS,
+    'schedulerSelectedTerm',
+    'theme',
+    'showCourseDetails',
+    'hideTakenCourses',
+    'offeredThisTermOnly',
+    'sortBasedOnScore',
+    'showDoubleMajorControls',
+    'showMinorControls',
+    'mobileNoticeDismissed',
+    'schedulerHoverPreview',
+    'schedulerHighlightAvailability',
+    'schedulerShowBlockedCourses',
+    'schedulerMinMajorType',
+    'schedulerMinDmType',
+    'schedulerMinMinorType',
+    'schedulerMinSuCredits',
+    'schedulerMinEcts',
+    'schedulerMinBasicScience',
+    'schedulerMinEngineering',
+    'schedulerCheckPrereqs',
+    'schedulerShowUnmetPrereqs',
+  ]);
+  const APP_LEGACY_STORAGE_PATTERNS = [
+    /^customCourses_[A-Z][A-Z0-9-]{0,19}$/,
+    /^schedulerState_\d{6}$/,
+    /^dmCustomCoursesCreditsRepairShown_[A-Z][A-Z0-9-]{0,19}$/,
+  ];
 
   function createModal({ title, bodyHtml, input, buttons, onMount }) {
     return new Promise((resolve) => {
@@ -323,6 +352,30 @@
       }
     } catch (_) {}
     return keys;
+  }
+
+  function isAppOwnedStorageKey(key) {
+    const value = String(key || '');
+    if (!value) return false;
+    if (value.startsWith('surriculum.')) return true;
+    if (APP_GLOBAL_STORAGE_KEYS.has(value)) return true;
+    return APP_LEGACY_STORAGE_PATTERNS.some((pattern) => pattern.test(value));
+  }
+
+  function clearAllAppData() {
+    const ownedKeys = listLocalStorageKeys().filter(isAppOwnedStorageKey);
+    const failedKeys = [];
+    ownedKeys.forEach((key) => {
+      try {
+        localStorage.removeItem(key);
+      } catch (_) {
+        failedKeys.push(key);
+      }
+    });
+    if (failedKeys.length) {
+      throw new Error(`Could not remove ${failedKeys.length} SUrriculum storage item(s).`);
+    }
+    return ownedKeys;
   }
 
   function migrateLegacyIfNeeded() {
@@ -1324,6 +1377,7 @@
     registerSaveHook(fn) {
       if (typeof fn === 'function') saveHooks.push(fn);
     },
+    clearAllAppData,
     getItem(key, planId) {
       const pid = planId || getActivePlanId();
       const raw = localStorage.getItem(planKey(pid, key));
