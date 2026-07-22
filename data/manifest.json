@@ -1,6 +1,6 @@
 {
-  "dataVersion": "a6e525a59c628f81",
-  "generatedAt": "2026-07-22T11:31:51Z",
+  "dataVersion": "a3c4ee09442539a9",
+  "generatedAt": "2026-07-22T12:40:47Z",
   "generatedBy": "build_manifest.py",
   "terms": {
     "201901": "f26abd86d83ee212",
@@ -24,7 +24,7 @@
     "202501": "db0f62c20c9cc788",
     "202502": "3dda0dc4d85c60ae",
     "202503": "bd4709e8419ef02f",
-    "202601": "497a42af777f5102",
-    "202602": "f336859d20b5c2b7"
+    "202601": "ff88cbf914216e6c",
+    "202602": "03f267ee93d5dfdf"
   }
 }
