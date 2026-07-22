@@ -228,7 +228,7 @@ test.describe('summary panel', () => {
       });
       return out;
     });
-    // Each card must use ITS OWN major's requirements — CS 29 vs ME 45. Sharing
+    // Each card must use ITS OWN 202401 requirements — CS 29 vs ME 34. Sharing
     // one limit across both is the obvious way for this to break.
     expect(limits.sort((a, b) => a - b), 'CS and ME required limits').toEqual([REQS.CS.required, REQS.ME.required].sort((a, b) => a - b));
   });

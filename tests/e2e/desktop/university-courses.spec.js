@@ -13,7 +13,9 @@ const plans = require('../fixtures/passing-plans-multiterm.json');
 //   FASS/SBS programs (university 44): "At least 2 of the below listed HUM
 //    courses must be taken. First the 2xx coded course, then the 3xx coded
 //    course must be taken."                            -> flags 12 + 13
-//   FENS programs (university 41): one HUM course.
+//   CS (university 41): one HUM course. Other FENS programs currently carry
+//   no verified HUM rule in requirements data, so this suite makes no broader
+//   one-HUM claim for them.
 //
 // The HUM rule cannot be a count or a credit check — HUM201 + HUM202 is two HUM
 // courses and reaches 44 university credits, yet fails the rule for want of a
@@ -91,12 +93,13 @@ test.describe('HUM requirement (FASS/SBS programs need a 2xx AND a 3xx)', () => 
     expect(await flag(page), 'yet the HUM rule is not').toBe(13);
   });
 
-  test('FENS programs are not held to the two-level rule', async ({ page }) => {
-    // DSA needs one HUM ("One of the HUM coded course listed below is
-    // required"), so dropping the 3xx courses must not flag it.
+  test('DSA is not held to the two-level rule under the current requirement record', async ({ page }) => {
+    // DSA currently has humRequired=0. This proves only that it is not subject
+    // to the FASS/SBS two-level rule; it deliberately does not claim that a
+    // one-HUM DSA rule was verified from SUIS.
     await seed(page, 'DSA', HUM_3XX);
     const f = await flag(page);
-    expect([12, 13], `DSA got flag ${f}; FENS programs need one HUM, not one of each`).not.toContain(f);
+    expect([12, 13], `DSA got unexpected HUM flag ${f}`).not.toContain(f);
   });
 });
 

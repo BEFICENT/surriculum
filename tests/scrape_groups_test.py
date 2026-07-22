@@ -6,8 +6,9 @@ hand-authored data on the saved offline pages — i.e. wiring the scrape in is
 behaviour-preserving, and a future page-format change that broke the parse would
 fail here rather than silently blanking a graduation pool.
 
-Runs against the committed 'Degree Detail Pages (for inspect)/' fixtures, so it
-needs no network. Not in the node/npm gate (that gate is JS-only); run directly:
+Runs against the committed Fall 2025-2026 pages in
+'Degree Detail Pages (for inspect)/', so it needs no network. Not in the
+node/npm gate (that gate is JS-only); run directly:
 
     python tests/scrape_groups_test.py
 
@@ -24,13 +25,21 @@ import fetch_requirements as fr  # noqa: E402
 
 # program code -> the two offline pages that carry enumerated Core-Elective pools.
 PROGRAMS = {"BAVACD": "VACD", "BAPSIR": "PSIR"}
+TERM = "202501"
+ADMIT_LABEL = "Admit Term: Fall 2025-2026"
 
 
 def merged_groups(program):
     """Run the real (offline) scraper path for a program and return its groups —
     fetch_requirements attaches the scraped pools, special_requirements merges them
     into the hand-authored skeleton, exactly as main() does."""
-    req = fr.fetch_requirements(program, "202401", offline_dir=fr.DETAIL_PAGES_DIR)
+    major = PROGRAMS[program]
+    fixture = os.path.join(fr.DETAIL_PAGES_DIR, f"SU_DEGREE.p_degree_detail_{major}.html")
+    with open(fixture, "r", encoding="utf-8") as fh:
+        html = fh.read()
+    assert ADMIT_LABEL in html, f"{major}: offline page is not the expected {TERM} admit term"
+
+    req = fr.fetch_requirements(program, TERM, offline_dir=fr.DETAIL_PAGES_DIR)
     pools = req.pop("_pools", None)
     assert pools, f"{program}: the scrape found no Core-Elective pools"
     return fr.special_requirements(PROGRAMS[program], pools)["groups"], pools

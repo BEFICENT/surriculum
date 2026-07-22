@@ -24,8 +24,8 @@ a time and checked off only after the fix and its verification are complete.
 
 ## Verified baseline
 
-- [x] JavaScript/static unit gate passes: 94/94 tests.
-- [x] Playwright gate passes: 277/277 tests in a clean dedicated run.
+- [x] JavaScript/static unit gate passes: 136/136 tests.
+- [x] Playwright gate passes: 283/283 tests in a clean dedicated run.
 - [x] `python tests/scrape_groups_test.py` passes when run directly.
 - [x] All 228,387 JSONL rows parse successfully.
 - [x] Manifest hashes and the content-derived data version match the data tree.
@@ -117,6 +117,18 @@ a time and checked off only after the fix and its verification are complete.
   a clear message. Completed on 2026-07-22: selected admit terms now load exact
   data (including first-run initialization), partial/duplicate/wrong-term data
   is rejected, and graduation/summary display an Unavailable state via flag 99.
+- [ ] Resolve contradictory live SUIS requirement pages and restore current
+  requirement snapshots. Re-captured on 2026-07-23: EE pages for
+  `202201`-`202403` state Total 125 while their five category values total 123;
+  ME pages for `202301`-`202403` have the same two-credit discrepancy; and ME
+  `202501` onward says Core 21 in the summary but 26 in the category prose. The
+  fail-closed scraper rejects the inconsistent historical pages, and local
+  requirements consequently stop at `202503` even though official `202601`-
+  `202603` selectors/pages exist. Decide and document which official value is
+  authoritative before adding or normalizing the missing terms.
+- [ ] Define the policy for `requirements/default.jsonl`. It matches no actual
+  admit term and mixes older thresholds with a partially newer VACD pool, so it
+  should either become an explicit frozen snapshot or track a named/latest term.
 - [x] Ensure failed course attempts cannot satisfy degree rules that previously
   relied on `hasCourse`, internship, alternative-course, pool, or other
   degree-completion paths. Completed on
@@ -189,14 +201,22 @@ a time and checked off only after the fix and its verification are complete.
 - [ ] Align the daily data-refresh workflow with whichever branch/artifact is
   used for production.
 
-## Test-suite work (deferred until requested)
+## Test-suite work
 
 - [ ] Integrate `tests/scrape_groups_test.py` into the normal test command. It is
   a standalone Python assertion script, is not discovered by the Node test
   runner, and is currently omitted from `npm test` and CI. A likely structure is
   a `test:python` npm script included by `npm test`, while keeping the direct
   Python command available.
-- [ ] Expand coverage for the release blockers above.
+- [ ] Expand coverage for the release blockers above. A focused graduation pass
+  completed on 2026-07-23 adds 48 non-duplicative cases: 42 unit/data checks and
+  six browser checks. It pins live SUIS threshold transitions for BIO, CS, IE,
+  MAT, and DSA; historical PSIR/VACD pool changes; executable/catalog-backed
+  graduation rules across all 21 stored admit terms; exact MAN/DSA/faculty
+  boundaries; unsuccessful/projected grade eligibility; missing progress-row
+  evaluators; and all non-CS internship programs. The saved pool-page test now
+  verifies its real `202501` fixture identity. Broader release-blocker coverage
+  remains open.
 - [ ] Add the deferred grade-status/repeat matrix: S/P/I/U/NA semantics, failed
   named/static/pool rules, scheduler prerequisites, autosave while editing a
   grade, document-order-independent repeats, and import over a planned

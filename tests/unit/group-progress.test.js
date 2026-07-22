@@ -123,3 +123,65 @@ test('the faculty marker expands to the ticker at its position in groups', () =>
   assert.deepEqual([...rows.map((r) => r.id)],
     ['faculty_total', 'faculty_fass', 'faculty_areas', 'core_arthistory']);
 });
+
+test('EE level-credit and special-area rows mirror the live graduation rules', () => {
+  const groups = [
+    { id: 'ee400', label: '400-level EE', base: 'core', suis: 'EE Core Electives',
+      rule: 'levelCredits', prefix: 'EE4', category: 'Core', min: 9 },
+    { id: 'special_area', label: 'Special area course', base: 'area', suis: 'EE Area Electives',
+      rule: 'specialAny', members: ['CS300', 'ME303'], altPrefix: 'EE48', altCategory: 'Area' },
+  ];
+  const rows = [...groupProgressFor(ctxOf([
+    C('EE401', { cat: 'Core', cr: 3 }),
+    C('EE402', { cat: 'Core', cr: 3 }),
+    C('EE403', { cat: 'Core', cr: 3 }),
+    C('EE485', { cat: 'Area', cr: 3 }),
+  ]), groups)].map(row);
+
+  assert.deepEqual([rows[0].current, rows[0].target, rows[0].ok], [9, 9, true]);
+  assert.deepEqual([rows[1].current, rows[1].target, rows[1].ok], [1, 1, true]);
+});
+
+test('MAN prefix-span and FASS/FENS-credit rows report exact boundaries', () => {
+  const groups = [
+    { id: 'core_areas', label: 'Core areas', base: 'core', suis: 'MAN Core Electives',
+      rule: 'prefixSpan', category: 'core', prefixes: ['ACC', 'FIN', 'MGMT', 'MKTG', 'OPIM', 'ORG'], min: 6 },
+    { id: 'free_fassfens', label: 'FASS/FENS free credits', base: 'free', suis: 'MAN Free Electives',
+      rule: 'offeringCredits', faculties: ['FASS', 'FENS'], min: 9 },
+  ];
+  const rows = [...groupProgressFor(ctxOf([
+    C('ACC201', { eff: 'core' }), C('FIN301', { eff: 'core' }),
+    C('MGMT401', { eff: 'core' }), C('MKTG301', { eff: 'core' }),
+    C('OPIM301', { eff: 'core' }), C('ORG301', { eff: 'core' }),
+    C('ANTH214', { eff: 'free', fac: 'FASS', cr: 3 }),
+    C('BIO304', { eff: 'free', fac: 'FENS', cr: 3 }),
+    C('CS300', { eff: 'free', fac: 'FENS', cr: 3 }),
+  ]), groups)].map(row);
+
+  assert.deepEqual([rows[0].current, rows[0].target, rows[0].ok], [6, 6, true]);
+  assert.deepEqual([rows[1].current, rows[1].target, rows[1].ok], [9, 9, true]);
+});
+
+test('DSA offering-count row uses static Core and the offering faculty', () => {
+  const group = { id: 'core_fens', label: 'FENS core courses', base: 'core', suis: 'DSA Core Electives',
+    rule: 'offeringCount', faculty: 'FENS', min: 3 };
+  const rowResult = row(groupProgressFor(ctxOf([
+    C('BIO310', { cat: 'Core', fac: 'FENS', eff: 'area' }),
+    C('CS306', { cat: 'Core', fac: 'FENS', eff: 'free' }),
+    C('CS404', { cat: 'Core', fac: 'FENS', eff: 'core' }),
+    C('ECON401', { cat: 'Core', fac: 'FASS', eff: 'core' }),
+  ]), [group])[0]);
+  assert.deepEqual([rowResult.current, rowResult.target, rowResult.ok], [3, 3, true]);
+});
+
+test('PSY advanced-count row requires PSY 4XX courses allocated to Area', () => {
+  const group = { id: 'psy_advanced', label: 'Advanced PSY', base: 'area', suis: 'PSY Area Electives',
+    rule: 'advancedCount', min: 2 };
+  const rowResult = row(groupProgressFor(ctxOf([
+    C('PSY401', { eff: 'area' }),
+    C('PSY402', { eff: 'area' }),
+    C('PSY403', { eff: 'free' }),
+    C('PSY301', { eff: 'area' }),
+  ]), [group])[0]);
+  assert.deepEqual([rowResult.current, rowResult.target, rowResult.ok], [2, 2, true]);
+});

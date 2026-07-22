@@ -103,17 +103,14 @@ test.describe('PSY area + free elective rules', () => {
     expect(r.flag, 'two is the cap, not a violation').not.toBe(BASIC_LANGUAGE_FLAG);
   });
 
-  test('both new flags have messages, and so does flag 77', async ({ page }) => {
+  test('both reachable PSY rule flags have messages', async ({ page }) => {
     await page.goto('/');
     const msgs = await page.evaluate(async () => {
       const { buildFlagMessages } = await import('/cases/flagMessages.js');
       const m = buildFlagMessages('PSY');
-      return { 39: m[39] && m[39](), 40: m[40] && m[40](), 77: m[77] && m[77]() };
+      return { 39: m[39] && m[39](), 40: m[40] && m[40]() };
     });
     expect(msgs[39], 'flag 39 message').toMatch(/4XX|400/i);
     expect(msgs[40], 'flag 40 message').toMatch(/language/i);
-    // 77 is returned by the PSY double-major core check and had NO message,
-    // so the UI rendered a bare "Error code 77" at the student.
-    expect(msgs[77], 'flag 77 must not fall back to "Error code 77"').toMatch(/Core Elective/i);
   });
 });

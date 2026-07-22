@@ -12,10 +12,10 @@ const plans = require('../fixtures/passing-plans-multiterm.json');
 // So each rule here is driven in BOTH directions — made to fire, and made to
 // clear — rather than observed once.
 //
-// These pin BEHAVIOUR, not correctness: the SUIS text for these rules has not
-// been checked yet, so a rule could be faithfully pinned and still wrong (as
-// VACD's was). That is deliberate — behaviour pinned now is behaviour the
-// refactor cannot silently change, and correctness is a separate pass.
+// These rules were re-checked against the live official SUIS degree pages on
+// 2026-07-23. Cross-term source parity and historical pool changes are covered
+// separately in graduation-requirements-live.test.js; this file drives the
+// browser integration in both directions.
 const TERM = '202301';
 const TERM_NAME = 'Fall 2023-2024';
 

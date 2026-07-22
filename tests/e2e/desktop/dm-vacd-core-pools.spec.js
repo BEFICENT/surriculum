@@ -9,13 +9,11 @@ const plans = require('../fixtures/passing-plans-multiterm.json');
 //
 // The main pass was fixed (cdc528e) to resolve VACD's two core pools BEFORE the
 // allocation cascade (selectVacdCorePools + a `forceCore` pin), because the VACD
-// core requirement (27 at 202301) EXCEEDS the pool minimums (9 + 12 = 21) — so
-// the remaining 6 core credits must come from core-typed courses OUTSIDE the
-// pools. The old post-cascade approach demoted pool courses out of core after
-// the cascade had already spent the core cap, stranding those non-pool core
-// courses in area/free. It only misfires for SOME course orderings — the ones
-// where pool courses are seen first — which is why catalog-order fixtures mask
-// it.
+// core requirement at 202301 is exactly the two historical pool minimums
+// (9 + 18 = 27). The old post-cascade approach could still choose/demote the
+// wrong pool courses after the cascade had already spent the core cap, making
+// the result depend on course order. Catalog-order fixtures masked that class
+// of failure.
 //
 // The double-major pass still carried that old post-cascade block. This test
 // pins it to the main pass's result: the SAME VACD plan, allocated as the main
@@ -30,8 +28,10 @@ const VACD = plans[TERM].VACD;
 // Every VACD core-pool member (pool 1 + pool 2), whether or not this plan holds
 // it — used only to build the triggering order.
 const POOL = [
-  'HART292', 'HART293', 'HART380', 'HART413', 'HART426', 'VA315', 'VA420', 'VA430',
-  'VA202', 'VA204', 'VA234', 'VA302', 'VA304', 'VA402', 'VA404',
+  'HART292', 'HART293', 'HART380', 'HART392', 'HART411', 'HART413', 'HART414',
+  'HART426', 'HART450', 'HART480', 'PHIL322', 'VA315', 'VA420', 'VA430', 'VIS412',
+  'VA202', 'VA204', 'VA234', 'VA302', 'VA304', 'VA323', 'VA324', 'VA328',
+  'VA331', 'VA335', 'VA402', 'VA404', 'VA431', 'VA433', 'VA434', 'VA440',
 ];
 
 const poolCourses = VACD.filter((c) => POOL.includes(c));
