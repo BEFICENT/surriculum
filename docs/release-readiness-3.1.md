@@ -154,7 +154,13 @@ a time and checked off only after the fix and its verification are complete.
 
 - [ ] Preserve Saturday and late-evening meetings in display and conflict
   detection. Current data includes Saturday meetings and classes ending at
-  20:30, outside the scheduler's Monday-Friday 08:40-19:30 grid.
+  20:30, outside the scheduler's Monday-Friday 08:40-19:30 grid. Verified on
+  2026-07-23: the active Summer 2025-2026 schedule (`202503`) contains eight
+  Saturday sections and nine unique sections extending past 19:30 (ten meeting
+  entries, generally 19:00-22:00). The stored Fall 2026-2027 schedule (`202601`)
+  has seven late sections, including TLL001 ending at 22:30, and Spring
+  2026-2027 (`202602`) has three late sections ending at 20:30; neither future
+  term currently contains a Saturday meeting.
 - [ ] Make scheduler replacement transactional so a rendering/build failure
   cannot leave the plan partially cleared.
 - [x] Replace origin-wide `localStorage.clear()` with deletion of only known
