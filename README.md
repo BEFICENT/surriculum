@@ -136,7 +136,7 @@ Open **Scheduler** from the sidebar. It is a SUchedule-style weekly grid that de
 Key features:
 
 - **Search + browse** courses for the selected scheduler term
-- **Pick section** and place it on a weekly grid (Mon–Fri, 08:40–19:30)
+- **Pick section** and place it on a compact weekday grid that adds weekend days or later hours only when the selected section or active preview needs them
 - **Corequisite bundling**: courses with labs/recitations are treated as a bundle so you don’t “lose” the lab/recitation separately
 - **Time conflicts**: overlapping classes render side-by-side instead of blocking each other
 - **Copy CRNs**: copies the selected CRNs

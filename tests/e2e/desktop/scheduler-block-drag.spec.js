@@ -18,14 +18,19 @@ const TERM_NAME = 'Fall 2024-2025';
 // so boundaries fall at 08:40, 09:40, 10:40 ... NOT on the clock hour.
 const DAY_START_MIN = 8 * 60 + 40; // 520
 
-async function openGrid(page) {
+async function openGrid(page, options = {}) {
+  const term = options.term || TERM;
+  const selected = options.selected || {};
   await seedPlan(page, {
     major: 'CS',
     entryTerm: TERM_NAME,
     curriculum: [],
     grades: [],
     dates: [],
-    schedulerSelectedTerm: TERM,
+    schedulerSelectedTerm: term,
+    schedulerStates: {
+      [term]: { selected, blocked: [] },
+    },
   });
   const modal = await openScheduler(page);
   await expect(modal.locator('.scheduler-day-col[data-day="M"]')).toBeVisible({ timeout: 10000 });
@@ -69,15 +74,15 @@ async function dragBlock(page, dayKey, fromMin, toMin) {
 }
 
 // The blocked ranges the feature actually persists, for the active term.
-const readBlocked = (page) => page.evaluate((term) => {
-  const raw = window.planStorage.getItem(`schedulerState_${term}`);
+const readBlocked = (page, term = TERM) => page.evaluate((termCode) => {
+  const raw = window.planStorage.getItem(`schedulerState_${termCode}`);
   if (!raw) return [];
   const parsed = JSON.parse(raw);
   const list = Array.isArray(parsed.blocked) ? parsed.blocked : [];
   return list
     .map((b) => ({ dayKey: b.dayKey, start: b.start, end: b.end }))
     .sort((a, b) => (a.dayKey === b.dayKey ? a.start - b.start : a.dayKey.localeCompare(b.dayKey)));
-}, TERM);
+}, term);
 
 const enableBlockMode = async (page, modal) => {
   await modal.locator('.scheduler-blocked-toggle').click();
@@ -201,6 +206,28 @@ test.describe('scheduler drag-to-block', () => {
     // Only the clicked day's range goes.
     expect(await readBlocked(page)).toEqual([
       { dayKey: 'F', start: DAY_START_MIN, end: DAY_START_MIN + 60 },
+    ]);
+  });
+
+  test('a selected late section lets users block hours in the extended grid', async ({ page }) => {
+    const lateTerm = '202403';
+    const modal = await openGrid(page, {
+      term: lateTerm,
+      selected: { DA522: { course_id: 'DA522', crn: '30194' } },
+    });
+    await expect(modal).toHaveAttribute('data-grid-minutes', '840');
+    await enableBlockMode(page, modal);
+
+    // DA522 exposes the evening grid. Scroll that range into view and block an
+    // otherwise-empty Tuesday slot from 19:40 to 20:40.
+    await page.evaluate(() => {
+      const grid = document.querySelector('.scheduler-grid');
+      if (grid) grid.scrollTop = grid.scrollHeight;
+    });
+    await dragBlock(page, 'T', 19 * 60 + 40, 20 * 60 + 40);
+
+    expect(await readBlocked(page, lateTerm)).toEqual([
+      { dayKey: 'T', start: 19 * 60 + 40, end: 20 * 60 + 40 },
     ]);
   });
 });

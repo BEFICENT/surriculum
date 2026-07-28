@@ -475,15 +475,17 @@
     'use strict';
     var DAYS = [
         { k: 'M', label: 'Mon' }, { k: 'T', label: 'Tue' }, { k: 'W', label: 'Wed' },
-        { k: 'R', label: 'Thu' }, { k: 'F', label: 'Fri' }
+        { k: 'R', label: 'Thu' }, { k: 'F', label: 'Fri' }, { k: 'S', label: 'Sat' },
+        { k: 'U', label: 'Sun' }
     ];
     // Landscape "tall" mode px-per-minute — matches the portrait/desktop default
     // (1.05px) so a block reads the same height there; the week overflows and the
     // grid scrolls instead of being squeezed to fit. See landscapeTargetPpm().
     var TALL_PPM = 1.05;
+    var GRID_START_MIN = 8 * 60 + 40;
 
     function defaultDay() {
-        var map = { 1: 'M', 2: 'T', 3: 'W', 4: 'R', 5: 'F' };
+        var map = { 0: 'U', 1: 'M', 2: 'T', 3: 'W', 4: 'R', 5: 'F', 6: 'S' };
         try { return map[new Date().getDay()] || 'M'; } catch (e) { return 'M'; }
     }
 
@@ -495,8 +497,28 @@
         }
     }
 
+    function syncDaySelector(modal) {
+        var sel = modal.querySelector('.m-sched-days');
+        if (!sel) return;
+        var visible = [];
+        for (var i = 0; i < DAYS.length; i++) {
+            var col = modal.querySelector('.scheduler-day-col[data-day="' + DAYS[i].k + '"]');
+            if (col && !col.hidden) visible.push(DAYS[i]);
+        }
+        sel.innerHTML = visible.map(function (d) {
+            return '<button type="button" class="m-sched-day" data-day="' + d.k + '">' + d.label + '</button>';
+        }).join('');
+        var current = modal.getAttribute('data-m-day');
+        var keys = visible.map(function (d) { return d.k; });
+        if (keys.indexOf(current) < 0) {
+            var preferred = defaultDay();
+            current = keys.indexOf(preferred) >= 0 ? preferred : (keys[0] || 'M');
+        }
+        setDay(modal, current);
+    }
+
     // Tap-to-preview: touch has no hover, so a tap on a course's body drives the
-    // scheduler's own (closured) hover preview via a synthetic mouseover, then we
+    // scheduler's own (closured) preview via an explicit request, then we
     // drop the sheet to reveal the grid. Back clears it; Add runs the card's pick.
     function previewLabel(el) {
         // A specific section row → show its section id + meeting time (drop the
@@ -521,19 +543,29 @@
         return el.getAttribute('data-course') || 'Course';
     }
     // `target` is either a .scheduler-course card (default section) or a specific
-    // .scheduler-inline-section-row — dispatching mouseover on it drives the
-    // scheduler's own section-aware hover preview, so we respect the tapped section.
+    // .scheduler-inline-section-row. The explicit request remains available even
+    // when the desktop-only hover-preview preference is disabled.
     function startPreview(modal, target) {
-        try { target.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window })); } catch (e) {}
         var isSection = target.classList && target.classList.contains('scheduler-inline-section-row');
+        var card = target.closest ? target.closest('.scheduler-course') : null;
+        var courseId = target.getAttribute('data-course') || (card ? card.getAttribute('data-course') : '');
+        var crn = isSection ? target.getAttribute('data-crn') : '';
+        try {
+            modal.dispatchEvent(new CustomEvent('schedulerpreviewrequest', {
+                detail: { courseId: courseId || '', crn: crn || '' }
+            }));
+        } catch (e) {}
+        // Stay in the results sheet when the section has no renderable meeting
+        // time; an empty preview screen would imply that something was shown.
+        if (!modal.querySelector('.scheduler-block.is-preview')) return;
         modal.__mPreviewSectionRow = isSection ? target : null;
-        modal.__mPreviewCard = target.closest ? target.closest('.scheduler-course') : null;
+        modal.__mPreviewCard = card;
         var lbl = modal.querySelector('.m-prev-label');
         if (lbl) lbl.textContent = previewLabel(target);
         // Mark every day this section touches on the day selector, then jump to
         // the first one so the user sees the section (not an unrelated day).
         try {
-            var order = ['M', 'T', 'W', 'R', 'F'];
+            var order = ['M', 'T', 'W', 'R', 'F', 'S', 'U'];
             var firstDay = null;
             for (var d = 0; d < order.length; d++) {
                 var dcol = modal.querySelector('.scheduler-day-col[data-day="' + order[d] + '"]');
@@ -564,9 +596,9 @@
         modal.__mPreviewCard = null;
         modal.__mPreviewSectionRow = null;
     }
-    // First day (Mon→Fri) that a committed (non-preview) course block sits on.
+    // First visible day that a committed (non-preview) course block sits on.
     function firstDayForCourse(modal, courseId) {
-        var order = ['M', 'T', 'W', 'R', 'F'];
+        var order = ['M', 'T', 'W', 'R', 'F', 'S', 'U'];
         var days = {};
         var blocks = modal.querySelectorAll('.scheduler-day-col .scheduler-block');
         for (var i = 0; i < blocks.length; i++) {
@@ -646,17 +678,16 @@
         if (!wrap) return;
         var sel = document.createElement('div');
         sel.className = 'm-sched-days';
-        var html = '';
-        for (var i = 0; i < DAYS.length; i++) {
-            html += '<button type="button" class="m-sched-day" data-day="' + DAYS[i].k + '">' + DAYS[i].label + '</button>';
-        }
-        sel.innerHTML = html;
         wrap.insertBefore(sel, wrap.firstChild);
         sel.addEventListener('click', function (e) {
             var btn = e.target.closest ? e.target.closest('.m-sched-day') : null;
             if (btn) setDay(modal, btn.getAttribute('data-day'));
         });
-        setDay(modal, defaultDay());
+        syncDaySelector(modal);
+        modal.addEventListener('schedulergridchange', function () {
+            syncDaySelector(modal);
+            try { setTimeout(refitLandscapeInPlace, 0); } catch (e) {}
+        });
 
         // Portrait: the desktop left sidebar (search / filters / course list /
         // selected sections / blocked hours) is hidden inline — there's no room.
@@ -848,10 +879,9 @@
         }
     }
 
-    // Landscape "whole week fits": maintain a px-per-minute value from the
-    // viewport height so the ~660-min day (08:40–19:40) fills the grid without
-    // scrolling. The scheduler reads --scheduler-minute (→ --m-fit-ppm) live when
-    // it renders, so opening in landscape fits automatically.
+    // Landscape "whole visible schedule fits": seed the standard 660-minute
+    // day scale before the grid exists. A schedulergridchange event refits this
+    // value when a selected section or preview exposes later hours.
     function updateFitPpm() {
         try {
             if (document.body.classList.contains('is-mobile') && window.matchMedia('(orientation: landscape)').matches) {
@@ -883,15 +913,16 @@
 
     // Target px-per-minute for the landscape week. Tall mode uses a fixed,
     // portrait-comparable scale (the week overflows and the grid scrolls);
-    // compact mode fits the whole ~660-min day into the *actual* grid area (not a
-    // guessed viewport overhead — otherwise the last hour sits short of the
-    // bottom). clientHeight is stable across ppm changes (it's the flex area,
-    // = modal minus its two headers). Returns null if the area isn't measurable.
+    // compact mode fits the currently visible minute span into the *actual* grid
+    // area (not a guessed viewport overhead — otherwise the last hour sits short
+    // of the bottom). clientHeight is stable across ppm changes (it's the flex
+    // area = modal minus its two headers). Returns null if it is not measurable.
     function landscapeTargetPpm(modal, grid, topGap) {
         if (modal.classList.contains('m-sched-tall')) return TALL_PPM;
         var avail = grid.clientHeight;
         if (!(avail > 60)) return null;
-        var p = (avail - topGap - 2) / 660;
+        var totalMinutes = parseFloat(modal.getAttribute('data-grid-minutes')) || 660;
+        var p = (avail - topGap - 2) / totalMinutes;
         return Math.max(0.26, Math.min(1.0, p));
     }
 
@@ -925,6 +956,15 @@
             }
             var blocks = modal.querySelectorAll('.scheduler-day-col .scheduler-block'); // top adds blockGap; height = dur*ppm - 2*blockGap
             for (var j = 0; j < blocks.length; j++) {
+                var displayStart = parseFloat(blocks[j].getAttribute('data-display-start'));
+                var displayEnd = parseFloat(blocks[j].getAttribute('data-display-end'));
+                if (!isNaN(displayStart) && !isNaN(displayEnd) && displayEnd > displayStart) {
+                    blocks[j].style.top = (topGap + blockGap + ((displayStart - GRID_START_MIN) * newPpm)) + 'px';
+                    blocks[j].style.height = Math.max(8, ((displayEnd - displayStart) * newPpm) - (2 * blockGap)) + 'px';
+                    continue;
+                }
+                // A transient drag ghost has no meeting metadata; proportional
+                // scaling is sufficient until the scheduler replaces it.
                 var bt = parseFloat(blocks[j].style.top), bh = parseFloat(blocks[j].style.height);
                 if (!isNaN(bt)) blocks[j].style.top = (topGap + blockGap + (bt - topGap - blockGap) * ratio) + 'px';
                 if (!isNaN(bh)) blocks[j].style.height = Math.max(8, (bh + 2 * blockGap) * ratio - 2 * blockGap) + 'px';

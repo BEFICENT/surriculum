@@ -1,6 +1,6 @@
 # SUrriculum 3.1 release-readiness tracker
 
-Last updated: 2026-07-23
+Last updated: 2026-07-28
 
 This is the working backlog for the 3.1 release. Items should be handled one at
 a time and checked off only after the fix and its verification are complete.
@@ -14,8 +14,8 @@ a time and checked off only after the fix and its verification are complete.
 - PDF.js 2.10.377 is formally affected by CVE-2024-4367. The disclosed exploit
   path appears to require glyph rendering, while SUrriculum only extracts text,
   but that reduced reachability is an inference rather than a vendor guarantee.
-- Do not expand test coverage yet. A dedicated coverage pass will happen before
-  release when requested.
+- Broad release-blocker coverage remains deferred. Focused graduation and
+  scheduler regressions were added when specifically requested.
 - The `surriculum-3.1` branch is published but has not been merged into `main`.
 - Claude co-author trailers were removed from the rewritten branch history.
 - Preserve the individual 3.1 commits. Do not squash or rebase the branch merely
@@ -25,7 +25,7 @@ a time and checked off only after the fix and its verification are complete.
 ## Verified baseline
 
 - [x] JavaScript/static unit gate passes: 136/136 tests.
-- [x] Playwright gate passes: 283/283 tests in a clean dedicated run.
+- [x] Playwright gate passes: 294/294 tests in a clean dedicated run.
 - [x] `python tests/scrape_groups_test.py` passes when run directly.
 - [x] All 228,387 JSONL rows parse successfully.
 - [x] Manifest hashes and the content-derived data version match the data tree.
@@ -164,15 +164,23 @@ a time and checked off only after the fix and its verification are complete.
 
 ## Scheduler and persistence
 
-- [ ] Preserve Saturday and late-evening meetings in display and conflict
-  detection. Current data includes Saturday meetings and classes ending at
-  20:30, outside the scheduler's Monday-Friday 08:40-19:30 grid. Verified on
-  2026-07-23: the active Summer 2025-2026 schedule (`202503`) contains eight
-  Saturday sections and nine unique sections extending past 19:30 (ten meeting
-  entries, generally 19:00-22:00). The stored Fall 2026-2027 schedule (`202601`)
-  has seven late sections, including TLL001 ending at 22:30, and Spring
-  2026-2027 (`202602`) has three late sections ending at 20:30; neither future
-  term currently contains a Saturday meeting.
+- [x] Preserve weekend and late-evening meetings in display and conflict
+  detection. Completed on 2026-07-28: the grid remains Monday-Friday and at its
+  standard height until an exact selected section or active preview needs an
+  additional day or later time. It then adds Saturday/Sunday and/or extends to
+  the next hour boundary, collapsing again when the selection/preview is gone.
+  All valid intervals participate in availability, section choice, blocked-hour
+  checks, and conflicts even while their extra UI is hidden. Weekend blocked
+  ranges now survive plan import/export but do not expand the grid by themselves.
+  Historical Sunday meetings receive the same policy; incomplete/TBA meetings
+  remain selectable but are neutral rather than incorrectly marked available,
+  and selected incomplete sections warn that conflict checking is partial.
+  Frozen browser coverage uses real `202403` Saturday/22:00 sections across
+  desktop and mobile, plus a real `202402` Sunday section on desktop.
+- [ ] Make date-specific intensive meetings date-aware. Some stored sections
+  repeat the same weekly slot for multiple date ranges, while others have
+  different overlapping slots. The scheduler currently ignores `date_range`,
+  so it can draw duplicates or report a section as conflicting with itself.
 - [ ] Make scheduler replacement transactional so a rendering/build failure
   cannot leave the plan partially cleared.
 - [x] Replace origin-wide `localStorage.clear()` with deletion of only known

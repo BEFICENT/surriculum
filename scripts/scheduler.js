@@ -8,6 +8,8 @@
     { key: 'W', label: 'Wed' },
     { key: 'R', label: 'Thu' },
     { key: 'F', label: 'Fri' },
+    { key: 'S', label: 'Sat', optional: true },
+    { key: 'U', label: 'Sun', optional: true },
   ];
 
   const DAY_START_MIN = 8 * 60 + 40;  // 08:40
@@ -172,12 +174,11 @@
 
   function parseDaysToKeys(days) {
     const s = String(days || '').toUpperCase().replace(/\s+/g, '');
-    const keys = [];
-    for (let i = 0; i < s.length; i++) {
-      const ch = s[i];
-      if (ch === 'M' || ch === 'T' || ch === 'W' || ch === 'R' || ch === 'F') keys.push(ch);
-    }
-    return keys;
+    // Banner's compact day codes are combinations such as M, TR, or MTWRF.
+    // Reject whole malformed/TBA tokens instead of accidentally interpreting
+    // one of their letters as a real meeting day (for example TBA -> Tuesday).
+    if (!s || !/^[MTWRFSU]+$/.test(s)) return [];
+    return Array.from(new Set(s.split('')));
   }
 
   function parseClockToMinutes(token) {
@@ -737,7 +738,9 @@
     const ui = (typeof window !== 'undefined') ? window.uiModal : null;
     const DISPLAY_END_EXTRA_MIN = 10; // show the final boundary at 19:40
     const DISPLAY_END_MIN = DAY_END_MIN + DISPLAY_END_EXTRA_MIN;
-    const BLOCK_END_MIN = DISPLAY_END_MIN;
+    const GRID_MAX_END_MIN = 24 * 60;
+    let currentGridEndMin = DISPLAY_END_MIN;
+    let activePreviewIntervals = [];
 
     if (!currentTermCode) {
       if (ui && typeof ui.alert === 'function') {
@@ -1730,11 +1733,11 @@
       `      <div class="scheduler-grid-corner">` +
       `        <button type="button" class="scheduler-corner-btn scheduler-sidebar-toggle" title="Toggle sidebar" aria-label="Toggle sidebar"><i class="fa-solid fa-angles-left"></i></button>` +
       `      </div>` +
-      DAYS.map(d => `<div class="scheduler-grid-day">${escapeHtml(d.label)}</div>`).join('') +
+      DAYS.map(d => `<div class="scheduler-grid-day" data-day="${d.key}"${d.optional ? ' hidden' : ''}>${escapeHtml(d.label)}</div>`).join('') +
       `    </div>` +
       `    <div class="scheduler-grid">` +
       `      <div class="scheduler-times"></div>` +
-      DAYS.map(d => `<div class="scheduler-day-col" data-day="${d.key}"></div>`).join('') +
+      DAYS.map(d => `<div class="scheduler-day-col" data-day="${d.key}"${d.optional ? ' hidden' : ''}></div>`).join('') +
       `    </div>` +
       `  </div>` +
       `</div>`;
@@ -1818,41 +1821,46 @@
       // Only stretch "standard" 50-minute blocks to avoid distorting other patterns.
       if (dur === 50 || (s % 60 === 40 && e % 60 === 30)) {
         const ee = snapUpToHourLine(e);
-        if (ee > e && ee <= DISPLAY_END_MIN) return { start: s, end: ee };
+        if (ee > e && ee <= currentGridEndMin) return { start: s, end: ee };
       }
       return { start: s, end: e };
     };
 
-    // Render time labels and grid lines
+    // Render the visible time scale. The base grid ends at 19:40; selected or
+    // previewed late meetings can temporarily extend it in hour-sized steps.
     const timesEl = body.querySelector('.scheduler-times');
-    const totalMins = DAY_END_MIN - DAY_START_MIN;
-    const hourSlots = Math.floor(totalMins / 60) + 1;
-    for (let i = 0; i < hourSlots; i++) {
-      const t = DAY_START_MIN + i * 60;
-      const row = document.createElement('div');
-      row.className = 'scheduler-time-row';
-      row.textContent = minutesToLabel(t);
-      timesEl.appendChild(row);
-    }
-
-    // Draw hour separators in each day column
     const cols = body.querySelectorAll('.scheduler-day-col');
-    cols.forEach((col) => {
-      const { pxPerMin, topGapPx } = getSchedulerLayout();
-      for (let i = 0; i < hourSlots; i++) {
-        const line = document.createElement('div');
-        line.className = 'scheduler-hour-line';
-        line.style.top = `${topGapPx + (i * 60 * pxPerMin)}px`;
-        col.appendChild(line);
-      }
-      // Also draw a final guideline at 19:40 so the last slot has a clear boundary.
+    const renderTimeGrid = (requestedEndMin) => {
       try {
-        const endLine = document.createElement('div');
-        endLine.className = 'scheduler-hour-line';
-        endLine.style.top = `${topGapPx + ((DISPLAY_END_MIN - DAY_START_MIN) * pxPerMin)}px`;
-        col.appendChild(endLine);
+        const safeEnd = Math.max(DISPLAY_END_MIN, Math.min(GRID_MAX_END_MIN, Number(requestedEndMin) || DISPLAY_END_MIN));
+        currentGridEndMin = safeEnd;
+        const totalMins = Math.max(60, safeEnd - DAY_START_MIN);
+        const hourSlots = Math.max(1, Math.ceil(totalMins / 60));
+        if (schedulerGridEl) schedulerGridEl.style.setProperty('--scheduler-total-minutes', String(totalMins));
+
+        if (timesEl) {
+          timesEl.innerHTML = '';
+          for (let i = 0; i < hourSlots; i++) {
+            const row = document.createElement('div');
+            row.className = 'scheduler-time-row';
+            row.textContent = minutesToLabel(DAY_START_MIN + i * 60);
+            timesEl.appendChild(row);
+          }
+        }
+
+        cols.forEach((col) => {
+          col.querySelectorAll('.scheduler-hour-line').forEach(line => line.remove());
+          const { pxPerMin, topGapPx } = getSchedulerLayout();
+          for (let i = 0; i <= hourSlots; i++) {
+            const line = document.createElement('div');
+            line.className = 'scheduler-hour-line';
+            line.style.top = `${topGapPx + (i * 60 * pxPerMin)}px`;
+            col.insertBefore(line, col.firstChild);
+          }
+        });
       } catch (_) {}
-    });
+    };
+    renderTimeGrid(DISPLAY_END_MIN);
 
     // Block-hours interaction: click+drag to create blocked time ranges.
     let blockDrag = null; // { dayKey, startY, ghostEl }
@@ -1868,7 +1876,7 @@
       // This avoids a click in the lower half of an hour selecting the next cell.
       const rel = min - DAY_START_MIN;
       const snapped = DAY_START_MIN + Math.floor(rel / 60) * 60;
-      const maxStart = BLOCK_END_MIN - 60;
+      const maxStart = currentGridEndMin - 60;
       return Math.max(DAY_START_MIN, Math.min(maxStart, snapped));
     };
     const snapRange = (a, b) => {
@@ -1876,9 +1884,9 @@
       const hi = Math.max(a, b);
       const start = DAY_START_MIN + Math.floor((lo - DAY_START_MIN) / 60) * 60;
       const end = DAY_START_MIN + Math.ceil((hi - DAY_START_MIN) / 60) * 60;
-      const maxStart = BLOCK_END_MIN - 60;
+      const maxStart = currentGridEndMin - 60;
       const s = Math.max(DAY_START_MIN, Math.min(maxStart, start));
-      const e = Math.max(s + 60, Math.min(BLOCK_END_MIN, end));
+      const e = Math.max(s + 60, Math.min(currentGridEndMin, end));
       return { start: s, end: e };
     };
 
@@ -2861,14 +2869,118 @@
             start = tr.start;
             end = tr.end;
           }
+          start = Number(start);
+          end = Number(end);
           if (!days.length) continue;
-          if (start < DAY_START_MIN || end > DAY_END_MIN) continue;
+          // Keep every valid weekly interval for availability, bundle scoring,
+          // and conflict detection. Visibility is decided separately from data.
+          if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
+          if (start < 0 || end <= start || end > GRID_MAX_END_MIN) continue;
           for (let di = 0; di < days.length; di++) {
             out.push({ dayKey: days[di], start, end });
           }
         }
       } catch (_) {}
       return out;
+    };
+
+    const sectionHasIncompleteMeetingData = (sec) => {
+      try {
+        const meetings = Array.isArray(sec && sec.meetings) ? sec.meetings : [];
+        if (!meetings.length) return true;
+        for (let i = 0; i < meetings.length; i++) {
+          const m = meetings[i] || {};
+          const days = parseDaysToKeys(m.days || m.Days || '');
+          let start = m.start_min;
+          let end = m.end_min;
+          if (start == null || end == null) {
+            const tr = parseTimeRangeToMinutes(m.time || m.Time || '');
+            if (!tr) return true;
+            start = tr.start;
+            end = tr.end;
+          }
+          start = Number(start);
+          end = Number(end);
+          if (!days.length || !Number.isFinite(start) || !Number.isFinite(end)) return true;
+          if (start < 0 || end <= start || end > GRID_MAX_END_MIN) return true;
+        }
+        return false;
+      } catch (_) {
+        return true;
+      }
+    };
+
+    const isGridRenderableInterval = (it) => {
+      try {
+        if (!it || !DAYS.some(d => d.key === it.dayKey)) return false;
+        return Number.isFinite(it.start) && Number.isFinite(it.end) &&
+          it.start >= DAY_START_MIN && it.end > it.start && it.end <= GRID_MAX_END_MIN;
+      } catch (_) {
+        return false;
+      }
+    };
+
+    const getSelectedIntervals = (idx) => {
+      const out = [];
+      try {
+        if (!idx) return out;
+        for (const rawCourseId of Object.keys(selected)) {
+          const courseId = normalizeCourseId(rawCourseId);
+          const pick = selected[rawCourseId] || selected[courseId] || {};
+          const entry = courseId ? idx.get(courseId) : null;
+          const crn = String(pick && pick.crn ? pick.crn : '');
+          const sec = entry && Array.isArray(entry.sections)
+            ? (entry.sections.find(s => String(s && s.crn ? s.crn : '') === crn) || null)
+            : null;
+          if (sec) out.push(...getSectionIntervals(sec));
+        }
+      } catch (_) {}
+      return out;
+    };
+
+    const updateGridExtent = (idx) => {
+      try {
+        const intervals = getSelectedIntervals(idx)
+          .concat(Array.isArray(activePreviewIntervals) ? activePreviewIntervals : [])
+          .filter(isGridRenderableInterval);
+        const optionalDays = new Set(
+          intervals.map(it => it.dayKey).filter(dayKey => dayKey === 'S' || dayKey === 'U')
+        );
+
+        let requiredEnd = DISPLAY_END_MIN;
+        for (let i = 0; i < intervals.length; i++) {
+          if (intervals[i].end > requiredEnd) requiredEnd = intervals[i].end;
+        }
+        const slotCount = Math.max(1, Math.ceil((requiredEnd - DAY_START_MIN) / 60));
+        const nextEnd = Math.min(GRID_MAX_END_MIN, DAY_START_MIN + slotCount * 60);
+        const visibleDays = DAYS.filter(d => !d.optional || optionalDays.has(d.key));
+        const signature = `${visibleDays.map(d => d.key).join('')}:${nextEnd}`;
+        if (body.getAttribute('data-grid-layout') === signature) return;
+
+        DAYS.forEach((d) => {
+          if (!d.optional) return;
+          const visible = optionalDays.has(d.key);
+          const head = body.querySelector(`.scheduler-grid-day[data-day="${d.key}"]`);
+          const col = body.querySelector(`.scheduler-day-col[data-day="${d.key}"]`);
+          if (head) head.hidden = !visible;
+          if (col) col.hidden = !visible;
+        });
+
+        const dayCount = visibleDays.length;
+        const headerEl = body.querySelector('.scheduler-grid-header');
+        if (headerEl) headerEl.style.setProperty('--scheduler-day-count', String(dayCount));
+        if (schedulerGridEl) schedulerGridEl.style.setProperty('--scheduler-day-count', String(dayCount));
+        renderTimeGrid(nextEnd);
+
+        body.setAttribute('data-grid-layout', signature);
+        modal.setAttribute('data-grid-days', visibleDays.map(d => d.key).join(''));
+        modal.setAttribute('data-grid-minutes', String(nextEnd - DAY_START_MIN));
+        try {
+          modal.dispatchEvent(new CustomEvent('schedulergridchange', {
+            detail: { days: visibleDays.map(d => d.key), endMin: nextEnd },
+          }));
+        } catch (_) {}
+      } catch (_) {}
     };
 
     const countIntervalOverlaps = (interval, existingIntervals) => {
@@ -2936,7 +3048,9 @@
         if (shouldHighlightAvailability()) {
           const intervals = getSectionIntervals(sec);
           const conflict = intervals.some((it) => countIntervalOverlaps(it, (occForAvailability && occForAvailability[it.dayKey]) || []) > 0);
-          classes.push(conflict ? 'is-available-conflict' : 'is-available');
+          if (conflict) classes.push('is-available-conflict');
+          else if (sectionHasIncompleteMeetingData(sec)) classes.push('is-time-unknown');
+          else classes.push('is-available');
         }
         if (Array.isArray(blocked) && blocked.length && shouldShowBlockedCourses()) {
           const blockedByDay = getBlockedByDay();
@@ -3002,14 +3116,15 @@
         const occ = {};
         DAYS.forEach(d => { occ[d.key] = (baseOccByDay && Array.isArray(baseOccByDay[d.key])) ? baseOccByDay[d.key].slice() : []; });
 
-        let best = { conflicts: Infinity, picked: null };
+        let best = { score: Infinity, conflicts: Infinity, unknowns: Infinity, picked: null };
         const picked = {};
 
-        const dfs = (i, conflicts) => {
-          if (conflicts >= best.conflicts) return;
-          if (best.conflicts === 0) return;
+        const dfs = (i, conflicts, unknowns) => {
+          const partialScore = conflicts * 1000 + unknowns;
+          if (partialScore >= best.score) return;
+          if (best.score === 0) return;
           if (i >= bundleCourseIds.length) {
-            best = { conflicts, picked: Object.assign({}, picked) };
+            best = { score: partialScore, conflicts, unknowns, picked: Object.assign({}, picked) };
             return;
           }
           const cid = bundleCourseIds[i];
@@ -3027,25 +3142,32 @@
               addedByDay[it.dayKey] = (addedByDay[it.dayKey] || 0) + 1;
             }
             picked[cid] = sec;
-            dfs(i + 1, conflicts + extra);
+            dfs(i + 1, conflicts + extra, unknowns + (sectionHasIncompleteMeetingData(sec) ? 1 : 0));
             delete picked[cid];
             for (const dayKey of Object.keys(addedByDay)) {
               const n = addedByDay[dayKey] || 0;
               if (n > 0 && occ[dayKey] && occ[dayKey].length >= n) occ[dayKey].splice(-n, n);
             }
-            if (best.conflicts === 0) return;
+            if (best.score === 0) return;
           }
         };
 
-        dfs(0, 0);
+        dfs(0, 0, 0);
         return best && best.picked ? best : null;
       } catch (_) {
         return null;
       }
     };
 
-    const clearPreviewBlocks = () => {
+    const removePreviewBlocks = () => {
       try { body.querySelectorAll('.scheduler-block.is-preview').forEach(el => el.remove()); } catch (_) {}
+    };
+
+    const clearPreviewBlocks = () => {
+      removePreviewBlocks();
+      activePreviewIntervals = [];
+      try { updateGridExtent(scheduleIndex); } catch (_) {}
+      try { renderBlockedBackground(); } catch (_) {}
     };
 
     const clearHoverHighlights = () => {
@@ -3065,11 +3187,11 @@
       } catch (_) {}
     };
 
-    const renderPreviewForCourse = (idx, baseCourseId, forcedSection) => {
+    const renderPreviewForCourse = (idx, baseCourseId, forcedSection, options) => {
       clearPreviewBlocks();
       try {
         if (!idx || !baseCourseId) return;
-        if (!shouldHoverPreview()) return;
+        if (!(options && options.ignoreHoverPreference) && !shouldHoverPreview()) return;
         const cid = normalizeCourseId(baseCourseId);
         if (!cid) return;
         try {
@@ -3099,6 +3221,7 @@
           if (!best || !best.picked) return;
           Object.assign(picked, best.picked);
         }
+        const previewItems = [];
         for (let i = 0; i < bundle.length; i++) {
           const courseId = bundle[i];
           const entry = idx.get(courseId);
@@ -3110,23 +3233,42 @@
           const intervals = getSectionIntervals(sec);
           for (let j = 0; j < intervals.length; j++) {
             const it = intervals[j];
-            const col = body.querySelector(`.scheduler-day-col[data-day="${it.dayKey}"]`);
-            if (!col) continue;
-            const block = document.createElement('div');
-            block.className = 'scheduler-block is-preview';
-            const dr = getDisplayRange(it.start, it.end);
-            setBlockPosition(block, dr.start, dr.end);
-            block.style.background = color;
-            block.setAttribute('data-course', courseId);
-            block.innerHTML = `<div class="scheduler-block-title">${escapeHtml(label)}</div>` +
-              `<div class="scheduler-block-time">${escapeHtml(minutesToLabel(it.start))}–${escapeHtml(minutesToLabel(it.end))}</div>`;
-            try {
-              if (countIntervalOverlaps(it, baseOcc[it.dayKey] || []) > 0) block.classList.add('is-preview-conflict');
-            } catch (_) {}
-            col.appendChild(block);
+            previewItems.push({ courseId, label, color, interval: it });
           }
         }
-      } catch (_) {}
+
+        activePreviewIntervals = previewItems.map(item => item.interval);
+        updateGridExtent(idx);
+        try { renderBlockedBackground(); } catch (_) {}
+
+        for (let i = 0; i < previewItems.length; i++) {
+          const item = previewItems[i];
+          const courseId = item.courseId;
+          const it = item.interval;
+          if (!isGridRenderableInterval(it)) continue;
+          const col = body.querySelector(`.scheduler-day-col[data-day="${it.dayKey}"]`);
+          if (!col || col.hidden) continue;
+          const block = document.createElement('div');
+          block.className = 'scheduler-block is-preview';
+          const dr = getDisplayRange(it.start, it.end);
+          setBlockPosition(block, dr.start, dr.end);
+          block.style.background = item.color;
+          block.setAttribute('data-course', courseId);
+          block.setAttribute('data-day', String(it.dayKey));
+          block.setAttribute('data-start', String(it.start));
+          block.setAttribute('data-end', String(it.end));
+          block.setAttribute('data-display-start', String(dr.start));
+          block.setAttribute('data-display-end', String(dr.end));
+          block.innerHTML = `<div class="scheduler-block-title">${escapeHtml(item.label)}</div>` +
+            `<div class="scheduler-block-time">${escapeHtml(minutesToLabel(it.start))}–${escapeHtml(minutesToLabel(it.end))}</div>`;
+          try {
+            if (countIntervalOverlaps(it, baseOcc[it.dayKey] || []) > 0) block.classList.add('is-preview-conflict');
+          } catch (_) {}
+          col.appendChild(block);
+        }
+      } catch (_) {
+        clearPreviewBlocks();
+      }
     };
 
     let hoverSelectedCourseId = '';
@@ -3191,6 +3333,20 @@
 
         const instr = sectionInstructorPreview(sec);
         const url = (s && s.crn) ? buildDetailUrl(s.crn) : '';
+        const scheduleWarningHtml = (() => {
+          try {
+            if (!sec) return '<div class="scheduler-selected-warning"><span class="muted">Schedule:</span> Section details are unavailable.</div>';
+            const warnings = [];
+            if (sectionHasIncompleteMeetingData(sec)) warnings.push('Some meeting times are unavailable; conflict checks are incomplete.');
+            const hiddenIntervals = getSectionIntervals(sec).filter(it => !isGridRenderableInterval(it));
+            if (hiddenIntervals.length) warnings.push('Some meetings fall outside the supported 08:40–24:00 time grid; their conflicts are still checked.');
+            return warnings.length
+              ? `<div class="scheduler-selected-warning"><span class="muted">Schedule:</span> ${escapeHtml(warnings.join(' '))}</div>`
+              : '';
+          } catch (_) {
+            return '';
+          }
+        })();
 
         const showDetails = shouldShowDetails();
         const d = showDetails ? getCourseDetails(courseId) : null;
@@ -3262,6 +3418,7 @@
           `<div class="scheduler-selected-label"><span class="scheduler-color-dot" style="background:${escapeHtml(hslFromString(courseId))}"></span>${escapeHtml(label)}</div>` +
           (instr ? `<div class="scheduler-selected-meta"><span class="muted">Instructor:</span> ${escapeHtml(instr)}</div>` : '') +
           detailLine +
+          scheduleWarningHtml +
           (miss.length ? `<div class="scheduler-selected-warning"><span class="muted">Missing coreq:</span> ${escapeHtml(miss.join(', '))}</div>` : '') +
           (orphan.length ? `<div class="scheduler-selected-warning"><span class="muted">Looks like a coreq for:</span> ${escapeHtml(orphan.join(', '))}</div>` : '') +
           `<div class="scheduler-selected-actions-row">` +
@@ -3311,17 +3468,25 @@
       const byDay = getBlockedByDay();
       for (const dayKey of Object.keys(byDay)) {
         const col = body.querySelector(`.scheduler-day-col[data-day="${dayKey}"]`);
-        if (!col) continue;
+        if (!col || col.hidden) continue;
         const list = byDay[dayKey] || [];
         for (let i = 0; i < list.length; i++) {
           const b = list[i];
           const start = b.start;
           const end = b.end;
+          const visibleStart = Math.max(DAY_START_MIN, start);
+          const visibleEnd = Math.min(currentGridEndMin, end);
+          if (visibleEnd <= visibleStart) continue;
           const block = document.createElement('div');
           block.className = 'scheduler-block scheduler-block-bg is-blocked';
           try { if (b && b.id) block.setAttribute('data-block-id', String(b.id)); } catch (_) {}
-          const dr = getDisplayRange(start, end);
+          const dr = getDisplayRange(visibleStart, visibleEnd);
           setBlockPosition(block, dr.start, dr.end);
+          block.setAttribute('data-day', String(dayKey));
+          block.setAttribute('data-start', String(start));
+          block.setAttribute('data-end', String(end));
+          block.setAttribute('data-display-start', String(dr.start));
+          block.setAttribute('data-display-end', String(dr.end));
           block.style.background = 'rgba(107, 114, 128, 0.35)';
           block.innerHTML = `<div class="scheduler-block-title">Blocked</div>` +
             `<div class="scheduler-block-time">${escapeHtml(minutesToLabel(start))}–${escapeHtml(minutesToLabel(end))}</div>`;
@@ -3450,7 +3615,7 @@
 
       const addBlock = (dayKey, start, end, label, color, meta) => {
         const col = body.querySelector(`.scheduler-day-col[data-day="${dayKey}"]`);
-        if (!col) return;
+        if (!col || col.hidden) return;
         const block = document.createElement('button');
         block.type = 'button';
         block.className = 'scheduler-block';
@@ -3462,6 +3627,8 @@
         try { block.setAttribute('data-day', String(dayKey)); } catch (_) {}
         try { block.setAttribute('data-start', String(start)); } catch (_) {}
         try { block.setAttribute('data-end', String(end)); } catch (_) {}
+        try { block.setAttribute('data-display-start', String(dr.start)); } catch (_) {}
+        try { block.setAttribute('data-display-end', String(dr.end)); } catch (_) {}
         block.innerHTML = `<div class="scheduler-block-title">${escapeHtml(label)}</div>` +
           `<div class="scheduler-block-time">${escapeHtml(minutesToLabel(start))}–${escapeHtml(minutesToLabel(end))}</div>`;
         try {
@@ -3545,9 +3712,11 @@
             start = tr.start;
             end = tr.end;
           }
-          if (!days.length) continue;
-          if (start < DAY_START_MIN || end > DAY_END_MIN) continue;
+          start = Number(start);
+          end = Number(end);
+          if (!days.length || !Number.isFinite(start) || !Number.isFinite(end)) continue;
           for (let di = 0; di < days.length; di++) {
+            if (!isGridRenderableInterval({ dayKey: days[di], start, end })) continue;
             addBlock(days[di], start, end, label, color, {
               course_id: courseId,
               where: m.where || m.Where || '',
@@ -4337,8 +4506,9 @@
                     const bundle = getRequiredBundleCourseIds(scheduleIndex, e.course_id);
                     const best = pickBestBundleSections(scheduleIndex, bundle, occForAvailability || {});
                     if (best && typeof best.conflicts === 'number') {
-                      if (best.conflicts === 0) classes.push('is-available');
-                      else classes.push('is-available-conflict');
+                      if (best.conflicts > 0) classes.push('is-available-conflict');
+                      else if (best.unknowns > 0) classes.push('is-time-unknown');
+                      else classes.push('is-available');
                     }
                   }
                 }
@@ -4586,7 +4756,11 @@
       saveSchedulerState(termCode, { selected });
       missingByCourse = {};
       renderSelected();
-      clearGridBlocks();
+      if (scheduleIndex) renderGrid(scheduleIndex);
+      else {
+        clearGridBlocks();
+        clearPreviewBlocks();
+      }
       resultsEl.innerHTML = '<div class="scheduler-muted">Cleared. Search to add courses.</div>';
     });
 
@@ -5264,6 +5438,24 @@
         try { await openScheduleManager(); } catch (_) {}
       });
     }
+
+    // Touch devices use an explicit preview request because they have no hover.
+    // Keep that interaction independent from the desktop hover-preview setting:
+    // disabling mouse hover must not leave mobile's visible Preview action inert.
+    modal.addEventListener('schedulerpreviewrequest', (e) => {
+      try {
+        const detail = e && e.detail ? e.detail : {};
+        const courseId = normalizeCourseId(detail.courseId || '');
+        const crn = String(detail.crn || '').trim();
+        if (!scheduleIndex || !courseId) return;
+        const entry = scheduleIndex.get(courseId);
+        const section = crn && entry && Array.isArray(entry.sections)
+          ? (entry.sections.find(sec => String(sec && sec.crn ? sec.crn : '') === crn) || null)
+          : null;
+        if (crn && !section) return;
+        renderPreviewForCourse(scheduleIndex, courseId, section, { ignoreHoverPreference: true });
+      } catch (_) {}
+    });
 
     // Hover interactions (optional)
     if (selectedEl) {

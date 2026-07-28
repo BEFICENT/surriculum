@@ -730,7 +730,7 @@
       const id = normalizeImportedText(block.id, `${itemPath}.id`, { maxLength: 100 });
       if (!/^[A-Za-z0-9._-]+$/.test(id)) importError(`${itemPath}.id`, 'has invalid characters');
       const dayKey = normalizeImportedText(block.dayKey, `${itemPath}.dayKey`, { maxLength: 1 }).toUpperCase();
-      if (!/^[MTWRF]$/.test(dayKey)) importError(`${itemPath}.dayKey`, 'has an invalid day');
+      if (!/^[MTWRFSU]$/.test(dayKey)) importError(`${itemPath}.dayKey`, 'has an invalid day');
       const start = normalizeFiniteNumber(block.start, `${itemPath}.start`, 1440);
       const end = normalizeFiniteNumber(block.end, `${itemPath}.end`, 1440);
       if (!Number.isInteger(start) || !Number.isInteger(end) || end <= start) {

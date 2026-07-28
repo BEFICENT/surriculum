@@ -2444,6 +2444,11 @@ html, body {
     background: color-mix(in srgb, rgba(245, 158, 11, 0.14) 35%, var(--bg-card));
 }
 
+.scheduler-picker-option.is-time-unknown {
+    border-left: 4px solid var(--text-secondary);
+    background: color-mix(in srgb, var(--text-secondary) 8%, var(--bg-card));
+}
+
 .scheduler-picker-option.is-blocked-hours {
     border-left: 4px solid rgba(239, 68, 68, 0.8);
     background: color-mix(in srgb, rgba(239, 68, 68, 0.13) 35%, var(--bg-card));
@@ -3247,6 +3252,11 @@ html, body {
     background: color-mix(in srgb, rgba(245, 158, 11, 0.16) 35%, var(--bg-card));
 }
 
+.scheduler-course.is-time-unknown {
+    border-color: var(--text-secondary);
+    background: color-mix(in srgb, var(--text-secondary) 8%, var(--bg-card));
+}
+
 .scheduler-course.is-blocked-hours {
     border-color: rgba(239, 68, 68, 0.75);
     background: color-mix(in srgb, rgba(239, 68, 68, 0.14) 35%, var(--bg-card));
@@ -3389,6 +3399,11 @@ html, body {
     background: color-mix(in srgb, rgba(245, 158, 11, 0.14) 35%, var(--bg-card));
 }
 
+.scheduler-inline-section-row.is-time-unknown {
+    border-left: 3px solid var(--text-secondary);
+    background: color-mix(in srgb, var(--text-secondary) 8%, var(--bg-card));
+}
+
 .scheduler-inline-section-row.is-blocked-hours {
     border-left: 3px solid rgba(239, 68, 68, 0.8);
     background: color-mix(in srgb, rgba(239, 68, 68, 0.13) 35%, var(--bg-card));
@@ -3500,7 +3515,7 @@ html, body {
 
 .scheduler-grid-header {
     display: grid;
-    grid-template-columns: 64px repeat(5, 1fr);
+    grid-template-columns: 64px repeat(var(--scheduler-day-count, 5), minmax(0, 1fr));
     gap: 0;
     border-bottom: 1px solid var(--border);
     background: var(--bg-card);
@@ -3548,12 +3563,18 @@ html, body {
     border-left: 1px solid var(--border);
 }
 
+.scheduler-grid-day[hidden],
+.scheduler-day-col[hidden] {
+    display: none !important;
+}
+
 .scheduler-grid {
     --scheduler-minute: 1.05px;
     --scheduler-top-gap: 14px;
     --scheduler-block-gap: 6px;
+    --scheduler-total-minutes: 660;
     display: grid;
-    grid-template-columns: 64px repeat(5, 1fr);
+    grid-template-columns: 64px repeat(var(--scheduler-day-count, 5), minmax(0, 1fr));
     gap: 0;
     flex: 1;
     min-height: 0;
@@ -3580,7 +3601,7 @@ html, body {
 
 .scheduler-day-col {
     position: relative;
-    min-height: calc(var(--scheduler-minute) * 660 + var(--scheduler-top-gap));
+    min-height: calc(var(--scheduler-minute) * var(--scheduler-total-minutes) + var(--scheduler-top-gap));
     border-left: 1px solid var(--border);
     background: linear-gradient(to bottom, rgba(0,0,0,0.02) 0%, rgba(0,0,0,0.02) 100%);
 }

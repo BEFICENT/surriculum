@@ -929,15 +929,17 @@ body.is-mobile .scheduler-details-disclosure-body {
     }
 
 @media (orientation: portrait) {
-    /* Portrait = one day at a time: drop the week header, hide the other four
-       day columns, collapse the template to the time gutter + one day, and slim
+    /* Portrait = one day at a time: drop the week header, hide all other day
+       columns, collapse the template to the time gutter + one day, and slim
        the gutter (labels are right-aligned, so 64px left a wide empty strip). */
     body.is-mobile .scheduler-modal.m-scheduler .scheduler-grid-header { display: none; }
     body.is-mobile .scheduler-modal.m-scheduler[data-m-day="M"] .scheduler-day-col:not([data-day="M"]),
     body.is-mobile .scheduler-modal.m-scheduler[data-m-day="T"] .scheduler-day-col:not([data-day="T"]),
     body.is-mobile .scheduler-modal.m-scheduler[data-m-day="W"] .scheduler-day-col:not([data-day="W"]),
     body.is-mobile .scheduler-modal.m-scheduler[data-m-day="R"] .scheduler-day-col:not([data-day="R"]),
-    body.is-mobile .scheduler-modal.m-scheduler[data-m-day="F"] .scheduler-day-col:not([data-day="F"]) {
+    body.is-mobile .scheduler-modal.m-scheduler[data-m-day="F"] .scheduler-day-col:not([data-day="F"]),
+    body.is-mobile .scheduler-modal.m-scheduler[data-m-day="S"] .scheduler-day-col:not([data-day="S"]),
+    body.is-mobile .scheduler-modal.m-scheduler[data-m-day="U"] .scheduler-day-col:not([data-day="U"]) {
         display: none;
     }
     body.is-mobile .scheduler-modal.m-scheduler .scheduler-grid {
@@ -970,7 +972,7 @@ body.is-mobile .scheduler-details-disclosure-body {
     body.is-mobile .scheduler-modal.m-scheduler .scheduler-legend::-webkit-scrollbar {
         display: none;
     }
-    /* Fit the whole ~660-min day into the grid so the entire week is visible at
+    /* Fit the visible day span into the grid so the entire week is visible at
        once (no vertical scroll). mobile.js maintains --m-fit-ppm (px per minute)
        from the viewport height; the scheduler reads --scheduler-minute live when
        it renders. NB: scope to .scheduler-modal (not .m-scheduler) — the hour
