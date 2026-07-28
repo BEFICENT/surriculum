@@ -833,20 +833,26 @@
 
     const sectionMeetingPreview = (sec, maxMeetings = 3) => {
       try {
-        const meetings = (sec && Array.isArray(sec.meetings)) ? sec.meetings : [];
-        return meetings.slice(0, maxMeetings).map(m => {
-          const days = (m && m.days ? String(m.days) : '').trim();
-          const tr = (m && m.time ? String(m.time) : '').trim();
-          const where = (m && m.where ? String(m.where) : '').trim();
-          const base = `${days} ${tr}`.trim();
-          return where ? `${base} @ ${where}` : base;
+        const intervals = getSectionIntervals(sec);
+        return intervals.slice(0, maxMeetings).map(it => {
+          const base = `${it.dayKey} ${minutesToLabel(it.start)}–${minutesToLabel(it.end)}`;
+          const where = it.where && it.where.includes(' / ') ? 'Multiple locations' : it.where;
+          let dateHint = '';
+          if (Array.isArray(it.dateLabels) && it.dateLabels.length > 1) {
+            dateHint = `${it.dateLabels.length} date ranges`;
+          } else if (Array.isArray(it.dateWindows) && it.dateWindows.length === 1 && it.dateWindows[0].startDay === it.dateWindows[0].endDay) {
+            dateHint = String((it.dateLabels && it.dateLabels[0]) || '').split(' - ')[0];
+          }
+          return `${base}${where ? ` @ ${where}` : ''}${dateHint ? ` (${dateHint})` : ''}`;
         }).filter(Boolean).join(' • ');
       } catch (_) {
         return '';
       }
     };
 
-    // Stable key for "same timing" comparisons (ignores classroom/instructor).
+    // Stable key for "same timing" comparisons (ignores classroom/instructor,
+    // but preserves date windows so separate intensive offerings are not listed
+    // as interchangeable CRNs).
     // Expands multi-day strings ("MW") into per-day slots so equivalent schedules
     // normalize the same even if meetings are represented differently.
     const sectionTimeKey = (sec) => {
@@ -868,8 +874,9 @@
             }
           }
           if (start == null || end == null) continue;
+          const dateRange = String(m.date_range || m.dateRange || '').trim().replace(/\s+/g, ' ');
           for (let di = 0; di < daysArr.length; di++) {
-            parts.push(`${daysArr[di]}|${start}|${end}`);
+            parts.push(`${daysArr[di]}|${start}|${end}|${dateRange || 'DATE-TBA'}`);
           }
         }
         parts.sort();
@@ -2297,8 +2304,9 @@
             }
           }
           const where = String(m.where || m.Where || '').trim();
+          const dateRange = String(m.date_range || m.dateRange || '').trim().replace(/\s+/g, ' ');
           if (days && start != null && end != null) {
-            meetingBits.push(`${days}|${start}|${end}|${where}`);
+            meetingBits.push(`${days}|${start}|${end}|${dateRange || 'DATE-TBA'}|${where}`);
           }
           const instr = String(m.instructors || m.Instructors || m.instructor || m.Instructor || '').trim();
           if (instr) instrSet.add(instr.replace(/\s+/g, ' '));
@@ -2854,61 +2862,177 @@
       }
     };
 
-    const getSectionIntervals = (sec) => {
-      const out = [];
-      try {
-        const meetings = Array.isArray(sec && sec.meetings) ? sec.meetings : [];
-        for (let i = 0; i < meetings.length; i++) {
-          const m = meetings[i] || {};
-          const days = parseDaysToKeys(m.days || m.Days || '');
-          let start = m.start_min;
-          let end = m.end_min;
-          if (start == null || end == null) {
-            const tr = parseTimeRangeToMinutes(m.time || m.Time || '');
-            if (!tr) continue;
-            start = tr.start;
-            end = tr.end;
-          }
-          start = Number(start);
-          end = Number(end);
-          if (!days.length) continue;
-          // Keep every valid weekly interval for availability, bundle scoring,
-          // and conflict detection. Visibility is decided separately from data.
-          if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
-          if (start < 0 || end <= start || end > GRID_MAX_END_MIN) continue;
-          for (let di = 0; di < days.length; di++) {
-            out.push({ dayKey: days[di], start, end });
-          }
-        }
-      } catch (_) {}
-      return out;
+    const DATE_DAY_MS = 24 * 60 * 60 * 1000;
+    const DATE_MONTHS = {
+      Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
+      Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11,
     };
+    const DAY_KEY_TO_UTC_DAY = { U: 0, M: 1, T: 2, W: 3, R: 4, F: 5, S: 6 };
 
-    const sectionHasIncompleteMeetingData = (sec) => {
+    const parseMeetingDateRange = (value) => {
       try {
-        const meetings = Array.isArray(sec && sec.meetings) ? sec.meetings : [];
-        if (!meetings.length) return true;
-        for (let i = 0; i < meetings.length; i++) {
-          const m = meetings[i] || {};
-          const days = parseDaysToKeys(m.days || m.Days || '');
-          let start = m.start_min;
-          let end = m.end_min;
-          if (start == null || end == null) {
-            const tr = parseTimeRangeToMinutes(m.time || m.Time || '');
-            if (!tr) return true;
-            start = tr.start;
-            end = tr.end;
-          }
-          start = Number(start);
-          end = Number(end);
-          if (!days.length || !Number.isFinite(start) || !Number.isFinite(end)) return true;
-          if (start < 0 || end <= start || end > GRID_MAX_END_MIN) return true;
-        }
-        return false;
+        const label = String(value || '').trim().replace(/\s+/g, ' ');
+        const match = label.match(/^([A-Z][a-z]{2}) (\d{1,2}), (\d{4}) - ([A-Z][a-z]{2}) (\d{1,2}), (\d{4})$/);
+        if (!match) return null;
+        const startMonth = DATE_MONTHS[match[1]];
+        const endMonth = DATE_MONTHS[match[4]];
+        if (!Number.isInteger(startMonth) || !Number.isInteger(endMonth)) return null;
+        const startYear = Number(match[3]);
+        const startDate = Number(match[2]);
+        const endYear = Number(match[6]);
+        const endDate = Number(match[5]);
+        const startMs = Date.UTC(startYear, startMonth, startDate);
+        const endMs = Date.UTC(endYear, endMonth, endDate);
+        const startCheck = new Date(startMs);
+        const endCheck = new Date(endMs);
+        if (startCheck.getUTCFullYear() !== startYear || startCheck.getUTCMonth() !== startMonth || startCheck.getUTCDate() !== startDate) return null;
+        if (endCheck.getUTCFullYear() !== endYear || endCheck.getUTCMonth() !== endMonth || endCheck.getUTCDate() !== endDate) return null;
+        const startDay = Math.floor(startMs / DATE_DAY_MS);
+        const endDay = Math.floor(endMs / DATE_DAY_MS);
+        if (endDay < startDay) return null;
+        return { startDay, endDay, label };
       } catch (_) {
-        return true;
+        return null;
       }
     };
+
+    const dateWindowContainsDay = (windowRange, dayKey) => {
+      try {
+        if (!windowRange) return false;
+        const wantedDay = DAY_KEY_TO_UTC_DAY[dayKey];
+        if (!Number.isInteger(wantedDay)) return false;
+        const firstWeekday = new Date(windowRange.startDay * DATE_DAY_MS).getUTCDay();
+        const firstOccurrence = windowRange.startDay + ((wantedDay - firstWeekday + 7) % 7);
+        return firstOccurrence <= windowRange.endDay;
+      } catch (_) {
+        return false;
+      }
+    };
+
+    const mergeDateWindows = (windows) => {
+      const sorted = (Array.isArray(windows) ? windows : [])
+        .filter(w => w && Number.isInteger(w.startDay) && Number.isInteger(w.endDay) && w.endDay >= w.startDay)
+        .map(w => ({ startDay: w.startDay, endDay: w.endDay }))
+        .sort((a, b) => (a.startDay - b.startDay) || (a.endDay - b.endDay));
+      const merged = [];
+      for (let i = 0; i < sorted.length; i++) {
+        const next = sorted[i];
+        const last = merged[merged.length - 1];
+        if (last && next.startDay <= last.endDay + 1) {
+          if (next.endDay > last.endDay) last.endDay = next.endDay;
+        } else {
+          merged.push(next);
+        }
+      }
+      return merged;
+    };
+
+    const dateWindowsOverlapOnDay = (dayKey, aWindows, bWindows) => {
+      // A missing/invalid date range is treated conservatively as recurring for
+      // the whole term so unknown data can never produce a false "available".
+      if (!Array.isArray(aWindows) || !aWindows.length) return true;
+      if (!Array.isArray(bWindows) || !bWindows.length) return true;
+      for (let ai = 0; ai < aWindows.length; ai++) {
+        for (let bi = 0; bi < bWindows.length; bi++) {
+          const startDay = Math.max(aWindows[ai].startDay, bWindows[bi].startDay);
+          const endDay = Math.min(aWindows[ai].endDay, bWindows[bi].endDay);
+          if (endDay < startDay) continue;
+          if (dateWindowContainsDay({ startDay, endDay }, dayKey)) return true;
+        }
+      }
+      return false;
+    };
+
+    const sectionMeetingModelCache = new WeakMap();
+    const getSectionMeetingModel = (sec) => {
+      if (!sec || typeof sec !== 'object') return { intervals: [], incomplete: true };
+      try {
+        const cached = sectionMeetingModelCache.get(sec);
+        if (cached) return cached;
+      } catch (_) {}
+
+      const bySlot = new Map();
+      let incomplete = false;
+      try {
+        const meetings = Array.isArray(sec.meetings) ? sec.meetings : [];
+        if (!meetings.length) incomplete = true;
+        for (let i = 0; i < meetings.length; i++) {
+          const m = meetings[i] || {};
+          const days = parseDaysToKeys(m.days || m.Days || '');
+          let start = m.start_min;
+          let end = m.end_min;
+          if (start == null || end == null) {
+            const tr = parseTimeRangeToMinutes(m.time || m.Time || '');
+            if (tr) {
+              start = tr.start;
+              end = tr.end;
+            } else {
+              // Do not let Number(null) turn a partially missing endpoint into
+              // midnight and admit a plausible-looking but bogus interval.
+              start = Number.NaN;
+              end = Number.NaN;
+            }
+          }
+          start = Number(start);
+          end = Number(end);
+          const rawDateRange = m.date_range || m.dateRange || '';
+          const dateWindow = parseMeetingDateRange(rawDateRange);
+          const validTime = Number.isFinite(start) && Number.isFinite(end) && start >= 0 && end > start && end <= GRID_MAX_END_MIN;
+          if (!days.length || !validTime || !dateWindow) incomplete = true;
+          if (!days.length || !validTime) continue;
+
+          for (let di = 0; di < days.length; di++) {
+            const dayKey = days[di];
+            const windowMatchesDay = !!(dateWindow && dateWindowContainsDay(dateWindow, dayKey));
+            if (dateWindow && !windowMatchesDay) incomplete = true;
+            const key = `${dayKey}|${start}|${end}`;
+            let slot = bySlot.get(key);
+            if (!slot) {
+              slot = {
+                dayKey,
+                start,
+                end,
+                dateWindows: [],
+                dateLabels: new Set(),
+                locations: new Set(),
+                instructors: new Set(),
+                unknownDates: false,
+              };
+              bySlot.set(key, slot);
+            }
+            if (windowMatchesDay) {
+              slot.dateWindows.push(dateWindow);
+              slot.dateLabels.add(dateWindow.label);
+            } else {
+              slot.unknownDates = true;
+            }
+            const where = String(m.where || m.Where || '').trim();
+            const instructors = String(m.instructors || m.Instructors || '').trim();
+            if (where) slot.locations.add(where);
+            if (instructors) slot.instructors.add(instructors);
+          }
+        }
+      } catch (_) {
+        incomplete = true;
+      }
+
+      const intervals = Array.from(bySlot.values()).map(slot => ({
+        dayKey: slot.dayKey,
+        start: slot.start,
+        end: slot.end,
+        dateWindows: slot.unknownDates ? null : mergeDateWindows(slot.dateWindows),
+        dateLabels: Array.from(slot.dateLabels),
+        where: Array.from(slot.locations).join(' / '),
+        instructors: Array.from(slot.instructors).join(' / '),
+      }));
+      const model = { intervals, incomplete };
+      try { sectionMeetingModelCache.set(sec, model); } catch (_) {}
+      return model;
+    };
+
+    const getSectionIntervals = (sec) => getSectionMeetingModel(sec).intervals;
+
+    const sectionHasIncompleteMeetingData = (sec) => getSectionMeetingModel(sec).incomplete;
 
     const isGridRenderableInterval = (it) => {
       try {
@@ -2983,6 +3107,18 @@
       } catch (_) {}
     };
 
+    const intervalsOverlap = (a, b) => {
+      try {
+        if (!a || !b) return false;
+        if (a.end <= b.start || a.start >= b.end) return false;
+        const dayKey = a.dayKey || b.dayKey || '';
+        if (a.dayKey && b.dayKey && a.dayKey !== b.dayKey) return false;
+        return dateWindowsOverlapOnDay(dayKey, a.dateWindows, b.dateWindows);
+      } catch (_) {
+        return false;
+      }
+    };
+
     const countIntervalOverlaps = (interval, existingIntervals) => {
       let c = 0;
       try {
@@ -2990,9 +3126,7 @@
         for (let i = 0; i < list.length; i++) {
           const it = list[i];
           if (!it) continue;
-          if (interval.end <= it.start) continue;
-          if (interval.start >= it.end) continue;
-          c += 1;
+          if (intervalsOverlap(interval, it)) c += 1;
         }
       } catch (_) {}
       return c;
@@ -3010,7 +3144,7 @@
             const list = byDay[dayKey] || [];
             for (let i = 0; i < list.length; i++) {
               const b = list[i];
-              occ[dayKey].push({ start: b.start, end: b.end, course_id: '__blocked__' });
+              occ[dayKey].push({ dayKey, start: b.start, end: b.end, dateWindows: null, course_id: '__blocked__' });
             }
           }
         }
@@ -3028,7 +3162,13 @@
           for (let j = 0; j < intervals.length; j++) {
             const it = intervals[j];
             if (!occ[it.dayKey]) occ[it.dayKey] = [];
-            occ[it.dayKey].push({ start: it.start, end: it.end, course_id: courseId });
+            occ[it.dayKey].push({
+              dayKey: it.dayKey,
+              start: it.start,
+              end: it.end,
+              dateWindows: it.dateWindows,
+              course_id: courseId,
+            });
           }
         }
       } catch (_) {}
@@ -3134,11 +3274,23 @@
             const intervals = getSectionIntervals(sec);
             let extra = 0;
             const addedByDay = {};
+            // A section's own date-specific rows are one schedule choice, not
+            // competing choices. Score every row against the already occupied
+            // schedule first, then add the section as a unit.
             for (let j = 0; j < intervals.length; j++) {
               const it = intervals[j];
               if (!occ[it.dayKey]) occ[it.dayKey] = [];
               extra += countIntervalOverlaps(it, occ[it.dayKey]);
-              occ[it.dayKey].push({ start: it.start, end: it.end, course_id: cid });
+            }
+            for (let j = 0; j < intervals.length; j++) {
+              const it = intervals[j];
+              occ[it.dayKey].push({
+                dayKey: it.dayKey,
+                start: it.start,
+                end: it.end,
+                dateWindows: it.dateWindows,
+                course_id: cid,
+              });
               addedByDay[it.dayKey] = (addedByDay[it.dayKey] || 0) + 1;
             }
             picked[cid] = sec;
@@ -3241,6 +3393,8 @@
         updateGridExtent(idx);
         try { renderBlockedBackground(); } catch (_) {}
 
+        const previewBlocksByDay = {};
+        DAYS.forEach(d => { previewBlocksByDay[d.key] = []; });
         for (let i = 0; i < previewItems.length; i++) {
           const item = previewItems[i];
           const courseId = item.courseId;
@@ -3259,13 +3413,22 @@
           block.setAttribute('data-end', String(it.end));
           block.setAttribute('data-display-start', String(dr.start));
           block.setAttribute('data-display-end', String(dr.end));
+          block.setAttribute('data-date-count', String(Array.isArray(it.dateLabels) ? it.dateLabels.length : 0));
+          try {
+            const dates = Array.isArray(it.dateLabels) ? it.dateLabels.join(', ') : '';
+            if (dates) block.setAttribute('title', `${item.label} • ${minutesToLabel(it.start)}–${minutesToLabel(it.end)} • ${dates}`);
+          } catch (_) {}
           block.innerHTML = `<div class="scheduler-block-title">${escapeHtml(item.label)}</div>` +
             `<div class="scheduler-block-time">${escapeHtml(minutesToLabel(it.start))}–${escapeHtml(minutesToLabel(it.end))}</div>`;
           try {
             if (countIntervalOverlaps(it, baseOcc[it.dayKey] || []) > 0) block.classList.add('is-preview-conflict');
           } catch (_) {}
           col.appendChild(block);
+          previewBlocksByDay[it.dayKey].push({ start: it.start, end: it.end, el: block });
         }
+        // Date-specific phases may overlap in the weekly projection while
+        // never occurring on the same calendar date. Keep every phase visible.
+        layoutOverlaps(previewBlocksByDay);
       } catch (_) {
         clearPreviewBlocks();
       }
@@ -3337,7 +3500,7 @@
           try {
             if (!sec) return '<div class="scheduler-selected-warning"><span class="muted">Schedule:</span> Section details are unavailable.</div>';
             const warnings = [];
-            if (sectionHasIncompleteMeetingData(sec)) warnings.push('Some meeting times are unavailable; conflict checks are incomplete.');
+            if (sectionHasIncompleteMeetingData(sec)) warnings.push('Some meeting times or dates are unavailable; conflict checks are incomplete.');
             const hiddenIntervals = getSectionIntervals(sec).filter(it => !isGridRenderableInterval(it));
             if (hiddenIntervals.length) warnings.push('Some meetings fall outside the supported 08:40–24:00 time grid; their conflicts are still checked.');
             return warnings.length
@@ -3525,6 +3688,8 @@
         for (let i = 0; i < list.length; i++) {
           for (let j = i + 1; j < list.length; j++) {
             if (list[j].start >= list[i].end) break;
+            if (list[i].selectionKey && list[i].selectionKey === list[j].selectionKey) continue;
+            if (!intervalsOverlap(list[i], list[j])) continue;
             conflictSet.add(list[i].el);
             conflictSet.add(list[j].el);
           }
@@ -3616,6 +3781,8 @@
       const addBlock = (dayKey, start, end, label, color, meta) => {
         const col = body.querySelector(`.scheduler-day-col[data-day="${dayKey}"]`);
         if (!col || col.hidden) return;
+        const dateLabels = meta && Array.isArray(meta.dateLabels) ? meta.dateLabels : [];
+        const dateText = dateLabels.join(', ');
         const block = document.createElement('button');
         block.type = 'button';
         block.className = 'scheduler-block';
@@ -3629,6 +3796,8 @@
         try { block.setAttribute('data-end', String(end)); } catch (_) {}
         try { block.setAttribute('data-display-start', String(dr.start)); } catch (_) {}
         try { block.setAttribute('data-display-end', String(dr.end)); } catch (_) {}
+        try { block.setAttribute('data-date-count', String(dateLabels.length)); } catch (_) {}
+        try { if (dateText) block.setAttribute('title', `${label} • ${minutesToLabel(start)}–${minutesToLabel(end)} • ${dateText}`); } catch (_) {}
         block.innerHTML = `<div class="scheduler-block-title">${escapeHtml(label)}</div>` +
           `<div class="scheduler-block-time">${escapeHtml(minutesToLabel(start))}–${escapeHtml(minutesToLabel(end))}</div>`;
         try {
@@ -3644,6 +3813,7 @@
             bodyHtml:
               `<p><strong>${escapeHtml(label)}</strong></p>` +
               `<p>${escapeHtml(minutesToLabel(start))}–${escapeHtml(minutesToLabel(end))} • ${escapeHtml(dayKey)}</p>` +
+              (dateText ? `<p><span class="muted">Dates:</span> ${escapeHtml(dateText)}</p>` : '') +
               (meta && meta.where ? `<p><span class="muted">Where:</span> ${escapeHtml(meta.where)}</p>` : '') +
               (meta && meta.instructors ? `<p><span class="muted">Instructors:</span> ${escapeHtml(meta.instructors)}</p>` : ''),
             buttons: [
@@ -3687,7 +3857,14 @@
         });
 
         col.appendChild(block);
-        blocksByDay[dayKey].push({ start, end, el: block });
+        blocksByDay[dayKey].push({
+          dayKey,
+          start,
+          end,
+          dateWindows: meta && Array.isArray(meta.dateWindows) ? meta.dateWindows : null,
+          selectionKey: meta && meta.selectionKey ? String(meta.selectionKey) : '',
+          el: block,
+        });
       };
 
       const selectedKeys = Object.keys(selected);
@@ -3700,29 +3877,18 @@
         if (!sec) continue;
         const color = hslFromString(courseId);
         const label = `${courseId}${sec.section ? `-${sec.section}` : ''}${sec.component ? ` • ${sec.component}` : ''}`;
-        const meetings = Array.isArray(sec.meetings) ? sec.meetings : [];
-        for (let mi = 0; mi < meetings.length; mi++) {
-          const m = meetings[mi] || {};
-          const days = parseDaysToKeys(m.days || m.Days || '');
-          let start = m.start_min;
-          let end = m.end_min;
-          if (start == null || end == null) {
-            const tr = parseTimeRangeToMinutes(m.time || m.Time || '');
-            if (!tr) continue;
-            start = tr.start;
-            end = tr.end;
-          }
-          start = Number(start);
-          end = Number(end);
-          if (!days.length || !Number.isFinite(start) || !Number.isFinite(end)) continue;
-          for (let di = 0; di < days.length; di++) {
-            if (!isGridRenderableInterval({ dayKey: days[di], start, end })) continue;
-            addBlock(days[di], start, end, label, color, {
-              course_id: courseId,
-              where: m.where || m.Where || '',
-              instructors: m.instructors || m.Instructors || '',
-            });
-          }
+        const intervals = getSectionIntervals(sec);
+        for (let ii = 0; ii < intervals.length; ii++) {
+          const it = intervals[ii];
+          if (!isGridRenderableInterval(it)) continue;
+          addBlock(it.dayKey, it.start, it.end, label, color, {
+            course_id: courseId,
+            selectionKey: `${courseId}:${String(sec.crn || '')}`,
+            dateWindows: it.dateWindows,
+            dateLabels: it.dateLabels,
+            where: it.where,
+            instructors: it.instructors,
+          });
         }
       }
 

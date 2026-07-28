@@ -25,7 +25,7 @@ a time and checked off only after the fix and its verification are complete.
 ## Verified baseline
 
 - [x] JavaScript/static unit gate passes: 136/136 tests.
-- [x] Playwright gate passes: 294/294 tests in a clean dedicated run.
+- [x] Playwright gate passes: 301/301 tests in a clean dedicated run.
 - [x] `python tests/scrape_groups_test.py` passes when run directly.
 - [x] All 228,387 JSONL rows parse successfully.
 - [x] Manifest hashes and the content-derived data version match the data tree.
@@ -117,15 +117,21 @@ a time and checked off only after the fix and its verification are complete.
   a clear message. Completed on 2026-07-22: selected admit terms now load exact
   data (including first-run initialization), partial/duplicate/wrong-term data
   is rejected, and graduation/summary display an Unavailable state via flag 99.
-- [ ] Resolve contradictory live SUIS requirement pages and restore current
+- [ ] Resolve live SUIS requirement-page ambiguities and restore current
   requirement snapshots. Re-captured on 2026-07-23: EE pages for
-  `202201`-`202403` state Total 125 while their five category values total 123;
-  ME pages for `202301`-`202403` have the same two-credit discrepancy; and ME
-  `202501` onward says Core 21 in the summary but 26 in the category prose. The
-  fail-closed scraper rejects the inconsistent historical pages, and local
-  requirements consequently stop at `202503` even though official `202601`-
-  `202603` selectors/pages exist. Decide and document which official value is
-  authoritative before adding or normalizing the missing terms.
+  `202201`-`202403` state Total 125 while their five category minima total 123;
+  ME pages for `202301`-`202403` have the same two-credit gap. This is probably
+  not a contradiction: the MATH 212 route is four SU credits while the MATH
+  201+202 route is six, and category minima need not equal the independent
+  overall-credit minimum. The current validator wrongly requires equality and
+  the local EE/ME snapshots compensate by inflating Required by two credits.
+  Change the invariant to `category sum <= total`, restore the captured category
+  minima, represent the mathematics alternatives explicitly, and retain Total
+  as the final overall threshold. Separately, ME `202501` onward really does say
+  Core 21 in its numeric summary but 26 in category prose; use the numeric
+  summary as the provisional authority only after documenting/confirming that
+  policy. The current fail-closed scraper prevents adding official `202601`-
+  `202603` pages until these cases are handled.
 - [ ] Define the policy for `requirements/default.jsonl`. It matches no actual
   admit term and mixes older thresholds with a partially newer VACD pool, so it
   should either become an explicit frozen snapshot or track a named/latest term.
@@ -138,19 +144,31 @@ a time and checked off only after the fix and its verification are complete.
   calculations. Grade save/reload is model-backed, so opening the grade picker
   can no longer autosave a failed attempt as blank. Ordinary `hasCourse` remains
   structural for duplicate prevention and existing planner behavior.
-- [ ] Separate projected-plan credit from completed/earned credit. Blank,
-  Registered, P, and I currently remain eligible in the forward-looking plan,
-  but the UI and tests call those credits "earned" and `canGraduate` does not
-  distinguish an actual transcript audit from a projection.
+- [ ] Separate projected-plan credit from completed/earned credit. The same
+  predicate currently drives allocation, totals, requirement checks, and
+  `canGraduate`; therefore a fully planned schedule with blank grades can be
+  labelled complete. Blank/Registered, P, and I can remain useful in a
+  forward-looking projection, but only final successful grades (A-D, S, and T)
+  should count in an earned audit. The UI needs distinct Complete versus On
+  track/Projected complete states, and an actual audit must not pass when no GPA
+  can be calculated.
 - [ ] Align special-grade and GPA semantics with university rules. In
-  particular, S is currently treated as 4.0 GPA; U/NA/W are now excluded from
-  degree-plan credit but NA's GPA treatment and P/I presentation still need an
-  explicit product decision and a complete grade-status matrix.
+  particular, S is currently treated as 4.0 instead of successful and
+  GPA-neutral; P and I are treated as completed plan credit; and NA is always
+  GPA-neutral even though it is F-equivalent for GPA-bearing courses and
+  U-equivalent otherwise. P/S/U/T/W are GPA-neutral, while I is temporary and
+  eventually becomes F or U if unresolved. Centralize this in one grade-policy
+  function and retain course grading-basis metadata needed to classify NA.
+- [ ] Add Program GPA (PGPA) to graduation evaluation. The app currently checks
+  only its overall GPA, while Sabancı's published graduation guidance requires
+  both CGPA and PGPA to be at least 2.00.
 - [ ] Support repeated attempts and retake planning. The model globally rejects
   a second canonical course code, so a retained failed attempt blocks adding a
-  future retake. Transcript import also needs deterministic latest-attempt
-  selection and should replace an existing planned placeholder rather than
-  silently skipping the completed attempt.
+  future retake. Official GPA calculation uses the latest repeated-course grade
+  while the transcript retains all attempts. Preserve attempts, derive the
+  active/latest one by term and attempt order, and make every import path use the
+  same reconciliation. Importing a completed attempt should replace an existing
+  planned placeholder rather than reporting success while leaving it unchanged.
 - [ ] Give unsuccessful attempts a distinct Summary state instead of placing
   them in the generic "untaken" bucket.
 - [x] Keep planner and scheduler offered-course data aligned. The planner now
@@ -177,10 +195,19 @@ a time and checked off only after the fix and its verification are complete.
   and selected incomplete sections warn that conflict checking is partial.
   Frozen browser coverage uses real `202403` Saturday/22:00 sections across
   desktop and mobile, plus a real `202402` Sunday section on desktop.
-- [ ] Make date-specific intensive meetings date-aware. Some stored sections
-  repeat the same weekly slot for multiple date ranges, while others have
-  different overlapping slots. The scheduler currently ignores `date_range`,
-  so it can draw duplicates or report a section as conflicting with itself.
+- [x] Make date-specific intensive meetings date-aware. Completed on
+  2026-07-28: repeated exact slots are collapsed into one visible block with all
+  of their date windows, while timetable phases with different clocks remain
+  separately visible. Availability, bundle scoring, blocked-hour checks,
+  selected-section conflicts, time-equivalence keys, and schedule-change
+  snapshots now use calendar-aware intervals. Missing/malformed dates remain
+  conservative rather than creating false availability. The overlap check also
+  verifies that the shared calendar range actually contains the stated weekday.
+  An audit of the 23 active schedule files found 34,843 meeting rows, all with
+  parseable ranges; 325 sections repeat 616 exact slots, 344 sections overlap in
+  a weekly projection, and none self-overlap on an actual date. Seven frozen
+  browser regressions cover repeated intensives, disjoint/shared dates, a
+  no-shared-weekday boundary, and a section whose timetable changes mid-term.
 - [ ] Make scheduler replacement transactional so a rendering/build failure
   cannot leave the plan partially cleared.
 - [x] Replace origin-wide `localStorage.clear()` with deletion of only known
@@ -199,15 +226,28 @@ a time and checked off only after the fix and its verification are complete.
 ## GitHub Pages and offline behavior
 
 - [ ] Fix service-worker URLs for the `/surriculum/` Pages subpath and add an
-  offline/subpath test during the future coverage pass.
+  offline/subpath test during the future coverage pass. The app's ordinary
+  relative URLs are subpath-safe, but the service worker precaches leading-`/`
+  URLs at the account root. The atomic precache can therefore fail on Pages;
+  its swallowed install error can still allow an empty new cache to activate
+  and replace a previously useful one. Build URLs from
+  `self.registration.scope`, precache the complete shell atomically, and test a
+  mounted `/surriculum/` installation plus offline reload.
 - [ ] Restrict service-worker cache cleanup to SUrriculum-owned cache-name
-  prefixes instead of deleting other caches on the shared Pages origin.
-- [ ] Choose an explicit 3.1 deployment path. GitHub Pages currently publishes
-  `main`, so pushing `surriculum-3.1` does not release it.
+  prefixes instead of deleting other caches on the shared Pages origin. Runtime
+  caching should likewise be restricted to the worker's own scope and await
+  cache writes.
+- [x] Choose an explicit 3.1 deployment path. Verified on 2026-07-28: GitHub
+  Pages uses the legacy branch configuration and publishes the repository root
+  from `main`. The final release will merge `surriculum-3.1` into `main`, which
+  automatically triggers `pages-build-deployment`; pushing the feature branch
+  alone does not deploy. Use a merge commit to preserve every 3.1 commit—do not
+  squash or rebase at merge time.
 - [ ] Prefer a GitHub Pages Actions deployment containing an allowlisted
   production artifact instead of publishing the entire repository root.
-- [ ] Align the daily data-refresh workflow with whichever branch/artifact is
-  used for production.
+- [x] Align the daily data-refresh workflow with the chosen production branch.
+  It runs from the default `main` branch and opens data-update PRs against it;
+  merging one of those PRs will trigger the same legacy Pages deployment.
 
 ## Test-suite work
 
