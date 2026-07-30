@@ -1015,6 +1015,8 @@ function dynamic_click(e, curriculum, course_data)
                 const semObj = curriculum.getSemester(semElem.id);
                 if (semObj) {
                     semObj.termIndex = terms.indexOf(newDateText);
+                    semObj.termName = newDateText;
+                    semObj.termCode = (typeof termNameToCode === 'function') ? termNameToCode(newDateText) : '';
                 }
             }
             if (typeof curriculum.recalcEffectiveTypes === 'function') {

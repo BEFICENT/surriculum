@@ -127,10 +127,27 @@
                 var card = cards[i];
                 var title = ((card.querySelector('.summary_modal_title') || {}).textContent || '').trim();
                 var stats = [];
-                var ps = card.querySelectorAll('.summary_modal_child p');
-                for (var j = 0; j < ps.length; j++) {
-                    var m = (ps[j].textContent || '').trim().match(/^(.*?):\s*([\d.]+)\s*\/\s*([\d.]+)/);
-                    if (m) stats.push({ label: m[1].trim(), value: parseFloat(m[2]), limit: parseFloat(m[3]) });
+                var metrics = card.querySelectorAll('.summary_metric[data-metric]');
+                for (var j = 0; j < metrics.length; j++) {
+                    var metric = metrics[j];
+                    var head = metric.querySelector('.summary_metric_head span');
+                    var legacy = metric.querySelector('p');
+                    var match = legacy ? (legacy.textContent || '').trim().match(/^(.*?):\s*([\d.]+)\s*\/\s*([\d.]+)/) : null;
+                    if (metric.dataset.metric === 'gpa') {
+                        if (match) stats.push({ label: match[1].trim(), value: parseFloat(match[2]), limit: parseFloat(match[3]) });
+                        continue;
+                    }
+                    var projected = parseFloat(metric.dataset.projected || '0');
+                    var limit = parseFloat(metric.dataset.limit || '0');
+                    stats.push({
+                        label: ((head || {}).textContent || (match && match[1]) || metric.dataset.metric).trim(),
+                        value: projected,
+                        limit: limit,
+                        earned: parseFloat(metric.dataset.earned || '0'),
+                        current: parseFloat(metric.dataset.current || '0'),
+                        future: parseFloat(metric.dataset.future || '0'),
+                        unverified: parseFloat(metric.dataset.unverified || '0')
+                    });
                 }
                 programs.push({ title: title, stats: stats });
             }
@@ -149,12 +166,31 @@
             var cma = window.computeMinorAllocation || (typeof computeMinorAllocation !== 'undefined' ? computeMinorAllocation : null);
             if (!curr || !cma || !curr.minors) return cards;
             var minors = curr.minors.filter(Boolean);
+            var progressGpa = null;
+            if (minors.length && typeof curr.getGraduationProgress === 'function') {
+                try {
+                    var mainProgress = curr.getGraduationProgress('main');
+                    progressGpa = mainProgress && mainProgress.gpa;
+                } catch (e) {}
+            }
             for (var i = 0; i < minors.length; i++) {
                 var r;
-                try { r = cma(curr, minors[i]); } catch (e) { continue; }
+                try {
+                    r = cma(curr, minors[i], { progressGpa: progressGpa });
+                } catch (e) { continue; }
                 if (!r || r.error) continue;
                 var cats = (r.req && r.req.categories) || {};
                 var done = r.totals || {};
+                var allocatedByState = {};
+                var allocated = r.allocationByCode || {};
+                Object.keys(allocated).forEach(function (code) {
+                    var rec = allocated[code] || {};
+                    var cat = rec.allocatedCat;
+                    var state = rec.progressState || 'earned';
+                    if (['earned', 'current', 'future', 'unverified'].indexOf(state) === -1) return;
+                    if (!allocatedByState[cat]) allocatedByState[cat] = { earned: 0, current: 0, future: 0, unverified: 0 };
+                    allocatedByState[cat][state] += Number(rec.credit || 0);
+                });
                 var stats = [], sumHave = 0, sumNeed = 0;
                 var order = ['required', 'core', 'area', 'free'];
                 for (var k = 0; k < order.length; k++) {
@@ -162,8 +198,11 @@
                     if (!cats[key] || !cats[key].minSU) continue;
                     var need = cats[key].minSU;
                     var have = (done[key] && done[key].credits) || 0;
+                    var split = allocatedByState[key] || { earned: 0, current: 0, future: 0, unverified: 0 };
                     sumHave += have; sumNeed += need;
-                    stats.push({ label: key.charAt(0).toUpperCase() + key.slice(1), value: have, limit: need });
+                    stats.push({ label: key.charAt(0).toUpperCase() + key.slice(1), value: have, limit: need,
+                        earned: split.earned, current: split.current,
+                        future: split.future, unverified: split.unverified });
                 }
                 if (r.gpaThreshold) {
                     stats.push({ label: 'CGPA (min)', value: Math.round((r.cgpa || 0) * 100) / 100, limit: r.gpaThreshold, met: !!r.gpaOk });
@@ -171,7 +210,13 @@
                 cards.push({
                     code: minors[i],
                     title: r.title || (minors[i] + ' Minor'),
-                    bar: sumNeed ? { value: sumHave, limit: sumNeed, label: 'SU credits' } : null,
+                    bar: sumNeed ? {
+                        value: sumHave, limit: sumNeed, label: 'SU credits',
+                        earned: stats.reduce(function (n, s) { return n + (s.earned || 0); }, 0),
+                        current: stats.reduce(function (n, s) { return n + (s.current || 0); }, 0),
+                        future: stats.reduce(function (n, s) { return n + (s.future || 0); }, 0),
+                        unverified: stats.reduce(function (n, s) { return n + (s.unverified || 0); }, 0)
+                    } : null,
                     stats: stats
                 });
             }
@@ -189,7 +234,7 @@
             for (var k = 0; k < p.stats.length; k++) {
                 if (p.stats[k].label === 'SU Credits') su = p.stats[k]; else rest.push(p.stats[k]);
             }
-            cards.push({ title: p.title, bar: su ? { value: su.value, limit: su.limit, label: 'SU credits' } : null, stats: rest });
+            cards.push({ title: p.title, bar: su ? Object.assign({}, su, { label: 'SU credits' }) : null, stats: rest });
             descriptors.push({ type: 'major', domIndex: i });
         }
         var minorCards = readMinorCards();
@@ -209,13 +254,29 @@
             html += '<div class="m-prog-title">' + esc(card.title) + '</div>';
             if (card.bar) {
                 html += '<div class="m-prog-barrow"><span>' + fmt(card.bar.value) + ' / ' + fmt(card.bar.limit) + ' ' + esc(card.bar.label) + '</span><span>' + pct + '%</span></div>';
-                html += '<div class="m-prog-bar"><div class="m-prog-fill" style="width:' + pct + '%"></div></div>';
+                if (card.bar.earned !== undefined) {
+                    var denom = Math.max(card.bar.value, card.bar.limit, 1);
+                    var barLabel = fmt(card.bar.earned) + ' earned, ' + fmt(card.bar.current) + ' current, ' + fmt(card.bar.future) + ' future, ' + fmt(card.bar.unverified) + ' needs grade, ' + fmt(card.bar.value) + ' projected of ' + fmt(card.bar.limit);
+                    html += '<div class="m-prog-bar is-segmented" role="img" aria-label="' + esc(barLabel) + '">';
+                    html += '<div class="m-prog-fill is-earned" style="width:' + (Math.max(0, card.bar.earned) / denom * 100) + '%"></div>';
+                    html += '<div class="m-prog-fill is-current" style="width:' + (Math.max(0, card.bar.current) / denom * 100) + '%"></div>';
+                    html += '<div class="m-prog-fill is-future" style="width:' + (Math.max(0, card.bar.future) / denom * 100) + '%"></div>';
+                    html += '<div class="m-prog-fill is-unverified" style="width:' + (Math.max(0, card.bar.unverified) / denom * 100) + '%"></div></div>';
+                    html += '<div class="m-prog-breakdown"><span class="is-earned">' + fmt(card.bar.earned) + ' earned</span><span class="is-current">' + fmt(card.bar.current) + ' current</span><span class="is-future">' + fmt(card.bar.future) + ' future</span>' + (card.bar.unverified ? '<span class="is-unverified">' + fmt(card.bar.unverified) + ' needs grade</span>' : '') + '</div>';
+                } else {
+                    html += '<div class="m-prog-bar"><div class="m-prog-fill" style="width:' + pct + '%"></div></div>';
+                }
             }
             html += '<div class="m-prog-grid">';
             for (var j = 0; j < card.stats.length; j++) {
                 var s = card.stats[j];
+                var earnedMet = s.earned !== undefined && s.earned >= s.limit;
                 var met = (s.met !== undefined) ? s.met : (s.value >= s.limit);
-                html += '<div class="m-prog-stat' + (met ? ' is-met' : '') + '"><div class="m-prog-lbl">' + esc(s.label) + '</div><div class="m-prog-val">' + fmt(s.value) + ' / ' + fmt(s.limit) + '</div></div>';
+                var statClass = earnedMet ? ' is-met' : (met ? ' is-projected-met' : '');
+                var val = s.earned !== undefined
+                    ? '<span class="is-earned">' + fmt(s.earned) + ' earned</span><span>' + fmt(s.value) + ' projected / ' + fmt(s.limit) + '</span>'
+                    : fmt(s.value) + ' / ' + fmt(s.limit);
+                html += '<div class="m-prog-stat' + statClass + '"><div class="m-prog-lbl">' + esc(s.label) + '</div><div class="m-prog-val">' + val + '</div></div>';
             }
             html += '</div></div>';
         }

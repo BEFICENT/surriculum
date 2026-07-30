@@ -1204,6 +1204,9 @@ html, body {
     border-left-color: #DC2626;
 }
 
+.graduation_card.is-projected { border-left-color: #7C3AED; }
+.graduation_card.is-unavailable { border-left-color: #64748B; }
+
 .graduation_card--compact {
     gap: 8px;
 }
@@ -1258,6 +1261,18 @@ html, body {
     border-color: #DC2626;
 }
 
+.graduation_status_badge.is-projected {
+    background: rgba(124, 58, 237, 0.12);
+    color: #7C3AED;
+    border-color: #7C3AED;
+}
+
+.graduation_status_badge.is-unavailable {
+    background: rgba(100, 116, 139, 0.12);
+    color: #64748B;
+    border-color: #64748B;
+}
+
 .dark-theme .graduation_status_badge.is-complete {
     background: rgba(22, 163, 74, 0.18);
     color: #16A34A !important;
@@ -1269,6 +1284,23 @@ html, body {
     color: #DC2626 !important;
     border-color: #DC2626 !important;
 }
+
+.dark-theme .graduation_status_badge.is-projected {
+    color: #C4B5FD !important;
+    border-color: #C4B5FD !important;
+}
+
+.dark-theme .graduation_status_badge.is-unavailable {
+    color: #94A3B8 !important;
+    border-color: #94A3B8 !important;
+}
+
+.graduation_card_message--complete { color: #16A34A !important; }
+.graduation_card_message--projected { color: #7C3AED !important; }
+.graduation_card_message--incomplete { color: #DC2626 !important; }
+.graduation_card_message--unavailable { color: #64748B !important; }
+.dark-theme .graduation_card_message--projected { color: #C4B5FD !important; }
+.dark-theme .graduation_card_message--unavailable { color: #94A3B8 !important; }
 
 .graduation_card_message {
     font-size: 0.96rem;
@@ -1330,7 +1362,7 @@ html, body {
 
 /* Updated summary_modal to be 50% bigger */
 .summary_modal {
-    width: 360px; /* Increased by 50% */
+    width: min(440px, 90vw);
     max-width: 90vw;
     max-height: 90vh;
     overflow: auto;
@@ -1344,7 +1376,15 @@ html, body {
     flex-direction: column;
     gap: 12px; /* Adjusted gap between elements */
     font-size: 1.2rem; /* Increased font size proportionally */
-    color: var(--text-primary)
+    color: var(--text-primary);
+    box-sizing: border-box;
+}
+
+.summary_modal_overlay {
+    align-items: flex-start;
+    overflow-y: auto;
+    padding: 20px 0;
+    box-sizing: border-box;
 }
 
 /* Summary minor quick actions */
@@ -1352,11 +1392,12 @@ html, body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     gap: 14px;
     width: 100%;
     max-width: 1200px;
     padding: 10px 12px;
+    box-sizing: border-box;
 }
 
 .summary_header_row {
@@ -1682,6 +1723,11 @@ html, body {
     background: rgba(22, 163, 74, 0.08);
 }
 
+.major-summary .ms-group.is-projected {
+    border-color: rgba(124, 58, 237, 0.45);
+    background: rgba(124, 58, 237, 0.07);
+}
+
 .major-summary .ms-group.is-unmet,
 .major-summary .ms-group.is-over {
     border-color: rgba(220, 38, 38, 0.40);
@@ -1721,6 +1767,16 @@ html, body {
     font-weight: 700;
 }
 
+.major-summary .ms-group-earned {
+    color: #15803D;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.dark-theme .major-summary .ms-group-earned {
+    color: #4ADE80;
+}
+
 .major-summary .ms-group-unit {
     color: var(--text-secondary);
     font-size: 0.85rem;
@@ -1754,15 +1810,21 @@ html, body {
     border-radius: 999px;
     background: var(--bg-surface);
     overflow: hidden;
+    position: relative;
 }
 
 .major-summary .ms-group-fill {
     display: block;
+    position: absolute;
+    inset: 0 auto 0 0;
     height: 100%;
     border-radius: 999px;
     background: #16A34A;
     transition: width 0.2s ease;
 }
+
+.major-summary .ms-group-fill.is-projected { background: #7C3AED; opacity: 0.55; }
+.major-summary .ms-group-fill.is-earned { background: #16A34A; opacity: 1; }
 
 .major-summary .ms-group.is-unmet .ms-group-fill {
     background: #F59E0B;
@@ -1771,6 +1833,9 @@ html, body {
 .major-summary .ms-group.is-over .ms-group-fill {
     background: #DC2626;
 }
+
+.major-summary .ms-group .ms-group-fill.is-projected { background: #7C3AED; }
+.major-summary .ms-group .ms-group-fill.is-earned { background: #16A34A; }
 
 
 /* === UTILITIES === */
@@ -1810,8 +1875,7 @@ html, body {
         font-size: 0.65rem;
     }
 
-    .graduation_modal,
-    .summary_modal {
+    .graduation_modal {
         width: 90vw;
         padding: 8px;
     }
@@ -1821,6 +1885,8 @@ html, body {
     }
 
     .summary_modal {
+        width: min(440px, 90vw);
+        padding: 8px;
         font-size: 1rem;
     }
 }
@@ -1844,8 +1910,7 @@ html, body {
         font-size: 0.40rem;
     }
 
-    .graduation_modal,
-    .summary_modal {
+    .graduation_modal {
         width: 90vw;
         padding: 5px;
     }
@@ -1855,6 +1920,8 @@ html, body {
     }
 
     .summary_modal {
+        width: min(440px, 90vw);
+        padding: 5px;
         font-size: 0.8rem;
     }
 }
@@ -2443,6 +2510,38 @@ html, body {
     border-left: 4px solid rgba(245, 158, 11, 0.75);
     background: color-mix(in srgb, rgba(245, 158, 11, 0.14) 35%, var(--bg-card));
 }
+
+.major-summary .ms-group.is-projected .ms-group-badge {
+    color: #7C3AED;
+    border-color: rgba(124, 58, 237, 0.55);
+    background: rgba(124, 58, 237, 0.12);
+}
+
+.dark-theme .major-summary .ms-group.is-projected .ms-group-badge {
+    color: #C4B5FD;
+    border-color: rgba(196, 181, 253, 0.65);
+}
+
+.ms-state-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 7px;
+    margin-right: 5px;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.ms-state-chip.is-earned { color: #15803D; background: rgba(22, 163, 74, 0.10); }
+.ms-state-chip.is-current { color: #2563EB; background: rgba(37, 99, 235, 0.10); }
+.ms-state-chip.is-future { color: #7C3AED; background: rgba(124, 58, 237, 0.10); }
+.ms-state-chip.is-unverified { color: #B45309; background: rgba(180, 83, 9, 0.10); }
+.dark-theme .ms-state-chip.is-earned { color: #4ADE80; }
+.dark-theme .ms-state-chip.is-current { color: #60A5FA; }
+.dark-theme .ms-state-chip.is-future { color: #C4B5FD; }
+.dark-theme .ms-state-chip.is-unverified { color: #FBBF24; }
 
 .scheduler-picker-option.is-time-unknown {
     border-left: 4px solid var(--text-secondary);
@@ -4045,10 +4144,62 @@ html, body {
 /* Rows within the summary modal */
 .summary_modal_child {
     display: flex;
-    align-items: center;
-    padding: 4px 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 5px;
+    padding: 7px 0;
     border-bottom: 1px solid var(--border);
 }
+
+.summary_metric_legacy {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.summary_metric_head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 0.94rem;
+}
+
+.summary_metric_equation {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.summary_part.is-earned { color: var(--text-primary); }
+.summary_part.is-current { color: #2563EB; }
+.summary_part.is-future { color: #7C3AED; }
+.summary_part.is-unverified { color: #B45309; }
+.dark-theme .summary_part.is-current { color: #60A5FA; }
+.dark-theme .summary_part.is-future { color: #C4B5FD; }
+.dark-theme .summary_part.is-unverified { color: #FBBF24; }
+
+.summary_segment_track {
+    display: flex;
+    width: 100%;
+    height: 7px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--bg-surface);
+}
+
+.summary_segment { display: block; height: 100%; }
+.summary_segment.is-earned { background: #16A34A; }
+.summary_segment.is-current { background: #2563EB; }
+.summary_segment.is-future { background: #7C3AED; }
+.summary_segment.is-unverified { background: #D97706; }
 
 .summary_modal_child:last-child {
     border-bottom: none;

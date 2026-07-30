@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { test, expect } = require('../fixtures');
 const { seedPlan } = require('../helpers/plan');
-const { seedGradPlan } = require('../helpers/passing-plan');
+const { seedGradPlan, CS_PASSING_PLAN } = require('../helpers/passing-plan');
 
 // displaySummary() — the progress view behind the "Summary" button, and the
 // screen students actually read to see where they stand. ~900 lines of
@@ -33,15 +33,37 @@ const openSummary = async (page) => {
   return overlay;
 };
 
+const livePastCurrentFuture = async (page) => {
+  await page.goto('/');
+  return page.evaluate(() => {
+    const current = String(window.currentTermCode || '');
+    const year = Number(current.slice(0, 4));
+    const suffix = current.slice(4);
+    const pastCode = suffix === '03' ? `${year}02` : (suffix === '02' ? `${year}01` : `${year - 1}03`);
+    const futureCode = suffix === '01' ? `${year}02` : (suffix === '02' ? `${year}03` : `${year + 1}01`);
+    return {
+      past: window.termCodeToName(pastCode),
+      current: window.currentTermName,
+      future: window.termCodeToName(futureCode),
+    };
+  });
+};
+
 // The card is 10 rows of "Label: value / limit". Parse them back out so the
 // test reads what the student reads, not an internal.
 const readCard = (page) => page.evaluate(() => {
   const card = document.querySelector('.summary_modal');
   if (!card) return null;
   const rows = {};
-  card.querySelectorAll('.summary_modal_child p').forEach((p) => {
-    const m = /^(.+?):\s*([\d.]+)\s*\/\s*([\d.]+)$/.exec((p.textContent || '').trim());
-    if (m) rows[m[1].trim()] = { value: Number(m[2]), limit: Number(m[3]) };
+  card.querySelectorAll('.summary_metric').forEach((metric) => {
+    const p = metric.querySelector('p');
+    const m = p ? /^(.+?):\s*([\d.]+)\s*\/\s*([\d.]+)$/.exec((p.textContent || '').trim()) : null;
+    if (metric.dataset.metric === 'gpa' && m) {
+      rows[m[1].trim()] = { value: Number(m[2]), limit: Number(m[3]) };
+      return;
+    }
+    const label = (metric.querySelector('.summary_metric_head span') || {}).textContent || '';
+    if (label) rows[label.trim()] = { value: Number(metric.dataset.projected), limit: Number(metric.dataset.limit) };
   });
   return { title: (card.querySelector('.summary_modal_title') || {}).textContent || '', rows };
 });
@@ -221,15 +243,181 @@ test.describe('summary panel', () => {
     const limits = await page.evaluate(() => {
       const out = [];
       document.querySelectorAll('.summary_modal').forEach((card) => {
-        const row = [...card.querySelectorAll('.summary_modal_child p')]
-          .find((p) => (p.textContent || '').startsWith('Required:'));
-        const m = row ? /\/\s*([\d.]+)/.exec(row.textContent) : null;
-        out.push(m ? Number(m[1]) : null);
+        const row = card.querySelector('.summary_metric[data-metric="required"]');
+        out.push(row ? Number(row.dataset.limit) : null);
       });
       return out;
     });
     // Each card must use ITS OWN 202401 requirements — CS 29 vs ME 34. Sharing
     // one limit across both is the obvious way for this to break.
     expect(limits.sort((a, b) => a - b), 'CS and ME required limits').toEqual([REQS.CS.required, REQS.ME.required].sort((a, b) => a - b));
+  });
+
+  test('a wrapped double-major summary remains reachable on a short viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 900, height: 1000 });
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: TERM_NAME,
+      doubleMajor: 'ME',
+      entryTermDM: TERM_NAME,
+      curriculum: [['CS201', 'ME201']],
+      grades: [['A', 'A']],
+      dates: [TERM_NAME],
+    });
+    const overlay = await openSummary(page);
+    const cards = overlay.locator('.summary_modal');
+    await expect(cards).toHaveCount(2);
+    expect(await overlay.evaluate((el) => getComputedStyle(el).overflowY)).toBe('auto');
+
+    for (const card of [cards.first(), cards.last()]) {
+      await card.scrollIntoViewIfNeeded();
+      const box = await card.boundingBox();
+      expect(box, 'the summary card should have a rendered box').not.toBeNull();
+      expect(box.y, 'the card top should be reachable').toBeGreaterThanOrEqual(0);
+      expect(box.y + box.height, 'the card bottom should be reachable').toBeLessThanOrEqual(1001);
+    }
+  });
+
+  test('credits split into earned, current, future, and needs-grade states', async ({ page }) => {
+    const terms = await livePastCurrentFuture(page);
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: TERM_NAME,
+      curriculum: [
+        ['MATH101', 'IF100'],
+        ['MATH102', 'NS101'],
+        ['NS102'],
+      ],
+      grades: [
+        ['A', ''],
+        ['A', ''],
+        ['A'],
+      ],
+      dates: [terms.past, terms.current, terms.future],
+    });
+
+    const expected = await page.evaluate(() => {
+      const p = window.curriculum.getGraduationProgress('main');
+      return {
+        breakdown: p.breakdown,
+        states: p.courseStates.map((x) => ({ code: x.course.code, state: x.state })),
+      };
+    });
+    expect(expected.states).toEqual(expect.arrayContaining([
+      { code: 'MATH101', state: 'earned' },
+      { code: 'MATH102', state: 'earned' },
+      { code: 'NS101', state: 'current' },
+      { code: 'NS102', state: 'future' },
+      { code: 'IF100', state: 'unverified' },
+    ]));
+    for (const [metric, split] of Object.entries(expected.breakdown)) {
+      for (const state of ['earned', 'current', 'future', 'unverified']) {
+        expect(split[state], `${metric}.${state} must never be negative`).toBeGreaterThanOrEqual(0);
+      }
+      expect(split.earned + split.current + split.future + split.unverified,
+        `${metric} segments should add up to projected`).toBeCloseTo(split.projected, 8);
+    }
+
+    const overlay = await openSummary(page);
+    const row = overlay.locator('.summary_metric[data-metric="total"]').first();
+    await expect(row).toHaveAttribute('data-earned', String(expected.breakdown.total.earned));
+    await expect(row).toHaveAttribute('data-current', String(expected.breakdown.total.current));
+    await expect(row).toHaveAttribute('data-future', String(expected.breakdown.total.future));
+    await expect(row).toHaveAttribute('data-unverified', String(expected.breakdown.total.unverified));
+    await expect(row.locator('.summary_metric_legacy')).toHaveAttribute('aria-hidden', 'true');
+    await expect(row.locator('.summary_metric_equation')).toContainText('earned');
+    await expect(row.locator('.summary_metric_equation')).toContainText('current');
+    await expect(row.locator('.summary_metric_equation')).toContainText('future');
+    await expect(row.locator('.summary_metric_equation')).toContainText('needs grade');
+
+    await overlay.locator('.summary_detail_btn').first().click();
+    const chips = overlay.locator('.major-summary .ms-state-chip');
+    const chipTexts = await chips.allTextContents();
+    expect(chipTexts).toEqual(expect.arrayContaining(['Earned', 'Current', 'Future', 'Needs grade']));
+  });
+
+  test('earned summary segments agree with an independently complete earned audit', async ({ page }) => {
+    const terms = await livePastCurrentFuture(page);
+    const earnedCourses = CS_PASSING_PLAN.filter((code) => code !== 'BIO310');
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: TERM_NAME,
+      curriculum: [earnedCourses, ['BIO310'], ['MATH212']],
+      grades: [earnedCourses.map(() => 'A'), [''], ['A']],
+      dates: [terms.past, terms.current, terms.future],
+    });
+
+    const audit = await page.evaluate(() => {
+      const p = window.curriculum.getGraduationProgress('main');
+      const exact = p.layers.earned.totals;
+      const rows = {};
+      for (const key of ['total', 'ects', 'university', 'required', 'core', 'area', 'free', 'science', 'engineering']) {
+        rows[key] = { displayedEarned: p.breakdown[key].earned, exactEarned: exact[key] };
+      }
+      return { earnedFlag: p.earnedFlag, status: p.status, rows };
+    });
+    expect(audit.earnedFlag).toBe(0);
+    expect(audit.status).toBe('complete');
+    for (const [metric, values] of Object.entries(audit.rows)) {
+      expect(values.displayedEarned, `${metric} should show the earned audit allocation`)
+        .toBeCloseTo(values.exactEarned, 8);
+    }
+
+    const overlay = await openSummary(page);
+    for (const [metric, values] of Object.entries(audit.rows)) {
+      await expect(overlay.locator(`.summary_metric[data-metric="${metric}"]`).first())
+        .toHaveAttribute('data-earned', String(values.exactEarned));
+    }
+    await overlay.locator('.summary_detail_btn').first().click();
+    const earnedAlternative = overlay.locator('.major-summary .ms-course').filter({ hasText: 'MATH201' }).first();
+    await expect(earnedAlternative).not.toHaveClass(/is-missing/);
+    await expect(earnedAlternative).toContainText('Earned');
+  });
+
+  test('an explicit future F is unsuccessful in overview and detail', async ({ page }) => {
+    const terms = await livePastCurrentFuture(page);
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: TERM_NAME,
+      curriculum: [['MATH101'], ['MATH102']],
+      grades: [['A'], ['F']],
+      dates: [terms.past, terms.future],
+    });
+    const state = await page.evaluate(() => {
+      const p = window.curriculum.getGraduationProgress('main');
+      const failed = p.courseStates.find((row) => row.course.code === 'MATH102');
+      return { state: failed.state, total: p.breakdown.total.projected,
+        gpa: p.gpa.value, gpaCredits: p.gpa.credits,
+        normalEffective: failed.course.effective_type };
+    });
+    expect(state).toEqual({ state: 'unsuccessful', total: 3, gpa: 4, gpaCredits: 3, normalEffective: 'none' });
+
+    const overlay = await openSummary(page);
+    await expect(overlay.locator('.summary_metric[data-metric="total"]').first())
+      .toHaveAttribute('data-projected', '3');
+    await overlay.locator('.summary_detail_btn').first().click();
+    await expect(overlay.locator('.major-summary .ms-course').filter({ hasText: 'MATH102' }).first())
+      .toHaveClass(/is-missing/);
+  });
+
+  test('a future course that exceeds a cap is shown as over-limit', async ({ page }) => {
+    const terms = await livePastCurrentFuture(page);
+    await seedPlan(page, {
+      major: 'ECON',
+      entryTerm: TERM_NAME,
+      curriculum: [['FRE110', 'FRE120'], ['GER110']],
+      grades: [['A', 'A'], ['A']],
+      dates: [terms.past, terms.future],
+    });
+
+    const overlay = await openSummary(page);
+    await overlay.locator('.summary_detail_btn').first().click();
+    const group = overlay.locator('.ms-group').filter({ hasText: 'beginning/basic language cap' });
+    await expect(group).toHaveCount(1);
+    await expect(group).toHaveClass(/is-over/);
+    await expect(group.locator('.ms-group-nums')).toHaveText('3/2');
+    await expect(group.locator('.ms-group-earned')).toHaveText('2 earned');
+    await expect(group.locator('.ms-group-badge')).toHaveText('Over limit');
+    await expect(overlay.locator('.ms-groups-section .ms-header .ms-req')).toContainText('projected');
   });
 });

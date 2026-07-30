@@ -19,6 +19,10 @@ function s_semester(id, course_data)
     // `termIndex` is set when the semester is created and whenever the user edits
     // the term via the UI.
     this.termIndex = null;
+    // Stable identity used by progress/graduation audits. Unlike termIndex this
+    // remains meaningful when the generated `terms` window moves over time.
+    this.termCode = '';
+    this.termName = '';
 
     this.totalGPA = 0.0;
     this.totalGPACredits = 0.0;

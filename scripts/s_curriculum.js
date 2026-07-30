@@ -10,6 +10,16 @@ const REQUIREMENTS_UNAVAILABLE_FLAG = 99;
 // or influence allocation. W/NA are normally removed by transcript import, but
 // keeping them here also makes plan imports fail closed.
 const DEGREE_INELIGIBLE_GRADES = new Set(['F', 'U', 'NA', 'W']);
+const FINAL_SUCCESS_GRADES = new Set([
+    'A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'S', 'T',
+]);
+const COURSE_PROGRESS_STATES = Object.freeze({
+    EARNED: 'earned',
+    CURRENT: 'current',
+    FUTURE: 'future',
+    UNVERIFIED: 'unverified',
+    UNSUCCESSFUL: 'unsuccessful',
+});
 
 function normalizeCourseGrade(grade) {
     const normalized = String(grade || '').trim().toUpperCase();
@@ -34,6 +44,86 @@ function isDegreeEligibleCourse(course) {
     return !!course && !DEGREE_INELIGIBLE_GRADES.has(gradeForCourse(course));
 }
 
+function normalizeProgressTermCode(term) {
+    const raw = String(term || '').trim();
+    if (/^\d{6}$/.test(raw)) return raw;
+    try {
+        const fn = (typeof termNameToCode === 'function') ? termNameToCode
+            : ((typeof window !== 'undefined' && typeof window.termNameToCode === 'function')
+                ? window.termNameToCode : null);
+        const code = fn ? String(fn(raw) || '') : '';
+        return /^\d{6}$/.test(code) ? code : '';
+    } catch (_) {
+        return '';
+    }
+}
+
+function currentProgressTermCode(explicitCode) {
+    const explicit = normalizeProgressTermCode(explicitCode);
+    if (explicit) return explicit;
+    try {
+        if (typeof window !== 'undefined') {
+            if (typeof window.getCurrentTermNameFromDate === 'function') {
+                const live = normalizeProgressTermCode(window.getCurrentTermNameFromDate(new Date()));
+                if (live) return live;
+            }
+            const code = normalizeProgressTermCode(window.currentTermCode);
+            if (code) return code;
+            return normalizeProgressTermCode(window.currentTermName);
+        }
+    } catch (_) {}
+    return '';
+}
+
+function semesterProgressTermCode(semester) {
+    if (!semester) return '';
+    const direct = normalizeProgressTermCode(
+        semester.termCode || semester.term || semester.termName || semester.date,
+    );
+    if (direct) return direct;
+    try {
+        const termList = (typeof terms !== 'undefined' && Array.isArray(terms)) ? terms
+            : ((typeof window !== 'undefined' && Array.isArray(window.terms)) ? window.terms : []);
+        const idx = semester.termIndex;
+        if (idx !== null && idx !== undefined && idx >= 0 && idx < termList.length) {
+            const fromIndex = normalizeProgressTermCode(termList[idx]);
+            if (fromIndex) return fromIndex;
+        }
+    } catch (_) {}
+    // Legacy plans did not persist a term on the semester model. The rendered
+    // semester heading is the last-resort bridge until such a plan is saved.
+    try {
+        const elem = document.getElementById(semester.id);
+        const container = elem && elem.closest ? elem.closest('.container_semester') : null;
+        const label = container ? container.querySelector('.date p') : null;
+        return normalizeProgressTermCode(label ? label.textContent : '');
+    } catch (_) {
+        return '';
+    }
+}
+
+// A real final grade proves completion even while the course still sits in the
+// current term. Successful/pending future-term grades remain projections: they
+// are commonly used as expected grades while planning. An explicit F/U/NA/W is
+// never projected as successful. Blank/P/I work as projected credit but do not
+// become earned merely because their term is in the past.
+function courseProgressState(course, semester, explicitCurrentTermCode) {
+    if (!course) return COURSE_PROGRESS_STATES.UNVERIFIED;
+    const grade = gradeForCourse(course);
+    const courseTerm = semesterProgressTermCode(semester);
+    const currentTerm = currentProgressTermCode(explicitCurrentTermCode);
+    if (DEGREE_INELIGIBLE_GRADES.has(grade)) return COURSE_PROGRESS_STATES.UNSUCCESSFUL;
+    if (courseTerm && currentTerm && courseTerm > currentTerm) {
+        return COURSE_PROGRESS_STATES.FUTURE;
+    }
+    if (!courseTerm || !currentTerm) return COURSE_PROGRESS_STATES.UNVERIFIED;
+    if (FINAL_SUCCESS_GRADES.has(grade)) return COURSE_PROGRESS_STATES.EARNED;
+    if (courseTerm && currentTerm && courseTerm === currentTerm) {
+        return COURSE_PROGRESS_STATES.CURRENT;
+    }
+    return COURSE_PROGRESS_STATES.UNVERIFIED;
+}
+
 function normalizeCourseCode(code) {
     return String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
@@ -44,22 +134,23 @@ function canonicalCourseCode(code) {
     return normalized === 'CS210' || normalized === 'DSA210' ? 'DSA210' : normalized;
 }
 
-function hasDegreeEligibleCourse(semesters, code) {
+function hasDegreeEligibleCourse(semesters, code, isEligible) {
     const target = canonicalCourseCode(code);
+    const eligible = isEligible || isDegreeEligibleCourse;
     for (let i = 0; i < semesters.length; i++) {
         const courses = semesters[i].courses || [];
         for (let j = 0; j < courses.length; j++) {
             const course = courses[j];
-            if (course && isDegreeEligibleCourse(course)
+            if (course && eligible(course, semesters[i])
                 && canonicalCourseCode(course.code) === target) return true;
         }
     }
     return false;
 }
 
-function hasAnyDegreeEligibleCourse(semesters, codes) {
+function hasAnyDegreeEligibleCourse(semesters, codes, isEligible) {
     for (let i = 0; i < codes.length; i++) {
-        if (hasDegreeEligibleCourse(semesters, codes[i])) return true;
+        if (hasDegreeEligibleCourse(semesters, codes[i], isEligible)) return true;
     }
     return false;
 }
@@ -68,6 +159,8 @@ function hasAnyDegreeEligibleCourse(semesters, codes) {
 if (typeof window !== 'undefined') {
     window.s_curriculum = s_curriculum;
     window.REQUIREMENTS_UNAVAILABLE_FLAG = REQUIREMENTS_UNAVAILABLE_FLAG;
+    window.COURSE_PROGRESS_STATES = COURSE_PROGRESS_STATES;
+    window.courseProgressState = courseProgressState;
 }
 
 // SUIS rule (VACD): "Only one of the following course pairs will be counted
@@ -195,13 +288,14 @@ function selectCorePools(sortedSems, creditGroups, isExcluded, isEligible) {
 // hand-copying this rule per major is how the last several bugs survived.
 // `effField` selects the pass: 'effective_type' or 'effective_type_dm'.
 const BASIC_LANGUAGE_LIMIT = 2;
-function countBasicLanguageInFree(semesters, effField) {
+function countBasicLanguageInFree(semesters, effField, isEligible) {
+    const eligible = isEligible || isDegreeEligibleCourse;
     let count = 0;
     for (let i = 0; i < semesters.length; i++) {
         const courses = semesters[i].courses || [];
         for (let j = 0; j < courses.length; j++) {
             const course = courses[j];
-            if (!course || !isDegreeEligibleCourse(course)) continue;
+            if (!course || !eligible(course, semesters[i])) continue;
             if (String(course[effField] || '').toLowerCase() !== 'free') continue;
             if (BASIC_LANGUAGE_COURSES.has(course.code)) count++;
         }
@@ -371,7 +465,7 @@ function allocateCascade(staticType, credit, counters, reqs, pinCore) {
 // the chronological order the pair/pool rules depend on; `allSems` is used only
 // for the order-independent math-exclusion sweep. `hasCourse` takes a code.
 function resolveAlternativeRules(major, entryTerm, sortedSems, allSems, getInfoFn, courseData,
-    hasCourse, groups, isEligible) {
+    hasCourse, groups, isEligible, priorityOf) {
     const excluded = new Set();
     const typeOverride = new Map();
     const forceCore = new Set();
@@ -384,9 +478,34 @@ function resolveAlternativeRules(major, entryTerm, sortedSems, allSems, getInfoF
             return String((rec && rec['EL_Type']) || '').toLowerCase();
         };
         const shouldSkipMath = mathAlternativeSkipPredicate(entryTerm, hasCourse, elTypeOf);
+        const entry = parseInt(entryTerm || '0', 10);
+        let keepRequiredAlternative = false;
+        if (typeof priorityOf === 'function' && !isNaN(entry) && entry < 202501 && hasCourse('MATH212')) {
+            const bestRank = (codes) => {
+                let best = Infinity;
+                allSems.forEach((sem) => {
+                    (sem.courses || []).forEach((course) => {
+                        if (!course || (isEligible && !isEligible(course, sem))) return;
+                        if (!codes.includes(normalizeCourseCode(course.code))) return;
+                        const rank = Number(priorityOf(course, sem));
+                        if (isFinite(rank)) best = Math.min(best, rank);
+                    });
+                });
+                return best;
+            };
+            const requiredAlternatives = ['MATH201', 'MATH202']
+                .filter((code) => elTypeOf(code) === 'required' && hasCourse(code));
+            keepRequiredAlternative = requiredAlternatives.length > 0
+                && bestRank(requiredAlternatives) < bestRank(['MATH212']);
+        }
         allSems.forEach((sem) => {
             (sem.courses || []).forEach((c) => {
-                if (c && (!isEligible || isEligible(c)) && shouldSkipMath(c.code)) excluded.add(c);
+                if (!c || (isEligible && !isEligible(c, sem))) return;
+                if (keepRequiredAlternative) {
+                    if (normalizeCourseCode(c.code) === 'MATH212') excluded.add(c);
+                } else if (shouldSkipMath(c.code)) {
+                    excluded.add(c);
+                }
             });
         });
     }
@@ -457,6 +576,22 @@ const DM_FIELDS = {
     },
 };
 
+function progressAllocationFields(view, layer) {
+    const key = '_progress_' + String(view || 'main') + '_' + String(layer || 'projected');
+    return {
+        category: key + '_category',
+        effective: key + '_effective',
+        total: {
+            core: key + '_core', area: key + '_area', free: key + '_free',
+            required: key + '_required', university: key + '_university',
+        },
+        metric: {
+            total: key + '_total', science: key + '_science',
+            engineering: key + '_engineering', ects: key + '_ects',
+        },
+    };
+}
+
 const creditOfCourse = (course) => ((typeof parseCreditValue === 'function')
     ? parseCreditValue(course.SU_credit || '0')
     : (parseFloat(course.SU_credit || '0') || 0));
@@ -472,14 +607,15 @@ const creditOfCourse = (course) => ((typeof parseCreditValue === 'function')
 // This is the ONE tally the graduation checks share. It was hand-written 22 times
 // across the major blocks and the copies had drifted (only CS/EE skipped excluded
 // courses); every block now calls this via countFacultyCourses().
-function tallyFacultyCourses(semesters, effField) {
+function tallyFacultyCourses(semesters, effField, isEligible) {
     const eff = effField || MAIN_FIELDS.effective;
+    const eligible = isEligible || isDegreeEligibleCourse;
     const tally = { total: 0, fens: 0, fass: 0, sbs: 0, math: 0 };
     for (let i = 0; i < semesters.length; i++) {
         const courses = semesters[i].courses || [];
         for (let a = 0; a < courses.length; a++) {
             const course = courses[a];
-            if (!course || !isDegreeEligibleCourse(course) || course[eff] === 'none') continue;
+            if (!course || !eligible(course, semesters[i]) || course[eff] === 'none') continue;
             const pool = course.Faculty_Course;
             if (!pool || pool === 'No') continue;
             tally.total++;
@@ -502,14 +638,15 @@ function tallyFacultyCourses(semesters, effField) {
 // into all four branches; ECON's copy alone tested a "PSYCH" prefix, which no SU
 // course code carries (psychology is "PSY"), so ECON silently never credited a
 // psychology area — unified here to "PSY".
-function tallyFacultyAreas(semesters, effField) {
+function tallyFacultyAreas(semesters, effField, isEligible) {
     const eff = effField || MAIN_FIELDS.effective;
+    const eligible = isEligible || isDegreeEligibleCourse;
     const areas = new Set();
     for (let i = 0; i < semesters.length; i++) {
         const courses = semesters[i].courses || [];
         for (let a = 0; a < courses.length; a++) {
             const course = courses[a];
-            if (!course || !isDegreeEligibleCourse(course) || course[eff] === 'none') continue;
+            if (!course || !eligible(course, semesters[i]) || course[eff] === 'none') continue;
             const pool = course.Faculty_Course;
             if (!pool || pool === 'No') continue;
             const code = String(course.code || '');
@@ -536,11 +673,12 @@ function tallyFacultyAreas(semesters, effField) {
 // pass's effective-type / category fields. Every rule also carries a `suis`
 // string citing the SUIS section it comes from.
 
-function forEachCourse(semesters, fn) {
+function forEachCourse(semesters, fn, isEligible) {
+    const eligible = isEligible || isDegreeEligibleCourse;
     for (let i = 0; i < semesters.length; i++) {
         const courses = semesters[i].courses || [];
         for (let a = 0; a < courses.length; a++) {
-            if (courses[a] && isDegreeEligibleCourse(courses[a])) fn(courses[a]);
+            if (courses[a] && eligible(courses[a], semesters[i])) fn(courses[a], semesters[i]);
         }
     }
 }
@@ -576,7 +714,7 @@ function sumPoolCredits(semesters, pool, opts) {
             if (k) { if (seenPairs.has(k)) return; seenPairs.add(k); }
         }
         sum += creditOfCourse(course);
-    });
+    }, o.isEligible);
     return sum;
 }
 
@@ -584,15 +722,15 @@ function sumPoolCredits(semesters, pool, opts) {
 // `ctx` = { curr, semesters, fields, entryTerm }.
 const RULE_EVALUATORS = {
     // A specific course is present.
-    hasCourse: (ctx, r) => hasDegreeEligibleCourse(ctx.semesters, r.code),
+    hasCourse: (ctx, r) => hasDegreeEligibleCourse(ctx.semesters, r.code, ctx.isEligible),
     // At least one of a list is present ("one of the following").
-    hasAny: (ctx, r) => hasAnyDegreeEligibleCourse(ctx.semesters, r.codes),
+    hasAny: (ctx, r) => hasAnyDegreeEligibleCourse(ctx.semesters, r.codes, ctx.isEligible),
     // A faculty-course pool count meets its minimum (see tallyFacultyCourses).
-    facultyCount: (ctx, r) => tallyFacultyCourses(ctx.semesters, ctx.fields.effective)[r.pool] >= r.min,
+    facultyCount: (ctx, r) => tallyFacultyCourses(ctx.semesters, ctx.fields.effective, ctx.isEligible)[r.pool] >= r.min,
     // Faculty courses span at least `min` distinct areas (flag 18).
-    facultyAreas: (ctx, r) => tallyFacultyAreas(ctx.semesters, ctx.fields.effective).size >= r.min,
+    facultyAreas: (ctx, r) => tallyFacultyAreas(ctx.semesters, ctx.fields.effective, ctx.isEligible).size >= r.min,
     // At most `max` basic/beginning language courses among the free electives.
-    languageCap: (ctx, r) => countBasicLanguageInFree(ctx.semesters, ctx.fields.effective) <= r.max,
+    languageCap: (ctx, r) => countBasicLanguageInFree(ctx.semesters, ctx.fields.effective, ctx.isEligible) <= r.max,
     // Credits from courses with a code prefix in a STATIC catalog category
     // (EE 400-level core, flag 23).
     levelCreditSum: (ctx, r) => {
@@ -602,7 +740,7 @@ const RULE_EVALUATORS = {
             if (String(course.code || '').startsWith(r.prefix) && course[catField] === r.category) {
                 sum += creditOfCourse(course);
             }
-        });
+        }, ctx.isEligible);
         return sum >= r.min;
     },
     // At least one course from an explicit list, or matching a prefix+static
@@ -615,14 +753,14 @@ const RULE_EVALUATORS = {
             const code = String(course.code || '');
             if (r.codes && r.codes.includes(course.code)) found = true;
             else if (r.altPrefix && code.startsWith(r.altPrefix) && course[catField] === r.altCategory) found = true;
-        });
+        }, ctx.isEligible);
         return found;
     },
     // Credits from a named pool meet a minimum, with optional effective-core
     // filter and mutually-exclusive pairs (VACD/PSIR core-elective pools).
     poolCreditSum: (ctx, r) => sumPoolCredits(ctx.semesters, r.pool, {
         effField: ctx.fields.effective, catField: ctx.fields.category,
-        requireCore: r.requireCore, pairs: r.pairs,
+        requireCore: r.requireCore, pairs: r.pairs, isEligible: ctx.isEligible,
     }) >= r.min,
     // At least `min` area-effective courses whose code is an advanced PSY course
     // (flag 39).
@@ -631,7 +769,7 @@ const RULE_EVALUATORS = {
         forEachCourse(ctx.semesters, (course) => {
             if (String(course[ctx.fields.effective] || '').toLowerCase() === 'area'
                 && isPsyAdvancedCode(course.code)) n++;
-        });
+        }, ctx.isEligible);
         return n >= r.min;
     },
     // Courses in a given effective category span at least `min` of the listed
@@ -644,7 +782,7 @@ const RULE_EVALUATORS = {
             for (let i = 0; i < r.prefixes.length; i++) {
                 if (code.startsWith(r.prefixes[i])) { seen.add(r.prefixes[i]); break; }
             }
-        });
+        }, ctx.isEligible);
         return seen.size >= r.min;
     },
     // Credits of free-effective courses OFFERED BY one of the given faculties
@@ -656,7 +794,7 @@ const RULE_EVALUATORS = {
                 && r.faculties.includes(course.Faculty)) {
                 sum += creditOfCourse(course);
             }
-        });
+        }, ctx.isEligible);
         return sum >= r.min;
     },
     // Count of STATIC-core courses OFFERED BY a faculty meets a minimum
@@ -666,7 +804,7 @@ const RULE_EVALUATORS = {
         const catField = ctx.fields.category;
         forEachCourse(ctx.semesters, (course) => {
             if (course[catField] === 'Core' && course.Faculty === r.faculty) n++;
-        });
+        }, ctx.isEligible);
         return n >= r.min;
     },
     // Applies only from a given entry term onward; otherwise auto-satisfied
@@ -674,7 +812,7 @@ const RULE_EVALUATORS = {
     entryGatedHasAny: (ctx, r) => {
         const entry = parseInt(ctx.entryTerm || '0', 10);
         if (isNaN(entry) || entry < r.minTerm) return true;
-        return hasAnyDegreeEligibleCourse(ctx.semesters, r.codes);
+        return hasAnyDegreeEligibleCourse(ctx.semesters, r.codes, ctx.isEligible);
     },
 };
 
@@ -825,7 +963,7 @@ const FACULTY_POOL_LABELS = {
 // Progress rows for the faculty-course ticker, mirroring facultyRules' order.
 function facultyProgress(ctx, facultyReq) {
     if (!facultyReq) return [];
-    const tally = tallyFacultyCourses(ctx.semesters, ctx.fields.effective);
+    const tally = tallyFacultyCourses(ctx.semesters, ctx.fields.effective, ctx.isEligible);
     const rows = [];
     for (let i = 0; i < FACULTY_POOL_ORDER.length; i++) {
         const pool = FACULTY_POOL_ORDER[i];
@@ -836,7 +974,7 @@ function facultyProgress(ctx, facultyReq) {
             suis: 'Faculty Courses', current, target: min, unit: 'course', ok: current >= min });
     }
     if (facultyReq.areas != null) {
-        const current = tallyFacultyAreas(ctx.semesters, ctx.fields.effective).size;
+        const current = tallyFacultyAreas(ctx.semesters, ctx.fields.effective, ctx.isEligible).size;
         rows.push({ id: 'faculty_areas', label: 'Faculty-course areas', suis: 'Faculty Courses (areas)',
             current, target: facultyReq.areas, unit: 'area', ok: current >= facultyReq.areas });
     }
@@ -860,12 +998,13 @@ function groupProgressFor(ctx, groups, facultyReq) {
                 break;
             case 'credits': {
                 const current = sumPoolCredits(ctx.semesters, g.members, {
-                    effField: fields.effective, catField, requireCore: !!g.requireBase, pairs: g.exclusivePairs });
+                    effField: fields.effective, catField, requireCore: !!g.requireBase,
+                    pairs: g.exclusivePairs, isEligible: ctx.isEligible });
                 out.push({ ...base, current, target: g.min, unit: 'SU', ok: current >= g.min });
                 break;
             }
             case 'oneOf': {
-                const current = hasAnyDegreeEligibleCourse(ctx.semesters, g.members) ? 1 : 0;
+                const current = hasAnyDegreeEligibleCourse(ctx.semesters, g.members, ctx.isEligible) ? 1 : 0;
                 out.push({ ...base, current, target: 1, unit: 'course', ok: current >= 1 });
                 break;
             }
@@ -875,7 +1014,7 @@ function groupProgressFor(ctx, groups, facultyReq) {
                     out.push({ ...base, current: 1, target: 1, unit: 'course', ok: true,
                         note: 'Not required for your admit term' });
                 } else {
-                    const current = hasAnyDegreeEligibleCourse(ctx.semesters, g.members) ? 1 : 0;
+                    const current = hasAnyDegreeEligibleCourse(ctx.semesters, g.members, ctx.isEligible) ? 1 : 0;
                     out.push({ ...base, current, target: 1, unit: 'course', ok: current >= 1 });
                 }
                 break;
@@ -886,7 +1025,7 @@ function groupProgressFor(ctx, groups, facultyReq) {
                     if (String(course.code || '').startsWith(g.prefix) && course[catField] === g.category) {
                         sum += creditOfCourse(course);
                     }
-                });
+                }, ctx.isEligible);
                 out.push({ ...base, current: sum, target: g.min, unit: 'SU', ok: sum >= g.min });
                 break;
             }
@@ -897,7 +1036,7 @@ function groupProgressFor(ctx, groups, facultyReq) {
                     const code = String(course.code || '');
                     if (g.members && g.members.includes(course.code)) found = true;
                     else if (g.altPrefix && code.startsWith(g.altPrefix) && course[catField] === g.altCategory) found = true;
-                });
+                }, ctx.isEligible);
                 out.push({ ...base, current: found ? 1 : 0, target: 1, unit: 'course', ok: found });
                 break;
             }
@@ -909,7 +1048,7 @@ function groupProgressFor(ctx, groups, facultyReq) {
                     for (let k = 0; k < g.prefixes.length; k++) {
                         if (code.startsWith(g.prefixes[k])) { seen.add(g.prefixes[k]); break; }
                     }
-                });
+                }, ctx.isEligible);
                 out.push({ ...base, current: seen.size, target: g.min, unit: 'area', ok: seen.size >= g.min });
                 break;
             }
@@ -920,7 +1059,7 @@ function groupProgressFor(ctx, groups, facultyReq) {
                         && g.faculties.includes(course.Faculty)) {
                         sum += creditOfCourse(course);
                     }
-                });
+                }, ctx.isEligible);
                 out.push({ ...base, current: sum, target: g.min, unit: 'SU', ok: sum >= g.min });
                 break;
             }
@@ -928,7 +1067,7 @@ function groupProgressFor(ctx, groups, facultyReq) {
                 let n = 0;
                 forEachCourse(ctx.semesters, (course) => {
                     if (course[catField] === 'Core' && course.Faculty === g.faculty) n++;
-                });
+                }, ctx.isEligible);
                 out.push({ ...base, current: n, target: g.min, unit: 'course', ok: n >= g.min });
                 break;
             }
@@ -937,12 +1076,12 @@ function groupProgressFor(ctx, groups, facultyReq) {
                 forEachCourse(ctx.semesters, (course) => {
                     if (String(course[fields.effective] || '').toLowerCase() === 'area'
                         && isPsyAdvancedCode(course.code)) n++;
-                });
+                }, ctx.isEligible);
                 out.push({ ...base, current: n, target: g.min, unit: 'course', ok: n >= g.min });
                 break;
             }
             case 'languageCap': {
-                const current = countBasicLanguageInFree(ctx.semesters, fields.effective);
+                const current = countBasicLanguageInFree(ctx.semesters, fields.effective, ctx.isEligible);
                 out.push({ ...base, current, target: g.max, unit: 'course', isCap: true, ok: current <= g.max });
                 break;
             }
@@ -1246,6 +1385,415 @@ function s_curriculum()
             && !Array.isArray(record.facultyReq);
     };
 
+    const catalogRecordFor = (catalog, code) => {
+        const target = normalizeCourseCode(code);
+        const rows = Array.isArray(catalog) ? catalog : [];
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            if (normalizeCourseCode((row && row.Major || '') + (row && row.Code || '')) === target) {
+                return row;
+            }
+        }
+        return null;
+    };
+
+    const customRecordFor = (major, code) => {
+        try {
+            if (typeof localStorage === 'undefined') return null;
+            const key = 'customCourses_' + major;
+            const ps = (typeof window !== 'undefined') ? window.planStorage : null;
+            let stored = null;
+            try { stored = ps ? ps.getItem(key) : localStorage.getItem(key); } catch (_) {}
+            if (!stored) return null;
+            return catalogRecordFor(JSON.parse(stored), code);
+        } catch (_) {
+            return null;
+        }
+    };
+
+    const sortedProgressSemesters = () => this.semesters.slice().sort((a, b) => {
+        const codeA = semesterProgressTermCode(a);
+        const codeB = semesterProgressTermCode(b);
+        if (codeA && codeB && codeA !== codeB) return codeA.localeCompare(codeB);
+        if (codeA && !codeB) return -1;
+        if (!codeA && codeB) return 1;
+        const idxA = (a.termIndex !== null && a.termIndex !== undefined) ? a.termIndex : -1;
+        const idxB = (b.termIndex !== null && b.termIndex !== undefined) ? b.termIndex : -1;
+        return idxB - idxA;
+    });
+
+    const addProgressMetric = (sem, fields, key, value) => {
+        const n = parseFloat(value || '0');
+        sem[fields.metric[key]] += isNaN(n) ? 0 : n;
+    };
+
+    // Independent allocation pass used by the earned/projected audit. It
+    // intentionally writes only private progress fields; the planner's normal
+    // effective types and totals remain the forward-looking allocation.
+    const runProgressAllocation = (view, layer, isEligible, stateOf) => {
+        const isDM = view === 'dm';
+        const major = isDM ? this.doubleMajor : this.major;
+        const entryTerm = isDM ? this.entryTermDM : this.entryTerm;
+        const req = getReq(major, entryTerm);
+        const fields = progressAllocationFields(view, layer);
+        if (!major || !requirementRecordIsValid(major, req)) {
+            return { available: false, major, entryTerm, req, fields, totals: {}, records: new Map(), isEligible };
+        }
+
+        const catalog = isDM ? this.doubleMajorCourseData : this.primaryCourseData;
+        const lookup = (code, data) => catalogRecordFor(data || catalog, code)
+            || customRecordFor(major, code);
+        const chronological = sortedProgressSemesters();
+        // Keep projected allocation monotonic from the student's perspective:
+        // earned courses claim pools first, followed by current, future, and
+        // unverified courses. Within each state, retain chronological/course
+        // order. This prevents a planned course from visually displacing credit
+        // that has already been earned while preserving the normal cascade.
+        const stateOrder = [
+            COURSE_PROGRESS_STATES.EARNED,
+            COURSE_PROGRESS_STATES.CURRENT,
+            COURSE_PROGRESS_STATES.FUTURE,
+            COURSE_PROGRESS_STATES.UNVERIFIED,
+            COURSE_PROGRESS_STATES.UNSUCCESSFUL,
+        ];
+        const sorted = [];
+        for (let s = 0; s < stateOrder.length; s++) {
+            const wanted = stateOrder[s];
+            for (let i = 0; i < chronological.length; i++) {
+                const source = chronological[i];
+                const courses = (source.courses || []).filter((course) => {
+                    const state = typeof stateOf === 'function'
+                        ? stateOf(course, source) : courseProgressState(course, source);
+                    return state === wanted;
+                });
+                if (courses.length) sorted.push({ _progressSource: source, courses });
+            }
+        }
+        const semesterByCourse = new Map();
+        const records = new Map();
+
+        for (let i = 0; i < this.semesters.length; i++) {
+            const sem = this.semesters[i];
+            Object.values(fields.total).forEach((name) => { sem[name] = 0; });
+            Object.values(fields.metric).forEach((name) => { sem[name] = 0; });
+            const courses = sem.courses || [];
+            for (let j = 0; j < courses.length; j++) {
+                const course = courses[j];
+                if (!course) continue;
+                semesterByCourse.set(course, sem);
+                course[fields.effective] = 'none';
+                delete course[fields.category];
+
+                // Named-pool selection reads credit metadata before the main
+                // cascade. Seed it from this program's catalog first.
+                const info = lookup(course.code, catalog);
+                if (info) {
+                    course.SU_credit = (typeof parseCreditValue === 'function')
+                        ? parseCreditValue(info.SU_credit || '0')
+                        : (parseFloat(info.SU_credit || '0') || 0);
+                    course.Basic_Science = parseFloat(info.Basic_Science || '0') || 0;
+                    course.Engineering = parseFloat(info.Engineering || '0') || 0;
+                    course.ECTS = parseFloat(info.ECTS || '0') || 0;
+                    course.Faculty_Course = info.Faculty_Course || course.Faculty_Course || 'No';
+                    course.Faculty = info.Faculty || course.Faculty || '';
+                }
+            }
+        }
+
+        const eligible = (course, sem) => !!course
+            && isEligible(course, sem || semesterByCourse.get(course));
+        const hasEligible = (code) => hasDegreeEligibleCourse(this.semesters, code, eligible);
+        const reqs = { required: req.required || 0, core: req.core || 0, area: req.area || 0 };
+        const counters = { required: 0, core: 0, area: 0 };
+        const forceCSCore = major === 'IE' && hasEligible('CS201') && hasEligible('DSA201');
+        const alternatives = resolveAlternativeRules(
+            major, entryTerm, sorted, this.semesters, lookup, catalog,
+            hasEligible, req.groups, eligible,
+            (course, sem) => stateOrder.indexOf(
+                typeof stateOf === 'function'
+                    ? stateOf(course, sem || semesterByCourse.get(course))
+                    : courseProgressState(course, sem || semesterByCourse.get(course)),
+            ),
+        );
+
+        for (let i = 0; i < sorted.length; i++) {
+            const semView = sorted[i];
+            const sem = semView._progressSource || semView;
+            const courses = semView.courses || [];
+            for (let j = 0; j < courses.length; j++) {
+                const course = courses[j];
+                if (!eligible(course, sem) || alternatives.excluded.has(course)) continue;
+
+                let info = lookup(course.code, catalog);
+                if (!info && !isDM) {
+                    // A course known only to the double-major catalog contributes
+                    // inherent credit/ECTS to the shared degree total, but must
+                    // not inherit the double major's category in the main pass.
+                    const fallback = catalogRecordFor(this.doubleMajorCourseData, course.code);
+                    const credit = fallback
+                        ? ((typeof parseCreditValue === 'function')
+                            ? parseCreditValue(fallback.SU_credit || '0')
+                            : (parseFloat(fallback.SU_credit || '0') || 0))
+                        : creditOfCourse(course);
+                    const science = parseFloat((fallback && fallback.Basic_Science) || course.Basic_Science || '0') || 0;
+                    const engineering = parseFloat((fallback && fallback.Engineering) || course.Engineering || '0') || 0;
+                    const ects = parseFloat((fallback && fallback.ECTS) || course.ECTS || '0') || 0;
+                    course.SU_credit = credit;
+                    course.Basic_Science = science;
+                    course.Engineering = engineering;
+                    course.ECTS = ects;
+                    course.Faculty_Course = (fallback && fallback.Faculty_Course) || course.Faculty_Course || 'No';
+                    course.Faculty = (fallback && fallback.Faculty) || course.Faculty || '';
+                    addProgressMetric(sem, fields, 'total', credit);
+                    addProgressMetric(sem, fields, 'science', science);
+                    addProgressMetric(sem, fields, 'engineering', engineering);
+                    addProgressMetric(sem, fields, 'ects', ects);
+                    records.set(course, { effective: 'none', category: '', credit,
+                        science, engineering, ects, countsTotal: true });
+                    continue;
+                }
+                if (!info) continue;
+
+                let staticType = String(info.EL_Type || '').toLowerCase();
+                if (alternatives.typeOverride.has(course)) {
+                    staticType = alternatives.typeOverride.get(course);
+                }
+                if (staticType === 'unknown') continue;
+
+                const credit = (typeof parseCreditValue === 'function')
+                    ? parseCreditValue(info.SU_credit || '0')
+                    : (parseFloat(info.SU_credit || '0') || 0);
+                const science = parseFloat(info.Basic_Science || '0') || 0;
+                const engineering = parseFloat(info.Engineering || '0') || 0;
+                const ects = parseFloat(info.ECTS || '0') || 0;
+                course.SU_credit = credit;
+                course.Basic_Science = science;
+                course.Engineering = engineering;
+                course.ECTS = ects;
+                course.Faculty_Course = info.Faculty_Course || 'No';
+                course.Faculty = info.Faculty || '';
+                if (staticType) {
+                    course[fields.category] = staticType.charAt(0).toUpperCase() + staticType.slice(1);
+                }
+
+                const pinCore = alternatives.forceCore.has(course)
+                    || (forceCSCore && course.code === 'CS201');
+                const effective = allocateCascade(staticType, credit, counters, reqs, pinCore);
+                course[fields.effective] = effective || 'none';
+                const totalField = fields.total[effective];
+                if (totalField) sem[totalField] += credit;
+                // The DM's generic degree totals are shared with the main plan;
+                // its own pass owns only category allocation.
+                if (!isDM) {
+                    addProgressMetric(sem, fields, 'total', credit);
+                    addProgressMetric(sem, fields, 'science', science);
+                    addProgressMetric(sem, fields, 'engineering', engineering);
+                    addProgressMetric(sem, fields, 'ects', ects);
+                }
+                records.set(course, { effective: effective || 'none', category: staticType,
+                    credit, science, engineering, ects, countsTotal: !isDM });
+            }
+        }
+
+        if (major === 'MAN') {
+            applyManDiversity(sorted, this.semesters, fields, req.core || 0, req.area || 0);
+        }
+
+        const totals = {
+            area: 0, core: 0, free: 0, university: 0, required: 0,
+            total: 0, science: 0, engineering: 0, ects: 0,
+        };
+        for (let i = 0; i < this.semesters.length; i++) {
+            const sem = this.semesters[i];
+            Object.keys(fields.total).forEach((key) => { totals[key] += sem[fields.total[key]] || 0; });
+            Object.keys(fields.metric).forEach((key) => { totals[key] += sem[fields.metric[key]] || 0; });
+        }
+        records.forEach((record, course) => { record.effective = course[fields.effective] || 'none'; });
+        return { available: true, major, entryTerm, req, fields, totals, records, isEligible };
+    };
+
+    const actualProgressGpa = (explicitCurrentTermCode) => {
+        const fallbackPoints = {
+            A: 4.0, 'A-': 3.7, 'B+': 3.3, B: 3.0, 'B-': 2.7,
+            'C+': 2.3, C: 2.0, 'C-': 1.7, 'D+': 1.3, D: 1.0, F: 0.0,
+            S: 4.0,
+        };
+        let points = 0;
+        let credits = 0;
+        const currentTerm = currentProgressTermCode(explicitCurrentTermCode);
+        for (let i = 0; i < this.semesters.length; i++) {
+            const sem = this.semesters[i];
+            const courseTerm = semesterProgressTermCode(sem);
+            const courses = sem.courses || [];
+            for (let j = 0; j < courses.length; j++) {
+                const course = courses[j];
+                // An actual GPA requires a known current/past term. This also
+                // keeps an explicitly entered future F from lowering the real
+                // GPA merely because unsuccessful grades share one state.
+                if (!courseTerm || !currentTerm || courseTerm > currentTerm) continue;
+                const state = courseProgressState(course, sem, explicitCurrentTermCode);
+                if (state === COURSE_PROGRESS_STATES.CURRENT
+                    || state === COURSE_PROGRESS_STATES.FUTURE
+                    || state === COURSE_PROGRESS_STATES.UNVERIFIED) continue;
+                const grade = gradeForCourse(course);
+                let value;
+                try {
+                    value = (typeof letter_grades_global_dic !== 'undefined')
+                        ? letter_grades_global_dic[grade] : fallbackPoints[grade];
+                } catch (_) { value = fallbackPoints[grade]; }
+                if (value === undefined || value === null || grade === 'T') continue;
+                const credit = creditOfCourse(course);
+                points += credit * value;
+                credits += credit;
+            }
+        }
+        return { value: credits ? points / credits : NaN, credits, points };
+    };
+
+    const combinedProgressSnapshot = (view, programSnapshot, mainSnapshot) => {
+        if (view !== 'dm') return { ...programSnapshot, genericRecords: programSnapshot.records };
+        const mainTotals = mainSnapshot && mainSnapshot.totals ? mainSnapshot.totals : {};
+        return {
+            ...programSnapshot,
+            totals: {
+                ...programSnapshot.totals,
+                total: mainTotals.total || 0,
+                science: mainTotals.science || 0,
+                engineering: mainTotals.engineering || 0,
+                ects: mainTotals.ects || 0,
+            },
+            genericRecords: mainSnapshot && mainSnapshot.records ? mainSnapshot.records : new Map(),
+        };
+    };
+
+    const evaluateProgressAllocation = (view, snapshot, requireGpa, explicitCurrentTermCode) => {
+        if (!snapshot || !snapshot.available) return REQUIREMENTS_UNAVAILABLE_FLAG;
+        const req = snapshot.req || {};
+        const totals = snapshot.totals || {};
+        const isDM = view === 'dm';
+        const totalReq = (req.total || 0) + (isDM ? 30 : 0);
+        const ectsReq = (req.ects || 0) + (isDM ? 60 : 0);
+        if ((totals.university || 0) < (req.university || 0)) return 1;
+        if (req.internshipCourse
+            && !hasDegreeEligibleCourse(this.semesters, req.internshipCourse, snapshot.isEligible)) return 4;
+        if ((totals.total || 0) < totalReq) return 5;
+        if ((totals.science || 0) < (req.science || 0)) return 8;
+        if ((totals.engineering || 0) < (req.engineering || 0)) return 9;
+        if ((totals.ects || 0) < ectsReq) return 10;
+        if ((totals.required || 0) < (req.required || 0)) return 2;
+        if ((totals.core || 0) < (req.core || 0)) return 3;
+        if ((totals.area || 0) < (req.area || 0)) return 6;
+        if ((totals.free || 0) < (req.free || 0)) return 7;
+
+        const gpa = actualProgressGpa(explicitCurrentTermCode);
+        if (requireGpa && !gpa.credits) return 38;
+        if (gpa.credits && gpa.value < (isDM ? 3.20 : 2.00)) return 38;
+        const ctx = { curr: this, semesters: this.semesters, fields: snapshot.fields,
+            entryTerm: snapshot.entryTerm, isEligible: snapshot.isEligible };
+        return evaluateRules(ctx, graduationRulesFor(snapshot.major, req));
+    };
+
+    this.getCourseProgressState = function(course, semester, explicitCurrentTermCode) {
+        return courseProgressState(course, semester, explicitCurrentTermCode);
+    };
+
+    this.getGraduationProgress = function(view, explicitCurrentTermCode) {
+        const programView = view === 'dm' ? 'dm' : 'main';
+        const currentTerm = currentProgressTermCode(explicitCurrentTermCode);
+        const stateOf = (course, sem) => courseProgressState(course, sem, currentTerm);
+        const predicates = {
+            earned: (course, sem) => stateOf(course, sem) === COURSE_PROGRESS_STATES.EARNED,
+            current: (course, sem) => {
+                const s = stateOf(course, sem);
+                return s === COURSE_PROGRESS_STATES.EARNED || s === COURSE_PROGRESS_STATES.CURRENT;
+            },
+            future: (course, sem) => {
+                const s = stateOf(course, sem);
+                return s === COURSE_PROGRESS_STATES.EARNED || s === COURSE_PROGRESS_STATES.CURRENT
+                    || s === COURSE_PROGRESS_STATES.FUTURE;
+            },
+            projected: (course, sem) => stateOf(course, sem) !== COURSE_PROGRESS_STATES.UNSUCCESSFUL,
+        };
+        const layers = {};
+        const layerNames = ['earned', 'current', 'future', 'projected'];
+        for (let i = 0; i < layerNames.length; i++) {
+            const layer = layerNames[i];
+            const mainSnapshot = runProgressAllocation('main', layer, predicates[layer], stateOf);
+            const programSnapshot = programView === 'dm'
+                ? runProgressAllocation('dm', layer, predicates[layer], stateOf) : mainSnapshot;
+            layers[layer] = combinedProgressSnapshot(programView, programSnapshot, mainSnapshot);
+        }
+
+        const metricKeys = ['total', 'ects', 'university', 'required', 'core', 'area', 'free', 'science', 'engineering'];
+        const breakdown = {};
+        for (let i = 0; i < metricKeys.length; i++) {
+            breakdown[metricKeys[i]] = { earned: 0, current: 0, future: 0, unverified: 0, projected: 0 };
+        }
+        const semesterByCourse = new Map();
+        for (let i = 0; i < this.semesters.length; i++) {
+            const sem = this.semesters[i];
+            (sem.courses || []).forEach((course) => { if (course) semesterByCourse.set(course, sem); });
+        }
+        const addBreakdown = (metric, course, amount) => {
+            if (!breakdown[metric]) return;
+            const state = stateOf(course, semesterByCourse.get(course));
+            if (!Object.prototype.hasOwnProperty.call(breakdown[metric], state)) return;
+            const n = Number(amount || 0);
+            if (!isFinite(n) || n <= 0) return;
+            breakdown[metric][state] += n;
+        };
+
+        // Attribute visible segments under the final projected allocation. The
+        // earned and projected completion flags still come from their exact,
+        // independent passes; attribution from one pass keeps every displayed
+        // segment non-negative and guarantees that the equation adds up.
+        layers.projected.records.forEach((record, course) => {
+            const category = String(record.effective || '').toLowerCase();
+            if (['university', 'required', 'core', 'area', 'free'].includes(category)) {
+                addBreakdown(category, course, record.credit);
+            }
+        });
+        layers.projected.genericRecords.forEach((record, course) => {
+            if (!record.countsTotal) return;
+            addBreakdown('total', course, record.credit);
+            addBreakdown('ects', course, record.ects);
+            addBreakdown('science', course, record.science);
+            addBreakdown('engineering', course, record.engineering);
+        });
+        for (let i = 0; i < metricKeys.length; i++) {
+            const b = breakdown[metricKeys[i]];
+            b.projected = b.earned + b.current + b.future + b.unverified;
+        }
+
+        const earnedFlag = evaluateProgressAllocation(programView, layers.earned, true, currentTerm);
+        const projectedFlag = evaluateProgressAllocation(programView, layers.projected, false, currentTerm);
+        const available = earnedFlag !== REQUIREMENTS_UNAVAILABLE_FLAG
+            && projectedFlag !== REQUIREMENTS_UNAVAILABLE_FLAG;
+        const status = !available ? 'unavailable'
+            : (earnedFlag === 0 ? 'complete' : (projectedFlag === 0 ? 'projected' : 'incomplete'));
+        const courseStates = [];
+        for (let i = 0; i < this.semesters.length; i++) {
+            const sem = this.semesters[i];
+            const courses = sem.courses || [];
+            for (let j = 0; j < courses.length; j++) {
+                const course = courses[j];
+                const record = layers.projected.records.get(course);
+                courseStates.push({ course, semester: sem, state: stateOf(course, sem),
+                    effective: record ? record.effective : 'none' });
+            }
+        }
+        return { view: programView, status, available, earnedFlag, projectedFlag,
+            breakdown, layers, courseStates, gpa: actualProgressGpa(currentTerm), currentTerm };
+    };
+
+    this.canGraduateEarned = function() {
+        return this.getGraduationProgress('main').earnedFlag;
+    };
+
+    this.canGraduateDoubleEarned = function() {
+        return this.getGraduationProgress('dm').earnedFlag;
+    };
+
     this.getSemester = function(id)
     {
         for(let i = 0; i < this.semesters.length; i++)
@@ -1340,15 +1888,23 @@ function s_curriculum()
     // current/target so the UI can show "Core I: 6/9 SU". Empty for programs with
     // no requirement-groups data. Reads the effective types the allocation set, so
     // call it after recalcEffectiveTypes(Double).
-    this.requirementGroupProgress = function(view) {
+    this.requirementGroupProgress = function(view, mode) {
         const isDM = view === 'dm';
         const major = isDM ? this.doubleMajor : this.major;
         if (!major) return [];
         const term = isDM ? this.entryTermDM : this.entryTerm;
         const req = getReq(major, term) || {};
         if (!requirementRecordIsValid(major, req)) return [];
-        const fields = isDM ? DM_FIELDS : MAIN_FIELDS;
-        const ctx = { curr: this, semesters: this.semesters, fields, entryTerm: term };
+        let fields = isDM ? DM_FIELDS : MAIN_FIELDS;
+        let isEligible;
+        if (mode === 'earned' || mode === 'projected') {
+            const progress = this.getGraduationProgress(isDM ? 'dm' : 'main');
+            const snapshot = progress.layers[mode];
+            if (!snapshot || !snapshot.available) return [];
+            fields = snapshot.fields;
+            isEligible = snapshot.isEligible;
+        }
+        const ctx = { curr: this, semesters: this.semesters, fields, entryTerm: term, isEligible };
         if (req.groups) return groupProgressFor(ctx, req.groups, req.facultyReq);
         if (req.facultyReq) return facultyProgress(ctx, req.facultyReq);
         return [];
@@ -1434,6 +1990,7 @@ function s_curriculum()
      * @param {Array} course_data The full course data array for the current major.
      */
     this.recalcEffectiveTypes = function (course_data) {
+        this.primaryCourseData = Array.isArray(course_data) ? course_data : [];
         // Determine requirement thresholds for this major. If a requirement is
         // undefined (e.g., for non-engineering majors without a science
         // requirement), default to 0 so no credits are allocated to that
@@ -1787,6 +2344,7 @@ function s_curriculum()
      */
     this.recalcEffectiveTypesDouble = function(course_data_dm) {
         if (!this.doubleMajor) return;
+        this.doubleMajorCourseData = Array.isArray(course_data_dm) ? course_data_dm : [];
         // Determine requirement thresholds for the double major. Required,
         // core and area requirements are drawn from the second major's
         // requirements.

@@ -549,6 +549,7 @@ body.is-mobile[data-mobile-tab="progress"] .m-progress {
 .m-progress .m-prog-detail .ms-section.m-sec-collapsed > .ms-subheader,
 .m-progress .m-prog-detail .ms-section.m-sec-collapsed > .ms-rules,
 .m-progress .m-prog-detail .ms-section.m-sec-collapsed > .ms-list,
+.m-progress .m-prog-detail .ms-section.m-sec-collapsed > .ms-group-list,
 .m-progress .m-prog-detail .ms-section.m-sec-collapsed > .ms-untaken-toggle {
     display: none;
 }
@@ -1103,10 +1104,29 @@ body.is-mobile .scheduler-details-disclosure-body {
     overflow: hidden;
     margin-bottom: 12px;
 }
+.m-progress .m-prog-bar.is-segmented {
+    display: flex;
+}
 .m-progress .m-prog-fill {
     height: 100%;
     background: var(--primary);
 }
+.m-progress .m-prog-fill.is-earned { background: #16A34A; }
+.m-progress .m-prog-fill.is-current { background: #2563EB; }
+.m-progress .m-prog-fill.is-future { background: #7C3AED; }
+.m-progress .m-prog-fill.is-unverified { background: #D97706; }
+.m-progress .m-prog-breakdown {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px 9px;
+    margin: -7px 0 12px;
+    font-size: 0.66rem;
+    color: var(--text-secondary);
+}
+.m-progress .m-prog-breakdown .is-earned { color: var(--text-primary); }
+.m-progress .m-prog-breakdown .is-current { color: #2563EB; }
+.m-progress .m-prog-breakdown .is-future { color: #7C3AED; }
+.m-progress .m-prog-breakdown .is-unverified { color: #B45309; }
 .m-progress .m-prog-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1125,10 +1145,19 @@ body.is-mobile .scheduler-details-disclosure-body {
     font-size: 0.85rem;
     font-weight: 600;
     color: var(--text-primary);
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
 }
 .m-progress .m-prog-stat.is-met .m-prog-val {
     color: var(--accent);
 }
+.m-progress .m-prog-stat.is-projected-met .m-prog-val { color: #7C3AED; }
+.m-progress .m-prog-stat .m-prog-val .is-earned { color: var(--text-primary); }
+.dark-theme .m-progress .m-prog-breakdown .is-current { color: #60A5FA; }
+.dark-theme .m-progress .m-prog-breakdown .is-future,
+.dark-theme .m-progress .m-prog-stat.is-projected-met .m-prog-val { color: #C4B5FD; }
+.dark-theme .m-progress .m-prog-breakdown .is-unverified { color: #FBBF24; }
 .m-progress .m-prog-empty {
     padding: 28px 16px;
     text-align: center;

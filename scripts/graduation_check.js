@@ -3,8 +3,11 @@
 // requirements). This is necessary when running under the file:// scheme
 // where ES module imports may not be available.
 
-function courseCountsTowardDegreePlan(curriculum, course) {
+function courseCountsTowardDegreePlan(curriculum, course, semester) {
     try {
+        if (curriculum && typeof curriculum.getCourseProgressState === 'function' && semester) {
+            return curriculum.getCourseProgressState(course, semester) !== 'unsuccessful';
+        }
         if (curriculum && typeof curriculum.isDegreeEligibleCourse === 'function') {
             return curriculum.isDegreeEligibleCourse(course);
         }
@@ -19,8 +22,22 @@ function courseCountsTowardDegreePlan(curriculum, course) {
 
 // Compute how taken courses are allocated for a minor, including the
 // "overflow" behavior (Core → Area → Free) and equivalence rules.
-function computeMinorAllocation(curriculum, minorCode) {
+function computeMinorAllocation(curriculum, minorCode, options) {
+    const opts = options || {};
     const computeCgpa = () => {
+        if (opts.progressGpa && typeof opts.progressGpa === 'object') {
+            return {
+                cgpa: Number(opts.progressGpa.value),
+                credits: Number(opts.progressGpa.credits) || 0,
+            };
+        }
+        if (opts.useProgressGpa && curriculum && typeof curriculum.getGraduationProgress === 'function') {
+            try {
+                const progress = curriculum.getGraduationProgress('main');
+                const gpa = progress && progress.gpa ? progress.gpa : {};
+                return { cgpa: Number(gpa.value), credits: Number(gpa.credits) || 0 };
+            } catch (_) {}
+        }
         let gpaCredits = 0;
         let gpaValue = 0.0;
         try {
@@ -79,14 +96,21 @@ function computeMinorAllocation(curriculum, minorCode) {
 
     // Collect passed/planned courses (ignore grade F).
     const taken = new Set();
+    const progressStateByCode = new Map();
     try {
         for (let i = 0; i < curriculum.semesters.length; i++) {
             const sem = curriculum.semesters[i];
             for (let j = 0; j < sem.courses.length; j++) {
                 const c = sem.courses[j];
                 if (!c || !c.code) continue;
-                if (!courseCountsTowardDegreePlan(curriculum, c)) continue;
-                taken.add(normalizeCode(c.code));
+                if (typeof opts.isEligible === 'function') {
+                    if (!opts.isEligible(c, sem)) continue;
+                } else if (!courseCountsTowardDegreePlan(curriculum, c, sem)) continue;
+                const normalized = normalizeCode(c.code);
+                taken.add(normalized);
+                if (curriculum && typeof curriculum.getCourseProgressState === 'function') {
+                    progressStateByCode.set(normalized, curriculum.getCourseProgressState(c, sem));
+                }
             }
         }
     } catch (_) {}
@@ -169,13 +193,18 @@ function computeMinorAllocation(curriculum, minorCode) {
         if (!rec) continue;
         const baseCat = fullOrder.includes(rec.__baseCat) ? rec.__baseCat : 'free';
         const credit = parseInt0(rec.SU_credit);
-        takenMinorCourses.push({ code, baseCat, credit });
+        takenMinorCourses.push({ code, baseCat, credit,
+            progressState: progressStateByCode.get(code) || 'earned' });
     }
     const catSortIdx = (cat) => {
         const idx = fullOrder.indexOf(cat);
         return idx === -1 ? 999 : idx;
     };
     takenMinorCourses.sort((a, b) => {
+        const stateRank = { earned: 0, current: 1, future: 2, unverified: 3 };
+        const as = Object.prototype.hasOwnProperty.call(stateRank, a.progressState) ? stateRank[a.progressState] : 4;
+        const bs = Object.prototype.hasOwnProperty.call(stateRank, b.progressState) ? stateRank[b.progressState] : 4;
+        if (as !== bs) return as - bs;
         const ai = catSortIdx(a.baseCat);
         const bi = catSortIdx(b.baseCat);
         if (ai !== bi) return ai - bi;
@@ -199,7 +228,9 @@ function computeMinorAllocation(curriculum, minorCode) {
             totals[cat].courses += 1;
             totals[cat].credits += c.credit;
             markEquivalenceUsed(cat, c.code);
-            allocationByCode[c.code] = { allocatedCat: cat, baseCat: c.baseCat, movedDown: cat !== c.baseCat, credit: c.credit };
+            allocationByCode[c.code] = { allocatedCat: cat, baseCat: c.baseCat,
+                movedDown: cat !== c.baseCat, credit: c.credit,
+                progressState: c.progressState };
             break;
         }
     }
@@ -244,11 +275,8 @@ function computeMinorAllocation(curriculum, minorCode) {
     // Minor CGPA requirement (only if GPA is computable).
     const { cgpa } = computeCgpa();
     const gpaThreshold = gpaThresholdForMinor(minorCode);
-    let gpaOk = true;
-    if (isFinite(cgpa)) {
-        gpaOk = cgpa >= gpaThreshold;
-        if (!gpaOk) allOk = false;
-    }
+    const gpaOk = isFinite(cgpa) && cgpa >= gpaThreshold;
+    if (!gpaOk) allOk = false;
 
     return {
         ok: allOk,
@@ -294,12 +322,20 @@ function displayGraduationResults(curriculum) {
         const PASS_COLOR = '#16A34A';
         const FAIL_COLOR = '#DC2626';
         const MUTED_COLOR = isDarkTheme ? '#94A3B8' : '#64748B';
-        const badgeStyleFor = (ok) => {
-            const color = ok ? PASS_COLOR : FAIL_COLOR;
-            const bg = ok ? 'rgba(22, 163, 74, 0.18)' : 'rgba(220, 38, 38, 0.18)';
+        const PROJECTED_COLOR = isDarkTheme ? '#C4B5FD' : '#7C3AED';
+        const badgeStyleFor = (state) => {
+            const color = state === 'complete' ? PASS_COLOR
+                : (state === 'projected' ? PROJECTED_COLOR : (state === 'unavailable' ? MUTED_COLOR : FAIL_COLOR));
+            const bg = state === 'complete' ? 'rgba(22, 163, 74, 0.18)'
+                : (state === 'projected' ? 'rgba(124, 58, 237, 0.16)'
+                    : (state === 'unavailable' ? 'rgba(100, 116, 139, 0.14)' : 'rgba(220, 38, 38, 0.18)'));
             return `color:${color};border-color:${color};background:${bg};`;
         };
-        const messageStyleFor = (ok) => `color:${ok ? PASS_COLOR : FAIL_COLOR};font-weight:700;`;
+        const messageStyleFor = (state) => {
+            const color = state === 'complete' ? PASS_COLOR
+                : (state === 'projected' ? PROJECTED_COLOR : (state === 'unavailable' ? MUTED_COLOR : FAIL_COLOR));
+            return `color:${color};font-weight:700;`;
+        };
         const detailStyleForTone = (tone) => {
             if (tone === 'danger') return `color:${FAIL_COLOR};font-weight:700;`;
             if (tone === 'success') return `color:${PASS_COLOR};font-weight:700;`;
@@ -318,13 +354,16 @@ function displayGraduationResults(curriculum) {
             }).join('')}</div>`;
         };
 
-        const renderStatusCard = ({ label, title, ok, unavailable = false, message, details, compact = false }) => {
-            const stateClass = ok ? 'is-complete' : 'is-incomplete';
-            const badgeText = unavailable ? 'Unavailable' : (ok ? 'Complete' : 'Incomplete');
+        const renderStatusCard = ({ label, title, state = 'incomplete', message, details, compact = false }) => {
+            const normalizedState = ['complete', 'projected', 'unavailable'].includes(state) ? state : 'incomplete';
+            const stateClass = 'is-' + normalizedState;
+            const badgeText = normalizedState === 'complete' ? 'Complete'
+                : (normalizedState === 'projected' ? 'Projected complete'
+                    : (normalizedState === 'unavailable' ? 'Unavailable' : 'Incomplete'));
             const cardClass = compact ? ' graduation_card--compact' : '';
-            const messageClass = ok ? ' graduation_card_message--success' : ' graduation_card_message--danger';
-            const badgeStyle = badgeStyleFor(ok);
-            const messageStyle = messageStyleFor(ok);
+            const messageClass = ` graduation_card_message--${normalizedState}`;
+            const badgeStyle = badgeStyleFor(normalizedState);
+            const messageStyle = messageStyleFor(normalizedState);
             const messageHtml = message
                 ? `<div class="graduation_card_message${messageClass}" style="${esc(messageStyle)}">${esc(message)}</div>`
                 : '';
@@ -347,38 +386,69 @@ function displayGraduationResults(curriculum) {
         const requirementsUnavailableFlag = (typeof globalThis !== 'undefined' && globalThis.REQUIREMENTS_UNAVAILABLE_FLAG)
             ? globalThis.REQUIREMENTS_UNAVAILABLE_FLAG
             : 99;
-        const flagMain = curriculum.canGraduate();
+        const progressMain = (typeof curriculum.getGraduationProgress === 'function')
+            ? curriculum.getGraduationProgress('main') : null;
+        const flagMain = progressMain ? progressMain.projectedFlag : curriculum.canGraduate();
         const msgMain = buildFlagMessages(curriculum.major) || {};
-        const mainMsg = flagMain === 0
-            ? 'All graduation checks pass.'
-            : ((msgMain[flagMain] ? msgMain[flagMain]() : `Error code ${flagMain}`) || 'Graduation requirements are incomplete.');
+        const mainState = progressMain ? progressMain.status
+            : (flagMain === requirementsUnavailableFlag ? 'unavailable' : (flagMain === 0 ? 'complete' : 'incomplete'));
+        const mainMsg = mainState === 'complete'
+            ? 'All earned graduation checks pass.'
+            : (mainState === 'projected'
+                ? 'Your current plan satisfies the graduation requirements; some credit is not earned yet.'
+            : ((msgMain[flagMain] ? msgMain[flagMain]() : `Error code ${flagMain}`) || 'Graduation requirements are incomplete.'));
+        const progressDetails = (progress) => {
+            if (!progress || !progress.breakdown || !progress.breakdown.total) return [];
+            const b = progress.breakdown.total;
+            const parts = [`${b.earned} earned`];
+            if (b.current) parts.push(`${b.current} current`);
+            if (b.future) parts.push(`${b.future} future`);
+            if (b.unverified) parts.push(`${b.unverified} needs grade verification`);
+            return [{ text: `SU credits: ${parts.join(' + ')} = ${b.projected} projected`, tone: 'muted' }];
+        };
         majorCards.push(renderStatusCard({
             label: 'Major',
             title: curriculum.major,
-            ok: flagMain === 0,
-            unavailable: flagMain === requirementsUnavailableFlag,
+            state: mainState,
             message: mainMsg,
+            details: progressDetails(progressMain),
         }));
 
         if (curriculum.doubleMajor) {
-            const flagDM = curriculum.canGraduateDouble();
+            const progressDM = (typeof curriculum.getGraduationProgress === 'function')
+                ? curriculum.getGraduationProgress('dm') : null;
+            const flagDM = progressDM ? progressDM.projectedFlag : curriculum.canGraduateDouble();
             const msgDM = buildFlagMessages(curriculum.doubleMajor) || {};
-            const dmMsg = flagDM === 0
-                ? 'All graduation checks pass.'
-                : ((msgDM[flagDM] ? msgDM[flagDM]() : `Error code ${flagDM}`) || 'Graduation requirements are incomplete.');
+            const dmState = progressDM ? progressDM.status
+                : (flagDM === requirementsUnavailableFlag ? 'unavailable' : (flagDM === 0 ? 'complete' : 'incomplete'));
+            const dmMsg = dmState === 'complete'
+                ? 'All earned graduation checks pass.'
+                : (dmState === 'projected'
+                    ? 'Your current plan satisfies the double-major requirements; some credit is not earned yet.'
+                : ((msgDM[flagDM] ? msgDM[flagDM]() : `Error code ${flagDM}`) || 'Graduation requirements are incomplete.'));
             majorCards.push(renderStatusCard({
                 label: 'Double Major',
                 title: curriculum.doubleMajor,
-                ok: flagDM === 0,
-                unavailable: flagDM === requirementsUnavailableFlag,
+                state: dmState,
                 message: dmMsg,
+                details: progressDetails(progressDM),
             }));
         }
 
         // Show minor completion status (does not affect major graduation).
         function evaluateMinor(minorCode) {
-            const res = computeMinorAllocation(curriculum, minorCode);
-            if (res.error) return { ok: false, title: minorCode, message: 'Minor data is unavailable.', details: [{ text: res.error, tone: 'danger' }] };
+            const stateOf = (course, sem) => (typeof curriculum.getCourseProgressState === 'function')
+                ? curriculum.getCourseProgressState(course, sem) : (courseCountsTowardDegreePlan(curriculum, course) ? 'earned' : 'unsuccessful');
+            const earned = computeMinorAllocation(curriculum, minorCode, {
+                progressGpa: progressMain && progressMain.gpa,
+                isEligible: (course, sem) => stateOf(course, sem) === 'earned',
+            });
+            const projected = computeMinorAllocation(curriculum, minorCode, {
+                progressGpa: progressMain && progressMain.gpa,
+                isEligible: (course, sem) => stateOf(course, sem) !== 'unsuccessful',
+            });
+            const res = projected;
+            if (res.error) return { state: 'unavailable', title: minorCode, message: 'Minor data is unavailable.', details: [{ text: res.error, tone: 'danger' }] };
 
             const req = res.req || {};
             const cats = req.categories || {};
@@ -407,9 +477,10 @@ function displayGraduationResults(curriculum) {
                 }
             } catch (_) {}
             return {
-                ok: res.ok,
+                state: earned.ok ? 'complete' : (projected.ok ? 'projected' : 'incomplete'),
                 title: res.title || minorCode,
-                message: res.ok ? 'Minor requirements are satisfied.' : 'Minor requirements are not yet satisfied.',
+                message: earned.ok ? 'Earned minor requirements are satisfied.'
+                    : (projected.ok ? 'The planned courses satisfy the minor requirements.' : 'Minor requirements are not yet satisfied.'),
                 details,
             };
         }
@@ -428,8 +499,8 @@ function displayGraduationResults(curriculum) {
                     return renderStatusCard({
                         label: 'Minor',
                         title: res.title || minorCode,
-                        ok: !!res.ok,
-                        message: '',
+                        state: res.state,
+                        message: res.message || '',
                         details: res.details || [],
                         compact: true,
                     });
@@ -501,7 +572,9 @@ function displaySummary(curriculum, major_chosen_by_user) {
                 for (let j = 0; j < sem.courses.length; j++) {
                     const c = sem.courses[j];
                     if (!c || !c.code) continue;
-                    if (!courseCountsTowardDegreePlan(curriculum, c)) continue;
+                    const progressState = (typeof curriculum.getCourseProgressState === 'function')
+                        ? curriculum.getCourseProgressState(c, sem) : 'earned';
+                    if (progressState === 'unsuccessful') continue;
                     taken.add(String(c.code).toUpperCase().replace(/\s+/g, ''));
                 }
             }
@@ -554,7 +627,14 @@ function displaySummary(curriculum, major_chosen_by_user) {
 
             const showMinorSummary = (minorCode) => {
                 try { majorPanelEl.classList.add('is-hidden'); } catch (_) {}
-                const allocRes = computeMinorAllocation(curriculum, minorCode);
+                const allocRes = computeMinorAllocation(curriculum, minorCode, {
+                    progressGpa: progressMain && progressMain.gpa,
+                });
+                const earnedAllocRes = computeMinorAllocation(curriculum, minorCode, {
+                    progressGpa: progressMain && progressMain.gpa,
+                    isEligible: (course, sem) => (typeof curriculum.getCourseProgressState === 'function')
+                        ? curriculum.getCourseProgressState(course, sem) === 'earned' : true,
+                });
                 if (allocRes.error) {
                     const ui = (typeof window !== 'undefined') ? window.uiModal : null;
                     if (ui && typeof ui.alert === 'function') {
@@ -588,6 +668,10 @@ function displaySummary(curriculum, major_chosen_by_user) {
                     if (!eq.length) return '';
                     const parts = eq.map(g => Array.isArray(g) ? g.join(' / ') : String(g));
                     return `<div class="ms-rules"><strong>Rule:</strong> Choose 1 of: ${parts.join(' • ')}</div>`;
+                };
+                const minorProgressChip = (state) => {
+                    const labels = { earned: 'Earned', current: 'Current', future: 'Future', unverified: 'Needs grade' };
+                    return labels[state] ? `<span class="ms-state-chip is-${esc(state)}">${esc(labels[state])}</span>` : '';
                 };
 
                 const orderPoolCodes = (codes, sectionCat) => {
@@ -634,7 +718,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
                           <span class="ms-code">${code}</span>
                           <span class="ms-name">${name}</span>
                         </div>
-                        <div class="ms-meta">${su} SU${countsAs}</div>
+                        <div class="ms-meta">${minorProgressChip(alloc.progressState)}${su} SU${countsAs}</div>
                       </div>
                     `;
                 };
@@ -653,7 +737,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
                           <span class="ms-code">${code}</span>
                           <span class="ms-name">${name}</span>
                         </div>
-                        <div class="ms-meta">${su} SU${fromTxt}</div>
+                        <div class="ms-meta">${minorProgressChip(alloc.progressState)}${su} SU${fromTxt}</div>
                       </div>
                     `;
                 };
@@ -727,9 +811,12 @@ function displaySummary(curriculum, major_chosen_by_user) {
                     const needC = parseInt0(cfg && cfg.minCourses);
                     const needS = parseInt0(cfg && cfg.minSU);
                     const have = totals[cat] || { courses: 0, credits: 0 };
+                    const earnedHave = earnedAllocRes && earnedAllocRes.totals
+                        ? (earnedAllocRes.totals[cat] || { courses: 0, credits: 0 })
+                        : { courses: 0, credits: 0 };
 
                     body += `<div class="ms-section">`;
-                    body += `<div class="ms-header"><div class="ms-title">${cat.toUpperCase()}</div><div class="ms-req">${have.courses}/${needC || 0} courses • ${have.credits}/${needS || 0} SU</div></div>`;
+                    body += `<div class="ms-header"><div class="ms-title">${cat.toUpperCase()}</div><div class="ms-req">${earnedHave.courses} earned courses • ${have.courses}/${needC || 0} projected • ${earnedHave.credits} earned / ${have.credits}/${needS || 0} projected SU</div></div>`;
                     if (cfg && cfg.allListedRequired && cat === 'required') {
                         body += `<div class="ms-rules"><strong>Rule:</strong> All listed courses are required (equivalence groups count as “choose one”).</div>`;
                     }
@@ -857,7 +944,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
         }
     };
 
-    function computeMajorAllocation(view) {
+    function computeMajorAllocation(view, progress) {
         const isDM = view === 'dm';
         const majorCode = isDM ? (curriculum.doubleMajor || '') : (major_chosen_by_user || curriculum.major || '');
         const entryTerm = isDM ? curriculum.entryTermDM : curriculum.entryTerm;
@@ -890,26 +977,37 @@ function displaySummary(curriculum, major_chosen_by_user) {
         };
 
         try {
+            const progressRecords = progress && progress.layers && progress.layers.projected
+                ? progress.layers.projected.records : null;
             for (let i = 0; i < curriculum.semesters.length; i++) {
                 const sem = curriculum.semesters[i];
                 for (let j = 0; j < sem.courses.length; j++) {
                     const c = sem.courses[j];
                     if (!c || !c.code) continue;
-                    if (!courseCountsTowardDegreePlan(curriculum, c)) continue;
+                    const progressState = (typeof curriculum.getCourseProgressState === 'function')
+                        ? curriculum.getCourseProgressState(c, sem) : 'earned';
+                    if (progressState === 'unsuccessful') continue;
 
                     const code = normalizeCode(c.code);
-                    const eff = String((c && c[effField]) || '').toLowerCase();
+                    const progressRecord = progressRecords && typeof progressRecords.get === 'function'
+                        ? progressRecords.get(c) : null;
+                    const eff = String((progressRecord && progressRecord.effective)
+                        || (progressRecords ? 'none' : ((c && c[effField]) || ''))).toLowerCase();
                     if (!eff || eff === 'none') continue;
 
                     const rec = courseByCode.get(code);
                     const baseCat = rec ? String(rec.__baseCat || '').toLowerCase() : 'none';
-                    const credit = rec ? parseInt0(rec.SU_credit) : parseInt0(c.SU_credit);
+                    const credit = progressRecord
+                        ? (Number(progressRecord.credit) || 0)
+                        : (rec ? parseInt0(rec.SU_credit) : parseInt0(c.SU_credit));
 
                     allocationByCode[code] = {
                         allocatedCat: eff,
                         baseCat,
                         movedDown: !!(baseCat && eff && baseCat !== eff),
-                        credit
+                        credit,
+                        progressState,
+                        courseId: c.id || '',
                     };
                 }
             }
@@ -929,7 +1027,9 @@ function displaySummary(curriculum, major_chosen_by_user) {
 
     const showMajorSummary = (view) => {
         const isDM = view === 'dm';
-        const allocRes = computeMajorAllocation(view);
+        const majorProgress = (typeof curriculum.getGraduationProgress === 'function')
+            ? curriculum.getGraduationProgress(view) : null;
+        const allocRes = computeMajorAllocation(view, majorProgress);
         const majorCode = allocRes.majorCode;
         if (!majorCode) return;
 
@@ -943,7 +1043,6 @@ function displaySummary(curriculum, major_chosen_by_user) {
         const courseByCode = allocRes.courseByCode || new Map();
         const pools = allocRes.pools || {};
         const totals = allocRes.totals || {};
-
         const formatNum = (v) => {
             const n = parseFloat(v || '0');
             if (!isFinite(n) || n <= 0) return null;
@@ -968,6 +1067,11 @@ function displaySummary(curriculum, major_chosen_by_user) {
             if (e) chips.push(e);
             chips.push(suChip(su));
             return chips.join(' ');
+        };
+        const progressChip = (state) => {
+            const labels = { earned: 'Earned', current: 'Current', future: 'Future', unverified: 'Needs grade' };
+            const label = labels[state];
+            return label ? `<span class="ms-state-chip is-${esc(state)}">${esc(label)}</span>` : '';
         };
 
         const orderPoolCodes = (codes, sectionCat) => {
@@ -1008,6 +1112,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
             const isHere = alloc.allocatedCat === sectionCat;
             const statusClass = isHere ? 'is-taken' : 'is-overflow';
             const countsAs = isHere ? '' : ` <span class="ms-meta-note">• Counts as ${esc(String(alloc.allocatedCat || '').toUpperCase())}</span>`;
+            const stateChip = progressChip(alloc.progressState);
             return `
               <div class="ms-course ${statusClass}">
                 <div class="ms-course-left">
@@ -1015,7 +1120,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
                   <span class="ms-code">${esc(code)}</span>
                   <span class="ms-name">${esc(name)}</span>
                 </div>
-                <div class="ms-meta">${chips}${countsAs}</div>
+                <div class="ms-meta">${stateChip}${chips}${countsAs}</div>
               </div>
             `;
         };
@@ -1037,7 +1142,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
                   <span class="ms-code">${esc(code)}</span>
                   <span class="ms-name">${esc(name)}</span>
                 </div>
-                <div class="ms-meta">${chips}${fromTxt}</div>
+                <div class="ms-meta">${progressChip(alloc.progressState)}${chips}${fromTxt}</div>
               </div>
             `;
         };
@@ -1089,11 +1194,14 @@ function displaySummary(curriculum, major_chosen_by_user) {
         // pools / tickers, shown as current/target progress. Empty for programs
         // that carry no groups (the section is simply omitted).
         let groupRows = [];
+        let earnedGroupRows = [];
         try {
             if (typeof curriculum.requirementGroupProgress === 'function') {
-                groupRows = curriculum.requirementGroupProgress(view) || [];
+                groupRows = curriculum.requirementGroupProgress(view, 'projected') || [];
+                earnedGroupRows = curriculum.requirementGroupProgress(view, 'earned') || [];
             }
-        } catch (_) { groupRows = []; }
+        } catch (_) { groupRows = []; earnedGroupRows = []; }
+        const earnedGroupById = new Map(earnedGroupRows.map((g) => [g.id, g]));
 
         const unitLabel = (unit, n) => {
             if (unit === 'SU') return 'SU';
@@ -1103,11 +1211,18 @@ function displaySummary(curriculum, major_chosen_by_user) {
         const renderGroupRow = (g) => {
             const target = Number(g.target) || 0;
             const current = Number(g.current) || 0;
+            const earnedRow = earnedGroupById.get(g.id) || {};
+            const earnedCurrent = Number(earnedRow.current) || 0;
             const isCap = !!g.isCap;
             const ok = !!g.ok;
+            const earnedOk = !!earnedRow.ok;
             const ratio = target > 0 ? Math.max(0, Math.min(1, current / target)) : (ok ? 1 : 0);
-            const stateClass = ok ? 'is-met' : (isCap ? 'is-over' : 'is-unmet');
-            const badge = isCap ? (ok ? 'OK' : 'Over limit') : (ok ? 'Met' : 'Not met');
+            const earnedRatio = target > 0 ? Math.max(0, Math.min(1, earnedCurrent / target)) : (earnedOk ? 1 : 0);
+            const stateClass = isCap
+                ? (!ok ? 'is-over' : (earnedOk ? 'is-met' : 'is-projected'))
+                : (earnedOk ? 'is-met' : (ok ? 'is-projected' : 'is-unmet'));
+            const badge = isCap ? (!ok ? 'Over limit' : (earnedOk ? 'OK' : 'Projected OK'))
+                : (earnedOk ? 'Met' : (ok ? 'Projected' : 'Not met'));
             const capNote = isCap ? ' (max)' : '';
             const suis = g.suis ? `<div class="ms-group-suis">${esc(g.suis)}</div>` : '';
             const note = g.note ? `<div class="ms-group-suis">${esc(g.note)}</div>` : '';
@@ -1120,19 +1235,23 @@ function displaySummary(curriculum, major_chosen_by_user) {
                   </div>
                   <div class="ms-group-count">
                     <span class="ms-group-nums">${esc(String(current))}/${esc(String(target))}</span>
+                    <span class="ms-group-earned">${esc(String(earnedCurrent))} earned</span>
                     <span class="ms-group-unit">${esc(unitLabel(g.unit, target))}${capNote}</span>
                     <span class="ms-group-badge">${esc(badge)}</span>
                   </div>
                 </div>
-                <div class="ms-group-bar"><span class="ms-group-fill" style="width:${Math.round(ratio * 100)}%"></span></div>
+                <div class="ms-group-bar"><span class="ms-group-fill is-projected" style="width:${Math.round(ratio * 100)}%"></span><span class="ms-group-fill is-earned" style="width:${Math.round(earnedRatio * 100)}%"></span></div>
               </div>
             `;
         };
 
         if (groupRows.length) {
-            const metCount = groupRows.filter(g => g.ok).length;
+            const projectedMetCount = groupRows.filter(g => g.ok).length;
+            const earnedMetCount = earnedGroupRows.filter(g => g.ok).length;
+            const projectedText = projectedMetCount !== earnedMetCount
+                ? ` · ${projectedMetCount}/${groupRows.length} projected` : '';
             body += `<div class="ms-section ms-groups-section">`;
-            body += `<div class="ms-header"><div class="ms-title">SPECIAL REQUIREMENTS</div><div class="ms-req">${metCount}/${groupRows.length} met</div></div>`;
+            body += `<div class="ms-header"><div class="ms-title">SPECIAL REQUIREMENTS</div><div class="ms-req">${earnedMetCount}/${groupRows.length} earned${projectedText}</div></div>`;
             body += `<div class="ms-rules">Program-specific pools and faculty-course tickers from your SUIS degree page.</div>`;
             body += `<div class="ms-group-list">${groupRows.map(renderGroupRow).join('')}</div>`;
             body += `</div>`;
@@ -1167,8 +1286,12 @@ function displaySummary(curriculum, major_chosen_by_user) {
                 })
                 : [];
 
+            const progressMetric = majorProgress && majorProgress.breakdown ? majorProgress.breakdown[cat] : null;
+            const progressLabel = progressMetric
+                ? `${progressMetric.earned} earned • ${progressMetric.projected}/${needS} projected SU`
+                : `${have.courses} courses • ${have.credits}/${needS} SU`;
             body += `<div class="ms-section">`;
-            body += `<div class="ms-header"><div class="ms-title">${esc(cat.toUpperCase())}</div><div class="ms-req">${have.courses} courses • ${have.credits}/${needS} SU</div></div>`;
+            body += `<div class="ms-header"><div class="ms-title">${esc(cat.toUpperCase())}</div><div class="ms-req">${esc(progressLabel)}</div></div>`;
 
             if (cat === 'free') {
                 body += `<div class="ms-rules"><strong>Note:</strong> This section only lists courses currently counted as FREE.</div>`;
@@ -1252,7 +1375,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
     };
 
     // Helper to build a summary modal for a given set of totals and limits.
-    function buildSummaryModal(totals, limits, gpa, majorCode, view, requirementsAvailable = true) {
+    function buildSummaryModal(totals, limits, gpa, majorCode, view, requirementsAvailable = true, progress = null) {
         const modal = document.createElement('div');
         modal.classList.add('summary_modal');
         cardsRowEl.appendChild(modal);
@@ -1269,16 +1392,57 @@ function displaySummary(curriculum, major_chosen_by_user) {
             modal.appendChild(unavailable);
             return modal;
         }
-        // Build content
+        // Build content. Each metric keeps a machine-readable projected total
+        // while visibly explaining which part is earned/current/future/unverified.
         const labels = ['GPA: ', 'SU Credits: ', 'ECTS: ', 'University: ',  'Required: ', 'Core: ', 'Area: ', 'Free: ',  'Basic Science: ', 'Engineering: '];
+        const metricKeys = ['gpa', 'total', 'ects', 'university', 'required', 'core', 'area', 'free', 'science', 'engineering'];
         const total_values = [gpa, totals.total, totals.ects, totals.university, totals.required, totals.core, totals.area, totals.free, totals.science, totals.engineering];
+        const formatValue = (value) => {
+            const n = Number(value || 0);
+            if (!isFinite(n)) return '0';
+            return Math.abs(n - Math.round(n)) < 1e-9 ? String(Math.round(n)) : n.toFixed(1);
+        };
         for (let i = 0; i < 10; i++) {
             const child = document.createElement('div');
             child.classList.add('summary_modal_child');
+            child.classList.add('summary_metric');
+            child.dataset.metric = metricKeys[i];
             if (i === 0) {
                 child.innerHTML = '<p>GPA: ' + gpa + ' / 4.00</p>';
             } else {
-                child.innerHTML = '<p>' + labels[i] + total_values[i] + ' / ' + limits[i] + '</p>';
+                const metric = metricKeys[i];
+                const b = (progress && progress.breakdown && progress.breakdown[metric])
+                    ? progress.breakdown[metric]
+                    : { earned: total_values[i], current: 0, future: 0, unverified: 0, projected: total_values[i] };
+                const earned = Number(b.earned || 0);
+                const current = Number(b.current || 0);
+                const future = Number(b.future || 0);
+                const unverified = Number(b.unverified || 0);
+                const projected = Number(b.projected || 0);
+                const limit = Number(limits[i] || 0);
+                child.dataset.earned = String(earned);
+                child.dataset.current = String(current);
+                child.dataset.future = String(future);
+                child.dataset.unverified = String(unverified);
+                child.dataset.projected = String(projected);
+                child.dataset.limit = String(limit);
+                const label = labels[i].replace(/:\s*$/, '');
+                const parts = [
+                    `<span class="summary_part is-earned"><strong>${formatValue(earned)}</strong> earned</span>`,
+                ];
+                if (current) parts.push(`<span class="summary_part is-current"><strong>+ ${formatValue(current)}</strong> current</span>`);
+                if (future) parts.push(`<span class="summary_part is-future"><strong>+ ${formatValue(future)}</strong> future</span>`);
+                if (unverified) parts.push(`<span class="summary_part is-unverified"><strong>+ ${formatValue(unverified)}</strong> needs grade</span>`);
+                const denom = Math.max(projected, limit, 1);
+                const segment = (state, amount) => amount > 0
+                    ? `<span class="summary_segment is-${state}" style="width:${Math.max(0, amount) / denom * 100}%"></span>` : '';
+                child.innerHTML = `
+                    <p class="summary_metric_legacy" aria-hidden="true">${label}: ${formatValue(projected)} / ${formatValue(limit)}</p>
+                    <div class="summary_metric_head"><span>${label}</span><strong>${formatValue(projected)} / ${formatValue(limit)}</strong></div>
+                    <div class="summary_metric_equation">${parts.join(' ')}</div>
+                    <div class="summary_segment_track" aria-hidden="true">
+                        ${segment('earned', earned)}${segment('current', current)}${segment('future', future)}${segment('unverified', unverified)}
+                    </div>`;
             }
             modal.appendChild(child);
         }
@@ -1320,7 +1484,16 @@ function displaySummary(curriculum, major_chosen_by_user) {
         gpaCredits += sem.totalGPACredits;
         gpaValue += sem.totalGPA;
     }
-    const gpaMain = gpaCredits ? (gpaValue / gpaCredits).toFixed(3) : '0.000';
+    const progressMain = (typeof curriculum.getGraduationProgress === 'function')
+        ? curriculum.getGraduationProgress('main') : null;
+    if (progressMain && progressMain.breakdown) {
+        Object.keys(totalsMain).forEach((key) => {
+            if (progressMain.breakdown[key]) totalsMain[key] = progressMain.breakdown[key].projected;
+        });
+    }
+    const gpaMain = progressMain && progressMain.gpa && progressMain.gpa.credits
+        ? Number(progressMain.gpa.value).toFixed(3)
+        : (gpaCredits ? (gpaValue / gpaCredits).toFixed(3) : '0.000');
     // Determine limits from requirements for primary major
     // Access the requirements object via the global scope to avoid reference
     // errors when this script runs in environments without an imported
@@ -1363,7 +1536,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
         String(safeReqMain.engineering || 0)
     ];
     // Build primary summary modal
-    buildSummaryModal(totalsMain, limitsMain, gpaMain, major_chosen_by_user, 'main', reqMainAvailable);
+    buildSummaryModal(totalsMain, limitsMain, gpaMain, major_chosen_by_user, 'main', reqMainAvailable, progressMain);
     // If a double major exists, compute totals for DM and show a second modal
     if (curriculum.doubleMajor) {
         let totalsDM = {
@@ -1393,7 +1566,16 @@ function displaySummary(curriculum, major_chosen_by_user) {
             gpaCreditsDM += sem.totalGPACredits;
             gpaValueDM += sem.totalGPA;
         }
-        const gpaDM = gpaCreditsDM ? (gpaValueDM / gpaCreditsDM).toFixed(3) : '0.000';
+        const progressDM = (typeof curriculum.getGraduationProgress === 'function')
+            ? curriculum.getGraduationProgress('dm') : null;
+        if (progressDM && progressDM.breakdown) {
+            Object.keys(totalsDM).forEach((key) => {
+                if (progressDM.breakdown[key]) totalsDM[key] = progressDM.breakdown[key].projected;
+            });
+        }
+        const gpaDM = progressDM && progressDM.gpa && progressDM.gpa.credits
+            ? Number(progressDM.gpa.value).toFixed(3)
+            : (gpaCreditsDM ? (gpaValueDM / gpaCreditsDM).toFixed(3) : '0.000');
         // Determine limits for DM (SU +30, ECTS +60)
         const dmReq = lookupReq(curriculum.doubleMajor, curriculum.entryTermDM);
         const dmReqAvailable = requirementRecordAvailable(curriculum.doubleMajor, dmReq);
@@ -1410,7 +1592,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
             String(safeDmReq.science || 0),
             String(safeDmReq.engineering || 0)
         ];
-        buildSummaryModal(totalsDM, limitsDM, gpaDM, curriculum.doubleMajor, 'dm', dmReqAvailable);
+        buildSummaryModal(totalsDM, limitsDM, gpaDM, curriculum.doubleMajor, 'dm', dmReqAvailable, progressDM);
     }
 }
 

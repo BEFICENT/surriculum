@@ -158,9 +158,13 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
         const dateTextElem = date.querySelector('p');
         const semesterLabel = dateTextElem ? dateTextElem.textContent : '';
         newsem.termIndex = terms.indexOf(semesterLabel);
+        newsem.termName = semesterLabel;
+        newsem.termCode = (typeof termNameToCode === 'function') ? termNameToCode(semesterLabel) : '';
     } catch (err) {
         // If date or terms are unavailable, leave termIndex as null
         newsem.termIndex = null;
+        newsem.termName = '';
+        newsem.termCode = '';
     }
 
     // Ghost course placeholder similar to the ghost semester container

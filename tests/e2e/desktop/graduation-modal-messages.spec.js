@@ -1,7 +1,8 @@
 'use strict';
 
 const { test, expect } = require('../fixtures');
-const { seedGradPlan } = require('../helpers/passing-plan');
+const { seedPlan } = require('../helpers/plan');
+const { CS_PASSING_PLAN, seedGradPlan } = require('../helpers/passing-plan');
 
 // The graduation modal (displayGraduationResults) is the integration point
 // between the flag engine and what a student actually reads: it takes
@@ -27,6 +28,19 @@ const openModal = async (page) => {
 const majorMessage = (overlay) => overlay.locator('.graduation_card').first().locator('.graduation_card_message').first();
 
 test.describe('graduation modal messages', () => {
+  const liveTermNames = async (page) => {
+    await page.goto('/');
+    return page.evaluate(() => {
+      const current = String(window.currentTermCode || '');
+      const year = Number(current.slice(0, 4));
+      const suffix = current.slice(4);
+      const pastCode = suffix === '03' ? `${year}02` : (suffix === '02' ? `${year}01` : `${year - 1}03`);
+      const futureCode = suffix === '01' ? `${year}02` : (suffix === '02' ? `${year}03` : `${year + 1}01`);
+      return { past: window.termCodeToName(pastCode), current: window.currentTermName,
+        future: window.termCodeToName(futureCode) };
+    });
+  };
+
   test('a complete plan shows the pass state, not a reason', async ({ page }) => {
     await seedGradPlan(page, {});
     expect(await page.evaluate(() => window.curriculum.canGraduate()), 'the plan graduates').toBe(0);
@@ -61,6 +75,80 @@ test.describe('graduation modal messages', () => {
     await seedGradPlan(page, { grade: 'D' });
     const overlay = await openModal(page);
     await expect(majorMessage(overlay)).toContainText(/GPA/i);
+  });
+
+  test('posted grades in the current term count as earned immediately', async ({ page }) => {
+    const terms = await liveTermNames(page);
+    await seedPlan(page, {
+      major: 'CS', entryTerm: 'Fall 2024-2025',
+      curriculum: [CS_PASSING_PLAN],
+      grades: [CS_PASSING_PLAN.map(() => 'A')],
+      dates: [terms.current],
+    });
+
+    const progress = await page.evaluate(() => {
+      const p = window.curriculum.getGraduationProgress('main');
+      return { status: p.status, earnedFlag: p.earnedFlag };
+    });
+    expect(progress.status).toBe('complete');
+    expect(progress.earnedFlag).toBe(0);
+    const overlay = await openModal(page);
+    await expect(overlay.locator('.graduation_card.is-complete').first()).toBeVisible();
+    await expect(overlay.locator('.graduation_status_badge').first()).toHaveText('Complete');
+  });
+
+  test('a complete future plan is projected complete, even with expected grades', async ({ page }) => {
+    const terms = await liveTermNames(page);
+    await seedPlan(page, {
+      major: 'CS', entryTerm: 'Fall 2024-2025',
+      curriculum: [CS_PASSING_PLAN],
+      grades: [CS_PASSING_PLAN.map(() => 'A')],
+      dates: [terms.future],
+    });
+
+    const progress = await page.evaluate(() => {
+      const p = window.curriculum.getGraduationProgress('main');
+      return { status: p.status, projectedFlag: p.projectedFlag, total: p.breakdown.total };
+    });
+    expect(progress.status).toBe('projected');
+    expect(progress.projectedFlag).toBe(0);
+    expect(progress.total.earned).toBe(0);
+    expect(progress.total.future).toBeGreaterThan(0);
+    const overlay = await openModal(page);
+    await expect(overlay.locator('.graduation_card.is-projected').first()).toBeVisible();
+    await expect(overlay.locator('.graduation_status_badge').first()).toHaveText('Projected complete');
+  });
+
+  test('a minor with no computable CGPA cannot be marked complete', async ({ page }) => {
+    const terms = await liveTermNames(page);
+    const courses = ['FIN301', 'FIN401', 'FIN402', 'FIN403', 'FIN404', 'ACC301'];
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: 'Fall 2024-2025',
+      minor1: 'FIN-MINOR',
+      entryTermMinor1: 'Fall 2024-2025',
+      curriculum: [courses],
+      grades: [courses.map(() => 'T')],
+      dates: [terms.past],
+    });
+
+    const allocation = await page.evaluate(() => {
+      const fn = window.computeMinorAllocation
+        || (typeof computeMinorAllocation === 'function' ? computeMinorAllocation : null);
+      const res = fn(window.curriculum, 'FIN-MINOR', {
+        progressGpa: window.curriculum.getGraduationProgress('main').gpa,
+        isEligible: (course, sem) => window.curriculum.getCourseProgressState(course, sem) === 'earned',
+      });
+      return { ok: res.ok, gpaOk: res.gpaOk, cgpa: Number.isFinite(res.cgpa) ? res.cgpa : null };
+    });
+    expect(allocation).toEqual({ ok: false, gpaOk: false, cgpa: null });
+
+    const overlay = await openModal(page);
+    const card = overlay.locator('.graduation_card').filter({ hasText: 'Finance Minor' });
+    await expect(card).toHaveCount(1);
+    await expect(card).toHaveClass(/is-incomplete/);
+    await expect(card.locator('.graduation_status_badge')).toHaveText('Incomplete');
+    await expect(card).toContainText('CGPA requirement');
   });
 
   test('no reachable flag renders as "Error code N"', async ({ page }) => {

@@ -144,14 +144,22 @@ a time and checked off only after the fix and its verification are complete.
   calculations. Grade save/reload is model-backed, so opening the grade picker
   can no longer autosave a failed attempt as blank. Ordinary `hasCourse` remains
   structural for duplicate prevention and existing planner behavior.
-- [ ] Separate projected-plan credit from completed/earned credit. The same
-  predicate currently drives allocation, totals, requirement checks, and
-  `canGraduate`; therefore a fully planned schedule with blank grades can be
-  labelled complete. Blank/Registered, P, and I can remain useful in a
-  forward-looking projection, but only final successful grades (A-D, S, and T)
-  should count in an earned audit. The UI needs distinct Complete versus On
-  track/Projected complete states, and an actual audit must not pass when no GPA
-  can be calculated.
+- [x] Separate projected-plan credit from completed/earned credit. Completed on
+  2026-07-30: semesters now retain stable term codes and every course is
+  classified as earned, current, future, unverified-past, or unsuccessful. A
+  posted successful grade in the current term counts as earned immediately;
+  successful/pending future-term grades remain planning estimates, while an
+  explicit F/U/NA/W never projects successful credit. Main-major and double-major
+  completion use independent earned and projected allocation passes (including
+  alternatives, named pools, cascade overflow, MAN diversity, special rules,
+  and GPA), and minor completion uses the same state policy. Desktop Summary,
+  detailed pool/group views, Graduation Check, and Mobile Progress now show
+  earned/current/future/needs-grade values with text-labelled segmented
+  colors. Pool allocation prioritizes earned credit before current, future, and
+  unverified work so later plans cannot displace visible earned progress. Only
+  the earned audit can say Complete; a plan-only pass says
+  Projected complete, and an earned audit with no real GPA fails closed. Exact
+  S/P/I/U/NA GPA semantics remain deliberately scoped to the next item.
 - [ ] Align special-grade and GPA semantics with university rules. In
   particular, S is currently treated as 4.0 instead of successful and
   GPA-neutral; P and I are treated as completed plan credit; and NA is always
