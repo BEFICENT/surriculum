@@ -2824,6 +2824,55 @@ function SUrriculum(major_chosen_by_user) {
                 ? parsedData.supersededCourses : [];
             const parserSkipped = parsedData && Array.isArray(parsedData.skippedCourses)
                 ? parsedData.skippedCourses : [];
+            const importRecordCode = (item) => escapeHtml(
+                item && typeof item === 'object' && item.code ? item.code : (item || 'Unknown course')
+            );
+            const importRecordContext = (item, semesterField = 'semester', gradeField = 'grade') => {
+                if (!item || typeof item !== 'object') return '';
+                const details = [];
+                if (item[semesterField]) details.push(escapeHtml(item[semesterField]));
+                if (item[gradeField] !== undefined && item[gradeField] !== null && String(item[gradeField]).trim()) {
+                    details.push(`grade ${escapeHtml(String(item[gradeField]).trim())}`);
+                }
+                return details.length ? ` <small>(${details.join(', ')})</small>` : '';
+            };
+            const renderImportRecordList = (items, describe) => {
+                if (!Array.isArray(items) || !items.length) return '';
+                return `<ul>${items.map((item) => {
+                    const detail = typeof describe === 'function'
+                        ? describe(item)
+                        : importRecordContext(item);
+                    return `<li><strong>${importRecordCode(item)}</strong>${detail || ''}</li>`;
+                }).join('')}</ul>`;
+            };
+            const describeSkippedImportRecord = (item) => {
+                const context = importRecordContext(item);
+                const reason = item && item.reason ? String(item.reason) : '';
+                const descriptions = {
+                    repeated: 'marked <strong>Repeated</strong> on the transcript. Sabancı uses this status for both repeated and substituted courses, so SUrriculum did not guess or import this record.',
+                    excluded: 'marked <strong>Excluded</strong> on the transcript and was not imported.',
+                    'ambiguous-existing-occurrence': 'multiple matching entries already exist in the plan, so no occurrence was changed.',
+                    'invalid-course-code': 'the course code could not be interpreted.',
+                    'create-failed': 'the course could not be added to the plan.',
+                    'create-unavailable': 'course creation was unavailable.'
+                };
+                const description = descriptions[reason]
+                    || escapeHtml(reason ? reason.replace(/-/g, ' ') : 'not importable');
+                return `${context}: ${description}`;
+            };
+            const renderImportChangeSections = (stats) => {
+                const data = stats || {};
+                const added = Array.isArray(data.addedCourses) ? data.addedCourses : [];
+                const updated = Array.isArray(data.updatedCourses) ? data.updatedCourses : [];
+                let html = '';
+                if (added.length) {
+                    html += `<p><strong>Added (${added.length}):</strong></p>${renderImportRecordList(added)}`;
+                }
+                if (updated.length) {
+                    html += `<p><strong>Updated (${updated.length}):</strong></p>${renderImportRecordList(updated)}`;
+                }
+                return html;
+            };
             const renderImportIssueSections = (stats) => {
                 const data = stats || {};
                 const notFound = Array.isArray(data.notFoundCourses) ? data.notFoundCourses : [];
@@ -2835,31 +2884,34 @@ function SUrriculum(major_chosen_by_user) {
                 const skipped = Array.isArray(data.skippedCourses) ? data.skippedCourses : [];
                 let html = '';
                 if (retainedUnallocated.length) {
-                    html += `<p><strong>${retainedUnallocated.length}</strong> course(s) already known to the cumulative course index or saved plan were outside the selected program/admit-term catalogs. They were retained as <strong>N/A</strong>:</p><p><small>${retainedUnallocated.map(item => escapeHtml(item && item.code ? item.code : item)).join(', ')}</small></p>`;
+                    html += `<p><strong>Retained as N/A (${retainedUnallocated.length}):</strong> these courses were known to the cumulative course index or saved plan but were outside the selected program/admit-term catalogs.</p>${renderImportRecordList(retainedUnallocated)}`;
                     html += '<p><small>Their letter grades count toward CGPA, but they remain outside PGPA and graduation requirements until a matching major, double major, minor, and admit term is selected.</small></p>';
                 }
                 if (notFound.length) {
-                    html += `<p><strong>${notFound.length}</strong> course(s) could not be verified in either the selected catalogs or the global course index and were skipped:</p><p><small>${notFound.map(code => escapeHtml(code)).join(', ')}</small></p>`;
+                    html += `<p><strong>Not found (${notFound.length}):</strong> these courses could not be verified in either the selected catalogs or the global course index and were not imported.</p>${renderImportRecordList(notFound, () => '')}`;
                 }
                 if (invalid.length) {
-                    html += `<p><strong>${invalid.length}</strong> record(s) had unsupported grades and were skipped:</p><ul>${invalid.map((item) => {
-                        const code = escapeHtml(item && item.code ? item.code : 'Unknown course');
-                        const grade = escapeHtml(item && item.grade ? item.grade : 'blank');
-                        return `<li><strong>${code}</strong>: ${grade}</li>`;
-                    }).join('')}</ul>`;
+                    html += `<p><strong>Unsupported grades (${invalid.length}):</strong> these records were not imported.</p>${renderImportRecordList(invalid)}`;
                 }
                 if (alreadyPresent.length) {
-                    html += `<p><strong>${alreadyPresent.length}</strong> course(s) were already in the plan and needed no safe change:</p><p><small>${alreadyPresent.map(item => escapeHtml(item && item.code ? item.code : 'Unknown course')).join(', ')}</small></p>`;
+                    html += `<p><strong>Already in the plan (${alreadyPresent.length}):</strong></p>${renderImportRecordList(alreadyPresent, (item) => {
+                        if (item && item.reason === 'different-semester') {
+                            const existing = item.semester ? escapeHtml(item.semester) : 'another semester';
+                            const imported = item.importedSemester ? escapeHtml(item.importedSemester) : 'the transcript semester';
+                            return `: already stored in ${existing}; the transcript places it in ${imported}, so SUrriculum left it unchanged.`;
+                        }
+                        return `${importRecordContext(item)}: already matched the imported record; no change was needed.`;
+                    })}`;
                 }
                 if (superseded.length) {
-                    html += `<p><strong>${superseded.length}</strong> older attempt(s) were superseded by the latest transcript record.</p>`;
+                    html += `<p><strong>Older duplicate records (${superseded.length}):</strong> SUrriculum kept the latest record for each course:</p>${renderImportRecordList(superseded, (item) => {
+                        const dropped = importRecordContext(item);
+                        const kept = importRecordContext(item, 'keptSemester', 'keptGrade');
+                        return `${dropped} → kept latest record${kept}`;
+                    })}`;
                 }
                 if (skipped.length) {
-                    html += `<p><strong>${skipped.length}</strong> record(s) were skipped:</p><ul>${skipped.map((item) => {
-                        const code = escapeHtml(item && item.code ? item.code : 'Unknown course');
-                        const reason = escapeHtml(item && item.reason ? String(item.reason).replace(/-/g, ' ') : 'not importable');
-                        return `<li><strong>${code}</strong>: ${reason}</li>`;
-                    }).join('')}</ul>`;
+                    html += `<p><strong>Skipped (${skipped.length}):</strong></p>${renderImportRecordList(skipped, describeSkippedImportRecord)}`;
                 }
                 return html;
             };
@@ -2965,7 +3017,7 @@ function SUrriculum(major_chosen_by_user) {
             }
 
             const updatedCount = Number(importStats.updatedCourseCount || 0);
-            const messageHtml = `<p>Added <strong>${importStats.importedCourses}</strong> new course(s) and updated <strong>${updatedCount}</strong> existing course(s).</p>${issueSections}`;
+            const messageHtml = `<p>Added <strong>${importStats.importedCourses}</strong> new course(s) and updated <strong>${updatedCount}</strong> existing course(s).</p>${renderImportChangeSections(importStats)}${issueSections}`;
             if (ui && typeof ui.alert === 'function') await ui.alert('Import complete', messageHtml);
             else await uiAlert('Import complete', messageHtml);
 

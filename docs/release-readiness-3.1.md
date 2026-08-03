@@ -246,6 +246,16 @@ a time and checked off only after the fix and its verification are complete.
   updated, already-present, superseded, invalid-grade, skipped, and not-found
   records are reported truthfully. This does not yet preserve multiple attempts
   or allow a failed/withdrawn occurrence and a later retake to coexist.
+
+  Deferred design note (2026-08-04): Sabancı transcripts use the status
+  `Repeated` for both same-code retakes and cross-code substitutions, without a
+  reliable replacement link. Future support must therefore preserve transcript
+  attempts separately, infer a retake only when a later occurrence of the same
+  canonical code exists, and leave other superseded records unresolved unless
+  an explicit mapping is available. Arbitrary duplicate planner courses remain
+  out of scope for 3.1. As an interim safeguard, the import result now lists
+  every added, updated, already-present, superseded, skipped, invalid-grade, and
+  not-found course and explains the `Repeated` ambiguity instead of guessing.
 - [ ] Harden shifted-layout PDF transcript grade-column detection. The normal
   tracked PDF extracts correctly, but the fallback parsers still infer a grade
   from token position: wrapped title/status text after a missing column can be
