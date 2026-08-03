@@ -1506,6 +1506,35 @@ html, body {
     font-size: 0.95rem;
 }
 
+.ms-average-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 8px;
+}
+
+.ms-average {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2px 10px;
+    padding: 9px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+}
+
+.ms-average > span { font-weight: 700; }
+.ms-average > small { grid-column: 1 / -1; color: var(--text-secondary); }
+.ms-average.is-met { border-color: rgba(22, 163, 74, 0.5); }
+.ms-average.is-unmet { border-color: rgba(220, 38, 38, 0.5); }
+.ms-average.is-met > strong { color: #16A34A; }
+.ms-average.is-unmet > strong { color: #DC2626; }
+
+.ms-average-projection,
+.summary_gpa_projection {
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+}
+
 .minor-summary .ms-section,
 .major-summary .ms-section {
     border: 1px solid var(--border);
@@ -3905,6 +3934,53 @@ html, body {
     background: var(--bg-surface);
 }
 
+.grade.grade-active {
+    z-index: 120;
+}
+
+.grade-dropdown-modern {
+    position: fixed;
+    z-index: 1000;
+    width: min(232px, calc(100vw - 16px));
+    padding: 6px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    cursor: default;
+}
+
+.grade-dropdown-options {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    max-height: min(360px, 60vh);
+    overflow-y: auto;
+}
+
+.grade-option {
+    min-height: 30px;
+    padding: 5px 6px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    font: inherit;
+    cursor: pointer;
+}
+
+.grade-option:hover,
+.grade-option:focus-visible {
+    border-color: var(--primary);
+    background: color-mix(in srgb, var(--primary) 10%, var(--bg-surface));
+    outline: none;
+}
+
+.grade-option.is-wide {
+    grid-column: 1 / -1;
+    text-align: left;
+}
+
 /* Style the grade input that gets created by JavaScript */
 .grade_input {
     position: absolute;
@@ -4177,6 +4253,18 @@ html, body {
     font-size: 0.75rem;
     color: var(--text-secondary);
 }
+
+.summary_gpa_warning {
+    padding: 7px 9px;
+    border: 1px solid rgba(220, 38, 38, 0.45);
+    border-radius: var(--radius-sm);
+    background: rgba(220, 38, 38, 0.08);
+    color: #B91C1C;
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.dark-theme .summary_gpa_warning { color: #FCA5A5; }
 
 .summary_part.is-earned { color: var(--text-primary); }
 .summary_part.is-current { color: #2563EB; }

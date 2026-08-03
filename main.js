@@ -2054,6 +2054,7 @@ function SUrriculum(major_chosen_by_user) {
     saveInterval = setInterval(function() {
         planSetItem("curriculum", serializator(curriculum));
         planSetItem("grades", grades_serializator(curriculum));
+        planSetItem("gradingBases", grading_bases_serializator(curriculum));
         planSetItem("dates", dates_serializator());
     }, 2000);
 
@@ -2063,6 +2064,7 @@ function SUrriculum(major_chosen_by_user) {
             window.planStorage.registerSaveHook(function() {
                 planSetItem("curriculum", serializator(curriculum));
                 planSetItem("grades", grades_serializator(curriculum));
+                planSetItem("gradingBases", grading_bases_serializator(curriculum));
                 planSetItem("dates", dates_serializator());
             });
         }
@@ -2571,17 +2573,6 @@ function SUrriculum(major_chosen_by_user) {
 
         // Get from transcript:
         async function handleAcademicRecordsImport() {
-        // Prevent import when semesters already exist, mirroring the
-        // behaviour of the "Add First Year Courses" button.
-        const existing = document.querySelectorAll('.semester');
-        if (existing.length > 0) {
-            const ui = (typeof window !== 'undefined') ? window.uiModal : null;
-            const msg = '<p>Import only works when no semesters are present.</p><p>Please start a new plan or clear your semesters first.</p>';
-            if (ui && typeof ui.alert === 'function') await ui.alert('Cannot import', msg);
-            else await uiAlert('Cannot import', msg);
-            return;
-        }
-
         const fileInput = document.getElementById('academicRecordsInput');
 
         if (fileInput.files.length > 0) {
@@ -2722,9 +2713,60 @@ function SUrriculum(major_chosen_by_user) {
                 return;
             }
 
+            const parserInvalidGrades = parsedData && Array.isArray(parsedData.invalidGradeCourses)
+                ? parsedData.invalidGradeCourses : [];
+            const parserSuperseded = parsedData && Array.isArray(parsedData.supersededCourses)
+                ? parsedData.supersededCourses : [];
+            const parserSkipped = parsedData && Array.isArray(parsedData.skippedCourses)
+                ? parsedData.skippedCourses : [];
+            const renderImportIssueSections = (stats) => {
+                const data = stats || {};
+                const notFound = Array.isArray(data.notFoundCourses) ? data.notFoundCourses : [];
+                const invalid = Array.isArray(data.invalidGradeCourses) ? data.invalidGradeCourses : [];
+                const alreadyPresent = Array.isArray(data.alreadyPresentCourses) ? data.alreadyPresentCourses : [];
+                const superseded = Array.isArray(data.supersededCourses) ? data.supersededCourses : [];
+                const skipped = Array.isArray(data.skippedCourses) ? data.skippedCourses : [];
+                let html = '';
+                if (notFound.length) {
+                    html += `<p><strong>${notFound.length}</strong> course(s) were not found in the current program and were skipped:</p><p><small>${notFound.map(code => escapeHtml(code)).join(', ')}</small></p>`;
+                }
+                if (invalid.length) {
+                    html += `<p><strong>${invalid.length}</strong> record(s) had unsupported grades and were skipped:</p><ul>${invalid.map((item) => {
+                        const code = escapeHtml(item && item.code ? item.code : 'Unknown course');
+                        const grade = escapeHtml(item && item.grade ? item.grade : 'blank');
+                        return `<li><strong>${code}</strong>: ${grade}</li>`;
+                    }).join('')}</ul>`;
+                }
+                if (alreadyPresent.length) {
+                    html += `<p><strong>${alreadyPresent.length}</strong> course(s) were already in the plan and needed no safe change:</p><p><small>${alreadyPresent.map(item => escapeHtml(item && item.code ? item.code : 'Unknown course')).join(', ')}</small></p>`;
+                }
+                if (superseded.length) {
+                    html += `<p><strong>${superseded.length}</strong> older attempt(s) were superseded by the latest transcript record.</p>`;
+                }
+                if (skipped.length) {
+                    html += `<p><strong>${skipped.length}</strong> record(s) were skipped:</p><ul>${skipped.map((item) => {
+                        const code = escapeHtml(item && item.code ? item.code : 'Unknown course');
+                        const reason = escapeHtml(item && item.reason ? String(item.reason).replace(/-/g, ' ') : 'not importable');
+                        return `<li><strong>${code}</strong>: ${reason}</li>`;
+                    }).join('')}</ul>`;
+                }
+                return html;
+            };
             if (!parsedData || !Array.isArray(parsedData.courses) || parsedData.courses.length === 0) {
                 const ui = (typeof window !== 'undefined') ? window.uiModal : null;
                 try {
+                    if (parserInvalidGrades.length || parserSkipped.length || parserSuperseded.length) {
+                        const body = '<p>The transcript was read, but it contained no importable latest course records.</p>'
+                            + renderImportIssueSections({
+                                invalidGradeCourses: parserInvalidGrades,
+                                supersededCourses: parserSuperseded,
+                                skippedCourses: parserSkipped
+                            });
+                        const title = parserInvalidGrades.length ? 'Grades need review' : 'No importable courses';
+                        if (ui && typeof ui.alert === 'function') await ui.alert(title, body);
+                        else await uiAlert(title, body);
+                        return;
+                    }
                     if (ui && typeof ui.alert === 'function') {
                         await ui.alert(
                             'No courses detected',
@@ -2757,6 +2799,23 @@ function SUrriculum(major_chosen_by_user) {
             const importStats = importResult.stats;
             const pendingList = importResult.pendingCustomCourses || [];
 
+            if (importStats) {
+                const mergeParserIssues = (field, issues) => {
+                    if (!issues.length) return;
+                    if (!Array.isArray(importStats[field])) importStats[field] = [];
+                    importStats[field].push(...issues);
+                };
+                mergeParserIssues('invalidGradeCourses', parserInvalidGrades);
+                mergeParserIssues('supersededCourses', parserSuperseded);
+                mergeParserIssues('skippedCourses', parserSkipped);
+                if (parsedData && Number.isFinite(Number(parsedData.detectedRecords))) {
+                    importStats.totalRecords = Number(parsedData.detectedRecords);
+                }
+                importStats.updatedCourseCount = Array.isArray(importStats.updatedCourses)
+                    ? importStats.updatedCourses.length : Number(importStats.updatedCourseCount || 0);
+                importStats.changedCourses = Number(importStats.importedCourses || 0) + importStats.updatedCourseCount;
+            }
+
             const ui = (typeof window !== 'undefined') ? window.uiModal : null;
             if (!importStats || typeof importStats.importedCourses !== 'number') {
                 if (ui && typeof ui.alert === 'function') {
@@ -2767,30 +2826,27 @@ function SUrriculum(major_chosen_by_user) {
                 return;
             }
 
-            if (importStats.importedCourses === 0) {
+            const changedCourses = Number(importStats.changedCourses || 0);
+            const issueSections = renderImportIssueSections(importStats);
+            const alreadyPresentCount = Array.isArray(importStats.alreadyPresentCourses)
+                ? importStats.alreadyPresentCourses.length : 0;
+            if (changedCourses === 0) {
                 const body = (
-                    `<p>No courses were imported.</p>` +
-                    `<p>Detected <strong>${importStats.totalCourses || 0}</strong> course(s) in the file, but none could be added to your current plan.</p>` +
-                    `<p>This usually happens if you selected the wrong major/double major before importing, or the file is not the Academic Records Summary.</p>` +
-                    `<p>Please upload the correct file:</p>` +
-                    '<ol>' +
-                    '<li>SUIS → Student → Student Records → Academic Transcript</li>' +
-                    '<li>Open <strong>Academic Records Summary</strong></li>' +
-                    '<li>Save as <strong>HTML</strong> (preferred) or print to <strong>PDF</strong></li>' +
-                    '<li>Upload that file here</li>' +
-                    '</ol>' +
-                    `<p>You can also upload a <strong>YÖK Transcript PDF</strong> (not preferred).</p>`
+                    `<p>${alreadyPresentCount ? 'No plan changes were needed.' : 'No courses were added or updated.'}</p>` +
+                    `<p>Detected <strong>${importStats.totalRecords || importStats.totalCourses || 0}</strong> transcript record(s).</p>` +
+                    issueSections +
+                    (!alreadyPresentCount
+                        ? '<p>Check that the selected major/double major and admit terms match this transcript.</p>'
+                        : '')
                 );
-                if (ui && typeof ui.alert === 'function') await ui.alert('No courses imported', body);
-                else await uiAlert('No courses imported', body);
+                const title = alreadyPresentCount ? 'Import complete' : 'No courses imported';
+                if (ui && typeof ui.alert === 'function') await ui.alert(title, body);
+                else await uiAlert(title, body);
                 return;
             }
 
-            // Show import results to user
-            const notFound = (importStats.notFoundCourses && importStats.notFoundCourses.length)
-                ? `<p><strong>${importStats.notFoundCourses.length}</strong> course(s) were not found in the current program and were skipped:</p><p><small>${importStats.notFoundCourses.join(', ')}</small></p>`
-                : '';
-            const messageHtml = `<p>Successfully imported <strong>${importStats.importedCourses}</strong> of <strong>${importStats.totalCourses}</strong> course(s).</p>${notFound}`;
+            const updatedCount = Number(importStats.updatedCourseCount || 0);
+            const messageHtml = `<p>Added <strong>${importStats.importedCourses}</strong> new course(s) and updated <strong>${updatedCount}</strong> existing course(s).</p>${issueSections}`;
             if (ui && typeof ui.alert === 'function') await ui.alert('Import complete', messageHtml);
             else await uiAlert('Import complete', messageHtml);
 

@@ -132,9 +132,23 @@
                     var metric = metrics[j];
                     var head = metric.querySelector('.summary_metric_head span');
                     var legacy = metric.querySelector('p');
-                    var match = legacy ? (legacy.textContent || '').trim().match(/^(.*?):\s*([\d.]+)\s*\/\s*([\d.]+)/) : null;
-                    if (metric.dataset.metric === 'gpa') {
-                        if (match) stats.push({ label: match[1].trim(), value: parseFloat(match[2]), limit: parseFloat(match[3]) });
+                    var legacyText = legacy ? (legacy.textContent || '').trim() : '';
+                    var match = legacyText.match(/^(.*?):\s*([\d.]+)\s*\/\s*([\d.]+)/);
+                    var unavailable = legacyText.match(/^(.*?):\s*N\/A\s*\/\s*([\d.]+)/i);
+                    if (metric.dataset.metric === 'gpa' || metric.dataset.metric === 'pgpa'
+                        || metric.dataset.metric === 'main_pgpa') {
+                        var averageLabel = ((head || {}).textContent || (match && match[1])
+                            || (unavailable && unavailable[1]) || metric.dataset.metric).trim();
+                        var threshold = parseFloat(metric.dataset.threshold || '0');
+                        var averageValue = parseFloat(metric.dataset.value || '');
+                        var averageMet = metric.dataset.met === 'true';
+                        if (Number.isFinite(averageValue)) {
+                            stats.push({ label: averageLabel + ' (min)', value: averageValue,
+                                limit: threshold, met: averageMet });
+                        } else {
+                            stats.push({ label: averageLabel + ' (min)', value: NaN,
+                                limit: threshold, met: false, displayValue: 'N/A' });
+                        }
                         continue;
                     }
                     var projected = parseFloat(metric.dataset.projected || '0');
@@ -205,7 +219,16 @@
                         future: split.future, unverified: split.unverified });
                 }
                 if (r.gpaThreshold) {
-                    stats.push({ label: 'CGPA (min)', value: Math.round((r.cgpa || 0) * 100) / 100, limit: r.gpaThreshold, met: !!r.gpaOk });
+                    var hasCgpa = Number.isFinite(Number(r.cgpa));
+                    stats.push({ label: 'CGPA (min)',
+                        value: hasCgpa ? Math.round(Number(r.cgpa) * 100) / 100 : NaN,
+                        limit: r.gpaThreshold, met: !!r.gpaOk,
+                        displayValue: hasCgpa ? null : 'N/A' });
+                    var hasPgpa = Number.isFinite(Number(r.pgpa));
+                    stats.push({ label: 'PGPA (min)',
+                        value: hasPgpa ? Math.round(Number(r.pgpa) * 100) / 100 : NaN,
+                        limit: r.gpaThreshold, met: !!r.pgpaOk,
+                        displayValue: hasPgpa ? null : 'N/A' });
                 }
                 cards.push({
                     code: minors[i],
@@ -273,7 +296,9 @@
                 var earnedMet = s.earned !== undefined && s.earned >= s.limit;
                 var met = (s.met !== undefined) ? s.met : (s.value >= s.limit);
                 var statClass = earnedMet ? ' is-met' : (met ? ' is-projected-met' : '');
-                var val = s.earned !== undefined
+                var val = s.displayValue
+                    ? esc(s.displayValue) + ' / ' + fmt(s.limit)
+                    : s.earned !== undefined
                     ? '<span class="is-earned">' + fmt(s.earned) + ' earned</span><span>' + fmt(s.value) + ' projected / ' + fmt(s.limit) + '</span>'
                     : fmt(s.value) + ' / ' + fmt(s.limit);
                 html += '<div class="m-prog-stat' + statClass + '"><div class="m-prog-lbl">' + esc(s.label) + '</div><div class="m-prog-val">' + val + '</div></div>';

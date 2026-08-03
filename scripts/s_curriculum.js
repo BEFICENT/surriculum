@@ -4,15 +4,14 @@
 
 const REQUIREMENTS_UNAVAILABLE_FLAG = 99;
 
-// A curriculum is both a record and a forward-looking plan, so ungraded,
-// in-progress and incomplete courses remain projected parts of the plan. An
-// explicitly unsuccessful/non-credit attempt must not satisfy any degree rule
-// or influence allocation. W/NA are normally removed by transcript import, but
-// keeping them here also makes plan imports fail closed.
-const DEGREE_INELIGIBLE_GRADES = new Set(['F', 'U', 'NA', 'W']);
-const FINAL_SUCCESS_GRADES = new Set([
-    'A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'S', 'T',
-]);
+// The browser policy in scripts/domain/grades.js is authoritative. This small
+// fallback keeps the pure VM tests and a partially loaded page conservative;
+// production consumers all reach the shared window.gradePolicy object.
+const FALLBACK_GRADE_POINTS = Object.freeze({
+    A: 4.0, 'A-': 3.7, 'B+': 3.3, B: 3.0, 'B-': 2.7,
+    'C+': 2.3, C: 2.0, 'C-': 1.7, 'D+': 1.3, D: 1.0, F: 0.0,
+});
+const FALLBACK_SPECIAL_GRADES = new Set(['', 'P', 'S', 'U', 'I', 'T', 'NA', 'W']);
 const COURSE_PROGRESS_STATES = Object.freeze({
     EARNED: 'earned',
     CURRENT: 'current',
@@ -20,10 +19,60 @@ const COURSE_PROGRESS_STATES = Object.freeze({
     UNVERIFIED: 'unverified',
     UNSUCCESSFUL: 'unsuccessful',
 });
+const PROGRAM_EFFECTIVE_TYPES = new Set([
+    'university', 'required', 'core', 'area', 'free',
+]);
 
 function normalizeCourseGrade(grade) {
-    const normalized = String(grade || '').trim().toUpperCase();
-    return normalized === 'REGISTERED' ? '' : normalized;
+    const raw = String(grade || '').trim().toUpperCase();
+    try {
+        const policy = (typeof window !== 'undefined') ? window.gradePolicy : null;
+        if (policy && typeof policy.normalizeGrade === 'function') {
+            const normalized = policy.normalizeGrade(raw);
+            return normalized === null ? raw : normalized;
+        }
+    } catch (_) {}
+    return raw === 'REGISTERED' ? '' : raw;
+}
+
+function fallbackGradeOutcome(grade, rawBasis) {
+    const token = normalizeCourseGrade(grade);
+    let basis = ['letter', 'satisfactory'].includes(String(rawBasis || '').trim().toLowerCase())
+        ? String(rawBasis).trim().toLowerCase() : 'unknown';
+    if (!Object.prototype.hasOwnProperty.call(FALLBACK_GRADE_POINTS, token)
+        && !FALLBACK_SPECIAL_GRADES.has(token)) {
+        return { token: null, supported: false, successful: false, earnsCredit: false,
+            pending: false, countsInGpa: false, gpaPoints: null, needsReview: true,
+            requiresGradingBasis: false, gradingBasis: 'unknown' };
+    }
+    if (Object.prototype.hasOwnProperty.call(FALLBACK_GRADE_POINTS, token)) {
+        basis = 'letter';
+        return { token, supported: true, successful: token !== 'F', earnsCredit: token !== 'F',
+            pending: false, countsInGpa: true, gpaPoints: FALLBACK_GRADE_POINTS[token],
+            needsReview: false, requiresGradingBasis: false, gradingBasis: 'letter' };
+    }
+    if (token === 'S' || token === 'U') basis = 'satisfactory';
+    if (token === 'NA') {
+        const resolved = basis === 'letter' || basis === 'satisfactory';
+        return { token, supported: true, successful: false, earnsCredit: false, pending: false,
+            countsInGpa: basis === 'letter', gpaPoints: basis === 'letter' ? 0 : null,
+            needsReview: !resolved, requiresGradingBasis: !resolved, gradingBasis: basis };
+    }
+    const successful = token === 'S' || token === 'T';
+    const pending = token === '' || token === 'P' || token === 'I';
+    return { token, supported: true, successful, earnsCredit: successful, pending,
+        countsInGpa: false, gpaPoints: null, needsReview: false,
+        requiresGradingBasis: false, gradingBasis: basis };
+}
+
+function evaluateCourseGrade(grade, gradingBasis) {
+    try {
+        const policy = (typeof window !== 'undefined') ? window.gradePolicy : null;
+        if (policy && typeof policy.evaluateGrade === 'function') {
+            return policy.evaluateGrade(grade, gradingBasis);
+        }
+    } catch (_) {}
+    return fallbackGradeOutcome(grade, gradingBasis);
 }
 
 function gradeForCourse(course) {
@@ -41,7 +90,9 @@ function gradeForCourse(course) {
 }
 
 function isDegreeEligibleCourse(course) {
-    return !!course && !DEGREE_INELIGIBLE_GRADES.has(gradeForCourse(course));
+    if (!course) return false;
+    const outcome = evaluateCourseGrade(gradeForCourse(course), course.gradingBasis);
+    return !!(outcome.supported && (outcome.earnsCredit || outcome.pending));
 }
 
 function normalizeProgressTermCode(term) {
@@ -110,18 +161,107 @@ function semesterProgressTermCode(semester) {
 function courseProgressState(course, semester, explicitCurrentTermCode) {
     if (!course) return COURSE_PROGRESS_STATES.UNVERIFIED;
     const grade = gradeForCourse(course);
+    const outcome = evaluateCourseGrade(grade, course.gradingBasis);
     const courseTerm = semesterProgressTermCode(semester);
     const currentTerm = currentProgressTermCode(explicitCurrentTermCode);
-    if (DEGREE_INELIGIBLE_GRADES.has(grade)) return COURSE_PROGRESS_STATES.UNSUCCESSFUL;
+    if (!outcome.supported || (!outcome.successful && !outcome.pending)) {
+        return COURSE_PROGRESS_STATES.UNSUCCESSFUL;
+    }
     if (courseTerm && currentTerm && courseTerm > currentTerm) {
         return COURSE_PROGRESS_STATES.FUTURE;
     }
     if (!courseTerm || !currentTerm) return COURSE_PROGRESS_STATES.UNVERIFIED;
-    if (FINAL_SUCCESS_GRADES.has(grade)) return COURSE_PROGRESS_STATES.EARNED;
+    if (outcome.successful && outcome.earnsCredit) return COURSE_PROGRESS_STATES.EARNED;
     if (courseTerm && currentTerm && courseTerm === currentTerm) {
         return COURSE_PROGRESS_STATES.CURRENT;
     }
     return COURSE_PROGRESS_STATES.UNVERIFIED;
+}
+
+// Program GPA membership is intentionally distinct from earned-credit
+// eligibility. A failed letter-graded course can belong to a program (and
+// therefore contribute zero points over its SU credits to PGPA) without
+// satisfying any course or credit requirement. The allocation pass used for
+// membership runs successful/planned courses first and classifies these
+// terminal failures afterwards, so they cannot displace earned credit.
+function isProgramEffectiveType(value) {
+    return PROGRAM_EFFECTIVE_TYPES.has(String(value || '').trim().toLowerCase());
+}
+
+function courseCanHaveProgramGpaMembership(course) {
+    if (!course) return false;
+    const outcome = evaluateCourseGrade(gradeForCourse(course), course.gradingBasis);
+    return !!(outcome.earnsCredit || outcome.pending || outcome.countsInGpa || outcome.needsReview);
+}
+
+function calculateGpaForMembership(semesters, isMember, explicitCurrentTermCode, includeEstimates) {
+    let points = 0;
+    let credits = 0;
+    let missingCredits = 0;
+    const issues = [];
+    const missingCourses = [];
+    const currentTerm = currentProgressTermCode(explicitCurrentTermCode);
+    const projected = includeEstimates === true;
+    const member = typeof isMember === 'function' ? isMember : (() => true);
+    const rows = Array.isArray(semesters) ? semesters : [];
+
+    for (let i = 0; i < rows.length; i++) {
+        const sem = rows[i];
+        const courseTerm = semesterProgressTermCode(sem);
+        const courses = (sem && Array.isArray(sem.courses)) ? sem.courses : [];
+        for (let j = 0; j < courses.length; j++) {
+            const course = courses[j];
+            if (!course || !member(course, sem)) continue;
+            // Actual averages only accept a known current/past term. Projected
+            // averages may use explicitly entered grades from future terms.
+            if (!projected && (!courseTerm || !currentTerm || courseTerm > currentTerm)) continue;
+
+            const grade = gradeForCourse(course);
+            const outcome = evaluateCourseGrade(grade, course.gradingBasis);
+            const credit = creditOfCourse(course);
+            if (outcome.needsReview) {
+                if (credit > 0) {
+                    issues.push({
+                        code: outcome.requiresGradingBasis
+                            ? 'NA_GRADING_BASIS_UNKNOWN' : 'UNSUPPORTED_GRADE',
+                        courseCode: String(course.code || ''),
+                        grade,
+                    });
+                }
+                continue;
+            }
+            if (outcome.countsInGpa) {
+                points += credit * outcome.gpaPoints;
+                credits += credit;
+                continue;
+            }
+            if (projected && outcome.pending
+                && String(outcome.gradingBasis || '').toLowerCase() !== 'satisfactory'
+                && credit > 0) {
+                missingCredits += credit;
+                missingCourses.push(String(course.code || ''));
+            }
+        }
+    }
+
+    const resolved = issues.length === 0;
+    return {
+        value: resolved && credits ? points / credits : NaN,
+        credits,
+        points,
+        resolved,
+        unresolved: !resolved,
+        issues,
+        complete: resolved && missingCredits === 0,
+        missingCredits,
+        missingCourses,
+        projected,
+    };
+}
+
+function doubleMajorAverageThreshold(entryTerm) {
+    const code = parseInt(String(entryTerm || '0'), 10);
+    return Number.isFinite(code) && code > 0 && code < 201901 ? 2.72 : 3.20;
 }
 
 function normalizeCourseCode(code) {
@@ -161,6 +301,9 @@ if (typeof window !== 'undefined') {
     window.REQUIREMENTS_UNAVAILABLE_FLAG = REQUIREMENTS_UNAVAILABLE_FLAG;
     window.COURSE_PROGRESS_STATES = COURSE_PROGRESS_STATES;
     window.courseProgressState = courseProgressState;
+    window.isProgramEffectiveType = isProgramEffectiveType;
+    window.calculateGpaForMembership = calculateGpaForMembership;
+    window.doubleMajorAverageThreshold = doubleMajorAverageThreshold;
 }
 
 // SUIS rule (VACD): "Only one of the following course pairs will be counted
@@ -1612,46 +1755,77 @@ function s_curriculum()
         return { available: true, major, entryTerm, req, fields, totals, records, isEligible };
     };
 
-    const actualProgressGpa = (explicitCurrentTermCode) => {
-        const fallbackPoints = {
-            A: 4.0, 'A-': 3.7, 'B+': 3.3, B: 3.0, 'B-': 2.7,
-            'C+': 2.3, C: 2.0, 'C-': 1.7, 'D+': 1.3, D: 1.0, F: 0.0,
-            S: 4.0,
-        };
-        let points = 0;
-        let credits = 0;
-        const currentTerm = currentProgressTermCode(explicitCurrentTermCode);
-        for (let i = 0; i < this.semesters.length; i++) {
-            const sem = this.semesters[i];
-            const courseTerm = semesterProgressTermCode(sem);
-            const courses = sem.courses || [];
-            for (let j = 0; j < courses.length; j++) {
-                const course = courses[j];
-                // An actual GPA requires a known current/past term. This also
-                // keeps an explicitly entered future F from lowering the real
-                // GPA merely because unsuccessful grades share one state.
-                if (!courseTerm || !currentTerm || courseTerm > currentTerm) continue;
-                const state = courseProgressState(course, sem, explicitCurrentTermCode);
-                if (state === COURSE_PROGRESS_STATES.CURRENT
-                    || state === COURSE_PROGRESS_STATES.FUTURE
-                    || state === COURSE_PROGRESS_STATES.UNVERIFIED) continue;
-                const grade = gradeForCourse(course);
-                let value;
-                try {
-                    value = (typeof letter_grades_global_dic !== 'undefined')
-                        ? letter_grades_global_dic[grade] : fallbackPoints[grade];
-                } catch (_) { value = fallbackPoints[grade]; }
-                if (value === undefined || value === null || grade === 'T') continue;
-                const credit = creditOfCourse(course);
-                points += credit * value;
-                credits += credit;
-            }
+    const actualProgressGpa = (explicitCurrentTermCode) => calculateGpaForMembership(
+        this.semesters,
+        () => true,
+        explicitCurrentTermCode,
+        false,
+    );
+
+    const programGpaForSnapshot = (snapshot, explicitCurrentTermCode, includeEstimates) => {
+        if (!snapshot || !snapshot.available || !(snapshot.records instanceof Map)) {
+            return {
+                value: NaN, credits: 0, points: 0, resolved: false, unresolved: true,
+                issues: [{ code: 'PROGRAM_REQUIREMENTS_UNAVAILABLE', courseCode: '', grade: '' }],
+                complete: false, missingCredits: 0, missingCourses: [],
+                projected: includeEstimates === true, available: false,
+            };
         }
-        return { value: credits ? points / credits : NaN, credits, points };
+        const result = calculateGpaForMembership(
+            this.semesters,
+            (course) => {
+                const record = snapshot.records.get(course);
+                return !!record && isProgramEffectiveType(record.effective);
+            },
+            explicitCurrentTermCode,
+            includeEstimates === true,
+        );
+        return { ...result, available: true, program: snapshot.major };
+    };
+
+    const programMembershipSnapshot = (view, explicitCurrentTermCode) => {
+        const programView = view === 'dm' ? 'dm' : 'main';
+        const currentTerm = currentProgressTermCode(explicitCurrentTermCode);
+        const stateOf = (course, sem) => courseProgressState(course, sem, currentTerm);
+        return runProgressAllocation(
+            programView,
+            'program_gpa',
+            (course) => courseCanHaveProgramGpaMembership(course),
+            stateOf,
+        );
+    };
+
+    // Public, allocation-independent access to the same actual-GPA policy used
+    // by Summary and graduation progress. Keeping this separate prevents
+    // compatibility callers from rebuilding GPA out of raw semester caches.
+    this.getActualGpa = function(explicitCurrentTermCode) {
+        return actualProgressGpa(explicitCurrentTermCode);
+    };
+
+    // Program GPA uses the program-specific effective allocation. Its private
+    // membership pass can classify an F/letter-basis NA without awarding the
+    // course any degree credit or changing the planner's visible allocation.
+    this.getProgramGpa = function(view, explicitCurrentTermCode, includeEstimates) {
+        const snapshot = programMembershipSnapshot(view, explicitCurrentTermCode);
+        return programGpaForSnapshot(snapshot, explicitCurrentTermCode, includeEstimates === true);
+    };
+
+    this.calculateGpaForMembership = function(isMember, explicitCurrentTermCode, includeEstimates) {
+        return calculateGpaForMembership(
+            this.semesters,
+            isMember,
+            explicitCurrentTermCode,
+            includeEstimates === true,
+        );
+    };
+
+    this.isProgramGpaCandidate = function(course) {
+        return courseCanHaveProgramGpaMembership(course);
     };
 
     const combinedProgressSnapshot = (view, programSnapshot, mainSnapshot) => {
-        if (view !== 'dm') return { ...programSnapshot, genericRecords: programSnapshot.records };
+        if (view !== 'dm') return { ...programSnapshot, genericRecords: programSnapshot.records,
+            mainProgramRecords: programSnapshot.records };
         const mainTotals = mainSnapshot && mainSnapshot.totals ? mainSnapshot.totals : {};
         return {
             ...programSnapshot,
@@ -1663,10 +1837,11 @@ function s_curriculum()
                 ects: mainTotals.ects || 0,
             },
             genericRecords: mainSnapshot && mainSnapshot.records ? mainSnapshot.records : new Map(),
+            mainProgramRecords: mainSnapshot && mainSnapshot.records ? mainSnapshot.records : new Map(),
         };
     };
 
-    const evaluateProgressAllocation = (view, snapshot, requireGpa, explicitCurrentTermCode) => {
+    const evaluateProgressAllocation = (view, snapshot, requireGpa, explicitCurrentTermCode, averages) => {
         if (!snapshot || !snapshot.available) return REQUIREMENTS_UNAVAILABLE_FLAG;
         const req = snapshot.req || {};
         const totals = snapshot.totals || {};
@@ -1685,9 +1860,22 @@ function s_curriculum()
         if ((totals.area || 0) < (req.area || 0)) return 6;
         if ((totals.free || 0) < (req.free || 0)) return 7;
 
-        const gpa = actualProgressGpa(explicitCurrentTermCode);
+        const averageSet = averages || {};
+        const gpa = averageSet.cgpa || actualProgressGpa(explicitCurrentTermCode);
+        const pgpa = averageSet.pgpa || { value: NaN, credits: 0, resolved: false };
+        const mainPgpa = averageSet.mainPgpa || pgpa;
+        const threshold = Number(averageSet.threshold) || (isDM ? 3.20 : 2.00);
+        if (!gpa.resolved) return 38;
         if (requireGpa && !gpa.credits) return 38;
-        if (gpa.credits && gpa.value < (isDM ? 3.20 : 2.00)) return 38;
+        if (gpa.credits && gpa.value < threshold) return 38;
+        if (!pgpa.resolved) return 41;
+        if (requireGpa && !pgpa.credits) return 41;
+        if (pgpa.credits && pgpa.value < threshold) return 41;
+        if (isDM) {
+            if (!mainPgpa.resolved) return 41;
+            if (requireGpa && !mainPgpa.credits) return 41;
+            if (mainPgpa.credits && mainPgpa.value < threshold) return 41;
+        }
         const ctx = { curr: this, semesters: this.semesters, fields: snapshot.fields,
             entryTerm: snapshot.entryTerm, isEligible: snapshot.isEligible };
         return evaluateRules(ctx, graduationRulesFor(snapshot.major, req));
@@ -1713,9 +1901,10 @@ function s_curriculum()
                     || s === COURSE_PROGRESS_STATES.FUTURE;
             },
             projected: (course, sem) => stateOf(course, sem) !== COURSE_PROGRESS_STATES.UNSUCCESSFUL,
+            programGpa: (course) => courseCanHaveProgramGpaMembership(course),
         };
         const layers = {};
-        const layerNames = ['earned', 'current', 'future', 'projected'];
+        const layerNames = ['earned', 'current', 'future', 'projected', 'programGpa'];
         for (let i = 0; i < layerNames.length; i++) {
             const layer = layerNames[i];
             const mainSnapshot = runProgressAllocation('main', layer, predicates[layer], stateOf);
@@ -1765,8 +1954,29 @@ function s_curriculum()
             b.projected = b.earned + b.current + b.future + b.unverified;
         }
 
-        const earnedFlag = evaluateProgressAllocation(programView, layers.earned, true, currentTerm);
-        const projectedFlag = evaluateProgressAllocation(programView, layers.projected, false, currentTerm);
+        const cgpa = actualProgressGpa(currentTerm);
+        const pgpa = programGpaForSnapshot(layers.programGpa, currentTerm, false);
+        const projectedPgpa = programGpaForSnapshot(layers.programGpa, currentTerm, true);
+        let mainPgpa = pgpa;
+        let projectedMainPgpa = projectedPgpa;
+        if (programView === 'dm') {
+            const mainMembership = {
+                ...layers.programGpa,
+                major: this.major,
+                records: layers.programGpa.mainProgramRecords || new Map(),
+            };
+            mainPgpa = programGpaForSnapshot(mainMembership, currentTerm, false);
+            projectedMainPgpa = programGpaForSnapshot(mainMembership, currentTerm, true);
+        }
+        const averageThreshold = programView === 'dm'
+            ? doubleMajorAverageThreshold(this.entryTerm) : 2.00;
+        const averages = { cgpa, pgpa, mainPgpa, threshold: averageThreshold };
+        const earnedFlag = evaluateProgressAllocation(
+            programView, layers.earned, true, currentTerm, averages,
+        );
+        const projectedFlag = evaluateProgressAllocation(
+            programView, layers.projected, false, currentTerm, averages,
+        );
         const available = earnedFlag !== REQUIREMENTS_UNAVAILABLE_FLAG
             && projectedFlag !== REQUIREMENTS_UNAVAILABLE_FLAG;
         const status = !available ? 'unavailable'
@@ -1778,12 +1988,22 @@ function s_curriculum()
             for (let j = 0; j < courses.length; j++) {
                 const course = courses[j];
                 const record = layers.projected.records.get(course);
+                const pgpaRecord = layers.programGpa.records.get(course);
                 courseStates.push({ course, semester: sem, state: stateOf(course, sem),
-                    effective: record ? record.effective : 'none' });
+                    effective: record ? record.effective : 'none',
+                    pgpaEffective: pgpaRecord ? pgpaRecord.effective : 'none' });
             }
         }
         return { view: programView, status, available, earnedFlag, projectedFlag,
-            breakdown, layers, courseStates, gpa: actualProgressGpa(currentTerm), currentTerm };
+            breakdown, layers, courseStates, gpa: cgpa, cgpa, pgpa, projectedPgpa,
+            mainPgpa, projectedMainPgpa, averageThreshold,
+            averageChecks: {
+                cgpa: cgpa.resolved && cgpa.credits > 0 && cgpa.value >= averageThreshold,
+                pgpa: pgpa.resolved && pgpa.credits > 0 && pgpa.value >= averageThreshold,
+                mainPgpa: mainPgpa.resolved && mainPgpa.credits > 0
+                    && mainPgpa.value >= averageThreshold,
+            },
+            currentTerm };
     };
 
     this.canGraduateEarned = function() {
@@ -1924,8 +2144,6 @@ function s_curriculum()
         let science = 0;
         let engineering = 0;
         let ects = 0;
-        let gpaCredits = 0;
-        let gpaValue = 0.0;
 
         for(let i = 0; i < this.semesters.length; i++)
         {
@@ -1938,8 +2156,6 @@ function s_curriculum()
             science += this.semesters[i].totalScience;
             engineering += this.semesters[i].totalEngineering;
             ects += this.semesters[i].totalECTS;
-            gpaCredits += this.semesters[i].totalGPACredits;
-            gpaValue += this.semesters[i].totalGPA;
         }
         // Generic requirement checks
         if (university < req.university) return 1;
@@ -1959,10 +2175,10 @@ function s_curriculum()
         if (free < req.free) return 7;
         // GPA check for graduation
         const gpaThresholdMainMajor = 2.00;
-        let GPA = gpaCredits ? (gpaValue / gpaCredits).toFixed(3) : NaN;
-        if (!isNaN(GPA)){
-            if (GPA < gpaThresholdMainMajor) return 38; // Flag for main major
-        }
+        const gpa = this.getActualGpa();
+        if (!gpa.resolved || (gpa.credits && gpa.value < gpaThresholdMainMajor)) return 38;
+        const pgpa = this.getProgramGpa('main');
+        if (!pgpa.resolved || (pgpa.credits && pgpa.value < gpaThresholdMainMajor)) return 41;
         // SPS 303, the HUM requirement and the per-major requirements are DATA
         // -- see PROGRAM_RULES -- evaluated in order, first unmet wins. The same
         // table drives the double-major pass (canGraduateDouble) via DM_FIELDS.
@@ -2575,8 +2791,6 @@ function s_curriculum()
         let science = 0;
         let engineering = 0;
         let ects = 0;
-        let gpaCreditsDM = 0;
-        let gpaValueDM = 0;
         for (let i = 0; i < this.semesters.length; i++) {
             const sem = this.semesters[i];
             total += sem.totalCredit;
@@ -2592,8 +2806,6 @@ function s_curriculum()
             science += sem.totalScience;
             engineering += sem.totalEngineering;
             ects += sem.totalECTS;
-            gpaCreditsDM += sem.totalGPACredits;
-            gpaValueDM += sem.totalGPA;
         }
         // Fetch requirements for double major and adjust SU/ECTS thresholds
         const totalReq = (req.total || 0) + 30;
@@ -2612,11 +2824,14 @@ function s_curriculum()
         if (area < (req.area || 0)) return 6;
         if (free < (req.free || 0)) return 7;
         // GPA check for graduation
-        const gpaThresholdDoubleMajor = 3.20;
-        let GPA = gpaCreditsDM ? (gpaValueDM / gpaCreditsDM).toFixed(3) : NaN;
-        if (!isNaN(GPA)){
-            if (this.doubleMajor && GPA < gpaThresholdDoubleMajor) return 38; // Flag for double major
-        }
+        const gpaThresholdDoubleMajor = doubleMajorAverageThreshold(this.entryTerm);
+        const gpa = this.getActualGpa();
+        if (!gpa.resolved || (gpa.credits && gpa.value < gpaThresholdDoubleMajor)) return 38;
+        const mainPgpa = this.getProgramGpa('main');
+        const dmPgpa = this.getProgramGpa('dm');
+        if (!mainPgpa.resolved || !dmPgpa.resolved
+            || (mainPgpa.credits && mainPgpa.value < gpaThresholdDoubleMajor)
+            || (dmPgpa.credits && dmPgpa.value < gpaThresholdDoubleMajor)) return 41;
         // Per-major requirements are the SAME data the main pass uses (see
         // PROGRAM_RULES), evaluated here against the double-major allocation via
         // DM_FIELDS. This is what makes the double major enforce EXACTLY the

@@ -59,5 +59,56 @@ test.describe('planner CRUD (desktop)', () => {
     expect(t.gpaValue).toBe(12); // 3 credits * 4.0
     expect(t.gpaCredits).toBe(3);
     expect(t.gpa).toBe(4);
+
+    await page.locator('.course:has(.course_code:text-is("MATH101")) .grade').click();
+    await page.locator('.grade-option[data-value="S"]').click();
+    const satisfactory = await readCurriculumTotals(page);
+    expect(satisfactory.gpaCredits).toBe(0);
+    expect(await page.evaluate(() => window.curriculum.semesters[0].courses[0].gradingBasis))
+      .toBe('satisfactory');
+  });
+
+  test('the grade picker exposes special grades and resolves NA basis explicitly', async ({ page }) => {
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: 'Fall 2024-2025',
+      curriculum: [['MATH101']],
+      grades: [['']],
+      dates: ['Fall 2024-2025'],
+    });
+
+    const grade = page.locator('.course:has(.course_code:text-is("MATH101")) .grade');
+    await grade.click();
+    for (const token of ['P', 'S', 'U', 'I', 'T', 'W']) {
+      await expect(page.locator(`.grade-option[data-value="${token}"]`)).toHaveCount(1);
+    }
+    await expect(page.locator('.grade-option[data-value="NA"]')).toHaveCount(2);
+    await page.locator('.grade-option[data-value="NA"][data-basis="satisfactory"]').click();
+
+    const result = await page.evaluate(() => {
+      const course = window.curriculum.semesters[0].courses[0];
+      return { grade: course.grade, basis: course.gradingBasis, gpa: window.curriculum.getActualGpa() };
+    });
+    expect(result.grade).toBe('NA');
+    expect(result.basis).toBe('satisfactory');
+    expect(result.gpa.resolved).toBe(true);
+    expect(result.gpa.credits).toBe(0);
+  });
+
+  test('dismissing the grade picker leaves the previous grade unchanged', async ({ page }) => {
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: 'Fall 2024-2025',
+      curriculum: [['MATH101']],
+      grades: [['A']],
+      dates: ['Fall 2024-2025'],
+    });
+
+    const grade = page.locator('.course:has(.course_code:text-is("MATH101")) .grade');
+    await grade.click();
+    await page.locator('.summary').click();
+
+    await expect(grade).toHaveText('A');
+    expect(await page.evaluate(() => window.curriculum.semesters[0].courses[0].grade)).toBe('A');
   });
 });

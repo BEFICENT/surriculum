@@ -11,17 +11,18 @@
   // (version.js — code/UI). Was misleadingly named APP_DATA_VERSION. The
   // persisted key STRING is kept as-is so existing installs aren't mistaken for
   // a fresh run.
-  const STORAGE_SCHEMA_VERSION = 1;
+  const STORAGE_SCHEMA_VERSION = 2;
   const STORAGE_SCHEMA_KEY = 'surriculum.appDataVersion';
   const MAX_PLANS = 10;
   const DEFAULT_PLAN_NAME = 'Default Plan';
+  const PLAN_EXPORT_VERSION = 2;
   const LEGACY_KEYS = [
     'major', 'doubleMajor',
     'entryTerm', 'entryTermDM',
     // Minor terms: `entryTermMinor` is legacy (single term); keep for migration.
     'entryTermMinor', 'entryTermMinor1', 'entryTermMinor2', 'entryTermMinor3',
     'minor1', 'minor2', 'minor3',
-    'curriculum', 'grades', 'dates'
+    'curriculum', 'grades', 'gradingBases', 'dates'
   ];
   const APP_GLOBAL_STORAGE_KEYS = new Set([
     ...LEGACY_KEYS,
@@ -455,13 +456,14 @@
   const IMPORT_COURSE_TYPES = new Set(['core', 'area', 'university', 'free', 'required', 'none']);
   const IMPORT_FACULTIES = new Set(['', 'FENS', 'FASS', 'SBS', 'SL']);
   const IMPORT_GRADES = new Set(['', 'S', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'F', 'T', 'P', 'I', 'U', 'W', 'NA']);
+  const IMPORT_GRADING_BASES = new Set(['unknown', 'letter', 'satisfactory']);
   const IMPORT_STATE_FIELDS = new Set([
     'major', 'doubleMajor',
     'entryTerm', 'entryTermDM',
     'entryTermMinor', 'entryTermMinor1', 'entryTermMinor2', 'entryTermMinor3',
     'minor1', 'minor2', 'minor3',
     'schedulerSelectedTerm',
-    'curriculum', 'grades', 'dates', 'customCourses', 'schedulerStates',
+    'curriculum', 'grades', 'gradingBases', 'dates', 'customCourses', 'schedulerStates',
   ]);
 
   function importError(path, message) {
@@ -594,12 +596,76 @@
       }
       return semester.map((grade, gradeIndex) => {
         if (typeof grade !== 'string') importError(`${semesterPath}[${gradeIndex}]`, 'expected a grade');
-        let normalized = grade.trim().toUpperCase();
-        if (normalized === 'REGISTERED') normalized = '';
-        if (!IMPORT_GRADES.has(normalized)) importError(`${semesterPath}[${gradeIndex}]`, 'has an unsupported grade');
+        const policy = (typeof window !== 'undefined' && window.gradePolicy) ? window.gradePolicy : null;
+        let normalized = policy && typeof policy.normalizeGrade === 'function'
+          ? policy.normalizeGrade(grade)
+          : grade.trim().toUpperCase();
+        if (!policy && normalized === 'REGISTERED') normalized = '';
+        if (normalized === null || !IMPORT_GRADES.has(normalized)) {
+          importError(`${semesterPath}[${gradeIndex}]`, 'has an unsupported grade');
+        }
         return normalized;
       });
     });
+  }
+
+  function validateGradingBases(value, curriculum, path) {
+    if (value === null) return null;
+    if (!Array.isArray(value)) importError(path, 'expected an array of semesters');
+    if (!Array.isArray(curriculum)) {
+      if (value.length === 0) return [];
+      importError(path, 'requires curriculum data');
+    }
+    if (value.length !== curriculum.length) importError(path, 'must have one entry per curriculum semester');
+    return value.map((semester, semesterIndex) => {
+      const semesterPath = `${path}[${semesterIndex}]`;
+      if (!Array.isArray(semester)) importError(semesterPath, 'expected an array of grading bases');
+      if (semester.length !== curriculum[semesterIndex].length) {
+        importError(semesterPath, 'must have one grading basis per course');
+      }
+      return semester.map((basis, basisIndex) => {
+        if (typeof basis !== 'string') importError(`${semesterPath}[${basisIndex}]`, 'expected a grading basis');
+        const raw = basis.trim().toLowerCase() || 'unknown';
+        if (!IMPORT_GRADING_BASES.has(raw)) {
+          importError(`${semesterPath}[${basisIndex}]`, 'has an unsupported grading basis');
+        }
+        const policy = (typeof window !== 'undefined' && window.gradePolicy) ? window.gradePolicy : null;
+        const normalized = policy && typeof policy.normalizeGradingBasis === 'function'
+          ? policy.normalizeGradingBasis(raw)
+          : raw;
+        return normalized;
+      });
+    });
+  }
+
+  function inferImportedGradingBasis(grade, explicitBasis) {
+    const policy = (typeof window !== 'undefined' && window.gradePolicy) ? window.gradePolicy : null;
+    if (policy && typeof policy.inferGradingBasis === 'function') {
+      return policy.inferGradingBasis(grade, explicitBasis);
+    }
+    const normalized = String(grade || '').trim().toUpperCase();
+    if (/^(?:A|A-|B\+|B|B-|C\+|C|C-|D\+|D|F)$/.test(normalized)) return 'letter';
+    if (normalized === 'S' || normalized === 'U') return 'satisfactory';
+    const basis = String(explicitBasis || '').trim().toLowerCase();
+    if (basis === 'letter' || basis === 'satisfactory') return basis;
+    return 'unknown';
+  }
+
+  function canonicalizeGradingBases(curriculum, grades, gradingBases) {
+    if (!Array.isArray(curriculum)) return null;
+    return curriculum.map((semester, semesterIndex) =>
+      semester.map((_, courseIndex) => {
+        const grade = Array.isArray(grades) && Array.isArray(grades[semesterIndex])
+          ? grades[semesterIndex][courseIndex] : '';
+        const explicitBasis = Array.isArray(gradingBases)
+          && Array.isArray(gradingBases[semesterIndex])
+          ? gradingBases[semesterIndex][courseIndex] : 'unknown';
+        return inferImportedGradingBasis(grade, explicitBasis);
+      }));
+  }
+
+  function synthesizeGradingBases(curriculum, grades) {
+    return canonicalizeGradingBases(curriculum, grades, null);
   }
 
   function validateDates(value, curriculum, path) {
@@ -896,10 +962,13 @@
     return out;
   }
 
-  function validatePlanState(value, path) {
+  function validatePlanState(value, path, fileVersion) {
     if (value === undefined || value === null) return {};
     const state = requirePlainObject(value, path);
-    requireKnownFields(state, IMPORT_STATE_FIELDS, path);
+    const allowedFields = fileVersion >= 2
+      ? IMPORT_STATE_FIELDS
+      : new Set(Array.from(IMPORT_STATE_FIELDS).filter((field) => field !== 'gradingBases'));
+    requireKnownFields(state, allowedFields, path);
     const out = {};
 
     const programFields = ['major', 'doubleMajor'];
@@ -926,6 +995,14 @@
     const curriculum = hasOwn(state, 'curriculum') ? validateCurriculum(state.curriculum, `${path}.curriculum`) : undefined;
     if (curriculum !== undefined) out.curriculum = curriculum;
     if (hasOwn(state, 'grades')) out.grades = validateGrades(state.grades, curriculum, `${path}.grades`);
+    if (fileVersion >= 2 && hasOwn(state, 'gradingBases') && state.gradingBases !== null) {
+      const suppliedBases = validateGradingBases(state.gradingBases, curriculum, `${path}.gradingBases`);
+      // A decisive A–F or S/U grade is the source of truth if stale metadata
+      // disagrees with it. Ambiguous grades such as NA retain the supplied basis.
+      out.gradingBases = canonicalizeGradingBases(curriculum, out.grades, suppliedBases);
+    } else if (Array.isArray(curriculum)) {
+      out.gradingBases = synthesizeGradingBases(curriculum, out.grades);
+    }
     if (hasOwn(state, 'dates')) out.dates = validateDates(state.dates, curriculum, `${path}.dates`);
     if (hasOwn(state, 'customCourses')) out.customCourses = validateCustomCourses(state.customCourses, `${path}.customCourses`);
     if (hasOwn(state, 'schedulerStates')) out.schedulerStates = validateSchedulerStates(state.schedulerStates, `${path}.schedulerStates`);
@@ -935,7 +1012,9 @@
   function validateImportObject(obj) {
     const root = requirePlainObject(obj, 'file');
     requireKnownFields(root, new Set(['type', 'version', 'exportedAt', 'plan']), 'file');
-    if (root.type !== 'surriculum_plan' || root.version !== 1) throw new Error('Unsupported file');
+    if (root.type !== 'surriculum_plan' || ![1, PLAN_EXPORT_VERSION].includes(root.version)) {
+      throw new Error('Unsupported file');
+    }
     if (hasOwn(root, 'exportedAt') && root.exportedAt !== null) normalizeIsoTimestamp(root.exportedAt, 'file.exportedAt');
 
     const plan = requirePlainObject(root.plan, 'file.plan');
@@ -953,7 +1032,7 @@
       const rawName = normalizeImportedText(plan.name, 'file.plan.name', { maxLength: 500, collapseWhitespace: true });
       name = normalizePlanName(rawName) || 'Imported Plan';
     }
-    return { name, state: validatePlanState(plan.state, 'file.plan.state') };
+    return { name, state: validatePlanState(plan.state, 'file.plan.state', root.version) };
   }
 
   function downloadJson(filename, obj) {
@@ -994,6 +1073,7 @@
       schedulerSelectedTerm: get('schedulerSelectedTerm') || null,
       curriculum: safeJsonParse(get('curriculum') || 'null', null),
       grades: safeJsonParse(get('grades') || 'null', null),
+      gradingBases: safeJsonParse(get('gradingBases') || 'null', null),
       dates: safeJsonParse(get('dates') || 'null', null),
       customCourses: {},
       schedulerStates: {},
@@ -1030,6 +1110,17 @@
       }
     }
 
+    if (Array.isArray(state.curriculum)) {
+      // Autosave writes parallel arrays sequentially. Recover a stale or
+      // partially written basis array before exporting so our own v2 export is
+      // always re-importable, and canonicalize conflicts from older storage.
+      state.gradingBases = canonicalizeGradingBases(
+        state.curriculum,
+        state.grades,
+        state.gradingBases,
+      );
+    }
+
     return state;
   }
 
@@ -1054,6 +1145,7 @@
 
     if (state.curriculum != null) setJson('curriculum', state.curriculum);
     if (state.grades != null) setJson('grades', state.grades);
+    if (state.gradingBases != null) setJson('gradingBases', state.gradingBases);
     if (state.dates != null) setJson('dates', state.dates);
 
     if (state.customCourses && typeof state.customCourses === 'object') {
@@ -1082,7 +1174,7 @@
     const state = readPlanState(planId);
     return {
       type: 'surriculum_plan',
-      version: 1,
+      version: PLAN_EXPORT_VERSION,
       exportedAt: nowIso(),
       plan: {
         id: meta?.id || planId,
@@ -1457,6 +1549,17 @@
       const exists = idx.plans.some(p => p.id === id);
       if (!exists) return { ok: false, message: 'Plan not found.' };
 
+      // The page save hook is bound to the plan that was active when this
+      // session loaded. Flush it before removing that namespace; running the
+      // hook afterwards would recreate orphaned keys for the deleted plan.
+      if (idx.activeId === id) {
+        try {
+          for (const fn of saveHooks) {
+            try { fn(); } catch (_) {}
+          }
+        } catch (_) {}
+      }
+
       // Remove all plan-scoped keys for this plan id
       const prefix = planKey(id, '');
       const keys = listLocalStorageKeys();
@@ -1469,11 +1572,6 @@
       if (idx.activeId === id) {
         idx.activeId = idx.plans[0].id;
         saveIndex(idx);
-        try {
-          for (const fn of saveHooks) {
-            try { fn(); } catch (_) {}
-          }
-        } catch (_) {}
         location.reload();
         reloaded = true;
       } else {

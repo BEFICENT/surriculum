@@ -125,6 +125,32 @@ test.describe('plan management', () => {
     expect(r.survived, 'the final plan must survive the delete attempt').toBe(1);
   });
 
+  test('deleting the active plan does not recreate scoped data during reload', async ({ page }) => {
+    const ids = await page.evaluate(() => {
+      const doomed = window.planStorage.getActivePlanId();
+      const keep = window.planStorage.createPlan('Keep');
+      window.planStorage.setItem('major', 'CS', doomed);
+      return { doomed, keep };
+    });
+
+    await Promise.all([
+      page.waitForNavigation(),
+      page.evaluate((doomed) => {
+        setTimeout(() => window.planStorage.deletePlan(doomed), 0);
+      }, ids.doomed),
+    ]);
+    await page.waitForFunction(() => !!(window.planStorage && window.planStorage.getPlans));
+
+    const result = await page.evaluate((doomed) => ({
+      activeId: window.planStorage.getActivePlanId(),
+      planIds: window.planStorage.getPlans().map((plan) => plan.id),
+      orphanKeys: Object.keys(localStorage).filter((key) => key.includes(doomed)),
+    }), ids.doomed);
+    expect(result.activeId).toBe(ids.keep);
+    expect(result.planIds).not.toContain(ids.doomed);
+    expect(result.orphanKeys).toEqual([]);
+  });
+
   test('setActivePlanId switches plans and rejects unknown ids', async ({ page }) => {
     const r = await page.evaluate(() => {
       const first = window.planStorage.getActivePlanId();

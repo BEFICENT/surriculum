@@ -11,12 +11,21 @@ function courseCountsTowardDegreePlan(curriculum, course, semester) {
         if (curriculum && typeof curriculum.isDegreeEligibleCourse === 'function') {
             return curriculum.isDegreeEligibleCourse(course);
         }
+        if (typeof window !== 'undefined' && window.gradePolicy
+            && typeof window.gradePolicy.evaluateGrade === 'function') {
+            const outcome = window.gradePolicy.evaluateGrade(
+                course && course.grade,
+                course && course.gradingBasis,
+            );
+            return !!(outcome.supported && (outcome.earnsCredit || outcome.pending));
+        }
         const elem = document.getElementById(course && course.id);
         const grade = elem ? elem.querySelector('.grade') : null;
         const value = String(grade ? grade.textContent : '').trim().toUpperCase();
-        return !['F', 'U', 'NA', 'W'].includes(value);
+        return ['', 'REGISTERED', 'P', 'I', 'S', 'T',
+            'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D'].includes(value);
     } catch (_) {
-        return true;
+        return false;
     }
 }
 
@@ -29,13 +38,28 @@ function computeMinorAllocation(curriculum, minorCode, options) {
             return {
                 cgpa: Number(opts.progressGpa.value),
                 credits: Number(opts.progressGpa.credits) || 0,
+                resolved: opts.progressGpa.resolved !== false,
+                issues: Array.isArray(opts.progressGpa.issues) ? opts.progressGpa.issues : [],
             };
         }
-        if (opts.useProgressGpa && curriculum && typeof curriculum.getGraduationProgress === 'function') {
+        // The current app always has a term-aware actual-GPA source. Prefer it
+        // even when it has zero credits; falling through in that case would let
+        // manually entered future grades masquerade as CGPA.
+        if (curriculum && typeof curriculum.getActualGpa === 'function') {
+            try {
+                const gpa = curriculum.getActualGpa();
+                return { cgpa: Number(gpa.value), credits: Number(gpa.credits) || 0,
+                    resolved: gpa.resolved !== false,
+                    issues: Array.isArray(gpa.issues) ? gpa.issues : [] };
+            } catch (_) {}
+        }
+        if (curriculum && typeof curriculum.getGraduationProgress === 'function') {
             try {
                 const progress = curriculum.getGraduationProgress('main');
                 const gpa = progress && progress.gpa ? progress.gpa : {};
-                return { cgpa: Number(gpa.value), credits: Number(gpa.credits) || 0 };
+                return { cgpa: Number(gpa.value), credits: Number(gpa.credits) || 0,
+                    resolved: gpa.resolved !== false,
+                    issues: Array.isArray(gpa.issues) ? gpa.issues : [] };
             } catch (_) {}
         }
         let gpaCredits = 0;
@@ -47,9 +71,9 @@ function computeMinorAllocation(curriculum, minorCode, options) {
                 gpaValue += (sem && sem.totalGPA) ? sem.totalGPA : 0;
             }
         } catch (_) {}
-        if (!gpaCredits) return { cgpa: NaN, credits: 0 };
+        if (!gpaCredits) return { cgpa: NaN, credits: 0, resolved: true, issues: [] };
         const cgpa = gpaValue / gpaCredits;
-        return { cgpa, credits: gpaCredits };
+        return { cgpa, credits: gpaCredits, resolved: true, issues: [] };
     };
 
     const gpaThresholdForMinor = (code) => {
@@ -272,11 +296,60 @@ function computeMinorAllocation(curriculum, minorCode, options) {
     if (minAllS && totalCredits < minAllS) allOk = false;
     if (!Object.keys(categories).length) allOk = false;
 
-    // Minor CGPA requirement (only if GPA is computable).
-    const { cgpa } = computeCgpa();
+    // Build a classification-only allocation for PGPA membership. Unlike the
+    // completion allocation above, this pass admits an F/letter-basis NA so a
+    // failed in-program course can contribute zero points over its SU credits
+    // without earning credit. Successful/planned courses sort ahead of failures,
+    // so a failure cannot displace a fulfilled equivalence or elective slot.
+    let pgpaResult = {
+        value: NaN, credits: 0, points: 0, resolved: false, unresolved: true,
+        issues: [], complete: false, missingCredits: 0, missingCourses: [],
+        projected: false,
+    };
+    let projectedPgpaResult = { ...pgpaResult, projected: true };
+    let membershipAllocationByCode = allocationByCode;
+    if (opts.calculateProgramGpa !== false) {
+        const candidate = (course) => {
+            try {
+                if (curriculum && typeof curriculum.isProgramGpaCandidate === 'function') {
+                    return curriculum.isProgramGpaCandidate(course);
+                }
+                const policy = (typeof window !== 'undefined') ? window.gradePolicy : null;
+                if (policy && typeof policy.evaluateGrade === 'function') {
+                    const outcome = policy.evaluateGrade(course && course.grade, course && course.gradingBasis);
+                    return !!(outcome.earnsCredit || outcome.pending || outcome.countsInGpa || outcome.needsReview);
+                }
+            } catch (_) {}
+            return true;
+        };
+        const membership = computeMinorAllocation(curriculum, minorCode, {
+            ...opts,
+            calculateProgramGpa: false,
+            isEligible: candidate,
+        });
+        membershipAllocationByCode = (membership && membership.allocationByCode) || {};
+        const isMember = (course) => {
+            const record = membershipAllocationByCode[normalizeCode(course && course.code)];
+            return !!record && ['required', 'core', 'area', 'free', 'university']
+                .includes(String(record.allocatedCat || '').toLowerCase());
+        };
+        if (curriculum && typeof curriculum.calculateGpaForMembership === 'function') {
+            pgpaResult = curriculum.calculateGpaForMembership(isMember, undefined, false);
+            projectedPgpaResult = curriculum.calculateGpaForMembership(isMember, undefined, true);
+        }
+    }
+
+    // Minor certificates require both the overall CGPA and this minor's PGPA.
+    const gpaResult = computeCgpa();
+    const { cgpa } = gpaResult;
     const gpaThreshold = gpaThresholdForMinor(minorCode);
-    const gpaOk = isFinite(cgpa) && cgpa >= gpaThreshold;
-    if (!gpaOk) allOk = false;
+    const cgpaOk = gpaResult.resolved !== false && isFinite(cgpa) && cgpa >= gpaThreshold;
+    const pgpa = Number(pgpaResult.value);
+    const pgpaOk = opts.calculateProgramGpa === false
+        ? true
+        : pgpaResult.resolved !== false && pgpaResult.credits > 0
+            && isFinite(pgpa) && pgpa >= gpaThreshold;
+    if (!cgpaOk || !pgpaOk) allOk = false;
 
     return {
         ok: allOk,
@@ -288,10 +361,21 @@ function computeMinorAllocation(curriculum, minorCode, options) {
         pools,
         courseByCode,
         allocationByCode,
+        membershipAllocationByCode,
         termCode,
         cgpa,
+        gpaResolved: gpaResult.resolved !== false,
+        gpaIssues: gpaResult.issues,
         gpaThreshold,
-        gpaOk,
+        gpaOk: cgpaOk,
+        cgpaOk,
+        pgpa,
+        pgpaCredits: Number(pgpaResult.credits) || 0,
+        pgpaResolved: pgpaResult.resolved !== false,
+        pgpaIssues: Array.isArray(pgpaResult.issues) ? pgpaResult.issues : [],
+        pgpaOk,
+        projectedPgpa: projectedPgpaResult,
+        averagesOk: cgpaOk && pgpaOk,
     };
 }
 
@@ -404,7 +488,40 @@ function displayGraduationResults(curriculum) {
             if (b.current) parts.push(`${b.current} current`);
             if (b.future) parts.push(`${b.future} future`);
             if (b.unverified) parts.push(`${b.unverified} needs grade verification`);
-            return [{ text: `SU credits: ${parts.join(' + ')} = ${b.projected} projected`, tone: 'muted' }];
+            const details = [{ text: `SU credits: ${parts.join(' + ')} = ${b.projected} projected`, tone: 'muted' }];
+            const threshold = Number(progress.averageThreshold) || (progress.view === 'dm' ? 3.20 : 2.00);
+            const pushAverage = (label, result) => {
+                const value = result && Number(result.value);
+                const resolved = result && result.resolved !== false;
+                const hasValue = result && Number(result.credits) > 0 && isFinite(value);
+                if (!resolved) {
+                    const codes = (result.issues || []).map((issue) => issue.courseCode).filter(Boolean);
+                    details.push({ text: `${label} needs review${codes.length ? ` (${codes.join(', ')})` : ''}.`, tone: 'danger' });
+                    return;
+                }
+                if (!hasValue) {
+                    details.push({ text: `${label}: N/A (required ≥ ${threshold.toFixed(2)})`, tone: 'danger' });
+                    return;
+                }
+                details.push({
+                    text: `${label}: ${value.toFixed(3)} (required ≥ ${threshold.toFixed(2)})`,
+                    tone: value >= threshold ? 'success' : 'danger',
+                });
+            };
+            pushAverage('CGPA', progress.gpa);
+            if (progress.view === 'dm') pushAverage('Main PGPA', progress.mainPgpa);
+            pushAverage(progress.view === 'dm' ? 'Double-major PGPA' : 'PGPA', progress.pgpa);
+            const projectedPgpa = progress.projectedPgpa;
+            if (projectedPgpa && (Number(projectedPgpa.credits) > 0 || Number(projectedPgpa.missingCredits) > 0)) {
+                const projectedValue = Number(projectedPgpa.value);
+                const valueText = isFinite(projectedValue) ? projectedValue.toFixed(3) : 'N/A';
+                const missing = Number(projectedPgpa.missingCredits) || 0;
+                details.push({
+                    text: `Projected PGPA from entered grades: ${valueText}${missing ? ` • ${missing} SU still need a grade estimate` : ''}`,
+                    tone: 'muted',
+                });
+            }
+            return details;
         };
         majorCards.push(renderStatusCard({
             label: 'Major',
@@ -467,13 +584,38 @@ function displayGraduationResults(curriculum) {
             }
             try {
                 const thr = (String(minorCode || '').toUpperCase() === 'ENTREP-MINOR') ? 2.50 : 2.72;
-                if (isFinite(res.cgpa)) {
+                if (res.gpaResolved === false) {
+                    details.push({ text: 'CGPA is unavailable until the unresolved grade basis is reviewed.', tone: 'danger' });
+                } else if (isFinite(res.cgpa)) {
                     const cgpaStr = Number(res.cgpa).toFixed(3);
                     if (res.gpaOk === false) {
                         details.push({ text: `CGPA: ${cgpaStr} (required ≥ ${thr.toFixed(2)})`, tone: 'danger' });
                     }
                 } else {
                     details.push({ text: `CGPA requirement: ≥ ${thr.toFixed(2)}`, tone: 'danger' });
+                }
+                if (res.pgpaResolved === false) {
+                    details.push({ text: 'Minor PGPA is unavailable until the program-course grades are reviewed.', tone: 'danger' });
+                } else if (isFinite(res.pgpa)) {
+                    const pgpaStr = Number(res.pgpa).toFixed(3);
+                    details.push({
+                        text: `Minor PGPA: ${pgpaStr} (required ≥ ${thr.toFixed(2)})`,
+                        tone: res.pgpaOk === false ? 'danger' : 'success',
+                    });
+                } else {
+                    details.push({ text: `Minor PGPA requirement: ≥ ${thr.toFixed(2)}`, tone: 'danger' });
+                }
+                const estimate = res.projectedPgpa;
+                if (estimate) {
+                    const value = Number(estimate.value);
+                    const missing = Number(estimate.missingCredits) || 0;
+                    const differs = Number(estimate.credits) !== Number(res.pgpaCredits || 0);
+                    if (differs || missing) {
+                        details.push({
+                            text: `Projected minor PGPA from entered grades: ${isFinite(value) ? value.toFixed(3) : 'N/A'}${missing ? ` • ${missing} SU still need a grade estimate` : ''}`,
+                            tone: 'muted',
+                        });
+                    }
                 }
             } catch (_) {}
             return {
@@ -780,7 +922,9 @@ function displaySummary(curriculum, major_chosen_by_user) {
                 let body = `<div class="minor-summary">`;
                 body += `<div class="ms-subtitle">Admit term: <strong>${termName || 'Unknown'}</strong></div>`;
                 try {
-                    if (isFinite(allocRes.cgpa) && allocRes.gpaThreshold) {
+                    if (allocRes.gpaResolved === false) {
+                        body += `<div class="ms-subtitle" style="color: #DC2626; font-weight: 700;">CGPA unavailable: review the grading basis of the flagged NA course.</div>`;
+                    } else if (isFinite(allocRes.cgpa) && allocRes.gpaThreshold) {
                         const cgpaStr = Number(allocRes.cgpa).toFixed(3);
                         const thrStr = Number(allocRes.gpaThreshold).toFixed(2);
                         const ok = allocRes.gpaOk !== false;
@@ -788,6 +932,26 @@ function displaySummary(curriculum, major_chosen_by_user) {
                         body += `<div class="ms-subtitle" style="${color}">CGPA requirement: <strong>${thrStr}</strong> • Your CGPA: <strong>${cgpaStr}</strong></div>`;
                     } else {
                         body += `<div class="ms-subtitle">CGPA requirement: <strong>${(String(minorCode || '').toUpperCase() === 'ENTREP-MINOR') ? '2.50' : '2.72'}</strong></div>`;
+                    }
+                    const thrStr = Number(allocRes.gpaThreshold || 0).toFixed(2);
+                    if (allocRes.pgpaResolved === false) {
+                        body += `<div class="ms-subtitle" style="color: #DC2626; font-weight: 700;">Minor PGPA unavailable: review the program-course grades.</div>`;
+                    } else if (isFinite(allocRes.pgpa)) {
+                        const pgpaStr = Number(allocRes.pgpa).toFixed(3);
+                        const color = allocRes.pgpaOk !== false
+                            ? 'color: var(--text-secondary);' : 'color: #DC2626; font-weight: 700;';
+                        body += `<div class="ms-subtitle" style="${color}">Minor PGPA requirement: <strong>${thrStr}</strong> • Your PGPA: <strong>${pgpaStr}</strong></div>`;
+                    } else {
+                        body += `<div class="ms-subtitle">Minor PGPA requirement: <strong>${thrStr}</strong></div>`;
+                    }
+                    const estimate = allocRes.projectedPgpa;
+                    if (estimate) {
+                        const value = Number(estimate.value);
+                        const missing = Number(estimate.missingCredits) || 0;
+                        const differs = Number(estimate.credits) !== Number(allocRes.pgpaCredits || 0);
+                        if (differs || missing) {
+                            body += `<div class="ms-average-projection">Projected minor PGPA from entered grades: <strong>${isFinite(value) ? value.toFixed(3) : 'N/A'}</strong>${missing ? ` • ${missing} SU need estimates` : ''}</div>`;
+                        }
                     }
                 } catch (_) {}
                 body += `<div class="ms-legend">
@@ -1184,6 +1348,27 @@ function displaySummary(curriculum, major_chosen_by_user) {
 
         let body = `<div class="major-summary">`;
         body += `<div class="ms-subtitle">Admit term: <strong>${esc(termName || 'Unknown')}</strong></div>`;
+        if (majorProgress) {
+            const threshold = Number(majorProgress.averageThreshold) || (isDM ? 3.20 : 2.00);
+            const averageRow = (label, result) => {
+                const value = result && Number(result.value);
+                const available = result && result.resolved !== false
+                    && Number(result.credits) > 0 && isFinite(value);
+                const met = available && value >= threshold;
+                return `<div class="ms-average ${met ? 'is-met' : 'is-unmet'}"><span>${esc(label)}</span><strong>${available ? value.toFixed(3) : 'N/A'}</strong><small>required ≥ ${threshold.toFixed(2)}</small></div>`;
+            };
+            body += `<div class="ms-average-grid">`;
+            body += averageRow('CGPA', majorProgress.gpa);
+            if (isDM) body += averageRow('Main PGPA', majorProgress.mainPgpa);
+            body += averageRow(isDM ? 'Double-major PGPA' : 'PGPA', majorProgress.pgpa);
+            body += `</div>`;
+            const estimate = majorProgress.projectedPgpa;
+            if (estimate && (Number(estimate.credits) > 0 || Number(estimate.missingCredits) > 0)) {
+                const value = Number(estimate.value);
+                const missing = Number(estimate.missingCredits) || 0;
+                body += `<div class="ms-average-projection">Projected PGPA from entered grades: <strong>${isFinite(value) ? value.toFixed(3) : 'N/A'}</strong>${missing ? ` • ${missing} SU need estimates` : ''}</div>`;
+            }
+        }
         body += `<div class="ms-legend">
             <div class="ms-legend-item"><span class="ms-dot ms-dot-green"></span>Counts in this pool</div>
             <div class="ms-legend-item"><span class="ms-dot ms-dot-yellow"></span>Counts in a different/lower pool</div>
@@ -1394,7 +1579,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
         }
         // Build content. Each metric keeps a machine-readable projected total
         // while visibly explaining which part is earned/current/future/unverified.
-        const labels = ['GPA: ', 'SU Credits: ', 'ECTS: ', 'University: ',  'Required: ', 'Core: ', 'Area: ', 'Free: ',  'Basic Science: ', 'Engineering: '];
+        const labels = ['CGPA: ', 'SU Credits: ', 'ECTS: ', 'University: ',  'Required: ', 'Core: ', 'Area: ', 'Free: ',  'Basic Science: ', 'Engineering: '];
         const metricKeys = ['gpa', 'total', 'ects', 'university', 'required', 'core', 'area', 'free', 'science', 'engineering'];
         const total_values = [gpa, totals.total, totals.ects, totals.university, totals.required, totals.core, totals.area, totals.free, totals.science, totals.engineering];
         const formatValue = (value) => {
@@ -1402,48 +1587,94 @@ function displaySummary(curriculum, major_chosen_by_user) {
             if (!isFinite(n)) return '0';
             return Math.abs(n - Math.round(n)) < 1e-9 ? String(Math.round(n)) : n.toFixed(1);
         };
-        for (let i = 0; i < 10; i++) {
+        const appendAverage = (key, label, result, fallbackValue, projectedResult) => {
+            const child = document.createElement('div');
+            child.classList.add('summary_modal_child');
+            child.classList.add('summary_metric');
+            child.dataset.metric = key;
+            const resolved = !(result && result.resolved === false);
+            const value = result && Number(result.credits) > 0 && isFinite(Number(result.value))
+                ? Number(result.value) : Number(fallbackValue);
+            const display = resolved && isFinite(value) ? value.toFixed(3) : 'N/A';
+            const threshold = Number(progress && progress.averageThreshold)
+                || (view === 'dm' ? 3.20 : 2.00);
+            child.dataset.gpaResolved = String(resolved);
+            child.dataset.value = isFinite(value) ? String(value) : '';
+            child.dataset.limit = '4';
+            child.dataset.threshold = String(threshold);
+            child.dataset.met = String(resolved && isFinite(value) && value >= threshold);
+            child.innerHTML = `
+                <p class="summary_metric_legacy" aria-hidden="true">${label}: ${display} / 4.00</p>
+                <div class="summary_metric_head"><span>${label}</span><strong>${display} / 4.00</strong></div>
+                <div class="summary_metric_equation"><span>Required ≥ ${threshold.toFixed(2)}</span></div>`;
+            if (!resolved) {
+                const issues = Array.isArray(result && result.issues) ? result.issues : [];
+                const codes = issues.map((issue) => issue.courseCode).filter(Boolean);
+                const warning = document.createElement('div');
+                warning.className = 'summary_gpa_warning';
+                warning.textContent = `${label} unavailable until ${codes.length ? codes.join(', ') : 'the flagged course'} has a valid grade and grading basis.`;
+                child.appendChild(warning);
+            }
+            if (projectedResult) {
+                const projectedValue = Number(projectedResult.value);
+                const missing = Number(projectedResult.missingCredits) || 0;
+                const differs = Number(projectedResult.credits) !== Number(result && result.credits);
+                if (differs || missing) {
+                    const estimate = document.createElement('div');
+                    estimate.className = 'summary_gpa_projection';
+                    estimate.textContent = `Entered-grade projection: ${isFinite(projectedValue) ? projectedValue.toFixed(3) : 'N/A'}${missing ? ` • ${missing} SU need estimates` : ''}`;
+                    child.appendChild(estimate);
+                }
+            }
+            modal.appendChild(child);
+        };
+        appendAverage('gpa', 'CGPA', progress && progress.gpa, gpa, null);
+        if (view === 'dm') {
+            appendAverage('main_pgpa', 'Main PGPA', progress && progress.mainPgpa, NaN,
+                progress && progress.projectedMainPgpa);
+        }
+        appendAverage('pgpa', view === 'dm' ? 'Double-major PGPA' : 'PGPA',
+            progress && progress.pgpa, NaN,
+            progress && progress.projectedPgpa);
+
+        for (let i = 1; i < 10; i++) {
             const child = document.createElement('div');
             child.classList.add('summary_modal_child');
             child.classList.add('summary_metric');
             child.dataset.metric = metricKeys[i];
-            if (i === 0) {
-                child.innerHTML = '<p>GPA: ' + gpa + ' / 4.00</p>';
-            } else {
-                const metric = metricKeys[i];
-                const b = (progress && progress.breakdown && progress.breakdown[metric])
-                    ? progress.breakdown[metric]
-                    : { earned: total_values[i], current: 0, future: 0, unverified: 0, projected: total_values[i] };
-                const earned = Number(b.earned || 0);
-                const current = Number(b.current || 0);
-                const future = Number(b.future || 0);
-                const unverified = Number(b.unverified || 0);
-                const projected = Number(b.projected || 0);
-                const limit = Number(limits[i] || 0);
-                child.dataset.earned = String(earned);
-                child.dataset.current = String(current);
-                child.dataset.future = String(future);
-                child.dataset.unverified = String(unverified);
-                child.dataset.projected = String(projected);
-                child.dataset.limit = String(limit);
-                const label = labels[i].replace(/:\s*$/, '');
-                const parts = [
-                    `<span class="summary_part is-earned"><strong>${formatValue(earned)}</strong> earned</span>`,
-                ];
-                if (current) parts.push(`<span class="summary_part is-current"><strong>+ ${formatValue(current)}</strong> current</span>`);
-                if (future) parts.push(`<span class="summary_part is-future"><strong>+ ${formatValue(future)}</strong> future</span>`);
-                if (unverified) parts.push(`<span class="summary_part is-unverified"><strong>+ ${formatValue(unverified)}</strong> needs grade</span>`);
-                const denom = Math.max(projected, limit, 1);
-                const segment = (state, amount) => amount > 0
-                    ? `<span class="summary_segment is-${state}" style="width:${Math.max(0, amount) / denom * 100}%"></span>` : '';
-                child.innerHTML = `
-                    <p class="summary_metric_legacy" aria-hidden="true">${label}: ${formatValue(projected)} / ${formatValue(limit)}</p>
-                    <div class="summary_metric_head"><span>${label}</span><strong>${formatValue(projected)} / ${formatValue(limit)}</strong></div>
-                    <div class="summary_metric_equation">${parts.join(' ')}</div>
-                    <div class="summary_segment_track" aria-hidden="true">
-                        ${segment('earned', earned)}${segment('current', current)}${segment('future', future)}${segment('unverified', unverified)}
-                    </div>`;
-            }
+            const metric = metricKeys[i];
+            const b = (progress && progress.breakdown && progress.breakdown[metric])
+                ? progress.breakdown[metric]
+                : { earned: total_values[i], current: 0, future: 0, unverified: 0, projected: total_values[i] };
+            const earned = Number(b.earned || 0);
+            const current = Number(b.current || 0);
+            const future = Number(b.future || 0);
+            const unverified = Number(b.unverified || 0);
+            const projected = Number(b.projected || 0);
+            const limit = Number(limits[i] || 0);
+            child.dataset.earned = String(earned);
+            child.dataset.current = String(current);
+            child.dataset.future = String(future);
+            child.dataset.unverified = String(unverified);
+            child.dataset.projected = String(projected);
+            child.dataset.limit = String(limit);
+            const label = labels[i].replace(/:\s*$/, '');
+            const parts = [
+                `<span class="summary_part is-earned"><strong>${formatValue(earned)}</strong> earned</span>`,
+            ];
+            if (current) parts.push(`<span class="summary_part is-current"><strong>+ ${formatValue(current)}</strong> current</span>`);
+            if (future) parts.push(`<span class="summary_part is-future"><strong>+ ${formatValue(future)}</strong> future</span>`);
+            if (unverified) parts.push(`<span class="summary_part is-unverified"><strong>+ ${formatValue(unverified)}</strong> needs grade</span>`);
+            const denom = Math.max(projected, limit, 1);
+            const segment = (state, amount) => amount > 0
+                ? `<span class="summary_segment is-${state}" style="width:${Math.max(0, amount) / denom * 100}%"></span>` : '';
+            child.innerHTML = `
+                <p class="summary_metric_legacy" aria-hidden="true">${label}: ${formatValue(projected)} / ${formatValue(limit)}</p>
+                <div class="summary_metric_head"><span>${label}</span><strong>${formatValue(projected)} / ${formatValue(limit)}</strong></div>
+                <div class="summary_metric_equation">${parts.join(' ')}</div>
+                <div class="summary_segment_track" aria-hidden="true">
+                    ${segment('earned', earned)}${segment('current', current)}${segment('future', future)}${segment('unverified', unverified)}
+                </div>`;
             modal.appendChild(child);
         }
         if (view === 'main' || view === 'dm') {
@@ -1463,6 +1694,21 @@ function displaySummary(curriculum, major_chosen_by_user) {
         }
         return modal;
     }
+    const formatActualGpa = (progress, legacyPoints, legacyCredits) => {
+        // Presence of a progress GPA is authoritative, including the
+        // no-actual-grades state. Only use the legacy aggregate for old
+        // curriculum objects that do not expose the progress engine at all.
+        if (progress && progress.gpa && typeof progress.gpa === 'object') {
+            const credits = Number(progress.gpa.credits) || 0;
+            const value = Number(progress.gpa.value);
+            return progress.gpa.resolved !== false && credits > 0 && isFinite(value)
+                ? value.toFixed(3) : 'N/A';
+        }
+        const credits = Number(legacyCredits) || 0;
+        const points = Number(legacyPoints) || 0;
+        return credits > 0 ? (points / credits).toFixed(3) : 'N/A';
+    };
+
     // Compute overall GPA and totals for primary major
     let totalsMain = {
         area: 0, core: 0, free: 0, university: 0, required: 0,
@@ -1491,9 +1737,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
             if (progressMain.breakdown[key]) totalsMain[key] = progressMain.breakdown[key].projected;
         });
     }
-    const gpaMain = progressMain && progressMain.gpa && progressMain.gpa.credits
-        ? Number(progressMain.gpa.value).toFixed(3)
-        : (gpaCredits ? (gpaValue / gpaCredits).toFixed(3) : '0.000');
+    const gpaMain = formatActualGpa(progressMain, gpaValue, gpaCredits);
     // Determine limits from requirements for primary major
     // Access the requirements object via the global scope to avoid reference
     // errors when this script runs in environments without an imported
@@ -1573,9 +1817,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
                 if (progressDM.breakdown[key]) totalsDM[key] = progressDM.breakdown[key].projected;
             });
         }
-        const gpaDM = progressDM && progressDM.gpa && progressDM.gpa.credits
-            ? Number(progressDM.gpa.value).toFixed(3)
-            : (gpaCreditsDM ? (gpaValueDM / gpaCreditsDM).toFixed(3) : '0.000');
+        const gpaDM = formatActualGpa(progressDM, gpaValueDM, gpaCreditsDM);
         // Determine limits for DM (SU +30, ECTS +60)
         const dmReq = lookupReq(curriculum.doubleMajor, curriculum.entryTermDM);
         const dmReqAvailable = requirementRecordAvailable(curriculum.doubleMajor, dmReq);

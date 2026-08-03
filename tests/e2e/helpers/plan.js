@@ -19,7 +19,10 @@ async function seedPlan(page, state) {
   await page.waitForFunction(() => !!(window.planStorage && window.planStorage.importPlanObject));
 
   await page.evaluate((s) => {
-    const obj = { type: 'surriculum_plan', version: 1, plan: { name: 'E2E Plan', state: s } };
+    // Keep most fixtures on v1 so every test exercises migration. Tests that
+    // explicitly provide per-attempt grading bases use the v2 schema.
+    const version = Object.prototype.hasOwnProperty.call(s, 'gradingBases') ? 2 : 1;
+    const obj = { type: 'surriculum_plan', version, plan: { name: 'E2E Plan', state: s } };
     window.planStorage.importPlanObject(obj, { activate: true });
   }, state);
 

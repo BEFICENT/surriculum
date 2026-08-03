@@ -396,11 +396,27 @@ if (typeof window !== 'undefined') {
 }
 
 var grade_list_InnerHTML = '';
-let letter_grades_global = ['S', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'F'];
-let letter_grades_global_dic = {'S':4.0, 'A':4.0, 'A-':3.7, 'B+':3.3, 'B':3.0, 'B-':2.7, 'C+':2.3, 'C':2.0, 'C-':1.7, 'D+':1.3, 'D':1.0, 'F':0.0}
+let letter_grades_global = ['A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'F'];
+let letter_grades_global_dic = {'A':4.0, 'A-':3.7, 'B+':3.3, 'B':3.0, 'B-':2.7, 'C+':2.3, 'C':2.0, 'C-':1.7, 'D+':1.3, 'D':1.0, 'F':0.0}
 for(let i = 0; i < letter_grades_global.length; i++)
 {
     grade_list_InnerHTML += "<option value='" + letter_grades_global[i] + "'>";
+}
+
+function evaluateGradeForLegacyTotals(grade, gradingBasis)
+{
+    try {
+        if (typeof window !== 'undefined' && window.gradePolicy
+            && typeof window.gradePolicy.evaluateGrade === 'function') {
+            return window.gradePolicy.evaluateGrade(grade, gradingBasis);
+        }
+    } catch (_) {}
+    const token = String(grade || '').trim().toUpperCase();
+    const points = letter_grades_global_dic[token];
+    return {
+        countsInGpa: points !== undefined,
+        gpaPoints: points === undefined ? null : points,
+    };
 }
 
 
@@ -1261,6 +1277,17 @@ function grades_serializator(curriculum)
     return result;
 }
 
+function grading_bases_serializator(curriculum)
+{
+    const semesters = curriculum && Array.isArray(curriculum.semesters) ? curriculum.semesters : [];
+    return JSON.stringify(semesters.map((semester) =>
+        (semester && Array.isArray(semester.courses) ? semester.courses : [])
+            .map((course) => {
+                const basis = String((course && course.gradingBasis) || '').trim().toLowerCase();
+                return basis === 'letter' || basis === 'satisfactory' ? basis : 'unknown';
+            })));
+}
+
 function dates_serializator()
 {
     const dates = Array.from(document.querySelectorAll('.date')).map((date) => {
@@ -1272,7 +1299,7 @@ function dates_serializator()
 
 function reload(curriculum, course_data)
 {
-    let data, grades, dates;
+    let data, grades, gradingBases, dates;
     const ps = (typeof window !== 'undefined') ? window.planStorage : null;
     const get = (k) => {
         try { return ps ? ps.getItem(k) : localStorage.getItem(k); } catch (_) {}
@@ -1281,15 +1308,24 @@ function reload(curriculum, course_data)
     };
     try{data = JSON.parse(get("curriculum"));} catch{}
     try{grades = JSON.parse(get("grades"));}   catch{}
+    try{gradingBases = JSON.parse(get("gradingBases"));} catch{}
     try{dates = JSON.parse(get("dates"))}      catch{}
     if(data)
     {
         for(let i = 0; i < data.length; i++)
         {
-            if(grades && dates)
-                createSemeter(true, data[i], curriculum, course_data, grades[i], dates[i]);
-            else
-                createSemeter(true, data[i], curriculum, course_data);
+            // Each persisted field is optional in imported/legacy plans. Keep
+            // fields that are present instead of dropping grades merely because
+            // the plan did not include custom semester labels.
+            createSemeter(
+                true,
+                data[i],
+                curriculum,
+                course_data,
+                grades && Array.isArray(grades[i]) ? grades[i] : [],
+                dates && typeof dates[i] === 'string' ? dates[i] : '',
+                gradingBases && Array.isArray(gradingBases[i]) ? gradingBases[i] : [],
+            );
 
         }
     }

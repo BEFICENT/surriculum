@@ -39,6 +39,42 @@ test.describe('mobile screens', () => {
     await expect(card.locator('.m-prog-bar')).toBeVisible();
   });
 
+  test('future-only grades show unavailable actual GPA for majors and minors', async ({ page }) => {
+    await page.goto('/');
+    const future = await page.evaluate(() => {
+      const current = String(window.currentTermCode || '');
+      const year = Number(current.slice(0, 4));
+      const suffix = current.slice(4);
+      const code = suffix === '01' ? `${year}02` : (suffix === '02' ? `${year}03` : `${year + 1}01`);
+      return window.termCodeToName(code);
+    });
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: 'Fall 2024-2025',
+      minor1: 'ANALY-MINOR',
+      entryTermMinor1: 'Fall 2024-2025',
+      curriculum: [['MATH101']],
+      grades: [['D']],
+      dates: [future],
+    });
+
+    await page.locator('.m-nav-item[data-mtab="progress"]').click();
+    const cards = page.locator('#mProgress .m-prog-card');
+    await expect(cards).toHaveCount(2);
+    const statWithLabel = (card, label) => card.locator('.m-prog-stat').filter({
+      has: page.locator('.m-prog-lbl', { hasText: new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`) }),
+    });
+    const majorCgpa = statWithLabel(cards.first(), 'CGPA (min)');
+    const majorPgpa = statWithLabel(cards.first(), 'PGPA (min)');
+    await expect(majorCgpa.locator('.m-prog-val')).toHaveText('N/A / 2');
+    await expect(majorPgpa.locator('.m-prog-val')).toHaveText('N/A / 2');
+
+    const minorCgpa = statWithLabel(cards.nth(1), 'CGPA (min)');
+    const minorPgpa = statWithLabel(cards.nth(1), 'PGPA (min)');
+    await expect(minorCgpa.locator('.m-prog-val')).toHaveText('N/A / 2.72');
+    await expect(minorPgpa.locator('.m-prog-val')).toHaveText('N/A / 2.72');
+  });
+
   test('progress bar exposes earned, current, future, and needs-grade segments', async ({ page }) => {
     await page.goto('/');
     const terms = await page.evaluate(() => {

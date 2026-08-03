@@ -1,4 +1,4 @@
-function createSemeter(aslastelement=true, courseList=[], curriculum, course_data, grade_list=[], date_custom="")
+function createSemeter(aslastelement=true, courseList=[], curriculum, course_data, grade_list=[], date_custom="", grading_basis_list=[])
 {
     const board = document.querySelector(".board");
 
@@ -198,7 +198,10 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
         let myCourse = new s_course(
             courseList[i],
             'c' + curriculum.course_id,
-            (grade_list && grade_list[i]) || '',
+            grade_list && grade_list[i] !== undefined && grade_list[i] !== null
+                ? grade_list[i] : '',
+            grading_basis_list && grading_basis_list[i] !== undefined && grading_basis_list[i] !== null
+                ? grading_basis_list[i] : 'unknown',
         );
         let courseCode = myCourse.code;
         try
@@ -211,9 +214,19 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
         }
         if(!curriculum.hasCourse(myCourse.code)) 
         {
+            const courseInfo = getInfo(courseCode, course_data);
             let courseCredit = (typeof parseCreditValue === 'function')
-                ? parseCreditValue(getInfo(courseCode, course_data)['SU_credit'])
-                : (parseFloat(getInfo(courseCode, course_data)['SU_credit']) || 0);
+                ? parseCreditValue(courseInfo['SU_credit'])
+                : (parseFloat(courseInfo['SU_credit']) || 0);
+            // GPA and status checks can run before the graduation allocation
+            // pass. Seed inherent catalog metadata as the course is loaded so
+            // an F/letter-NA attempt still contributes its real denominator.
+            myCourse.SU_credit = courseCredit;
+            myCourse.Basic_Science = parseFloat(courseInfo['Basic_Science'] || '0') || 0;
+            myCourse.Engineering = parseFloat(courseInfo['Engineering'] || '0') || 0;
+            myCourse.ECTS = parseFloat(courseInfo['ECTS'] || '0') || 0;
+            myCourse.Faculty_Course = courseInfo['Faculty_Course'] || 'No';
+            myCourse.Faculty = courseInfo['Faculty'] || '';
             curriculum.getSemester(semester.id).addCourse(myCourse);
             let dom_course = document.createElement('div');
             dom_course.classList.add('course');
@@ -251,7 +264,6 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
             c_label.appendChild(actionsDiv);
             let c_info = document.createElement("div");
             c_info.classList.add("course_info");
-            const courseInfo = getInfo(courseCode, course_data);
             const nameDiv = document.createElement('div');
             nameDiv.className = 'course_name';
             nameDiv.textContent = String(courseInfo['Course_Name'] || '');
@@ -289,13 +301,11 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
             else
             {
                 grade.textContent = myCourse.grade;
-                const gradeValue = letter_grades_global_dic[myCourse.grade];
-                if (gradeValue !== undefined) {
-                    // GPA is affected by all letter grades except transfers (T)
-                    curriculum.getSemester(semester.id).totalGPA += courseCredit * gradeValue;
-                    if (myCourse.grade !== 'T') {
-                        curriculum.getSemester(semester.id).totalGPACredits += courseCredit;
-                    }
+                const gradeOutcome = (typeof evaluateGradeForLegacyTotals === 'function')
+                    ? evaluateGradeForLegacyTotals(myCourse.grade, myCourse.gradingBasis) : null;
+                if (gradeOutcome && gradeOutcome.countsInGpa) {
+                    curriculum.getSemester(semester.id).totalGPA += courseCredit * gradeOutcome.gpaPoints;
+                    curriculum.getSemester(semester.id).totalGPACredits += courseCredit;
                 }
                 // Explicitly unsuccessful attempts do not count toward the
                 // degree plan. The full allocation pass below recomputes these

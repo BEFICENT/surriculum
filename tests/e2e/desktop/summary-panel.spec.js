@@ -49,20 +49,24 @@ const livePastCurrentFuture = async (page) => {
   });
 };
 
-// The card is 10 rows of "Label: value / limit". Parse them back out so the
-// test reads what the student reads, not an internal.
+// Parse the visible average and credit rows back out so the test reads what the
+// student reads, while retaining the machine-readable graduation threshold.
 const readCard = (page) => page.evaluate(() => {
   const card = document.querySelector('.summary_modal');
   if (!card) return null;
   const rows = {};
   card.querySelectorAll('.summary_metric').forEach((metric) => {
-    const p = metric.querySelector('p');
-    const m = p ? /^(.+?):\s*([\d.]+)\s*\/\s*([\d.]+)$/.exec((p.textContent || '').trim()) : null;
-    if (metric.dataset.metric === 'gpa' && m) {
-      rows[m[1].trim()] = { value: Number(m[2]), limit: Number(m[3]) };
+    const label = (metric.querySelector('.summary_metric_head span') || {}).textContent || '';
+    if (['gpa', 'pgpa', 'main_pgpa'].includes(metric.dataset.metric) && label) {
+      rows[label.trim()] = {
+        kind: 'average',
+        value: metric.dataset.value === '' ? NaN : Number(metric.dataset.value),
+        scale: Number(metric.dataset.limit),
+        threshold: Number(metric.dataset.threshold),
+        met: metric.dataset.met === 'true',
+      };
       return;
     }
-    const label = (metric.querySelector('.summary_metric_head span') || {}).textContent || '';
     if (label) rows[label.trim()] = { value: Number(metric.dataset.projected), limit: Number(metric.dataset.limit) };
   });
   return { title: (card.querySelector('.summary_modal_title') || {}).textContent || '', rows };
@@ -72,6 +76,7 @@ const modelTotals = (page) => page.evaluate(() => {
   const s = window.curriculum.semesters;
   const sum = (f) => s.reduce((a, x) => a + (x[f] || 0), 0);
   const gpaCredits = sum('totalGPACredits');
+  const progress = window.curriculum.getGraduationProgress('main');
   return {
     total: sum('totalCredit'),
     ects: sum('totalECTS'),
@@ -83,6 +88,8 @@ const modelTotals = (page) => page.evaluate(() => {
     science: sum('totalScience'),
     engineering: sum('totalEngineering'),
     gpa: gpaCredits ? Number((sum('totalGPA') / gpaCredits).toFixed(3)) : 0,
+    pgpa: Number(progress.pgpa.value),
+    averageThreshold: progress.averageThreshold,
   };
 });
 
@@ -116,8 +123,14 @@ test.describe('summary panel', () => {
       expect(card.rows[label].value, `${label} value should match the model`).toBeCloseTo(value, 2);
       expect(card.rows[label].limit, `${label} limit should match requirements/202401`).toBe(limit);
     }
-    expect(card.rows.GPA.value, 'GPA should match the model').toBeCloseTo(model.gpa, 2);
-    expect(card.rows.GPA.limit, 'GPA is out of 4.00').toBe(4);
+    expect(card.rows.CGPA.value, 'CGPA should match the model').toBeCloseTo(model.gpa, 2);
+    expect(card.rows.PGPA.value, 'PGPA should match the program-allocation model').toBeCloseTo(model.pgpa, 2);
+    for (const label of ['CGPA', 'PGPA']) {
+      expect(card.rows[label].scale, `${label} is out of 4.00`).toBe(4);
+      expect(card.rows[label].threshold, `${label} uses the engine threshold`)
+        .toBe(model.averageThreshold);
+      expect(card.rows[label].met, `${label} should pass for the all-A plan`).toBe(true);
+    }
   });
 
   test('the summary agrees with the graduation check about what is met', async ({ page }) => {
@@ -130,7 +143,12 @@ test.describe('summary panel', () => {
     await openSummary(page);
     const card = await readCard(page);
     for (const [label, row] of Object.entries(card.rows)) {
-      if (label === 'GPA') continue; // 4.00 is the scale, not a threshold
+      if (row.kind === 'average') {
+        expect(row.met, `${label} should be marked met on a graduating plan`).toBe(true);
+        expect(row.value, `${label} should clear its graduation threshold`)
+          .toBeGreaterThanOrEqual(row.threshold);
+        continue;
+      }
       expect(row.value, `${label} (${row.value}/${row.limit}) must be met on a graduating plan`)
         .toBeGreaterThanOrEqual(row.limit);
     }
@@ -251,6 +269,14 @@ test.describe('summary panel', () => {
     // Each card must use ITS OWN 202401 requirements — CS 29 vs ME 34. Sharing
     // one limit across both is the obvious way for this to break.
     expect(limits.sort((a, b) => a - b), 'CS and ME required limits').toEqual([REQS.CS.required, REQS.ME.required].sort((a, b) => a - b));
+
+    const dmCard = page.locator('.summary_modal').nth(1);
+    await expect(dmCard.locator('.summary_metric[data-metric="main_pgpa"] .summary_metric_head span'))
+      .toHaveText('Main PGPA');
+    await expect(dmCard.locator('.summary_metric[data-metric="pgpa"] .summary_metric_head span'))
+      .toHaveText('Double-major PGPA');
+    await expect(dmCard.locator('.summary_metric[data-metric="main_pgpa"]'))
+      .toHaveAttribute('data-threshold', '3.2');
   });
 
   test('a wrapped double-major summary remains reachable on a short viewport', async ({ page }) => {
@@ -372,6 +398,95 @@ test.describe('summary panel', () => {
     const earnedAlternative = overlay.locator('.major-summary .ms-course').filter({ hasText: 'MATH201' }).first();
     await expect(earnedAlternative).not.toHaveClass(/is-missing/);
     await expect(earnedAlternative).toContainText('Earned');
+  });
+
+  test('future-only entered grades do not appear as an actual GPA', async ({ page }) => {
+    const terms = await livePastCurrentFuture(page);
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: TERM_NAME,
+      doubleMajor: 'ME',
+      entryTermDM: TERM_NAME,
+      curriculum: [['MATH101']],
+      grades: [['D']],
+      dates: [terms.future],
+    });
+
+    const gpa = await page.evaluate(() => {
+      const sem = window.curriculum.semesters[0];
+      const actual = window.curriculum.getActualGpa();
+      const progress = window.curriculum.getGraduationProgress('main').gpa;
+      return {
+        // The raw cache deliberately retains the entered grade; consumers must
+        // not mistake it for an actual GPA while its term is still future.
+        rawCredits: sem.totalGPACredits,
+        rawPoints: sem.totalGPA,
+        actualCredits: actual.credits,
+        actualPoints: actual.points,
+        actualFinite: Number.isFinite(actual.value),
+        progressCredits: progress.credits,
+      };
+    });
+    expect(gpa).toEqual({
+      rawCredits: 3,
+      rawPoints: 3,
+      actualCredits: 0,
+      actualPoints: 0,
+      actualFinite: false,
+      progressCredits: 0,
+    });
+
+    const overlay = await openSummary(page);
+    const cgpaRows = overlay.locator('.summary_metric[data-metric="gpa"]');
+    const pgpaRows = overlay.locator('.summary_metric[data-metric="pgpa"]');
+    const mainPgpaRow = overlay.locator('.summary_metric[data-metric="main_pgpa"]');
+    await expect(cgpaRows).toHaveCount(2);
+    await expect(pgpaRows).toHaveCount(2);
+    await expect(mainPgpaRow).toHaveCount(1);
+    await expect(cgpaRows.nth(0).locator('p')).toHaveText('CGPA: N/A / 4.00');
+    await expect(cgpaRows.nth(1).locator('p')).toHaveText('CGPA: N/A / 4.00');
+    await expect(pgpaRows.nth(0).locator('p')).toHaveText('PGPA: N/A / 4.00');
+    await expect(pgpaRows.nth(1).locator('p')).toHaveText('Double-major PGPA: N/A / 4.00');
+    await expect(mainPgpaRow.locator('p')).toHaveText('Main PGPA: N/A / 4.00');
+    for (const row of [pgpaRows.nth(0), pgpaRows.nth(1), mainPgpaRow]) {
+      await expect(row.locator('.summary_gpa_projection'))
+        .toContainText('Entered-grade projection: 1.000');
+    }
+  });
+
+  test('posted current-term grades appear in the actual GPA immediately', async ({ page }) => {
+    const terms = await livePastCurrentFuture(page);
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: TERM_NAME,
+      curriculum: [['MATH101', 'MATH102']],
+      grades: [['A', 'B']],
+      dates: [terms.current],
+    });
+
+    const gpa = await page.evaluate(() => {
+      const actual = window.curriculum.getActualGpa();
+      const graduation = window.curriculum.getGraduationProgress('main');
+      const progress = graduation.gpa;
+      return {
+        actual: { value: actual.value, credits: actual.credits, points: actual.points },
+        progress: { value: progress.value, credits: progress.credits, points: progress.points },
+        pgpa: {
+          value: graduation.pgpa.value,
+          credits: graduation.pgpa.credits,
+          points: graduation.pgpa.points,
+        },
+      };
+    });
+    expect(gpa.actual).toEqual({ value: 3.5, credits: 6, points: 21 });
+    expect(gpa.progress).toEqual(gpa.actual);
+    expect(gpa.pgpa).toEqual(gpa.actual);
+
+    const overlay = await openSummary(page);
+    await expect(overlay.locator('.summary_metric[data-metric="gpa"]').first().locator('p'))
+      .toHaveText('CGPA: 3.500 / 4.00');
+    await expect(overlay.locator('.summary_metric[data-metric="pgpa"]').first().locator('p'))
+      .toHaveText('PGPA: 3.500 / 4.00');
   });
 
   test('an explicit future F is unsuccessful in overview and detail', async ({ page }) => {

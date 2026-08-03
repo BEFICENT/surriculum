@@ -10,7 +10,7 @@ test.describe('minors + double major (desktop)', () => {
       entryTerm: 'Fall 2024-2025',
       minor1: 'ANALY-MINOR',
       entryTermMinor1: 'Fall 2024-2025',
-      curriculum: [['MATH101', 'NS101', 'CS201']],
+      curriculum: [['MATH306', 'OPIM302', 'CS404']],
       grades: [['A', 'A', 'A']],
       dates: ['Fall 2024-2025'],
     });
@@ -25,6 +25,9 @@ test.describe('minors + double major (desktop)', () => {
         totalsCats: res.totals ? Object.keys(res.totals).sort() : null,
         cgpa: res.cgpa,
         gpaOk: res.gpaOk,
+        pgpa: res.pgpa,
+        pgpaOk: res.pgpaOk,
+        averagesOk: res.averagesOk,
       };
     });
 
@@ -35,6 +38,139 @@ test.describe('minors + double major (desktop)', () => {
     // CGPA is the plan's overall GPA (all A's) and clears the minor threshold.
     expect(r.cgpa).toBe(4);
     expect(r.gpaOk).toBe(true);
+    expect(r.pgpa).toBe(4);
+    expect(r.pgpaOk).toBe(true);
+    expect(r.averagesOk).toBe(true);
+  });
+
+  test('the direct minor GPA gate ignores entered grades in future terms', async ({ page }) => {
+    await page.goto('/');
+    const future = await page.evaluate(() => {
+      const current = String(window.currentTermCode || '');
+      const year = Number(current.slice(0, 4));
+      const suffix = current.slice(4);
+      const code = suffix === '01' ? `${year}02` : (suffix === '02' ? `${year}03` : `${year + 1}01`);
+      return window.termCodeToName(code);
+    });
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: 'Fall 2024-2025',
+      minor1: 'ANALY-MINOR',
+      entryTermMinor1: 'Fall 2024-2025',
+      curriculum: [['MATH306']],
+      grades: [['A']],
+      dates: [future],
+    });
+
+    const result = await page.evaluate(() => {
+      const fn = window.computeMinorAllocation
+        || (typeof computeMinorAllocation === 'function' ? computeMinorAllocation : null);
+      const sem = window.curriculum.semesters[0];
+      const res = fn(window.curriculum, 'ANALY-MINOR');
+      return {
+        rawCredits: sem.totalGPACredits,
+        cgpaFinite: Number.isFinite(res.cgpa),
+        gpaOk: res.gpaOk,
+        pgpaFinite: Number.isFinite(res.pgpa),
+        pgpaOk: res.pgpaOk,
+        projectedPgpa: Number.isFinite(res.projectedPgpa.value)
+          ? res.projectedPgpa.value : null,
+      };
+    });
+    expect(result).toEqual({
+      rawCredits: 3,
+      cgpaFinite: false,
+      gpaOk: false,
+      pgpaFinite: false,
+      pgpaOk: false,
+      projectedPgpa: 4,
+    });
+
+    await page.locator('.summary').click();
+    await page.locator('.summary_minor_btn').click();
+    await expect(page.locator('.summary_minor_panel .ms-average-projection'))
+      .toContainText('Projected minor PGPA from entered grades: 4.000');
+  });
+
+  test('minor completion checks minor PGPA separately from a passing CGPA', async ({ page }) => {
+    await page.goto('/');
+    const current = await page.evaluate(() => window.currentTermName);
+    const outsideMinor = [
+      'MATH101', 'MATH102', 'NS101', 'NS102', 'CS201',
+      'CS204', 'CS300', 'CS301', 'CS302', 'CS303',
+    ];
+    const minorCourses = ['OPIM390', 'MGMT203', 'IE405', 'OPIM302', 'CS404', 'CS412'];
+    const courses = [...outsideMinor, ...minorCourses];
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: 'Fall 2024-2025',
+      minor1: 'ANALY-MINOR',
+      entryTermMinor1: 'Fall 2024-2025',
+      curriculum: [courses],
+      grades: [courses.map((code) => (minorCourses.includes(code) ? 'D' : 'A'))],
+      dates: [current],
+    });
+
+    const result = await page.evaluate(() => {
+      const fn = window.computeMinorAllocation
+        || (typeof computeMinorAllocation === 'function' ? computeMinorAllocation : null);
+      const res = fn(window.curriculum, 'ANALY-MINOR');
+      return {
+        totalCourses: Object.values(res.totals)
+          .reduce((sum, category) => sum + category.courses, 0),
+        totalCredits: Object.values(res.totals)
+          .reduce((sum, category) => sum + category.credits, 0),
+        cgpa: res.cgpa,
+        cgpaOk: res.cgpaOk,
+        pgpa: res.pgpa,
+        pgpaOk: res.pgpaOk,
+        averagesOk: res.averagesOk,
+        ok: res.ok,
+      };
+    });
+
+    expect(result.totalCourses).toBe(6);
+    expect(result.totalCredits).toBe(18);
+    expect(result.cgpa).toBeGreaterThanOrEqual(2.72);
+    expect(result.cgpaOk).toBe(true);
+    expect(result.pgpa).toBe(1);
+    expect(result.pgpaOk).toBe(false);
+    expect(result.averagesOk).toBe(false);
+    expect(result.ok).toBe(false);
+  });
+
+  test('a failed minor course enters minor PGPA but not earned minor progress', async ({ page }) => {
+    await page.goto('/');
+    const current = await page.evaluate(() => window.currentTermName);
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: 'Fall 2024-2025',
+      minor1: 'ANALY-MINOR',
+      entryTermMinor1: 'Fall 2024-2025',
+      curriculum: [['MATH101', 'MATH306', 'OPIM390']],
+      grades: [['A', 'A', 'F']],
+      dates: [current],
+    });
+
+    const result = await page.evaluate(() => {
+      const fn = window.computeMinorAllocation
+        || (typeof computeMinorAllocation === 'function' ? computeMinorAllocation : null);
+      const res = fn(window.curriculum, 'ANALY-MINOR');
+      return {
+        earnedCodes: Object.keys(res.allocationByCode),
+        membership: Object.fromEntries(Object.entries(res.membershipAllocationByCode)
+          .map(([code, record]) => [code, record.allocatedCat])),
+        pgpa: res.pgpa,
+        pgpaCredits: res.pgpaCredits,
+      };
+    });
+
+    expect(result.earnedCodes).toContain('MATH306');
+    expect(result.earnedCodes).not.toContain('OPIM390');
+    expect(result.membership.OPIM390).toBe('required');
+    expect(result.membership.MATH101).toBeUndefined();
+    expect(result.pgpaCredits).toBe(6);
+    expect(result.pgpa).toBe(2);
   });
 
   test('an incomplete double major cannot graduate', async ({ page }) => {

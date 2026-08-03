@@ -1,6 +1,225 @@
 // Academic Records Parser
 // This module parses Academic Records Summary HTML files to extract course information
 
+// Keep transcript ingestion conservative even if this classic script is used in
+// isolation (for example, by a parser test that does not load the domain modules).
+// In the application, window.gradePolicy is the source of truth; this fallback
+// mirrors only its accepted input vocabulary and basis inference.
+const TRANSCRIPT_GRADE_TOKENS = new Set([
+    '',
+    'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'F',
+    'P', 'S', 'U', 'I', 'T', 'NA', 'W'
+]);
+const TRANSCRIPT_LETTER_GRADES = new Set([
+    'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'F'
+]);
+
+function getTranscriptGradePolicy() {
+    try {
+        if (typeof window !== 'undefined' && window.gradePolicy) {
+            return window.gradePolicy;
+        }
+    } catch (_) {
+        // Fall through to the conservative parser-local policy.
+    }
+    return null;
+}
+
+function normalizeTranscriptGrade(rawGrade) {
+    if (String(rawGrade === null || rawGrade === undefined ? '' : rawGrade).trim() === '--') {
+        return '';
+    }
+    const policy = getTranscriptGradePolicy();
+    if (policy && typeof policy.normalizeGrade === 'function') {
+        try {
+            return policy.normalizeGrade(rawGrade);
+        } catch (_) {
+            return null;
+        }
+    }
+
+    if (rawGrade === null || rawGrade === undefined) return '';
+    const normalized = String(rawGrade).trim().toUpperCase();
+    if (!normalized || normalized === 'REGISTERED' || normalized === '--') return '';
+    return TRANSCRIPT_GRADE_TOKENS.has(normalized) ? normalized : null;
+}
+
+function inferTranscriptGradingBasis(rawGrade, explicitBasis) {
+    const policy = getTranscriptGradePolicy();
+    if (policy && typeof policy.inferGradingBasis === 'function') {
+        try {
+            const inferred = policy.inferGradingBasis(rawGrade, explicitBasis);
+            return inferred === 'letter' || inferred === 'satisfactory' ? inferred : '';
+        } catch (_) {
+            return '';
+        }
+    }
+
+    const grade = normalizeTranscriptGrade(rawGrade);
+    if (TRANSCRIPT_LETTER_GRADES.has(grade)) return 'letter';
+    if (grade === 'S' || grade === 'U') return 'satisfactory';
+
+    const normalizedBasis = String(explicitBasis || '').trim().toLowerCase();
+    if (['letter', 'gpa', 'gpa-bearing', 'letter-grade'].includes(normalizedBasis)) {
+        return 'letter';
+    }
+    if (['satisfactory', 'non-gpa', 's/u', 'su'].includes(normalizedBasis)) {
+        return 'satisfactory';
+    }
+    return '';
+}
+
+function normalizeTranscriptGradeRecord(rawGrade, explicitBasis) {
+    const grade = normalizeTranscriptGrade(rawGrade);
+    if (grade === null) return null;
+    return {
+        grade: grade,
+        gradingBasis: inferTranscriptGradingBasis(grade, explicitBasis)
+    };
+}
+
+function makeParsedCourse(details, gradeRecord) {
+    const parsed = Object.assign({}, details, { grade: gradeRecord.grade });
+    if (gradeRecord.gradingBasis) parsed.gradingBasis = gradeRecord.gradingBasis;
+    return parsed;
+}
+
+function canonicalTranscriptCourseCode(rawCode) {
+    const code = String(rawCode || '').trim().toUpperCase().replace(/\s+/g, '');
+    return code === 'CS210' ? 'DSA210' : code;
+}
+
+function transcriptSemesterOrder(rawSemester) {
+    const match = String(rawSemester || '').match(/(Fall|Spring|Summer)\s+(\d{4})-\d{4}/i);
+    if (!match) return null;
+    const term = match[1].toLowerCase();
+    const offset = term === 'spring' ? 1 : (term === 'summer' ? 2 : 0);
+    return (parseInt(match[2], 10) * 10) + offset;
+}
+
+function makeTranscriptCandidate(details, rawGrade, explicitBasis, metadata) {
+    const gradeRecord = normalizeTranscriptGradeRecord(rawGrade, explicitBasis);
+    return Object.assign({}, details, {
+        code: canonicalTranscriptCourseCode(details && details.code),
+        _gradeRecord: gradeRecord,
+        _invalidGrade: gradeRecord ? null : String(rawGrade === null || rawGrade === undefined ? '' : rawGrade).trim(),
+        _attempt: metadata && Number.isFinite(Number(metadata.attempt)) ? Number(metadata.attempt) : null,
+        _sourceOrder: metadata && Number.isFinite(Number(metadata.sourceOrder)) ? Number(metadata.sourceOrder) : 0
+    });
+}
+
+function transcriptCandidateGrade(candidate) {
+    return candidate && candidate._gradeRecord
+        ? candidate._gradeRecord.grade
+        : String((candidate && candidate._invalidGrade) || '').trim();
+}
+
+function compareTranscriptCandidates(left, right) {
+    const leftSemester = transcriptSemesterOrder(left && left.semester);
+    const rightSemester = transcriptSemesterOrder(right && right.semester);
+    if (leftSemester !== null && rightSemester !== null && leftSemester !== rightSemester) {
+        return leftSemester - rightSemester;
+    }
+    if (leftSemester !== null && rightSemester === null) return 1;
+    if (leftSemester === null && rightSemester !== null) return -1;
+
+    const leftAttempt = left && left._attempt;
+    const rightAttempt = right && right._attempt;
+    if (leftAttempt !== null && rightAttempt !== null && leftAttempt !== rightAttempt) {
+        return leftAttempt - rightAttempt;
+    }
+    return Number((left && left._sourceOrder) || 0) - Number((right && right._sourceOrder) || 0);
+}
+
+// The planner currently stores one occurrence per course code. Reconcile every
+// transcript format in one place so that document order cannot decide which
+// attempt survives. The latest chronological semester wins; attempt number and
+// source order are deterministic tie-breakers within a semester.
+function reconcileTranscriptCandidates(candidates) {
+    const winners = new Map();
+    const superseded = [];
+    const list = Array.isArray(candidates) ? candidates : [];
+
+    list.forEach((candidate, index) => {
+        if (!candidate || !candidate.code) return;
+        if (!Number.isFinite(Number(candidate._sourceOrder))) candidate._sourceOrder = index;
+        const code = canonicalTranscriptCourseCode(candidate.code);
+        candidate.code = code;
+        const previous = winners.get(code);
+        if (!previous) {
+            winners.set(code, candidate);
+            return;
+        }
+        if (compareTranscriptCandidates(candidate, previous) >= 0) {
+            superseded.push({ dropped: previous, kept: candidate });
+            winners.set(code, candidate);
+        } else {
+            superseded.push({ dropped: candidate, kept: previous });
+        }
+    });
+
+    const selected = Array.from(winners.values()).sort((a, b) => a._sourceOrder - b._sourceOrder);
+    const courses = [];
+    selected.forEach((candidate) => {
+        if (!candidate._gradeRecord) return;
+        const details = Object.assign({}, candidate);
+        delete details._gradeRecord;
+        delete details._invalidGrade;
+        delete details._attempt;
+        delete details._sourceOrder;
+        courses.push(makeParsedCourse(details, candidate._gradeRecord));
+    });
+
+    const invalidGradeCourses = list
+        .filter(candidate => candidate && !candidate._gradeRecord)
+        .map(candidate => ({
+            code: canonicalTranscriptCourseCode(candidate.code),
+            grade: String(candidate._invalidGrade || '').trim(),
+            semester: candidate.semester
+        }));
+    const supersededCourses = superseded.map((entry) => ({
+        code: canonicalTranscriptCourseCode(entry.dropped.code),
+        semester: entry.dropped.semester,
+        grade: transcriptCandidateGrade(entry.dropped),
+        keptSemester: entry.kept.semester,
+        keptGrade: transcriptCandidateGrade(entry.kept),
+        reason: 'older-attempt'
+    }));
+
+    return { courses, invalidGradeCourses, supersededCourses };
+}
+
+function newTranscriptResult() {
+    return {
+        courses: [],
+        notFoundCourses: [],
+        invalidGradeCourses: [],
+        supersededCourses: [],
+        skippedCourses: [],
+        detectedRecords: 0
+    };
+}
+
+function addTranscriptSkip(result, code, rawGrade, semester, reason) {
+    if (!Array.isArray(result.skippedCourses)) result.skippedCourses = [];
+    result.skippedCourses.push({
+        code: canonicalTranscriptCourseCode(code),
+        grade: String(rawGrade === null || rawGrade === undefined ? '' : rawGrade).trim(),
+        semester: semester,
+        reason: reason
+    });
+}
+
+function finalizeTranscriptResult(result, candidates) {
+    const reconciled = reconcileTranscriptCandidates(candidates);
+    result.courses = reconciled.courses;
+    result.invalidGradeCourses = reconciled.invalidGradeCourses;
+    result.supersededCourses = reconciled.supersededCourses;
+    result.skippedCourses = Array.isArray(result.skippedCourses) ? result.skippedCourses : [];
+    result.detectedRecords = (Array.isArray(candidates) ? candidates.length : 0) + result.skippedCourses.length;
+    return result;
+}
+
 /**
  * Parses an Academic Records Summary HTML file and extracts course information
  * @param {string} htmlContent - The HTML content of the Academic Records file
@@ -13,17 +232,9 @@ function parseAcademicRecords(htmlContent) {
     // Get all course tables (each semester has its own table)
     const courseTables = doc.querySelectorAll('.courseTable');
 
-    // Store parsed courses and issues
-    const result = {
-        courses: [],
-        notFoundCourses: []
-    };
-
-    // Track the most recent entry for each course code. As we parse the tables
-    // in the order they appear in the transcript, later occurrences will
-    // overwrite earlier ones so that repeated attempts keep only the latest
-    // grade.
-    const latestMap = {};
+    const result = newTranscriptResult();
+    const candidates = [];
+    let sourceOrder = 0;
 
     // Extract courses from each table (semester)
     courseTables.forEach(table => {
@@ -56,7 +267,8 @@ function parseAcademicRecords(htmlContent) {
             if (cells.length >= 4) {
                 let courseCode = cells[0].textContent.trim().replace(/\s/g, '');
                 const courseTitle = cells[1].textContent.trim();
-                const grade = cells[3].textContent.trim();
+                const rawGrade = cells[3].textContent.trim();
+                const attempt = cells.length > 2 ? parseFloat(cells[2].textContent.trim()) : null;
 
                 // Determine status if available by scanning remaining cells. If
                 // the row marks the course as "Repeated" or "Excluded", we skip
@@ -65,7 +277,10 @@ function parseAcademicRecords(htmlContent) {
                     .slice(4)
                     .map(c => c.textContent.trim().toLowerCase())
                     .join(' ');
-                if (statusText.includes('repeated') || statusText.includes('excluded')) {
+                const skipReason = statusText.includes('excluded')
+                    ? 'excluded' : (statusText.includes('repeated') ? 'repeated' : '');
+                if (skipReason) {
+                    addTranscriptSkip(result, courseCode, rawGrade, semester, skipReason);
                     return;
                 }
                 // Extract SU credit and ECTS values if available. The transcript
@@ -89,37 +304,23 @@ function parseAcademicRecords(htmlContent) {
                     ects = 0;
                 }
 
-                // Replace CS210 with DSA210
-                if (courseCode === 'CS210') {
-                    courseCode = 'DSA210';
-                }
-
                 // Correct the condition to skip courses with ELAE code
                 if (courseCode.includes('ELAE')) {
                     return; // Skip this iteration
                 }
 
-                // Skip withdrawn or not attended courses
-                if (['W', 'NA'].includes(grade)) {
-                    return;
-                }
-
-                // Include the course, using blank grade for "Registered"
-                latestMap[courseCode] = {
+                candidates.push(makeTranscriptCandidate({
                     code: courseCode,
                     title: courseTitle,
-                    grade: grade === 'Registered' ? '' : grade,
                     semester: semester,
                     suCredits: suCredits,
                     ects: ects
-                };
+                }, rawGrade, '', { attempt, sourceOrder: sourceOrder++ }));
             }
         });
     });
 
-    // Finalize the result courses from the latestMap values
-    result.courses = Object.values(latestMap);
-    return result;
+    return finalizeTranscriptResult(result, candidates);
 }
 
 /**
@@ -131,7 +332,9 @@ function parseYokTranscript(pdfText) {
     const lines = pdfText.replace(/\r/g, '').split('\n').map(l => l.trim());
     const courseCodeRegex = /^\*?\s*[A-Z]+\s*\d{3,}[A-Z0-9]*\s*$/;
     const semesterRegex = /\((\d{4}-\d{4}) (Fall|Spring|Summer) (Term|School)\)/;
-    const result = { courses: [], notFoundCourses: [] };
+    const result = newTranscriptResult();
+    const candidates = [];
+    let sourceOrder = 0;
     let currentSemester = 'Unknown Semester';
 
     for (let i = 0; i < lines.length; i++) {
@@ -166,7 +369,7 @@ function parseYokTranscript(pdfText) {
         if (englishTitle.startsWith('(') && englishTitle.endsWith(')')) {
             englishTitle = englishTitle.slice(1, -1);
         }
-        next(); // course status - not used
+        const courseStatus = next();
         next(); // language - not used
 
         next(); // T hours
@@ -178,34 +381,38 @@ function parseYokTranscript(pdfText) {
         if (/^[0-9.]+$/.test(token)) {
             token = next();
         }
-        let grade = token;
+        let rawGrade = token;
 
         if(!token.includes('--')){
             next(); // comment - ignored
         }
         else{
-            grade = '';
+            rawGrade = '';
         }
         i = j;
 
-        if (code === 'CS210') {
-            code = 'DSA210';
-        }
-        if (code.includes('ELAE') || ['W', 'NA'].includes(grade)) {
+        if (code.includes('ELAE')) {
             continue;
         }
 
-        result.courses.push({
+        const normalizedStatus = String(courseStatus || '').toLowerCase();
+        const skipReason = normalizedStatus.includes('excluded')
+            ? 'excluded' : (normalizedStatus.includes('repeated') ? 'repeated' : '');
+        if (skipReason) {
+            addTranscriptSkip(result, code, rawGrade, currentSemester, skipReason);
+            continue;
+        }
+
+        candidates.push(makeTranscriptCandidate({
             code: code,
             title: englishTitle || turkishTitle,
-            grade: grade,
             semester: currentSemester,
             suCredits: suCredits,
             ects: ects
-        });
+        }, rawGrade, '', { sourceOrder: sourceOrder++ }));
     }
 
-    return result;
+    return finalizeTranscriptResult(result, candidates);
 }
 
 /**
@@ -224,11 +431,9 @@ function parseAcademicRecordsPdf(pdfText) {
     const semesterRegex = /^(Fall|Spring|Summer)\s+\d{4}-\d{4}$/;
     // PDF transcripts include a "level" column such as UG/GR which we ignore.
     const levelTokens = new Set(['UG', 'GR', 'FDY', 'PG', 'PR', 'SA', 'SR', 'MS', 'MD', 'DR']);
-    // Grades mirror the options used elsewhere in the app (helper_functions.js)
-    // and include special entries for transfer and in-progress courses.
-    const gradeRegex = /^(S|A|A-|B\+|B|B-|C\+|C|C-|D\+|D|F|T|P|I|W|NA|U|Registered)$/;
-
-    const result = { courses: [], notFoundCourses: [] };
+    const result = newTranscriptResult();
+    const candidates = [];
+    let sourceOrder = 0;
     let currentSemester = 'Unknown Semester';
 
     function parseAcademicRecordsPdfTokenStream(text) {
@@ -241,11 +446,9 @@ function parseAcademicRecordsPdf(pdfText) {
             // OCR often confuses these in course numbers.
             return t.replace(/[Il]/g, '1').replace(/O/g, '0');
         };
-        const gradeTokenRegexUpper = /^(S|A|A-|B\+|B|B-|C\+|C|C-|D\+|D|F|T|P|I|W|NA|U|REGISTERED)$/;
-        const isGradeToken = (tok) => gradeTokenRegexUpper.test(upper(tok));
-        const normalizeGrade = (tok) => {
-            const u = upper(tok);
-            return u === 'REGISTERED' ? 'Registered' : u;
+        const isGradeToken = (tok) => {
+            if (!String(tok || '').trim()) return false;
+            return normalizeTranscriptGrade(tok) !== null;
         };
         const readGradeAt = (idx) => {
             const a = tokens[idx] || '';
@@ -253,9 +456,19 @@ function parseAcademicRecordsPdf(pdfText) {
             const bU = upper(tokens[idx + 1] || '');
             if ((aU === 'A' || aU === 'B' || aU === 'C' || aU === 'D') && (bU === '+' || bU === '-')) {
                 const g = aU + bU;
-                if (isGradeToken(g)) return { grade: normalizeGrade(g), next: idx + 2 };
+                const gradeRecord = normalizeTranscriptGradeRecord(g);
+                return gradeRecord
+                    ? { gradeRecord: gradeRecord, next: idx + 2 }
+                    : { invalidGrade: g, next: idx + 2 };
             }
-            if (isGradeToken(a)) return { grade: normalizeGrade(a), next: idx + 1 };
+            const gradeRecord = normalizeTranscriptGradeRecord(a);
+            if (String(a).trim() && gradeRecord) return { gradeRecord: gradeRecord, next: idx + 1 };
+            // At this point the cursor is immediately after the level/title.
+            // A non-numeric token is therefore a grade candidate; reject it
+            // explicitly instead of silently importing the course as ungraded.
+            if (String(a).trim() && isNaN(parseFloat(a))) {
+                return { invalidGrade: a, next: idx + 1 };
+            }
             return null;
         };
         const isNumberToken = (t) => {
@@ -320,7 +533,9 @@ function parseAcademicRecordsPdf(pdfText) {
             return null;
         };
 
-        const out = { courses: [], notFoundCourses: [] };
+        const out = newTranscriptResult();
+        const tokenCandidates = [];
+        let tokenSourceOrder = 0;
         let sem = 'Unknown Semester';
 
         for (let i = 0; i < tokens.length;) {
@@ -381,10 +596,12 @@ function parseAcademicRecordsPdf(pdfText) {
 
             const courseTitle = titleTokens.join(' ').trim();
 
-            let grade = '';
+            let gradeRecord = normalizeTranscriptGradeRecord('');
+            let invalidGrade = null;
             const g = readGradeAt(cursor);
             if (g) {
-                grade = g.grade;
+                if (g.gradeRecord) gradeRecord = g.gradeRecord;
+                else invalidGrade = g.invalidGrade;
                 cursor = g.next;
             }
 
@@ -410,33 +627,31 @@ function parseAcademicRecordsPdf(pdfText) {
                 if (statusTokens.length > 60) break;
             }
             const statusText = statusTokens.join(' ').toLowerCase();
-            if ((statusText.includes('repeated') || statusText.includes('excluded')) && !statusText.includes('regardless of whether the course is repeated later')) {
+            const skipReason = statusText.includes('excluded')
+                ? 'excluded' : (statusText.includes('repeated') && !statusText.includes('regardless of whether the course is repeated later')
+                    ? 'repeated' : '');
+            if (skipReason) {
+                addTranscriptSkip(out, code,
+                    invalidGrade !== null ? invalidGrade : (gradeRecord ? gradeRecord.grade : ''),
+                    sem, skipReason);
                 i = j;
                 continue;
             }
 
-            if (code === 'CS210') {
-                code = 'DSA210';
-            }
-
-            if (['W', 'NA'].includes(grade)) {
-                i = j;
-                continue;
-            }
-
-            out.courses.push({
+            tokenCandidates.push(makeTranscriptCandidate({
                 code: code,
                 title: courseTitle,
-                grade: grade === 'Registered' ? '' : grade,
                 semester: sem,
                 suCredits: suCredits,
                 ects: ects
-            });
+            }, invalidGrade !== null ? invalidGrade : gradeRecord.grade,
+            gradeRecord && gradeRecord.gradingBasis,
+            { sourceOrder: tokenSourceOrder++ }));
 
             i = j;
         }
 
-        return out;
+        return finalizeTranscriptResult(out, tokenCandidates);
     }
 
     for (let i = 0; i < lines.length;) {
@@ -467,9 +682,12 @@ function parseAcademicRecordsPdf(pdfText) {
                 i++;
             }
 
-            let grade = '';
-            if (i < lines.length && gradeRegex.test(lines[i])) {
-                grade = lines[i];
+            let gradeRecord = normalizeTranscriptGradeRecord('');
+            let invalidGrade = null;
+            if (i < lines.length && isNaN(parseFloat(lines[i]))) {
+                const candidate = normalizeTranscriptGradeRecord(lines[i]);
+                if (candidate) gradeRecord = candidate;
+                else invalidGrade = lines[i];
                 i++;
             }
 
@@ -494,13 +712,14 @@ function parseAcademicRecordsPdf(pdfText) {
                 i++;
             }
             const statusText = statusTokens.join(' ').toLowerCase();
-            if ((statusText.includes('repeated') || statusText.includes('excluded')) && !statusText.includes('regardless of whether the course is repeated later')) {
+            const skipReason = statusText.includes('excluded')
+                ? 'excluded' : (statusText.includes('repeated') && !statusText.includes('regardless of whether the course is repeated later')
+                    ? 'repeated' : '');
+            if (skipReason) {
+                addTranscriptSkip(result, code,
+                    invalidGrade !== null ? invalidGrade : (gradeRecord ? gradeRecord.grade : ''),
+                    currentSemester, skipReason);
                 continue;
-            }
-
-            // Replace CS210 with DSA210
-            if (code === 'CS210') {
-                code = 'DSA210';
             }
 
             // Correct the condition to skip courses with ELAE code
@@ -508,31 +727,145 @@ function parseAcademicRecordsPdf(pdfText) {
                 continue; // Skip this iteration
             }
 
-            if (['W', 'NA'].includes(grade)) {
-                continue;
-            }
-
-            result.courses.push({
+            candidates.push(makeTranscriptCandidate({
                 code: code,
                 title: courseTitle,
-                grade: grade === 'Registered' ? '' : grade,
                 semester: currentSemester,
                 suCredits: suCredits,
                 ects: ects
-            });
+            }, invalidGrade !== null ? invalidGrade : gradeRecord.grade,
+            gradeRecord && gradeRecord.gradingBasis,
+            { sourceOrder: sourceOrder++ }));
             continue;
         }
 
         i++;
     }
 
+    const finalized = finalizeTranscriptResult(result, candidates);
+
     // Fallback parser for PDFs produced by "Microsoft Print to PDF" which may
     // flatten rows into a different token ordering.
-    if (result.courses.length === 0) {
+    if (finalized.detectedRecords === 0) {
         return parseAcademicRecordsPdfTokenStream(pdfText);
     }
 
-    return result;
+    return finalized;
+}
+
+function formatTranscriptSemester(semester) {
+    const value = String(semester || '').trim();
+    const match = value.match(/(Fall|Spring|Summer)\s+(\d{4}-\d{4})/i);
+    if (!match) return value;
+    const term = match[1].charAt(0).toUpperCase() + match[1].slice(1).toLowerCase();
+    return term + ' ' + match[2];
+}
+
+function curriculumCourseOccurrences(curriculum, rawCode) {
+    const code = canonicalTranscriptCourseCode(rawCode);
+    const occurrences = [];
+    const semesters = curriculum && Array.isArray(curriculum.semesters) ? curriculum.semesters : [];
+    semesters.forEach((semester) => {
+        const courses = semester && Array.isArray(semester.courses) ? semester.courses : [];
+        courses.forEach((course) => {
+            if (canonicalTranscriptCourseCode(course && course.code) === code) {
+                occurrences.push({ semester, course });
+            }
+        });
+    });
+    return occurrences;
+}
+
+function curriculumSemesterName(semester) {
+    if (!semester) return '';
+    if (semester.termName) return formatTranscriptSemester(semester.termName);
+    try {
+        if (typeof document !== 'undefined' && semester.id) {
+            const node = document.getElementById(semester.id);
+            const label = node && node.closest('.container_semester')
+                ? node.closest('.container_semester').querySelector('.date p') : null;
+            if (label) return formatTranscriptSemester(label.textContent);
+        }
+    } catch (_) {}
+    return '';
+}
+
+function courseCatalogRecord(courseData, curriculum, rawCode) {
+    const code = canonicalTranscriptCourseCode(rawCode);
+    const lists = [courseData];
+    if (curriculum && Array.isArray(curriculum.doubleMajorCourseData)) lists.push(curriculum.doubleMajorCourseData);
+    for (const list of lists) {
+        if (!Array.isArray(list)) continue;
+        for (const record of list) {
+            const recordCode = canonicalTranscriptCourseCode(
+                record && record.code ? record.code : String((record && record.Major) || '') + String((record && record.Code) || '')
+            );
+            if (recordCode === code) return record;
+        }
+    }
+    return null;
+}
+
+function updateExistingTranscriptCourse(occurrence, gradeRecord, curriculum, courseData) {
+    if (!occurrence || !occurrence.course || !occurrence.semester || !gradeRecord) return false;
+    const course = occurrence.course;
+    const semester = occurrence.semester;
+    const oldGrade = normalizeTranscriptGrade(course.grade);
+    const oldCanonicalGrade = oldGrade === null ? String(course.grade || '').trim().toUpperCase() : oldGrade;
+    const oldBasis = inferTranscriptGradingBasis(oldCanonicalGrade, course.gradingBasis) || 'unknown';
+    const nextBasis = gradeRecord.gradingBasis || oldBasis || 'unknown';
+    if (oldCanonicalGrade === gradeRecord.grade && oldBasis === nextBasis) return false;
+
+    const record = courseCatalogRecord(courseData, curriculum, course.code);
+    const creditValue = record ? record.SU_credit : course.SU_credit;
+    const credit = typeof parseCreditValue === 'function'
+        ? parseCreditValue(creditValue || 0) : (parseFloat(creditValue || 0) || 0);
+    const evaluate = (grade, basis) => {
+        if (typeof evaluateGradeForLegacyTotals === 'function') {
+            return evaluateGradeForLegacyTotals(grade, basis);
+        }
+        const policy = getTranscriptGradePolicy();
+        return policy && typeof policy.evaluateGrade === 'function'
+            ? policy.evaluateGrade(grade, basis) : null;
+    };
+    const oldOutcome = evaluate(oldCanonicalGrade, oldBasis);
+    const nextOutcome = evaluate(gradeRecord.grade, nextBasis);
+    if (oldOutcome && oldOutcome.countsInGpa) {
+        semester.totalGPA = Number(semester.totalGPA || 0) - (credit * oldOutcome.gpaPoints);
+        semester.totalGPACredits = Number(semester.totalGPACredits || 0) - credit;
+    }
+    if (nextOutcome && nextOutcome.countsInGpa) {
+        semester.totalGPA = Number(semester.totalGPA || 0) + (credit * nextOutcome.gpaPoints);
+        semester.totalGPACredits = Number(semester.totalGPACredits || 0) + credit;
+    }
+
+    course.grade = gradeRecord.grade;
+    course.gradingBasis = nextBasis;
+    try {
+        if (typeof document !== 'undefined' && course.id) {
+            const node = document.getElementById(course.id);
+            const gradeNode = node && node.querySelector('.grade');
+            if (gradeNode) gradeNode.textContent = gradeRecord.grade || 'Add grade';
+        }
+    } catch (_) {}
+    return true;
+}
+
+function removeEmptySemestersCreatedAfter(curriculum, priorSemesterIds) {
+    if (!curriculum || !Array.isArray(curriculum.semesters)) return;
+    const prior = priorSemesterIds instanceof Set ? priorSemesterIds : new Set();
+    for (let i = curriculum.semesters.length - 1; i >= 0; i--) {
+        const semester = curriculum.semesters[i];
+        if (!semester || prior.has(semester.id) || (Array.isArray(semester.courses) && semester.courses.length)) continue;
+        try {
+            if (typeof document !== 'undefined' && semester.id) {
+                const node = document.getElementById(semester.id);
+                const container = node && node.closest('.container_semester');
+                if (container) container.remove();
+            }
+        } catch (_) {}
+        curriculum.semesters.splice(i, 1);
+    }
 }
 
 /**
@@ -543,13 +876,27 @@ function parseAcademicRecordsPdf(pdfText) {
  * @returns {Object} Statistics about the import process
  */
 function importParsedCourses(parsedCourses, courseData, curriculum) {
-    // Build statistics object up front.  The `notFoundCourses` array will
-    // accumulate codes that are neither present in the program nor match
-    // the special prefixes.  These will be reported back to the user.
+    const inputCourses = Array.isArray(parsedCourses) ? parsedCourses : [];
+    const importCandidates = inputCourses.map((course, sourceOrder) => makeTranscriptCandidate(
+        Object.assign({}, course, { code: canonicalTranscriptCourseCode(course && course.code) }),
+        course && course.grade,
+        course && course.gradingBasis,
+        { sourceOrder }
+    ));
+    const reconciled = reconcileTranscriptCandidates(importCandidates);
+    const uniqueCodes = new Set(importCandidates.map(candidate => candidate.code).filter(Boolean));
+
     const stats = {
-        totalCourses: parsedCourses.length,
+        totalRecords: inputCourses.length,
+        totalCourses: uniqueCodes.size,
         importedCourses: 0,
-        notFoundCourses: []
+        updatedCourses: [],
+        addedCourses: [],
+        alreadyPresentCourses: [],
+        supersededCourses: reconciled.supersededCourses.slice(),
+        skippedCourses: [],
+        notFoundCourses: [],
+        invalidGradeCourses: reconciled.invalidGradeCourses.slice()
     };
     // When we encounter courses that need to be created as custom courses
     // (based on their prefix), we'll push them into this array.  The
@@ -562,47 +909,67 @@ function importParsedCourses(parsedCourses, courseData, curriculum) {
     // Group courses by semester
     const courseBySemester = {};
 
-    // Format semesters to be more user-friendly
-    const formatSemester = (semester) => {
-        // Extract the semester pattern like "Fall 2022-2023" from the header
-        let match = semester.match(/(Fall|Spring|Summer)\s+(\d{4}-\d{4})/);
-        if (match) {
-            // Reformat it to the expected format: "Fall 2022-2023"
-            const term = match[1];
-            const yearRange = match[2];
-            return term + " " + yearRange;
-        }
-        return semester;
-    };
-
     // Parse the semester order to allow for correct sorting
     const getSemesterOrder = (semester) => {
-        const formattedSemester = formatSemester(semester);
-        const parts = formattedSemester.split(' ');
-        if (parts.length < 2) return 0;
-
-        const term = parts[0];
-        const yearRange = parts[1];
-
-        let order = 0;
-        if (yearRange) {
-            const yearParts = yearRange.split('-');
-            if (yearParts.length === 2) {
-                const year = parseInt(yearParts[0]);
-                order = year * 10; // Base score from year
-
-                // Add term-specific values (Fall=0, Spring=1, Summer=2)
-                if (term === 'Spring') order += 1;
-                else if (term === 'Summer') order += 2;
-            }
-        }
-        return order;
+        const order = transcriptSemesterOrder(semester);
+        return order === null ? 0 : order;
     };
 
-    parsedCourses.forEach(course => {
+    reconciled.courses.forEach(course => {
+        const gradeRecord = normalizeTranscriptGradeRecord(course.grade, course.gradingBasis);
+        if (!gradeRecord) return;
+
+        const importedSemester = formatTranscriptSemester(course.semester);
+        const existingOccurrences = curriculumCourseOccurrences(curriculum, course.code);
+        if (existingOccurrences.length === 1) {
+            const occurrence = existingOccurrences[0];
+            const existingSemester = curriculumSemesterName(occurrence.semester);
+            if (existingSemester && importedSemester && existingSemester === importedSemester) {
+                if (updateExistingTranscriptCourse(occurrence, gradeRecord, curriculum, courseData)) {
+                    stats.updatedCourses.push({ code: course.code, semester: importedSemester, grade: gradeRecord.grade });
+                } else {
+                    stats.alreadyPresentCourses.push({
+                        code: course.code,
+                        semester: importedSemester,
+                        grade: gradeRecord.grade,
+                        reason: 'unchanged'
+                    });
+                }
+            } else {
+                stats.alreadyPresentCourses.push({
+                    code: course.code,
+                    semester: existingSemester,
+                    importedSemester: importedSemester,
+                    grade: gradeRecord.grade,
+                    reason: 'different-semester'
+                });
+            }
+            return;
+        }
+        if (existingOccurrences.length > 1) {
+            stats.skippedCourses.push({
+                code: course.code,
+                semester: importedSemester,
+                grade: gradeRecord.grade,
+                reason: 'ambiguous-existing-occurrence'
+            });
+            return;
+        }
+
         // Extract course code prefix and number for better matching
-        const codePrefix = course.code.match(/^[A-Z]+/)[0];
-        const codeNumber = course.code.match(/\d+[A-Z0-9]*/)[0];
+        const prefixMatch = course.code.match(/^[A-Z]+/);
+        const numberMatch = course.code.match(/\d+[A-Z0-9]*/);
+        if (!prefixMatch || !numberMatch) {
+            stats.skippedCourses.push({
+                code: course.code,
+                semester: importedSemester,
+                grade: gradeRecord.grade,
+                reason: 'invalid-course-code'
+            });
+            return;
+        }
+        const codePrefix = prefixMatch[0];
+        const codeNumber = numberMatch[0];
 
         // Check if course exists in course data using both combined and split formats.
         // Also check the selected double major's course list if available.
@@ -732,7 +1099,7 @@ function importParsedCourses(parsedCourses, courseData, curriculum) {
 
         if (courseExists) {
             // Get formatted semester name
-            const formattedSemester = formatSemester(course.semester);
+            const formattedSemester = formatTranscriptSemester(course.semester);
 
             // Group by semester
             if (!courseBySemester[formattedSemester]) {
@@ -740,13 +1107,14 @@ function importParsedCourses(parsedCourses, courseData, curriculum) {
                     name: formattedSemester,
                     order: getSemesterOrder(course.semester),
                     courses: [],
-                    grades: {} // Store grades for each course
+                    grades: {}, // Store grades for each course
+                    gradingBases: {}
                 };
             }
-            // Store course and its grade
+            // Store course and its canonical grade metadata.
             courseBySemester[formattedSemester].courses.push(course.code);
-            courseBySemester[formattedSemester].grades[course.code] = course.grade;
-            stats.importedCourses++;
+            courseBySemester[formattedSemester].grades[course.code] = gradeRecord.grade;
+            courseBySemester[formattedSemester].gradingBases[course.code] = gradeRecord.gradingBasis;
         } else {
             stats.notFoundCourses.push(course.code);
         }
@@ -767,13 +1135,48 @@ function importParsedCourses(parsedCourses, courseData, curriculum) {
             const gradeList = semesterData.courses.map(courseCode => {
                 return semesterData.grades[courseCode] || '';
             });
-            // Create the semester using whichever global function is available.
-            if (typeof createSemeter === 'function') {
-                createSemeter(false, semesterData.courses, curriculum, courseData, gradeList, semesterData.name);
-            } else if (typeof window.createSemeter === 'function') {
-                window.createSemeter(false, semesterData.courses, curriculum, courseData, gradeList, semesterData.name);
-            } else {
-                console.error('createSemeter function not found');
+            const gradingBasisList = semesterData.courses.map(courseCode => {
+                return semesterData.gradingBases[courseCode] || '';
+            });
+            const inspectableCurriculum = curriculum && Array.isArray(curriculum.semesters);
+            const priorSemesterIds = new Set(inspectableCurriculum
+                ? curriculum.semesters.map(semester => semester && semester.id) : []);
+            const createFn = typeof createSemeter === 'function'
+                ? createSemeter
+                : ((typeof window !== 'undefined' && typeof window.createSemeter === 'function')
+                    ? window.createSemeter : null);
+            let createSucceeded = false;
+            if (createFn) {
+                try {
+                    createFn(false, semesterData.courses, curriculum, courseData, gradeList, semesterData.name, gradingBasisList);
+                    createSucceeded = true;
+                } catch (error) {
+                    console.error('Failed to create imported semester:', error);
+                }
+            }
+
+            semesterData.courses.forEach((courseCode) => {
+                const added = inspectableCurriculum
+                    ? curriculumCourseOccurrences(curriculum, courseCode).length > 0
+                    : createSucceeded;
+                if (added) {
+                    stats.importedCourses++;
+                    stats.addedCourses.push({
+                        code: courseCode,
+                        semester: semesterData.name,
+                        grade: semesterData.grades[courseCode] || ''
+                    });
+                } else {
+                    stats.skippedCourses.push({
+                        code: courseCode,
+                        semester: semesterData.name,
+                        grade: semesterData.grades[courseCode] || '',
+                        reason: createFn ? 'create-failed' : 'create-unavailable'
+                    });
+                }
+            });
+            if (inspectableCurriculum) {
+                removeEmptySemestersCreatedAfter(curriculum, priorSemesterIds);
             }
         }
     }
@@ -789,6 +1192,12 @@ function importParsedCourses(parsedCourses, courseData, curriculum) {
     } catch (err) {
         // ignore
     }
+
+    stats.updatedCourseCount = stats.updatedCourses.length;
+    stats.alreadyPresentCourseCount = stats.alreadyPresentCourses.length;
+    stats.supersededCourseCount = stats.supersededCourses.length;
+    stats.skippedCourseCount = stats.skippedCourses.length;
+    stats.changedCourses = stats.importedCourses + stats.updatedCourseCount;
 
     // Finally, return both the import statistics and any pending custom
     // courses.  Do not return prematurely inside loops; returning here

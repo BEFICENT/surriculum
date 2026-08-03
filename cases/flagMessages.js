@@ -39,7 +39,8 @@ export function buildFlagMessages(major) {
       8: () => `Your Basic Science SU credit is less than ${req.science}.`,
       9: () => `Your Engineering SU credit is less than ${req.engineering}.`,
       10: () => `Your ECTS is less than sufficient.`,
-      38: () => `You don't have enough GPA!`,
+      38: () => `Your Cumulative GPA (CGPA) does not meet the required minimum.`,
+      41: () => `Your Program GPA (PGPA) does not meet the required minimum.`,
 
       //Major-specific messages
 

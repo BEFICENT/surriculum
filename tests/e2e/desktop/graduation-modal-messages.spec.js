@@ -97,21 +97,65 @@ test.describe('graduation modal messages', () => {
     await expect(overlay.locator('.graduation_status_badge').first()).toHaveText('Complete');
   });
 
+  test('posted low grades in the current term affect GPA and graduation immediately', async ({ page }) => {
+    const terms = await liveTermNames(page);
+    await seedPlan(page, {
+      major: 'CS', entryTerm: 'Fall 2024-2025',
+      curriculum: [CS_PASSING_PLAN],
+      grades: [CS_PASSING_PLAN.map(() => 'D')],
+      dates: [terms.current],
+    });
+
+    const result = await page.evaluate(() => {
+      const p = window.curriculum.getGraduationProgress('main');
+      return {
+        status: p.status,
+        earnedFlag: p.earnedFlag,
+        projectedFlag: p.projectedFlag,
+        gpa: p.gpa.value,
+        gpaCredits: p.gpa.credits,
+        legacyFlag: window.curriculum.canGraduate(),
+      };
+    });
+    expect(result.status).toBe('incomplete');
+    expect(result.earnedFlag).toBe(38);
+    expect(result.projectedFlag).toBe(38);
+    expect(result.gpa).toBe(1);
+    expect(result.gpaCredits).toBeGreaterThan(0);
+    expect(result.legacyFlag).toBe(38);
+
+    const overlay = await openModal(page);
+    await expect(overlay.locator('.graduation_card.is-incomplete').first()).toBeVisible();
+    await expect(majorMessage(overlay)).toContainText(/GPA/i);
+  });
+
   test('a complete future plan is projected complete, even with expected grades', async ({ page }) => {
     const terms = await liveTermNames(page);
     await seedPlan(page, {
       major: 'CS', entryTerm: 'Fall 2024-2025',
       curriculum: [CS_PASSING_PLAN],
-      grades: [CS_PASSING_PLAN.map(() => 'A')],
+      // A future expected D must not lower today's actual GPA. Before the
+      // time-aware legacy cleanup, canGraduate() incorrectly returned flag 38.
+      grades: [CS_PASSING_PLAN.map(() => 'D')],
       dates: [terms.future],
     });
 
     const progress = await page.evaluate(() => {
       const p = window.curriculum.getGraduationProgress('main');
-      return { status: p.status, projectedFlag: p.projectedFlag, total: p.breakdown.total };
+      return {
+        status: p.status,
+        projectedFlag: p.projectedFlag,
+        total: p.breakdown.total,
+        gpaCredits: p.gpa.credits,
+        gpaFinite: Number.isFinite(p.gpa.value),
+        legacyFlag: window.curriculum.canGraduate(),
+      };
     });
     expect(progress.status).toBe('projected');
     expect(progress.projectedFlag).toBe(0);
+    expect(progress.gpaCredits).toBe(0);
+    expect(progress.gpaFinite).toBe(false);
+    expect(progress.legacyFlag).toBe(progress.projectedFlag);
     expect(progress.total.earned).toBe(0);
     expect(progress.total.future).toBeGreaterThan(0);
     const overlay = await openModal(page);

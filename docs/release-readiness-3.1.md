@@ -1,6 +1,6 @@
 # SUrriculum 3.1 release-readiness tracker
 
-Last updated: 2026-07-28
+Last updated: 2026-08-03
 
 This is the working backlog for the 3.1 release. Items should be handled one at
 a time and checked off only after the fix and its verification are complete.
@@ -24,8 +24,10 @@ a time and checked off only after the fix and its verification are complete.
 
 ## Verified baseline
 
-- [x] JavaScript/static unit gate passes: 136/136 tests.
-- [x] Playwright gate passes: 301/301 tests in a clean dedicated run.
+- [x] JavaScript/static unit gate passes: 160/160 tests.
+- [x] Playwright gate exits clean with 349 tests: 348 passed on the first
+  attempt and one recovered on retry after the external Font Awesome CDN
+  intermittently rejected its webfont with a CORS error.
 - [x] `python tests/scrape_groups_test.py` passes when run directly.
 - [x] All 228,387 JSONL rows parse successfully.
 - [x] Manifest hashes and the content-derived data version match the data tree.
@@ -103,7 +105,9 @@ a time and checked off only after the fix and its verification are complete.
   text. An ad-hoc malicious-import check passed; add its permanent regression
   coverage during the future coverage pass.
 - [ ] Consider self-hosting runtime third-party assets and adding a restrictive
-  Content Security Policy.
+  Content Security Policy. The 2026-08-03 full browser gate reproduced the
+  availability risk: a Font Awesome CDN webfont was intermittently blocked by
+  CORS; Playwright's configured retry recovered without an application failure.
 
 ## Graduation and data correctness
 
@@ -158,18 +162,57 @@ a time and checked off only after the fix and its verification are complete.
   colors. Pool allocation prioritizes earned credit before current, future, and
   unverified work so later plans cannot displace visible earned progress. Only
   the earned audit can say Complete; a plan-only pass says
-  Projected complete, and an earned audit with no real GPA fails closed. Exact
-  S/P/I/U/NA GPA semantics remain deliberately scoped to the next item.
-- [ ] Align special-grade and GPA semantics with university rules. In
-  particular, S is currently treated as 4.0 instead of successful and
-  GPA-neutral; P and I are treated as completed plan credit; and NA is always
-  GPA-neutral even though it is F-equivalent for GPA-bearing courses and
-  U-equivalent otherwise. P/S/U/T/W are GPA-neutral, while I is temporary and
-  eventually becomes F or U if unresolved. Centralize this in one grade-policy
-  function and retain course grading-basis metadata needed to classify NA.
-- [ ] Add Program GPA (PGPA) to graduation evaluation. The app currently checks
-  only its overall GPA, while Sabancı's published graduation guidance requires
-  both CGPA and PGPA to be at least 2.00.
+  Projected complete, and an earned audit with no real GPA fails closed. On
+  2026-07-31, the remaining Summary and legacy graduation/minor consumers were
+  aligned with the same time-aware actual GPA: future-term entered grades no
+  longer leak through the zero-credit fallback, while posted current-term
+  grades still count immediately.
+- [x] Align special-grade and GPA semantics with university rules. Completed on
+  2026-08-01: one canonical policy now defines the accepted grade vocabulary,
+  letter points, credit eligibility, pending states, and GPA treatment. S and T
+  earn GPA-neutral credit; U and W do not; P and I remain projected only in a
+  current/future term; F earns no degree credit but remains a zero-point GPA
+  attempt. NA is F-equivalent on a letter basis and U-equivalent on an S/U
+  basis; an unknown positive-credit basis leaves actual GPA unresolved and all
+  graduation paths fail closed with a visible review warning. Unsupported
+  tokens, including A+, earn and project nothing. A posted current-term final
+  grade is actual immediately, while a future-term grade remains an estimate.
+
+  Grading basis is stored per planned occurrence, survives autosave and v2 plan
+  export/import, and is synthesized conservatively for v1/schema-1 plans.
+  Decisive A-F and S/U grades override stale basis metadata. The grade picker
+  exposes the full supported set and explicit letter/S-U choices for NA without
+  clearing a grade when dismissed. Transcript import retains W and NA, reports
+  unsupported grades, and passes aligned basis metadata into the plan. The
+  policy does not auto-convert an unresolved I to F/U; the eventual official
+  replacement grade remains the source of truth.
+
+  The persistence review also fixed three adjacent data-loss paths: a partial
+  plan import no longer drops grades when dates are absent; deleting the active
+  plan no longer recreates its removed namespace through a stale save hook; and
+  a stale/misaligned grading-basis array is repaired before export so the app's
+  own v2 file remains re-importable.
+- [x] Add Program GPA (PGPA) to graduation evaluation. Completed on 2026-08-03:
+  main-degree completion now requires both CGPA and main-program PGPA to be at
+  least 2.00. Double-major completion requires CGPA, main-program PGPA, and
+  double-major PGPA to meet 3.20 (2.72 for pre-2019 admits). Minor completion
+  requires both CGPA and that minor's PGPA to meet 2.72, except Entrepreneurship
+  at 2.50. Program membership follows each program's effective allocation;
+  effective N/A courses remain in CGPA but are excluded from PGPA. A separate
+  membership pass keeps GPA-bearing failures in PGPA without awarding degree
+  credit or consuming a fulfilled requirement slot.
+
+  Actual averages use posted grades from known current/past terms, so a posted
+  current-term grade counts immediately; future-term entered grades never make
+  an earned graduation check pass. Summary, Graduation Check, and Mobile
+  Progress show CGPA and the relevant PGPA separately. They may also show a
+  clearly labelled projected PGPA from entered future grade estimates and
+  report program credits that still need an estimate.
+- [ ] Retain valid transcript courses that are outside the currently selected
+  program catalogs. Imports currently reject those records. Later, keep them as
+  effective N/A so they can contribute to CGPA, while excluding them from PGPA
+  until program membership is known. Do not infer membership merely from the
+  programs selected at import time.
 - [ ] Support repeated attempts and retake planning. The model globally rejects
   a second canonical course code, so a retained failed attempt blocks adding a
   future retake. Official GPA calculation uses the latest repeated-course grade
@@ -177,6 +220,22 @@ a time and checked off only after the fix and its verification are complete.
   active/latest one by term and attempt order, and make every import path use the
   same reconciliation. Importing a completed attempt should replace an existing
   planned placeholder rather than reporting success while leaving it unchanged.
+
+  Interim import reconciliation completed on 2026-08-01: HTML, PDF, and YÖK
+  imports now select the latest record chronologically instead of trusting
+  document order; YÖK Repeated/Excluded rows are skipped; same-term planned
+  occurrences update in place; empty/phantom imports are avoided; and added,
+  updated, already-present, superseded, invalid-grade, skipped, and not-found
+  records are reported truthfully. This does not yet preserve multiple attempts
+  or allow a failed/withdrawn occurrence and a later retake to coexist.
+- [ ] Harden shifted-layout PDF transcript grade-column detection. The normal
+  tracked PDF extracts correctly, but the fallback parsers still infer a grade
+  from token position: wrapped title/status text after a missing column can be
+  reported as an unsupported grade, while a missing level marker can let an
+  unsupported grade blend into the title. Define a bounded grade-like token
+  grammar and add synthetic wrapped-title/missing-level cases before changing
+  this fragile fallback. The Microsoft Print-to-PDF sample contains no PDF.js
+  text items at all and will still require a clearer re-export/OCR path.
 - [ ] Give unsuccessful attempts a distinct Summary state instead of placing
   them in the generic "untaken" bucket.
 - [x] Keep planner and scheduler offered-course data aligned. The planner now
@@ -273,10 +332,14 @@ a time and checked off only after the fix and its verification are complete.
   evaluators; and all non-CS internship programs. The saved pool-page test now
   verifies its real `202501` fixture identity. Broader release-blocker coverage
   remains open.
-- [ ] Add the deferred grade-status/repeat matrix: S/P/I/U/NA semantics, failed
-  named/static/pool rules, scheduler prerequisites, autosave while editing a
-  grade, document-order-independent repeats, and import over a planned
-  placeholder.
+- [x] Add the deferred special-grade matrix. Unit and browser regressions now
+  cover A-F/S/P/I/U/T/NA/W/blank/unsupported outcomes, letter-vs-S/U NA, actual
+  versus future GPA, failed degree allocation, grading-basis persistence and
+  legacy migration, grade-picker/autosave behavior, and fail-closed warnings.
+- [ ] Add the remaining repeat-attempt matrix: retained multi-attempt history,
+  cross-term retake planning, scheduler prerequisites after a retake, and
+  replacement/movement of a planned placeholder when the imported attempt is
+  in a different term.
 - [ ] Add Firefox and WebKit coverage for critical flows; current Playwright
   projects cover desktop Chromium and a Pixel 7 Chromium profile.
 - [ ] Add CI that runs npm tests, the Python parity check, and data/manifest

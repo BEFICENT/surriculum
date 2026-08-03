@@ -33,9 +33,11 @@ test('explicit unsuccessful results earn no credit in any term', () => {
 
 test('past final grades are earned while unresolved past courses need verification', () => {
   assert.equal(classify('A', '202501'), 'earned');
-  for (const grade of ['', 'Registered', 'P', 'I', 'unexpected']) {
+  for (const grade of ['', 'Registered', 'P', 'I']) {
     assert.equal(classify(grade, '202501'), 'unverified');
   }
+  assert.equal(classify('unexpected', '202501'), 'unsuccessful');
+  assert.equal(classify('A+', '202501'), 'unsuccessful');
 });
 
 test('future-term entries stay projected even when a grade was entered', () => {

@@ -112,7 +112,7 @@ function s_semester(id, course_data)
 }
 
 //struct representing course:
-function s_course(code, id = 0, grade = '')
+function s_course(code, id = 0, grade = '', gradingBasis = 'unknown')
 {
     this.code = code.toUpperCase().trim();
     this.id = id
@@ -120,8 +120,25 @@ function s_course(code, id = 0, grade = '')
     // allocation rules must not depend on reading rendered DOM text, and the
     // model value also prevents an open grade picker from being autosaved as a
     // blank grade. "Registered" is the persisted label for a planned course.
-    const normalizedGrade = String(grade || '').trim().toUpperCase();
-    this.grade = normalizedGrade === 'REGISTERED' ? '' : normalizedGrade;
+    const rawGrade = String(grade ?? '').trim().toUpperCase();
+    const policy = (typeof window !== 'undefined' && window.gradePolicy)
+        ? window.gradePolicy : null;
+    const normalizedGrade = policy && typeof policy.normalizeGrade === 'function'
+        ? policy.normalizeGrade(rawGrade)
+        : (rawGrade === 'REGISTERED' ? '' : rawGrade);
+    // Keep an unsupported token visible on the model. The policy then treats
+    // it as needing review and awards neither credit nor GPA, instead of
+    // quietly turning bad imported data into an ungraded projected course.
+    this.grade = normalizedGrade === null ? rawGrade : normalizedGrade;
+    if (policy && typeof policy.inferGradingBasis === 'function') {
+        this.gradingBasis = policy.inferGradingBasis(this.grade, gradingBasis);
+    } else {
+        const explicit = String(gradingBasis || '').trim().toLowerCase();
+        if (/^(?:A|A-|B\+|B|B-|C\+|C|C-|D\+|D|F)$/.test(this.grade)) this.gradingBasis = 'letter';
+        else if (/^(?:S|U)$/.test(this.grade)) this.gradingBasis = 'satisfactory';
+        else if (explicit === 'letter' || explicit === 'satisfactory') this.gradingBasis = explicit;
+        else this.gradingBasis = 'unknown';
+    }
     // Effective type of the course after category reallocation. Initially null and
     // will be set by curriculum.recalcEffectiveTypes().
     this.effective_type = null;
