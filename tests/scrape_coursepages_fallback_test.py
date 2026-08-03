@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Focused offline tests for catalog fallback course-page metadata.
 
-Run directly from the repository root:
+Run through ``npm run test:python`` or directly from the repository root:
 
     python tests/scrape_coursepages_fallback_test.py
 """

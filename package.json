@@ -4,8 +4,9 @@
   "private": true,
   "description": "Dev-time test suite for SUrriculum. The shipped app is dependency-free vanilla HTML/CSS/JS with no build step; everything here is tooling only and never served to users.",
   "scripts": {
-    "test": "npm run test:unit && npm run test:e2e",
+    "test": "npm run test:unit && npm run test:python && npm run test:e2e",
     "test:unit": "node tests/static_checks.js && node --test \"tests/unit/**/*.test.js\"",
+    "test:python": "python tests/scrape_groups_test.py && python tests/scrape_coursepages_fallback_test.py",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:ui": "playwright test --ui"

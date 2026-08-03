@@ -7,8 +7,8 @@ behaviour-preserving, and a future page-format change that broke the parse would
 fail here rather than silently blanking a graduation pool.
 
 Runs against the committed Fall 2025-2026 pages in
-'Degree Detail Pages (for inspect)/', so it needs no network. Not in the
-node/npm gate (that gate is JS-only); run directly:
+'Degree Detail Pages (for inspect)/', so it needs no network. It runs through
+``npm run test:python`` and can also be run directly:
 
     python tests/scrape_groups_test.py
 

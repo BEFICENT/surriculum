@@ -346,12 +346,11 @@ a time and checked off only after the fix and its verification are complete.
 
 ## Test-suite work
 
-- [ ] Integrate `tests/scrape_groups_test.py` and
+- [x] Integrate `tests/scrape_groups_test.py` and
   `tests/scrape_coursepages_fallback_test.py` into the normal test command. They
-  are standalone Python assertion scripts, are not discovered by the Node test
-  runner, and are currently omitted from `npm test` and CI. A likely structure
-  is a `test:python` npm script included by `npm test`, while keeping the direct
-  Python commands available.
+  remain standalone Python assertion scripts, but `npm test` now runs them
+  through `test:python` after the fast JavaScript/static gate and before the
+  browser suite. The direct Python commands remain available for focused runs.
 - [ ] Expand coverage for the release blockers above. A focused graduation pass
   completed on 2026-07-23 adds 48 non-duplicative cases: 42 unit/data checks and
   six browser checks. It pins live SUIS threshold transitions for BIO, CS, IE,

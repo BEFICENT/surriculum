@@ -8,18 +8,21 @@ is git-ignored and never served to users.
 
 ```bash
 npm install            # once: installs @playwright/test (dev only)
+pip install -r requirements.txt  # once: installs Python scraper dependencies
 npx playwright install chromium   # once: the browser binary
 
-npm test               # unit + e2e
+npm test               # unit + Python checks + e2e
 npm run test:unit      # fast: node --test + the legacy static checks
+npm run test:python    # offline scraper parity/fallback checks
 npm run test:e2e       # Playwright (real browser)
 python tests/scrape_groups_test.py
 python tests/scrape_coursepages_fallback_test.py
 npm run test:e2e:ui    # Playwright interactive UI mode
 ```
 
-The two Python checks are currently standalone and must be run explicitly;
-they are not yet included in `npm test` or CI.
+The two Python checks are included in `npm test`; their direct commands remain
+available for focused runs. Python dependencies are installed separately from
+the JavaScript dev tooling.
 
 ## Layout
 
