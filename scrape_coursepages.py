@@ -1,6 +1,7 @@
 import argparse
 import datetime as _dt
 import json
+import math
 import os
 import re
 import time
@@ -26,6 +27,20 @@ DEFAULT_COURSES_DIR = "courses"
 DEFAULT_OUT_BASIC_SCIENCE = os.path.join(DEFAULT_COURSES_DIR, "basic_science_credits.jsonl")
 DEFAULT_OUT_ALL_INFO = os.path.join(DEFAULT_COURSES_DIR, "all_coursepage_info.jsonl")
 DEFAULT_CACHE_DIR = os.path.join(DEFAULT_COURSES_DIR, "coursepage_html_cache")
+
+
+# Program catalogs contain both intrinsic course metadata and contextual degree
+# metadata.  Only the former belongs in the course-page index: EL_Type and
+# Faculty_Course can differ by program and must continue to be resolved from the
+# selected program's catalog at runtime.
+CATALOG_FALLBACK_FIELDS = {
+    "title": "Course_Name",
+    "su_credits": "SU_credit",
+    "ects": "ECTS",
+    "engineering": "Engineering",
+    "basic_science": "Basic_Science",
+    "faculty": "Faculty",
+}
 
 
 @dataclass(frozen=True)
@@ -250,6 +265,90 @@ def iter_course_json_paths(courses_dir: str) -> Iterable[str]:
                 continue
             yield os.path.join(root, fname)
 
+
+def _catalog_path_sort_key(path: str, courses_dir: str) -> Tuple[int, str]:
+    """Prefer newer term snapshots, then a stable relative-path ordering."""
+    try:
+        relative = os.path.relpath(path, courses_dir).replace("\\", "/")
+    except ValueError:
+        relative = os.path.abspath(path).replace("\\", "/")
+    term_codes = [int(part) for part in relative.split("/") if re.fullmatch(r"\d{6}", part)]
+    newest_term = max(term_codes) if term_codes else -1
+    return (-newest_term, relative.casefold())
+
+
+def _catalog_text(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None
+
+
+def _catalog_number(value: Any) -> Optional[float]:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        normalized = float(value)
+    else:
+        normalized = _to_float(str(value))
+    return normalized if normalized is not None and math.isfinite(normalized) else None
+
+
+def collect_catalog_courses(
+    courses_dir: str,
+) -> Tuple[Dict[str, CourseKey], set[str], Dict[str, Dict[str, Any]]]:
+    """Collect course identities, breakdown expectations, and fallback metadata.
+
+    Catalog snapshots repeat the same course across programs and admit terms.
+    For each intrinsic field, the first non-null value from the newest snapshot
+    wins; ties use the normalized relative path.  This makes the result stable
+    even when ``os.walk`` returns directories in a different order, while still
+    allowing an older snapshot to supply a field omitted by the newest one.
+    """
+    unique: Dict[str, CourseKey] = {}
+    expected_breakdown: set[str] = set()
+    fallback_by_course_id: Dict[str, Dict[str, Any]] = {}
+
+    paths = sorted(
+        iter_course_json_paths(courses_dir),
+        key=lambda path: _catalog_path_sort_key(path, courses_dir),
+    )
+    for path in paths:
+        data = read_course_list(path)
+        if not data:
+            continue
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            subj = str(item.get("Major") or "").strip()
+            numb = str(item.get("Code") or "").strip()
+            if not subj or not numb:
+                continue
+            key = CourseKey(subj_code=subj, crse_numb=numb)
+            course_id = key.course_id
+            unique.setdefault(course_id, key)
+
+            fallback = fallback_by_course_id.setdefault(course_id, {})
+            for output_field, catalog_field in CATALOG_FALLBACK_FIELDS.items():
+                if output_field in fallback:
+                    continue
+                raw_value = item.get(catalog_field)
+                value = (
+                    _catalog_text(raw_value)
+                    if output_field in {"title", "faculty"}
+                    else _catalog_number(raw_value)
+                )
+                if value is not None:
+                    fallback[output_field] = value
+
+            bs_val = _catalog_number(item.get("Basic_Science")) or 0.0
+            eng_val = _catalog_number(item.get("Engineering")) or 0.0
+            if bs_val > 0.0 or eng_val > 0.0:
+                expected_breakdown.add(course_id)
+
+    return unique, expected_breakdown, fallback_by_course_id
+
+
 def read_course_list(path: str) -> List[Dict[str, Any]]:
     if path.endswith(".jsonl"):
         records: List[Dict[str, Any]] = []
@@ -291,37 +390,70 @@ def read_course_list(path: str) -> List[Dict[str, Any]]:
 
 
 def collect_unique_courses(courses_dir: str) -> Tuple[Dict[str, CourseKey], set[str]]:
-    unique: Dict[str, CourseKey] = {}
-    expected_breakdown: set[str] = set()
-    for path in iter_course_json_paths(courses_dir):
-        data = read_course_list(path)
-        if not data:
-            continue
-        for item in data:
-            if not isinstance(item, dict):
-                continue
-            subj = str(item.get("Major") or "").strip()
-            numb = str(item.get("Code") or "").strip()
-            if not subj or not numb:
-                continue
-            key = CourseKey(subj_code=subj, crse_numb=numb)
-            course_id = key.course_id
-            unique.setdefault(course_id, key)
-
-            bs = item.get("Basic_Science")
-            eng = item.get("Engineering")
-            try:
-                bs_val = float(bs) if bs is not None else 0.0
-            except (TypeError, ValueError):
-                bs_val = 0.0
-            try:
-                eng_val = float(eng) if eng is not None else 0.0
-            except (TypeError, ValueError):
-                eng_val = 0.0
-            if bs_val > 0.0 or eng_val > 0.0:
-                expected_breakdown.add(course_id)
-
+    # Keep the original two-value helper contract for external/debug callers.
+    unique, expected_breakdown, _ = collect_catalog_courses(courses_dir)
     return unique, expected_breakdown
+
+
+def apply_catalog_fallbacks(
+    coursepage_info: Dict[str, Dict[str, Any]],
+    unique_courses: Dict[str, CourseKey],
+    fallback_by_course_id: Dict[str, Dict[str, Any]],
+) -> Tuple[int, int]:
+    """Merge intrinsic catalog values into cumulative course-page records.
+
+    A verified non-null scrape is authoritative.  Failed/unverified records use
+    catalog values even if their parsed response happened to contain data (an
+    invalid response may belong to a different course).  Successful records are
+    filled only where a field is null or absent.  Contextual catalog fields are
+    never considered by this function.
+
+    Returns ``(records_created, fields_filled)`` for diagnostics/tests.
+    """
+    records_created = 0
+    fields_filled = 0
+    for course_id in sorted(unique_courses):
+        course = unique_courses[course_id]
+        record = coursepage_info.get(course_id)
+        if not isinstance(record, dict):
+            record = {
+                "course_id": course_id,
+                "subj_code": course.subj_code,
+                "crse_numb": course.crse_numb,
+                "scrape_ok": False,
+                "scrape_error": "coursepage_data_unavailable",
+                "parsed_subj_code": None,
+                "parsed_crse_numb": None,
+                "header_text": None,
+                "description": None,
+                "prerequisites": None,
+                "corequisites": None,
+                "last_offered_terms": [],
+                "source_url": build_coursepage_url(course.subj_code, course.crse_numb),
+                "scraped_at": None,
+            }
+            coursepage_info[course_id] = record
+            records_created += 1
+
+        successful_scrape = record.get("scrape_ok") is True
+        fallback = fallback_by_course_id.get(course_id) or {}
+        for field in CATALOG_FALLBACK_FIELDS:
+            value = fallback.get(field)
+            if not successful_scrape and value is None:
+                # A failed response may describe a different course entirely.
+                # Do not preserve any parsed intrinsic value unless a catalog
+                # snapshot can verify it.
+                record[field] = None
+                continue
+            if value is None:
+                continue
+            if successful_scrape and record.get(field) is not None:
+                continue
+            if record.get(field) != value:
+                record[field] = value
+                fields_filled += 1
+
+    return records_created, fields_filled
 
 
 def read_jsonl_by_course_id(path: str) -> Dict[str, Dict[str, Any]]:
@@ -484,7 +616,7 @@ def main() -> int:
     existing_info = read_jsonl_by_course_id(args.out_all_info)
     existing_credits = read_jsonl_by_course_id(args.out_basic_science)
 
-    unique_courses, expected_breakdown = collect_unique_courses(courses_dir)
+    unique_courses, expected_breakdown, catalog_fallbacks = collect_catalog_courses(courses_dir)
     needed: List[CourseKey] = []
     for course_id in sorted(unique_courses.keys()):
         if args.refresh or (course_id not in existing_info) or (course_id not in existing_credits):
@@ -692,6 +824,10 @@ def main() -> int:
                 f"({success_rate:.1%}); preserving the existing output files"
             )
             return 1
+
+    # Every catalog course must have useful intrinsic metadata even when its
+    # course page could not be fetched or omitted an individual field.
+    apply_catalog_fallbacks(existing_info, unique_courses, catalog_fallbacks)
 
     # Write cumulative outputs (deterministic ordering).
     write_jsonl(args.out_all_info, [existing_info[k] for k in sorted(existing_info.keys())])

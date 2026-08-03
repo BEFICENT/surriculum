@@ -13,8 +13,13 @@ npx playwright install chromium   # once: the browser binary
 npm test               # unit + e2e
 npm run test:unit      # fast: node --test + the legacy static checks
 npm run test:e2e       # Playwright (real browser)
+python tests/scrape_groups_test.py
+python tests/scrape_coursepages_fallback_test.py
 npm run test:e2e:ui    # Playwright interactive UI mode
 ```
+
+The two Python checks are currently standalone and must be run explicitly;
+they are not yet included in `npm test` or CI.
 
 ## Layout
 

@@ -436,7 +436,12 @@ function getCoursesDataList(course_data)
     // merge courses unique to the double major into the primary list so
     // that users can select DM-only courses from the dropdown.  We
     // construct a copy of course_data and append unique DM courses.
-    let combined = Array.isArray(course_data) ? course_data.slice() : [];
+    // Global course definitions are loaded only to rehydrate/import courses
+    // which are absent from the selected program catalogs. They are not a
+    // planning catalog and must never leak into the Add Course dropdown.
+    let combined = Array.isArray(course_data)
+        ? course_data.filter(function(c) { return !(c && c.__globalCourseDefinition); })
+        : [];
     try {
         const cur = (typeof window !== 'undefined') ? window.curriculum : null;
         if (cur && cur.doubleMajor && Array.isArray(cur.doubleMajorCourseData)) {
@@ -445,6 +450,7 @@ function getCoursesDataList(course_data)
                 return (c.Major + c.Code);
             }));
             cur.doubleMajorCourseData.forEach(function(dm) {
+                if (dm && dm.__globalCourseDefinition) return;
                 const key = dm.Major + dm.Code;
                 if (!mainSet.has(key)) {
                     combined.push(dm);
@@ -458,6 +464,7 @@ function getCoursesDataList(course_data)
                 const list = cur.minorCourseDataByCode[minorCode];
                 if (!Array.isArray(list)) return;
                 list.forEach(function(mc) {
+                    if (mc && mc.__globalCourseDefinition) return;
                     const key = mc.Major + mc.Code;
                     if (!mainSet.has(key)) {
                         combined.push(mc);
@@ -497,12 +504,15 @@ function getCoursesDataList(course_data)
 // returned by getCoursesDataList but in array form so it can be rendered
 // manually instead of relying on the browser's default datalist styling.
 function getCoursesList(course_data) {
-    let combined = Array.isArray(course_data) ? course_data.slice() : [];
+    let combined = Array.isArray(course_data)
+        ? course_data.filter(c => !(c && c.__globalCourseDefinition))
+        : [];
     let mainSet = new Set(combined.map(c => c.Major + c.Code));
     try {
         const cur = (typeof window !== 'undefined') ? window.curriculum : null;
         if (cur && cur.doubleMajor && Array.isArray(cur.doubleMajorCourseData)) {
             cur.doubleMajorCourseData.forEach(dm => {
+                if (dm && dm.__globalCourseDefinition) return;
                 const key = dm.Major + dm.Code;
                 if (!mainSet.has(key)) {
                     dm.__fromDoubleMajor = true;
@@ -517,6 +527,7 @@ function getCoursesList(course_data) {
                 const list = cur.minorCourseDataByCode[minorCode];
                 if (!Array.isArray(list)) return;
                 list.forEach(mc => {
+                    if (mc && mc.__globalCourseDefinition) return;
                     const key = mc.Major + mc.Code;
                     if (!mainSet.has(key)) {
                         mc.__fromMinor = true;
@@ -1045,8 +1056,285 @@ if (typeof window !== 'undefined') {
     };
 }
 
+// Normalize course codes at the boundary shared by the global course-page
+// index, transcript imports, and stored curricula. Keep this helper private so
+// it cannot collide with the plan importer's stricter code validator.
+function normalizeGlobalCourseDefinitionCode(value) {
+    try {
+        let raw = value;
+        if (raw && typeof raw === 'object') {
+            if (raw.code != null) raw = raw.code;
+            else if (raw.course_id != null) raw = raw.course_id;
+            else raw = String(raw.Major || '') + String(raw.Code || '');
+        }
+        return String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
+    } catch (_) {
+        return '';
+    }
+}
+
+function globalCourseDefinitionNumber(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const normalized = (typeof value === 'string') ? value.trim().replace(',', '.') : value;
+    if (normalized === '') return null;
+    const number = Number(normalized);
+    return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function globalCourseDefinitionText(value) {
+    return (typeof value === 'string') ? value.trim().replace(/\s+/g, ' ') : '';
+}
+
+function globalCourseDefinitionOverrideValue(overrides, keys) {
+    if (!overrides || typeof overrides !== 'object') return undefined;
+    for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
+        if (Object.prototype.hasOwnProperty.call(overrides, key)) return overrides[key];
+    }
+    return undefined;
+}
+
+// Convert one all_coursepage_info row into the same shape used by program
+// catalogs. The marker deliberately distinguishes this internal fallback from
+// a real catalog/custom-course row, and `unknown` keeps it out of every
+// program requirement pool until a selected catalog supplies a real type.
+function catalogRecordFromGlobalCoursePageInfo(info, overrides) {
+    if (!info || typeof info !== 'object') return null;
+
+    const sourceCode = info.course_id ||
+        (String(info.subj_code || info.parsed_subj_code || '') +
+            String(info.crse_numb || info.parsed_crse_numb || ''));
+    const normalizedCode = normalizeGlobalCourseDefinitionCode(sourceCode);
+    const codeMatch = normalizedCode.match(/^([A-Z]{1,12})(\d[A-Z0-9]*)$/);
+    if (!codeMatch) return null;
+
+    const offered = Array.isArray(info.last_offered_terms) ? info.last_offered_terms : [];
+    let offeredTitle = '';
+    let offeredSuCredit = null;
+    for (let i = 0; i < offered.length; i++) {
+        const row = offered[i] || {};
+        if (!offeredTitle) offeredTitle = globalCourseDefinitionText(row.course_name);
+        if (offeredSuCredit === null) offeredSuCredit = globalCourseDefinitionNumber(row.su_credit);
+        if (offeredTitle && offeredSuCredit !== null) break;
+    }
+
+    const overrideTitle = globalCourseDefinitionText(globalCourseDefinitionOverrideValue(
+        overrides, ['title', 'Course_Name', 'courseName', 'course_name', 'name']
+    ));
+    const title = globalCourseDefinitionText(info.title) || offeredTitle || overrideTitle || normalizedCode;
+
+    const pageSuCredit = globalCourseDefinitionNumber(info.su_credits);
+    const overrideSuCredit = globalCourseDefinitionNumber(globalCourseDefinitionOverrideValue(
+        overrides, ['suCredits', 'SU_credit', 'suCredit', 'su_credits']
+    ));
+    const suCredit = pageSuCredit !== null
+        ? pageSuCredit : (offeredSuCredit !== null ? offeredSuCredit : (overrideSuCredit !== null ? overrideSuCredit : 0));
+
+    const pageEcts = globalCourseDefinitionNumber(info.ects);
+    const overrideEcts = globalCourseDefinitionNumber(globalCourseDefinitionOverrideValue(
+        overrides, ['ects', 'ECTS']
+    ));
+    const ects = pageEcts !== null ? pageEcts : (overrideEcts !== null ? overrideEcts : 0);
+    const engineering = globalCourseDefinitionNumber(info.engineering);
+    const basicScience = globalCourseDefinitionNumber(info.basic_science);
+    // `faculty` is catalog identity metadata from the hydrated scrape. It is
+    // safe to carry across program contexts, unlike Faculty_Course membership,
+    // which intentionally remains contextual and therefore defaults to No.
+    const faculty = globalCourseDefinitionText(info.faculty).toUpperCase();
+
+    return {
+        Major: codeMatch[1],
+        Code: codeMatch[2],
+        Course_Name: title,
+        ECTS: String(ects),
+        Engineering: engineering !== null ? engineering : 0,
+        Basic_Science: basicScience !== null ? basicScience : 0,
+        SU_credit: String(suCredit),
+        Faculty: faculty,
+        Faculty_Course: 'No',
+        EL_Type: 'unknown',
+        __globalCourseDefinition: true
+    };
+}
+
+// Synchronous by design: callers which already loaded the index can resolve a
+// single definition without another promise boundary. Use
+// appendGlobalCourseDefinitions for the lazy-loading batch path.
+function resolveGlobalCourseDefinition(code, overrides) {
+    try {
+        if (typeof window === 'undefined') return null;
+        const normalizedCode = normalizeGlobalCourseDefinitionCode(code);
+        if (!normalizedCode) return null;
+        const index = window.coursePageInfoByCode;
+        if (!index || typeof index.get !== 'function') return null;
+        return catalogRecordFromGlobalCoursePageInfo(index.get(normalizedCode), overrides);
+    } catch (_) {
+        return null;
+    }
+}
+
+const GLOBAL_COURSE_METADATA_STORAGE_KEY = 'globalCourseMetadata';
+
+function globalCourseMetadataFromRecord(record) {
+    if (!record || typeof record !== 'object') return null;
+    const code = normalizeGlobalCourseDefinitionCode(record);
+    if (!/^([A-Z]{1,12})(\d[A-Z0-9]*)$/.test(code)) return null;
+    const title = globalCourseDefinitionText(globalCourseDefinitionOverrideValue(
+        record, ['title', 'Course_Name', 'courseName', 'course_name', 'name']
+    )) || code;
+    const suCredits = globalCourseDefinitionNumber(globalCourseDefinitionOverrideValue(
+        record, ['suCredits', 'SU_credit', 'suCredit', 'su_credits']
+    ));
+    const ects = globalCourseDefinitionNumber(globalCourseDefinitionOverrideValue(
+        record, ['ects', 'ECTS']
+    ));
+    return {
+        code,
+        title,
+        suCredits: suCredits !== null ? suCredits : 0,
+        ects: ects !== null ? ects : 0
+    };
+}
+
+// Keep a small, plan-scoped metadata snapshot for globally resolved transcript
+// courses. The shipped index remains authoritative; this snapshot only fills
+// missing fields and prevents a transient index failure from changing credits
+// or erasing the saved occurrence on the next reload.
+function getStoredGlobalCourseMetadata() {
+    const byCode = new Map();
+    try {
+        const ps = (typeof window !== 'undefined') ? window.planStorage : null;
+        let raw = null;
+        try { raw = ps ? ps.getItem(GLOBAL_COURSE_METADATA_STORAGE_KEY) : localStorage.getItem(GLOBAL_COURSE_METADATA_STORAGE_KEY); } catch (_) {}
+        const parsed = JSON.parse(raw || '[]');
+        if (!Array.isArray(parsed)) return byCode;
+        for (let i = 0; i < parsed.length && i < 2000; i++) {
+            const metadata = globalCourseMetadataFromRecord(parsed[i]);
+            if (metadata) byCode.set(metadata.code, metadata);
+        }
+    } catch (_) {}
+    return byCode;
+}
+
+function rememberGlobalCourseDefinition(record) {
+    const metadata = globalCourseMetadataFromRecord(record);
+    if (!metadata) return null;
+    try {
+        const byCode = getStoredGlobalCourseMetadata();
+        byCode.set(metadata.code, metadata);
+        const rows = Array.from(byCode.values()).sort(function(a, b) {
+            return a.code.localeCompare(b.code);
+        });
+        const value = JSON.stringify(rows);
+        const ps = (typeof window !== 'undefined') ? window.planStorage : null;
+        if (ps && typeof ps.setItem === 'function') ps.setItem(GLOBAL_COURSE_METADATA_STORAGE_KEY, value);
+        else if (typeof localStorage !== 'undefined') localStorage.setItem(GLOBAL_COURSE_METADATA_STORAGE_KEY, value);
+    } catch (_) {}
+    return metadata;
+}
+
+function findLoadedCatalogDefinition(courseData, normalizedCode) {
+    try {
+        if (typeof window !== 'undefined' && typeof window.getInfo === 'function') {
+            const resolved = window.getInfo(normalizedCode, Array.isArray(courseData) ? courseData : []);
+            if (resolved) return resolved;
+        }
+    } catch (_) {}
+
+    // The module bridge may not have executed yet. Mirror its precedence so
+    // callers still cannot insert a global fallback ahead of a real record.
+    let internalFallback = null;
+    const lists = [Array.isArray(courseData) ? courseData : []];
+    try {
+        const cur = (typeof window !== 'undefined') ? window.curriculum : null;
+        if (cur && cur.doubleMajor && Array.isArray(cur.doubleMajorCourseData)) {
+            lists.push(cur.doubleMajorCourseData);
+        }
+        if (cur && Array.isArray(cur.minors) && cur.minorCourseDataByCode) {
+            for (let i = 0; i < cur.minors.length; i++) {
+                const list = cur.minorCourseDataByCode[cur.minors[i]];
+                if (Array.isArray(list)) lists.push(list);
+            }
+        }
+    } catch (_) {}
+
+    for (let li = 0; li < lists.length; li++) {
+        const list = lists[li];
+        for (let i = 0; i < list.length; i++) {
+            const record = list[i];
+            if (!record || normalizeGlobalCourseDefinitionCode(record) !== normalizedCode) continue;
+            if (record.__globalCourseDefinition) {
+                if (!internalFallback) internalFallback = record;
+                continue;
+            }
+            return record;
+        }
+    }
+    return internalFallback;
+}
+
+function normalizedGlobalOverrides(overridesByCode) {
+    const normalized = new Map();
+    if (!overridesByCode || typeof overridesByCode !== 'object') return normalized;
+    try {
+        if (typeof overridesByCode.forEach === 'function' && typeof overridesByCode.get === 'function') {
+            overridesByCode.forEach(function(value, key) {
+                const code = normalizeGlobalCourseDefinitionCode(key);
+                if (code) normalized.set(code, value);
+            });
+            return normalized;
+        }
+        Object.keys(overridesByCode).forEach(function(key) {
+            const code = normalizeGlobalCourseDefinitionCode(key);
+            if (code) normalized.set(code, overridesByCode[key]);
+        });
+    } catch (_) {}
+    return normalized;
+}
+
+// Lazily load the global index once, then append definitions only for the
+// explicitly requested codes. Existing primary/DM/minor/user-custom records
+// always win, and no index-wide list is ever merged into courseData.
+async function appendGlobalCourseDefinitions(courseData, codes, overridesByCode) {
+    const added = [];
+    const missing = [];
+    if (!Array.isArray(courseData)) return { added, missing };
+
+    let requested;
+    if (typeof codes === 'string' || !codes || typeof codes[Symbol.iterator] !== 'function') {
+        requested = [codes];
+    } else {
+        requested = Array.from(codes);
+    }
+    const normalizedCodes = [];
+    const seen = new Set();
+    for (let i = 0; i < requested.length; i++) {
+        const code = normalizeGlobalCourseDefinitionCode(requested[i]);
+        if (!code || seen.has(code)) continue;
+        seen.add(code);
+        normalizedCodes.push(code);
+    }
+    if (!normalizedCodes.length) return { added, missing };
+
+    try { await loadCoursePageInfoIndex(); } catch (_) {}
+    const overrides = normalizedGlobalOverrides(overridesByCode);
+    for (let i = 0; i < normalizedCodes.length; i++) {
+        const code = normalizedCodes[i];
+        if (findLoadedCatalogDefinition(courseData, code)) continue;
+        const definition = resolveGlobalCourseDefinition(code, overrides.get(code));
+        if (!definition) {
+            missing.push(code);
+            continue;
+        }
+        courseData.push(definition);
+        added.push(definition);
+    }
+    return { added, missing };
+}
+
 // Load the full course-page scrape info (courses/all_coursepage_info.jsonl) and
-// index it by course_id. This powers the "Details" button on course cards.
+// index it by normalized course_id. This powers course-card details and the
+// contained global-definition fallback above.
 function loadCoursePageInfoIndex() {
     try {
         if (typeof window === 'undefined') return Promise.resolve(null);
@@ -1058,17 +1346,31 @@ function loadCoursePageInfoIndex() {
                     if (window.__courseOfferingsJsonlText) return window.__courseOfferingsJsonlText;
                 } catch (_) {}
 
-                // Prefer synchronous XHR under file:// where fetch can be blocked.
-                try {
-                    const xhr = new XMLHttpRequest();
-                    xhr.open('GET', './courses/all_coursepage_info.jsonl', false);
-                    xhr.overrideMimeType('application/json');
-                    xhr.send(null);
-                    if (xhr.status === 200 || xhr.status === 0) return xhr.responseText;
-                } catch (_) {}
+                const isFile = (() => {
+                    try { return typeof location !== 'undefined' && location && location.protocol === 'file:'; } catch (_) { return false; }
+                })();
 
+                // The cumulative file is large, so never block the main thread
+                // with synchronous XHR on http(s).
                 try {
                     const res = await fetch('./courses/all_coursepage_info.jsonl');
+                    if (res.ok) return await res.text();
+                } catch (_) {}
+
+                // Browsers commonly block fetch for local file:// pages. Keep
+                // the legacy synchronous fallback narrowly scoped to that mode.
+                if (isFile) {
+                    try {
+                        const xhr = new XMLHttpRequest();
+                        xhr.open('GET', './courses/all_coursepage_info.jsonl', false);
+                        xhr.overrideMimeType('application/json');
+                        xhr.send(null);
+                        if (xhr.status === 200 || xhr.status === 0) return xhr.responseText;
+                    } catch (_) {}
+                }
+
+                try {
+                    const res = await fetch('./courses/all_coursepage_info.jsonl', { cache: 'no-store' });
                     if (res.ok) return await res.text();
                 } catch (_) {}
                 return '';
@@ -1078,6 +1380,8 @@ function loadCoursePageInfoIndex() {
             const byCode = new Map();
             if (!text) {
                 window.coursePageInfoByCode = byCode;
+                // Do not permanently memoize a transient network/file failure.
+                window.__coursePageInfoPromise = null;
                 return byCode;
             }
             const lines = text.split(/\r?\n/);
@@ -1086,7 +1390,8 @@ function loadCoursePageInfoIndex() {
                 if (!line) continue;
                 try {
                     const obj = JSON.parse(line);
-                    const id = obj && obj.course_id ? String(obj.course_id) : '';
+                    const id = obj && obj.course_id
+                        ? normalizeGlobalCourseDefinitionCode(obj.course_id) : '';
                     if (!id) continue;
                     if (!byCode.has(id)) byCode.set(id, obj);
                 } catch (_) {
@@ -1094,6 +1399,7 @@ function loadCoursePageInfoIndex() {
                 }
             }
             window.coursePageInfoByCode = byCode;
+            if (!byCode.size) window.__coursePageInfoPromise = null;
             return byCode;
         })();
 
@@ -1105,6 +1411,10 @@ function loadCoursePageInfoIndex() {
 
 if (typeof window !== 'undefined') {
     window.loadCoursePageInfoIndex = loadCoursePageInfoIndex;
+    window.resolveGlobalCourseDefinition = resolveGlobalCourseDefinition;
+    window.appendGlobalCourseDefinitions = appendGlobalCourseDefinitions;
+    window.getStoredGlobalCourseMetadata = getStoredGlobalCourseMetadata;
+    window.rememberGlobalCourseDefinition = rememberGlobalCourseDefinition;
 }
 
 // Load the derived course instructor history index

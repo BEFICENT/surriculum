@@ -43,13 +43,13 @@ test.describe('data version lives in data/manifest.json', () => {
 });
 
 test.describe('plan storage schema is versioned independently', () => {
-  test('grading-basis persistence uses schema version 2', async ({ page }) => {
+  test('global transcript metadata persistence uses schema version 3', async ({ page }) => {
     await page.goto('/');
     const version = await page.evaluate(() => ({
       api: window.storageSchema && window.storageSchema.getCurrentSchemaVersion(),
       stored: Number(localStorage.getItem('surriculum.appDataVersion')),
     }));
-    expect(version).toEqual({ api: 2, stored: 2 });
+    expect(version).toEqual({ api: 3, stored: 3 });
   });
 
   test('schema-1 stored plans load with synthesized grading bases', async ({ page }) => {
@@ -71,6 +71,29 @@ test.describe('plan storage schema is versioned independently', () => {
       schema: Number(localStorage.getItem('surriculum.appDataVersion')),
       bases: window.curriculum.semesters[0].courses.map((course) => course.gradingBasis),
     }));
-    expect(result).toEqual({ schema: 2, bases: ['letter', 'satisfactory'] });
+    expect(result).toEqual({ schema: 3, bases: ['letter', 'satisfactory'] });
+  });
+
+  test('schema-2 stored plans preserve explicit grading bases', async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => {
+      window.planStorage.setItem('major', 'CS');
+      window.planStorage.setItem('entryTerm', 'Fall 2024-2025');
+      window.planStorage.setItem('curriculum', JSON.stringify([['MATH101']]));
+      window.planStorage.setItem('grades', JSON.stringify([['NA']]));
+      window.planStorage.setItem('gradingBases', JSON.stringify([['satisfactory']]));
+      window.planStorage.setItem('dates', JSON.stringify(['Fall 2024-2025']));
+      localStorage.setItem('surriculum.appDataVersion', '2');
+    });
+    await page.reload();
+    await page.waitForFunction(() => window.curriculum && window.curriculum.semesters
+      && window.curriculum.semesters[0] && window.curriculum.semesters[0].courses.length === 1);
+
+    const result = await page.evaluate(() => ({
+      schema: Number(localStorage.getItem('surriculum.appDataVersion')),
+      grade: window.curriculum.semesters[0].courses[0].grade,
+      basis: window.curriculum.semesters[0].courses[0].gradingBasis,
+    }));
+    expect(result).toEqual({ schema: 3, grade: 'NA', basis: 'satisfactory' });
   });
 });

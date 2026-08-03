@@ -191,6 +191,13 @@ Scrape course pages for metadata (including Basic Science/Engineering credit bre
 python scrape_coursepages.py
 ```
 
+The same step also uses the newest program/minor catalog snapshots to fill
+missing intrinsic fields after a verified scrape. For failed or unverified
+course-page responses, it replaces intrinsic values with catalog-backed values
+and clears any that cannot be verified. Program-specific classification fields
+such as `EL_Type` and `Faculty_Course` remain in their program and admit-term
+catalogs; they are never copied into the global course-page index.
+
 Use `python scrape_coursepages.py --refresh` for a genuine full refresh of
 existing records. Full refreshes bypass the local HTML cache; the automated data
 workflow performs one every Monday and remains incremental on other days.

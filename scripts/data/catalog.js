@@ -9,55 +9,44 @@
 // scripts/domain/credits.js): classic scripts call window.getInfo /
 // window.isCourseValid; new module code can `import` them.
 
-// checks whether the course exists:
-export function isCourseValid(course, course_data) {
-  const code = course && course.code ? course.code.replace(/\s+/g, '') : '';
-  // First check within the main major's course data
-  for (let i = 0; i < course_data.length; i++) {
-    if (((course_data[i]['Major'] + course_data[i]['Code']) === code)) return true;
-  }
-  // If not found and a double major is active, check the double major's
-  // course catalog for this course code. The global curriculum object
-  // exposes doubleMajorCourseData when a second major is selected.
-  try {
-    const cur = (typeof window !== 'undefined') ? window.curriculum : null;
-    if (cur && cur.doubleMajor && Array.isArray(cur.doubleMajorCourseData)) {
-      const dmList = cur.doubleMajorCourseData;
-      for (let i = 0; i < dmList.length; i++) {
-        if (((dmList[i]['Major'] + dmList[i]['Code']) === code)) {
-          return true;
-        }
-      }
+function normalizeCatalogCode(value) {
+  return String(value || '').trim().toUpperCase().replace(/\s+/g, '');
+}
+
+function recordCode(record) {
+  if (!record || typeof record !== 'object') return '';
+  return normalizeCatalogCode(String(record.Major || '') + String(record.Code || ''));
+}
+
+// Search a list without allowing an internal global definition to shadow a
+// real program or user-custom record later in that list.
+function findCatalogRecord(list, code, fallback) {
+  if (!Array.isArray(list)) return { record: null, fallback };
+  let nextFallback = fallback;
+  for (let i = 0; i < list.length; i++) {
+    const record = list[i];
+    if (recordCode(record) !== code) continue;
+    if (record.__globalCourseDefinition) {
+      if (!nextFallback) nextFallback = record;
+      continue;
     }
-  } catch (_) {
-    // ignore errors
+    return { record, fallback: nextFallback };
   }
-  // If not found and minors are selected, check each selected minor's
-  // catalog. Minor courses are valid for planning even if they are not
-  // part of the primary major's scraped pools.
-  try {
-    const cur = (typeof window !== 'undefined') ? window.curriculum : null;
-    if (cur && Array.isArray(cur.minors) && cur.minors.length && cur.minorCourseDataByCode) {
-      for (let mi = 0; mi < cur.minors.length; mi++) {
-        const minorCode = cur.minors[mi];
-        const list = cur.minorCourseDataByCode[minorCode];
-        if (!Array.isArray(list)) continue;
-        for (let i = 0; i < list.length; i++) {
-          if (((list[i]['Major'] + list[i]['Code']) === code)) return true;
-        }
-      }
-    }
-  } catch (_) {}
-  return false;
+  return { record: null, fallback: nextFallback };
 }
 
 // returns info's of the course:
 export function getInfo(course, course_data) {
-  const code = (course || '').replace(/\s+/g, '');
-  // First search within the primary course data
-  for (let i = 0; i < course_data.length; i++) {
-    if ((course_data[i]['Major'] + course_data[i]['Code']) === code) return course_data[i];
-  }
+  const code = normalizeCatalogCode(course);
+  if (!code) return 0;
+  let fallback = null;
+
+  // First search within the primary course data. User custom courses are
+  // appended here and are real definitions for lookup precedence purposes.
+  let result = findCatalogRecord(course_data, code, fallback);
+  if (result.record) return result.record;
+  fallback = result.fallback;
+
   // If not found and a double major is active, search within the double
   // major's catalog so that course details (name, credits) can be
   // retrieved for DM-only courses.  This allows unknown courses to
@@ -66,12 +55,9 @@ export function getInfo(course, course_data) {
   try {
     const cur = (typeof window !== 'undefined') ? window.curriculum : null;
     if (cur && cur.doubleMajor && Array.isArray(cur.doubleMajorCourseData)) {
-      const dmList = cur.doubleMajorCourseData;
-      for (let i = 0; i < dmList.length; i++) {
-        if (((dmList[i]['Major'] + dmList[i]['Code']) === code)) {
-          return dmList[i];
-        }
-      }
+      result = findCatalogRecord(cur.doubleMajorCourseData, code, fallback);
+      if (result.record) return result.record;
+      fallback = result.fallback;
     }
   } catch (_) {
     // ignore errors
@@ -85,16 +71,23 @@ export function getInfo(course, course_data) {
       for (let mi = 0; mi < cur.minors.length; mi++) {
         const minorCode = cur.minors[mi];
         const list = cur.minorCourseDataByCode[minorCode];
-        if (!Array.isArray(list)) continue;
-        for (let i = 0; i < list.length; i++) {
-          if (((list[i]['Major'] + list[i]['Code']) === code)) {
-            return list[i];
-          }
-        }
+        result = findCatalogRecord(list, code, fallback);
+        if (result.record) return result.record;
+        fallback = result.fallback;
       }
     }
   } catch (_) {}
-  return 0;
+  return fallback || 0;
+}
+
+// checks whether the course exists:
+export function isCourseValid(course, course_data) {
+  const code = normalizeCatalogCode(course && typeof course === 'object' ? course.code : course);
+  const record = code ? getInfo(code, course_data) : null;
+  // Global definitions exist only to render/reload/import an occurrence that
+  // already came from an external record. Hiding them from datalists is not
+  // sufficient: typed course codes also pass through this validator.
+  return Boolean(record && !record.__globalCourseDefinition);
 }
 
 // Bridge for classic scripts that still consume these as globals.

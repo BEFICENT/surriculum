@@ -1,6 +1,6 @@
 # SUrriculum 3.1 release-readiness tracker
 
-Last updated: 2026-08-03
+Last updated: 2026-08-04
 
 This is the working backlog for the 3.1 release. Items should be handled one at
 a time and checked off only after the fix and its verification are complete.
@@ -24,11 +24,10 @@ a time and checked off only after the fix and its verification are complete.
 
 ## Verified baseline
 
-- [x] JavaScript/static unit gate passes: 160/160 tests.
-- [x] Playwright gate exits clean with 349 tests: 348 passed on the first
-  attempt and one recovered on retry after the external Font Awesome CDN
-  intermittently rejected its webfont with a CORS error.
+- [x] JavaScript/static unit gate passes: 166/166 tests.
+- [x] Playwright gate passes all 357 tests on the first attempt (5.2 minutes).
 - [x] `python tests/scrape_groups_test.py` passes when run directly.
+- [x] `python tests/scrape_coursepages_fallback_test.py` passes: 3/3 tests.
 - [x] All 228,387 JSONL rows parse successfully.
 - [x] Manifest hashes and the content-derived data version match the data tree.
 - [x] Extended 21-term catalog/requirements integrity audit passes.
@@ -178,8 +177,8 @@ a time and checked off only after the fix and its verification are complete.
   tokens, including A+, earn and project nothing. A posted current-term final
   grade is actual immediately, while a future-term grade remains an estimate.
 
-  Grading basis is stored per planned occurrence, survives autosave and v2 plan
-  export/import, and is synthesized conservatively for v1/schema-1 plans.
+  Grading basis is stored per planned occurrence, survives autosave and v2+
+  plan export/import, and is synthesized conservatively for v1/schema-1 plans.
   Decisive A-F and S/U grades override stale basis metadata. The grade picker
   exposes the full supported set and explicit letter/S-U choices for NA without
   clearing a grade when dismissed. Transcript import retains W and NA, reports
@@ -208,11 +207,30 @@ a time and checked off only after the fix and its verification are complete.
   Progress show CGPA and the relevant PGPA separately. They may also show a
   clearly labelled projected PGPA from entered future grade estimates and
   report program credits that still need an estimate.
-- [ ] Retain valid transcript courses that are outside the currently selected
-  program catalogs. Imports currently reject those records. Later, keep them as
-  effective N/A so they can contribute to CGPA, while excluding them from PGPA
-  until program membership is known. Do not infer membership merely from the
-  programs selected at import time.
+- [x] Retain valid transcript courses that are outside the currently selected
+  program catalogs. Completed on 2026-08-04: transcript import now resolves the
+  selected main, double-major, and minor catalogs first, then uses the cumulative
+  course-page index only as a catalog-independent identity fallback. Such
+  courses reload as effective N/A, remain in letter-grade CGPA, and stay out of
+  PGPA and graduation pools until a selected program/admit-term catalog supplies
+  real membership. Correcting those selections therefore reclassifies the saved
+  course without another transcript import. Newly imported codes that cannot be
+  verified still fail closed and are reported as skipped.
+
+  Resolved global identity metadata is also saved per plan as a validated,
+  catalog-neutral snapshot (storage/export schema 3). Current shipped data wins
+  on reload and the snapshot only fills missing fields. If the global index is
+  temporarily unavailable, an internal N/A placeholder preserves the saved
+  code, grade, term, and known credits instead of letting autosave erase it.
+
+  The data refresh now hydrates missing/failed course-page identity fields from
+  deterministic catalog metadata without copying contextual `EL_Type` or
+  `Faculty_Course`, and without adding daily network requests. The global index
+  is fetched lazily, and only definitions for unresolved saved/imported
+  codes are appended to the planner catalog. Those definitions are excluded
+  from the Add Course/manual course choices. A retained course already in the
+  plan can still be scheduled when it appears in the selected term's live
+  offerings.
 - [ ] Support repeated attempts and retake planning. The model globally rejects
   a second canonical course code, so a retained failed attempt blocks adding a
   future retake. Official GPA calculation uses the latest repeated-course grade
@@ -318,11 +336,12 @@ a time and checked off only after the fix and its verification are complete.
 
 ## Test-suite work
 
-- [ ] Integrate `tests/scrape_groups_test.py` into the normal test command. It is
-  a standalone Python assertion script, is not discovered by the Node test
-  runner, and is currently omitted from `npm test` and CI. A likely structure is
-  a `test:python` npm script included by `npm test`, while keeping the direct
-  Python command available.
+- [ ] Integrate `tests/scrape_groups_test.py` and
+  `tests/scrape_coursepages_fallback_test.py` into the normal test command. They
+  are standalone Python assertion scripts, are not discovered by the Node test
+  runner, and are currently omitted from `npm test` and CI. A likely structure
+  is a `test:python` npm script included by `npm test`, while keeping the direct
+  Python commands available.
 - [ ] Expand coverage for the release blockers above. A focused graduation pass
   completed on 2026-07-23 adds 48 non-duplicative cases: 42 unit/data checks and
   six browser checks. It pins live SUIS threshold transitions for BIO, CS, IE,

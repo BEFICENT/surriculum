@@ -11,11 +11,11 @@
   // (version.js — code/UI). Was misleadingly named APP_DATA_VERSION. The
   // persisted key STRING is kept as-is so existing installs aren't mistaken for
   // a fresh run.
-  const STORAGE_SCHEMA_VERSION = 2;
+  const STORAGE_SCHEMA_VERSION = 3;
   const STORAGE_SCHEMA_KEY = 'surriculum.appDataVersion';
   const MAX_PLANS = 10;
   const DEFAULT_PLAN_NAME = 'Default Plan';
-  const PLAN_EXPORT_VERSION = 2;
+  const PLAN_EXPORT_VERSION = 3;
   const LEGACY_KEYS = [
     'major', 'doubleMajor',
     'entryTerm', 'entryTermDM',
@@ -47,6 +47,7 @@
     'schedulerMinEngineering',
     'schedulerCheckPrereqs',
     'schedulerShowUnmetPrereqs',
+    'globalCourseMetadata',
   ]);
   const APP_LEGACY_STORAGE_PATTERNS = [
     /^customCourses_[A-Z][A-Z0-9-]{0,19}$/,
@@ -453,6 +454,7 @@
   const IMPORT_MAX_SCHEDULES_PER_TERM = 10;
   const IMPORT_MAX_SCHEDULE_NAME_LENGTH = 200;
   const IMPORT_MAX_SNAPSHOT_TEXT_LENGTH = 4000;
+  const IMPORT_MAX_GLOBAL_COURSE_METADATA = 2000;
   const IMPORT_COURSE_TYPES = new Set(['core', 'area', 'university', 'free', 'required', 'none']);
   const IMPORT_FACULTIES = new Set(['', 'FENS', 'FASS', 'SBS', 'SL']);
   const IMPORT_GRADES = new Set(['', 'S', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'F', 'T', 'P', 'I', 'U', 'W', 'NA']);
@@ -464,6 +466,7 @@
     'minor1', 'minor2', 'minor3',
     'schedulerSelectedTerm',
     'curriculum', 'grades', 'gradingBases', 'dates', 'customCourses', 'schedulerStates',
+    'globalCourseMetadata',
   ]);
 
   function importError(path, message) {
@@ -680,6 +683,67 @@
       maxLength: 80,
       collapseWhitespace: true,
     }));
+  }
+
+  function validateGlobalCourseMetadataItem(raw, itemPath) {
+    const item = requirePlainObject(raw, itemPath);
+    requireKnownFields(item, new Set(['code', 'title', 'suCredits', 'ects']), itemPath);
+    ['code', 'title', 'suCredits', 'ects'].forEach((field) => {
+      if (!hasOwn(item, field)) importError(`${itemPath}.${field}`, 'is required');
+    });
+    return {
+      code: normalizeCourseCode(item.code, `${itemPath}.code`),
+      title: normalizeImportedText(item.title, `${itemPath}.title`, {
+        maxLength: 200,
+        collapseWhitespace: true,
+        truncate: true,
+      }),
+      suCredits: normalizeFiniteNumber(item.suCredits, `${itemPath}.suCredits`, 100),
+      ects: normalizeFiniteNumber(item.ects, `${itemPath}.ects`, 100),
+    };
+  }
+
+  function validateGlobalCourseMetadata(value, path) {
+    if (value === null) return [];
+    if (!Array.isArray(value)) importError(path, 'expected an array');
+    if (value.length > IMPORT_MAX_GLOBAL_COURSE_METADATA) {
+      importError(path, `supports at most ${IMPORT_MAX_GLOBAL_COURSE_METADATA} courses`);
+    }
+    const seen = new Set();
+    return value.map((raw, index) => {
+      const itemPath = `${path}[${index}]`;
+      const item = validateGlobalCourseMetadataItem(raw, itemPath);
+      if (seen.has(item.code)) importError(itemPath, 'contains a duplicate course code');
+      seen.add(item.code);
+      return item;
+    });
+  }
+
+  // Stored state can be damaged by an interrupted/manual localStorage edit.
+  // Imports remain atomic and strict, but reads salvage independent valid rows
+  // so one bad snapshot cannot erase every unrelated global transcript course.
+  function salvageStoredGlobalCourseMetadata(value, path) {
+    if (!Array.isArray(value)) return [];
+    const out = [];
+    const seen = new Set();
+    let ignored = Math.max(0, value.length - IMPORT_MAX_GLOBAL_COURSE_METADATA);
+    value.slice(0, IMPORT_MAX_GLOBAL_COURSE_METADATA).forEach((raw, index) => {
+      try {
+        const item = validateGlobalCourseMetadataItem(raw, `${path}[${index}]`);
+        if (seen.has(item.code)) {
+          ignored++;
+          return;
+        }
+        seen.add(item.code);
+        out.push(item);
+      } catch (_) {
+        ignored++;
+      }
+    });
+    if (ignored) {
+      try { console.warn(`Ignored ${ignored} invalid stored global course metadata row(s).`); } catch (_) {}
+    }
+    return out;
   }
 
   function validateCustomCourse(value, path) {
@@ -965,9 +1029,11 @@
   function validatePlanState(value, path, fileVersion) {
     if (value === undefined || value === null) return {};
     const state = requirePlainObject(value, path);
-    const allowedFields = fileVersion >= 2
-      ? IMPORT_STATE_FIELDS
-      : new Set(Array.from(IMPORT_STATE_FIELDS).filter((field) => field !== 'gradingBases'));
+    const allowedFields = new Set(Array.from(IMPORT_STATE_FIELDS).filter((field) => {
+      if (field === 'gradingBases') return fileVersion >= 2;
+      if (field === 'globalCourseMetadata') return fileVersion >= 3;
+      return true;
+    }));
     requireKnownFields(state, allowedFields, path);
     const out = {};
 
@@ -1006,13 +1072,19 @@
     if (hasOwn(state, 'dates')) out.dates = validateDates(state.dates, curriculum, `${path}.dates`);
     if (hasOwn(state, 'customCourses')) out.customCourses = validateCustomCourses(state.customCourses, `${path}.customCourses`);
     if (hasOwn(state, 'schedulerStates')) out.schedulerStates = validateSchedulerStates(state.schedulerStates, `${path}.schedulerStates`);
+    if (fileVersion >= 3 && hasOwn(state, 'globalCourseMetadata')) {
+      out.globalCourseMetadata = validateGlobalCourseMetadata(
+        state.globalCourseMetadata,
+        `${path}.globalCourseMetadata`,
+      );
+    }
     return out;
   }
 
   function validateImportObject(obj) {
     const root = requirePlainObject(obj, 'file');
     requireKnownFields(root, new Set(['type', 'version', 'exportedAt', 'plan']), 'file');
-    if (root.type !== 'surriculum_plan' || ![1, PLAN_EXPORT_VERSION].includes(root.version)) {
+    if (root.type !== 'surriculum_plan' || ![1, 2, PLAN_EXPORT_VERSION].includes(root.version)) {
       throw new Error('Unsupported file');
     }
     if (hasOwn(root, 'exportedAt') && root.exportedAt !== null) normalizeIsoTimestamp(root.exportedAt, 'file.exportedAt');
@@ -1075,9 +1147,15 @@
       grades: safeJsonParse(get('grades') || 'null', null),
       gradingBases: safeJsonParse(get('gradingBases') || 'null', null),
       dates: safeJsonParse(get('dates') || 'null', null),
+      globalCourseMetadata: safeJsonParse(get('globalCourseMetadata') || '[]', []),
       customCourses: {},
       schedulerStates: {},
     };
+
+    state.globalCourseMetadata = salvageStoredGlobalCourseMetadata(
+      state.globalCourseMetadata,
+      'stored global course metadata',
+    );
 
     const prefix = planKey(planId, 'customCourses_');
     const schedulerPrefix = planKey(planId, 'schedulerState_');
@@ -1147,6 +1225,12 @@
     if (state.grades != null) setJson('grades', state.grades);
     if (state.gradingBases != null) setJson('gradingBases', state.gradingBases);
     if (state.dates != null) setJson('dates', state.dates);
+    if (state.globalCourseMetadata != null) {
+      setJson('globalCourseMetadata', validateGlobalCourseMetadata(
+        state.globalCourseMetadata,
+        'plan.globalCourseMetadata',
+      ));
+    }
 
     if (state.customCourses && typeof state.customCourses === 'object') {
       for (const maj of Object.keys(state.customCourses)) {
@@ -1473,7 +1557,14 @@
     getItem(key, planId) {
       const pid = planId || getActivePlanId();
       const raw = localStorage.getItem(planKey(pid, key));
-      if (raw == null || !String(key || '').startsWith('customCourses_')) return raw;
+      if (raw == null) return raw;
+      if (String(key || '') === 'globalCourseMetadata') {
+        return JSON.stringify(salvageStoredGlobalCourseMetadata(
+          safeJsonParse(raw, []),
+          'stored global course metadata',
+        ));
+      }
+      if (!String(key || '').startsWith('customCourses_')) return raw;
       try {
         const program = String(key).slice('customCourses_'.length);
         const parsed = JSON.parse(raw);
@@ -1492,6 +1583,11 @@
         const parsed = JSON.parse(String(value || ''));
         const normalized = validateCustomCourses({ [program]: parsed }, `custom courses.${program}`);
         storedValue = JSON.stringify(normalized[normalizeProgramCode(program, 'custom-course program')]);
+      } else if (String(key || '') === 'globalCourseMetadata') {
+        storedValue = JSON.stringify(validateGlobalCourseMetadata(
+          JSON.parse(String(value || '')),
+          'global course metadata',
+        ));
       }
       localStorage.setItem(planKey(pid, key), storedValue);
       touchUpdated(pid);

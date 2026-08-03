@@ -841,6 +841,106 @@ function SUrriculum(major_chosen_by_user) {
     if (typeof window !== 'undefined') {
         window.curriculum = curriculum;
     }
+
+    // A saved transcript can contain a real university course that is absent
+    // from the currently selected program/admit-term catalogs. Those course
+    // codes are still persisted in `curriculum`; load only their global
+    // definitions before rendering so createSemeter can restore them as
+    // unallocated (effective N/A) instead of silently dropping them. The full
+    // global index is never merged into the planner's Add Course choices.
+    async function restoreGlobalDefinitionsForSavedCourses() {
+        let saved = null;
+        try {
+            saved = JSON.parse(planGetItem('curriculum') || 'null');
+        } catch (_) {
+            saved = null;
+        }
+        if (!Array.isArray(saved)) return { added: [], missing: [] };
+
+        const normalizedCodes = [];
+        const seen = new Set();
+        saved.forEach((semester) => {
+            if (!Array.isArray(semester)) return;
+            semester.forEach((rawCode) => {
+                const code = String(rawCode || '').toUpperCase().replace(/\s+/g, '');
+                if (!code || seen.has(code)) return;
+                seen.add(code);
+                normalizedCodes.push(code);
+            });
+        });
+        if (!normalizedCodes.length) return { added: [], missing: [] };
+
+        const recordCode = (record) => String(
+            record && record.code
+                ? record.code
+                : String((record && record.Major) || '') + String((record && record.Code) || '')
+        ).toUpperCase().replace(/\s+/g, '');
+        const selectedLists = [course_data, doubleMajorCourseData];
+        try {
+            if (curriculum.minorCourseDataByCode) {
+                Object.values(curriculum.minorCourseDataByCode).forEach((list) => selectedLists.push(list));
+            }
+        } catch (_) {}
+        const selectedCodes = new Set();
+        selectedLists.forEach((list) => {
+            if (!Array.isArray(list)) return;
+            list.forEach((record) => {
+                if (record && !record.__globalCourseDefinition) selectedCodes.add(recordCode(record));
+            });
+        });
+        const unresolved = normalizedCodes.filter((code) => !selectedCodes.has(code));
+        if (!unresolved.length) return { added: [], missing: [] };
+
+        let restored = { added: [], missing: unresolved.slice() };
+        try {
+            if (typeof window !== 'undefined'
+                && typeof window.appendGlobalCourseDefinitions === 'function') {
+                const storedMetadata = typeof window.getStoredGlobalCourseMetadata === 'function'
+                    ? window.getStoredGlobalCourseMetadata() : new Map();
+                restored = await window.appendGlobalCourseDefinitions(course_data, unresolved, storedMetadata);
+                if (typeof window.rememberGlobalCourseDefinition === 'function') {
+                    restored.added.forEach((record) => window.rememberGlobalCourseDefinition(record));
+                }
+            }
+        } catch (error) {
+            console.warn('Unable to restore global transcript course definitions:', error);
+        }
+
+        // Never let a temporary index failure erase saved transcript data. A
+        // marker-only placeholder preserves the code/grade/term and any
+        // plan-scoped metadata snapshot; a later successful reload replaces it
+        // with the current global or selected-catalog definition.
+        const storedMetadata = (typeof window !== 'undefined'
+            && typeof window.getStoredGlobalCourseMetadata === 'function')
+            ? window.getStoredGlobalCourseMetadata() : new Map();
+        const preserved = [];
+        (Array.isArray(restored.missing) ? restored.missing : []).forEach((code) => {
+            if (course_data.some((record) => recordCode(record) === code)) return;
+            const match = code.match(/^([A-Z]{1,12})(\d[A-Z0-9]*)$/);
+            if (!match) return;
+            const metadata = storedMetadata.get(code) || {};
+            const placeholder = {
+                Major: match[1],
+                Code: match[2],
+                Course_Name: String(metadata.title || code),
+                ECTS: String(Number.isFinite(Number(metadata.ects)) ? Number(metadata.ects) : 0),
+                Engineering: 0,
+                Basic_Science: 0,
+                SU_credit: String(Number.isFinite(Number(metadata.suCredits)) ? Number(metadata.suCredits) : 0),
+                Faculty: '',
+                Faculty_Course: 'No',
+                EL_Type: 'unknown',
+                __globalCourseDefinition: true,
+                __storedCoursePlaceholder: true,
+            };
+            course_data.push(placeholder);
+            preserved.push(placeholder);
+        });
+        if (preserved.length) {
+            console.warn(`Preserved ${preserved.length} saved course definition(s) while the global index was unavailable.`);
+        }
+        return { added: restored.added || [], missing: restored.missing || [], preserved };
+    }
     // Initialize course details toggle state and event
     let showDetails = true;
     try {
@@ -2036,6 +2136,11 @@ function SUrriculum(major_chosen_by_user) {
 
     //************************************************************** 
 
+    // Restore catalog-independent definitions before reloading. This await is
+    // inside the async course-data bootstrap and runs only when saved codes are
+    // unresolved by the selected program catalogs.
+    await restoreGlobalDefinitionsForSavedCourses();
+
     //Reload items from local storage:
     reload(curriculum, course_data);
     // After reloading existing semesters, recalculate effective categories
@@ -2722,13 +2827,19 @@ function SUrriculum(major_chosen_by_user) {
             const renderImportIssueSections = (stats) => {
                 const data = stats || {};
                 const notFound = Array.isArray(data.notFoundCourses) ? data.notFoundCourses : [];
+                const retainedUnallocated = Array.isArray(data.retainedUnallocatedCourses)
+                    ? data.retainedUnallocatedCourses : [];
                 const invalid = Array.isArray(data.invalidGradeCourses) ? data.invalidGradeCourses : [];
                 const alreadyPresent = Array.isArray(data.alreadyPresentCourses) ? data.alreadyPresentCourses : [];
                 const superseded = Array.isArray(data.supersededCourses) ? data.supersededCourses : [];
                 const skipped = Array.isArray(data.skippedCourses) ? data.skippedCourses : [];
                 let html = '';
+                if (retainedUnallocated.length) {
+                    html += `<p><strong>${retainedUnallocated.length}</strong> course(s) already known to the cumulative course index or saved plan were outside the selected program/admit-term catalogs. They were retained as <strong>N/A</strong>:</p><p><small>${retainedUnallocated.map(item => escapeHtml(item && item.code ? item.code : item)).join(', ')}</small></p>`;
+                    html += '<p><small>Their letter grades count toward CGPA, but they remain outside PGPA and graduation requirements until a matching major, double major, minor, and admit term is selected.</small></p>';
+                }
                 if (notFound.length) {
-                    html += `<p><strong>${notFound.length}</strong> course(s) were not found in the current program and were skipped:</p><p><small>${notFound.map(code => escapeHtml(code)).join(', ')}</small></p>`;
+                    html += `<p><strong>${notFound.length}</strong> course(s) could not be verified in either the selected catalogs or the global course index and were skipped:</p><p><small>${notFound.map(code => escapeHtml(code)).join(', ')}</small></p>`;
                 }
                 if (invalid.length) {
                     html += `<p><strong>${invalid.length}</strong> record(s) had unsupported grades and were skipped:</p><ul>${invalid.map((item) => {
@@ -2790,6 +2901,14 @@ function SUrriculum(major_chosen_by_user) {
             // Import courses to curriculum. The parser returns an object
             // containing both statistics and a list of pending custom
             // courses that need additional user input.
+            // Load the catalog-independent identity index on demand. The
+            // synchronous importer can then retain real courses that are only
+            // missing because program/admit-term settings are incomplete.
+            try {
+                if (typeof window.loadCoursePageInfoIndex === 'function') {
+                    await window.loadCoursePageInfoIndex();
+                }
+            } catch (_) {}
             const importResult = window.academicRecordsParser.importParsedCourses(
                 parsedData.courses,
                 course_data,
