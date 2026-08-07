@@ -41,7 +41,10 @@ function isValidRequirementRecord(record, majorCode) {
   if (record.total <= 0 || record.ects <= 0) return false;
   if (!new Set([0, 1, 2]).has(record.humRequired)) return false;
   const creditTotal = CREDIT_BUCKET_FIELDS.reduce((sum, field) => sum + record[field], 0);
-  if (creditTotal !== record.total) return false;
+  // Category values are minimum pool targets. They can legitimately add up to
+  // less than the independently published overall Total (EE/ME's MATH212 path
+  // leaves a two-credit gap), but can never demand more credits than Total.
+  if (creditTotal > record.total) return false;
 
   const facultyReq = record.facultyReq;
   if (!isPlainObject(facultyReq) || Object.keys(facultyReq).length === 0) return false;

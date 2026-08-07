@@ -74,7 +74,7 @@ test.describe('major and entry-term switching', () => {
   });
 
   test('the requirement thresholds follow the major', async ({ page }) => {
-    // CS required = 29, ME required = 34. The engine must evaluate against the
+    // CS required = 29, ME required = 32. The engine must evaluate against the
     // new major's requirements, not the old ones.
     await seedPlan(page, { major: 'CS', entryTerm: TERM_NAME, curriculum: [['CS204']], grades: [['A']], dates: [TERM_NAME] });
 
@@ -87,7 +87,7 @@ test.describe('major and entry-term switching', () => {
 
     expect(await reqFor()).toEqual({ major: 'CS', required: 29 });
     await switchSelect(page, '.change_major', 'ME', (m) => window.curriculum && window.curriculum.major === m);
-    expect(await reqFor()).toEqual({ major: 'ME', required: 34 });
+    expect(await reqFor()).toEqual({ major: 'ME', required: 32 });
   });
 
   test('setting a double major loads its catalog and evaluates a second allocation', async ({ page }) => {

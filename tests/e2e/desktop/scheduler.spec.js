@@ -48,4 +48,29 @@ test.describe('scheduler (desktop)', () => {
     // MATH101 is planned for a PAST term -> taken -> hidden.
     await expect(modal.locator('.scheduler-course[data-course="MATH101"]')).toHaveCount(0);
   });
+
+  test('shared prerequisite evaluator still marks unmet scheduler courses', async ({ page }) => {
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: 'Fall 2024-2025',
+      curriculum: [[]],
+      grades: [[]],
+      dates: ['Spring 2024-2025'],
+      schedulerSelectedTerm: '202402',
+    });
+
+    await page.evaluate(() => {
+      localStorage.setItem('schedulerCheckPrereqs', 'true');
+      localStorage.setItem('schedulerShowUnmetPrereqs', 'true');
+      window.openSchedulerModal();
+    });
+    const modal = page.locator('.scheduler-modal');
+    await expect(modal).toBeVisible({ timeout: 15000 });
+    await modal.locator('.scheduler-search').fill('MATH102');
+
+    const course = modal.locator('.scheduler-course[data-course="MATH102"]');
+    await expect(course).toBeVisible({ timeout: 15000 });
+    await expect(course).toHaveClass(/is-unmet-prereq/);
+    await expect(course).toContainText(/Prereq.*MATH101/s);
+  });
 });

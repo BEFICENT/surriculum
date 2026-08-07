@@ -481,14 +481,14 @@ function collectAltPairExtras(sortedSems, pairs, isEligible) {
     return extras;
 }
 
-// Programs whose SUIS "Required Courses" note states the MATH212 alternative
-// AND whose required threshold can actually be met on the MATH212 path.
+// Programs whose pre-2025 alternative has a single redundant course that can
+// be excluded deterministically when MATH212 is present.
 //
-// EE and ME state the rule too ("either MATH 212 or both (MATH 201 and
-// MATH 202)") but are DELIBERATELY EXCLUDED pending a threshold fix — see
-// mathAlternativeSkipPredicate. Their thresholds assume the 201+202 path and are
-// 2 credits out of reach on the MATH212 path, so applying the exclusion there
-// would take a student who currently passes and fail them.
+// EE and ME state a compound alternative instead: MATH212 OR the complete
+// MATH201+MATH202 pair. Their published Required minimums (33/32) make either
+// ordinary route work without an exclusion. The unusual all-three-courses case
+// remains deliberately untouched until its preferred attempt/order policy is
+// specified; it must not complicate the normal routes.
 //
 // MAT, BIO and DSA are excluded for a different reason: they state no such rule
 // and type these courses quite differently (BIO has MATH212 as an `area`
@@ -523,21 +523,9 @@ const MATH_ALTERNATIVE_MAJORS = new Set(['CS', 'IE']);
 // invent a distinction SUIS never draws. Worth revisiting if SUIS ever clarifies:
 // it decides whether some pre-2025 CS/IE students see flag 19.
 //
-// WHY EE/ME ARE NOT WIRED UP HERE. Their required thresholds cannot be reached
-// on the MATH212 path at all:
-//
-//                threshold   via MATH212 (4cr)   via 201+202 (6cr)
-//        EE         35            33  SHORT            35  ok
-//        ME         34            32  SHORT            34  ok
-//
-// The threshold is the sum of the required list, which carries 201+202; MATH212
-// is worth two credits less than the pair it replaces. So an EE/ME student on
-// the MATH212 path is ALREADY told they cannot graduate (flag 2) — a live bug
-// independent of this rule, and one that lives in the threshold rather than
-// here. Applying the exclusion for EE/ME before fixing that would also fail the
-// students who hold all three courses, who pass today. CS/IE are unaffected:
-// their alternative is MATH212 (4cr) vs MATH201 (3cr), so the newer course is
-// worth MORE and every path clears.
+// EE/ME are not wired into this exclusion predicate: their 4-SU route and 6-SU
+// pair route are both accepted by their official Required minimum, while the
+// only case needing an exclusion decision is the deferred all-three edge.
 //
 // `elTypeOf(code)` returns the course's EL_Type in this program's catalog.
 function mathAlternativeSkipPredicate(entryTermCode, hasCourse, elTypeOf) {
@@ -597,8 +585,8 @@ function allocateCascade(staticType, credit, counters, reqs, pinCore) {
 // Resolve a program's alternative-course rules BEFORE the allocation cascade
 // (see collectAltPairExtras for why they cannot run afterwards). Returns the
 // three collections the cascade consults:
-//   excluded     - counts toward nothing (no pool, no credit total): the CS/IE/
-//                  EE/ME math-alternative extras and VACD's required-pair extras.
+//   excluded     - counts toward nothing (no pool, no credit total): CS/IE math
+//                  extras, 2025+ unknown-typed maths, and VACD pair extras.
 //   typeOverride - re-point a course at a specific pool: ME's pair extra -> core,
 //                  PSY's philosophy extra -> free, VACD's pool extras -> area.
 //   forceCore    - pinned to core regardless of the core cap: VACD's core pools.
@@ -615,7 +603,8 @@ function resolveAlternativeRules(major, entryTerm, sortedSems, allSems, getInfoF
 
     if (MATH_ALTERNATIVE_MAJORS.has(major)) {
         // MATH212 stands in for the `required`-typed subset of {MATH201, MATH202}
-        // in this program's catalog — MATH201 alone for CS/IE, both for EE/ME.
+        // in this program's catalog (MATH201 for the CS/IE programs entering
+        // this branch).
         const elTypeOf = (code) => {
             const rec = getInfoFn(code, courseData);
             return String((rec && rec['EL_Type']) || '').toLowerCase();
@@ -2411,11 +2400,10 @@ function s_curriculum()
                 if (typeOverride.has(course)) staticType = typeOverride.get(course);
                 // SUIS: a course the catalog types `unknown` is "not included in
                 // any course pool" for this program, so it counts toward NOTHING
-                // — not a pool, and not the degree total either (every major's
-                // `total` is exactly the sum of its pool minimums, so a course
-                // in no pool cannot contribute to it). Same treatment as the
-                // hard-coded alternative exclusions above; the `continue` runs
-                // before any total is touched.
+                // — not a pool and not the independent degree total. A gap
+                // between category minimums and Total does not make an expressly
+                // excluded course eligible. The `continue` runs before any total
+                // is touched.
                 //
                 // The catalog uses this consistently and only where SUIS says
                 // so: MATH201/MATH202 for the 2025+ engineering admits ("not
@@ -2537,6 +2525,15 @@ function s_curriculum()
         try {
             if (typeof window !== 'undefined' && typeof window.updateDatalistForDoubleMajor === 'function') {
                 window.updateDatalistForDoubleMajor();
+            }
+        } catch (_) {}
+        // Planner prerequisite/corequisite notices are advisory DOM only. Queue
+        // them after every model allocation refresh so add/delete, grades, term
+        // edits, imports, and semester moves all converge on one update path.
+        try {
+            const requisites = (typeof window !== 'undefined') ? window.courseRequisites : null;
+            if (requisites && typeof requisites.queuePlannerWarningRefresh === 'function') {
+                requisites.queuePlannerWarningRefresh();
             }
         } catch (_) {}
     };

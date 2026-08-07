@@ -11,10 +11,10 @@
 // https://suis.sabanciuniv.edu/prod/SU_DEGREE.p_degree_detail
 //   ?P_PROGRAM=<program>&P_LANG=EN&P_LEVEL=UG&P_TERM=<term>&P_SUBMIT=Select
 //
-// EE 202201-202403 and ME 202301-202503 are intentionally absent from the
-// captured threshold matrix: their live pages contain internally contradictory
-// summary/prose values. Those pages are tracked as a release-data issue rather
-// than being encoded here as uncertain graduation truth.
+// Category minima are allowed to total less than the independent overall-credit
+// threshold. This matters for the captured EE/ME curricula whose MATH212 route
+// is two credits lighter than MATH201+MATH202. ME 202501+ remains a separate
+// source ambiguity because its numeric Core summary and category prose differ.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -92,6 +92,29 @@ const LIVE_SUMMARIES = [
     label: 'IE within-year boundary', major: 'IE', program: 'BSMS', snapshots: {
       202401: [41, 31, 29, 9, 15, 125, 240],
       202402: [41, 34, 26, 9, 15, 125, 240],
+    },
+  },
+  {
+    label: 'EE MATH212 gap across every affected term', major: 'EE', program: 'BSEE', snapshots: {
+      202201: [41, 33, 25, 9, 15, 125, 240],
+      202202: [41, 33, 25, 9, 15, 125, 240],
+      202203: [41, 33, 25, 9, 15, 125, 240],
+      202301: [41, 33, 25, 9, 15, 125, 240],
+      202302: [41, 33, 25, 9, 15, 125, 240],
+      202303: [41, 33, 25, 9, 15, 125, 240],
+      202401: [41, 33, 25, 9, 15, 125, 240],
+      202402: [41, 33, 25, 9, 15, 125, 240],
+      202403: [41, 33, 25, 9, 15, 125, 240],
+    },
+  },
+  {
+    label: 'ME MATH212 gap across every affected term', major: 'ME', program: 'BSME', snapshots: {
+      202301: [41, 32, 26, 9, 15, 125, 240],
+      202302: [41, 32, 26, 9, 15, 125, 240],
+      202303: [41, 32, 26, 9, 15, 125, 240],
+      202401: [41, 32, 26, 9, 15, 125, 240],
+      202402: [41, 32, 26, 9, 15, 125, 240],
+      202403: [41, 32, 26, 9, 15, 125, 240],
     },
   },
   {
@@ -192,10 +215,9 @@ for (const filename of termFiles) {
     for (const major of MAJORS) {
       const req = byMajor[major];
       const catalog = catalogFor(term, major);
-      assert.equal(
-        req.university + req.required + req.core + req.area + req.free,
-        req.total,
-        `${term}/${major}: category credits must add to total`,
+      assert.ok(
+        req.university + req.required + req.core + req.area + req.free <= req.total,
+        `${term}/${major}: category minimums must not exceed total`,
       );
       assert.ok(req.facultyReq && Object.keys(req.facultyReq).length, `${term}/${major}: facultyReq`);
       if (req.internshipCourse) {

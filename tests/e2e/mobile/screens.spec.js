@@ -27,6 +27,33 @@ test.describe('mobile screens', () => {
     await expect(page.locator('.container_semester.m-collapsed')).toHaveCount(0);
   });
 
+  test('planner warnings stay inside the course card and collapse with the semester', async ({ page }) => {
+    await seedPlan(page, {
+      major: 'EE',
+      entryTerm: 'Fall 2024-2025',
+      curriculum: [['EE200']],
+      grades: [['']],
+      dates: ['Spring 2024-2025'],
+    });
+    await page.evaluate(() => window.courseRequisites.refreshPlannerWarnings());
+
+    const semester = page.locator('.container_semester').first();
+    const course = semester.locator('.course:has(.course_code:text-is("EE200"))');
+    const warning = course.locator('.planner-requisite-warning[data-warning-kind="corequisite"]');
+    await expect(warning).toContainText('EE202');
+    const contained = await course.evaluate((card) => {
+      const note = card.querySelector('.planner-requisite-warning');
+      const cardBox = card.getBoundingClientRect();
+      const noteBox = note && note.getBoundingClientRect();
+      return !!noteBox && noteBox.left >= cardBox.left && noteBox.right <= cardBox.right;
+    });
+    expect(contained).toBe(true);
+
+    await semester.locator('.date').click();
+    await expect(semester).toHaveClass(/m-collapsed/);
+    await expect(warning).toBeHidden();
+  });
+
   test('progress screen renders a program card with a completion bar', async ({ page }) => {
     await seedPlan(page, PLAN);
 

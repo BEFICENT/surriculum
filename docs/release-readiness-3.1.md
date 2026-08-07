@@ -1,6 +1,6 @@
 # SUrriculum 3.1 release-readiness tracker
 
-Last updated: 2026-08-04
+Last updated: 2026-08-08
 
 This is the working backlog for the 3.1 release. Items should be handled one at
 a time and checked off only after the fix and its verification are complete.
@@ -24,10 +24,11 @@ a time and checked off only after the fix and its verification are complete.
 
 ## Verified baseline
 
-- [x] JavaScript/static unit gate passes: 166/166 tests.
-- [x] Playwright gate passes all 357 tests on the first attempt (5.2 minutes).
+- [x] JavaScript/static unit gate passes: 178/178 tests.
+- [x] Playwright gate passes all 368 tests on the first attempt (5.3 minutes).
 - [x] `python tests/scrape_groups_test.py` passes when run directly.
 - [x] `python tests/scrape_coursepages_fallback_test.py` passes: 3/3 tests.
+- [x] Python requirement validation and checked-in manifest integrity checks pass.
 - [x] All 228,387 JSONL rows parse successfully.
 - [x] Manifest hashes and the content-derived data version match the data tree.
 - [x] Extended 21-term catalog/requirements integrity audit passes.
@@ -120,21 +121,26 @@ a time and checked off only after the fix and its verification are complete.
   a clear message. Completed on 2026-07-22: selected admit terms now load exact
   data (including first-run initialization), partial/duplicate/wrong-term data
   is rejected, and graduation/summary display an Unavailable state via flag 99.
-- [ ] Resolve live SUIS requirement-page ambiguities and restore current
-  requirement snapshots. Re-captured on 2026-07-23: EE pages for
-  `202201`-`202403` state Total 125 while their five category minima total 123;
-  ME pages for `202301`-`202403` have the same two-credit gap. This is probably
-  not a contradiction: the MATH 212 route is four SU credits while the MATH
-  201+202 route is six, and category minima need not equal the independent
-  overall-credit minimum. The current validator wrongly requires equality and
-  the local EE/ME snapshots compensate by inflating Required by two credits.
-  Change the invariant to `category sum <= total`, restore the captured category
-  minima, represent the mathematics alternatives explicitly, and retain Total
-  as the final overall threshold. Separately, ME `202501` onward really does say
-  Core 21 in its numeric summary but 26 in category prose; use the numeric
-  summary as the provisional authority only after documenting/confirming that
-  policy. The current fail-closed scraper prevents adding official `202601`-
-  `202603` pages until these cases are handled.
+- [x] Restore the official pre-2025 EE/ME category minima without weakening the
+  independent overall Total. Completed on 2026-08-08: both scraper and browser
+  validators now accept `category sum <= total` while rejecting a sum above
+  Total. EE `202201`-`202403` now stores Required 33 and ME `202301`-`202403`
+  stores Required 32, matching the live pages' 123 category SU / 125 Total.
+  Route tests cover MATH 212, MATH 201+202, either incomplete half, and the
+  separate 125-SU check. The current live `202601`-`202603` pages validate; they
+  are not local yet because the generated term window does not include them
+  before Fall 2026-2027 becomes current.
+- [ ] Resolve the separate ME `202501`-onward source ambiguity. Its numeric
+  summary says Core 21 while category prose says minimum 26; keep the numeric
+  summary provisionally, document the authority decision, and re-confirm it
+  before release.
+- [ ] Decide the rare pre-2025 EE/ME mathematics edge policy when a student has
+  all three of MATH 201, MATH 202, and MATH 212. Ordinary valid routes are now
+  correct; no extra course is excluded in the all-three case until repeat/order
+  semantics are specified. Also revisit whether a failed low-credit named
+  requirement such as EE 200 should ever be enforced beyond credit minima; the
+  planner now warns about its EE 202 corequisite, but graduation remains purely
+  credit/rule based as intended for this release.
 - [ ] Define the policy for `requirements/default.jsonl`. It matches no actual
   admit term and mixes older thresholds with a partially newer VACD pool, so it
   should either become an explicit frozen snapshot or track a named/latest term.
@@ -147,6 +153,18 @@ a time and checked off only after the fix and its verification are complete.
   calculations. Grade save/reload is model-backed, so opening the grade picker
   can no longer autosave a failed attempt as blank. Ordinary `hasCourse` remains
   structural for duplicate prevention and existing planner behavior.
+- [x] Add non-blocking planner prerequisite/corequisite guidance. Completed on
+  2026-08-08: planner cards show yellow advisory warnings when prerequisite
+  expressions are unmet in earlier terms or when a genuinely separate
+  corequisite such as EE 200/EE 202 is absent from the same or an earlier term.
+  Failed attempts do not satisfy the warning check. Recitation/lab/discussion
+  component codes ending R/L/D are intentionally suppressed because those
+  sections are not separate planner courses. The planner and scheduler now
+  share the same AND/OR parser, including clause-specific concurrent enrollment;
+  planner checks also respect the catalog's minimum-S prerequisites. Completed
+  transcript courses can satisfy later prerequisites but do not receive planning
+  warnings themselves. Warnings remain completely outside graduation and
+  allocation logic.
 - [x] Separate projected-plan credit from completed/earned credit. Completed on
   2026-07-30: semesters now retain stable term codes and every course is
   classified as earned, current, future, unverified-past, or unsuccessful. A

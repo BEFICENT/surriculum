@@ -2207,6 +2207,34 @@ html, body {
     min-height: 50px;
 }
 
+.course.has-requisite-warning {
+    border-color: #f59e0b;
+}
+
+.planner-course-warnings {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 7px 8px;
+    border-top: 1px solid #f59e0b;
+    background: rgba(245, 158, 11, 0.14);
+}
+
+.planner-requisite-warning {
+    color: #92400e;
+    font-size: 0.7rem;
+    line-height: 1.35;
+    font-weight: 600;
+}
+
+.dark-theme .planner-course-warnings {
+    background: rgba(245, 158, 11, 0.18);
+}
+
+.dark-theme .planner-requisite-warning {
+    color: #fcd34d;
+}
+
 /* LEFT COLUMN - course_label with 2 rows */
 .course_label {
     display: flex;

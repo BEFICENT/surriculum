@@ -13,14 +13,16 @@ npx playwright install chromium   # once: the browser binary
 
 npm test               # unit + Python checks + e2e
 npm run test:unit      # fast: node --test + the legacy static checks
-npm run test:python    # offline scraper parity/fallback checks
+npm run test:python    # offline scraper parity/fallback/schema checks
 npm run test:e2e       # Playwright (real browser)
 python tests/scrape_groups_test.py
 python tests/scrape_coursepages_fallback_test.py
+python tests/requirements_validation_test.py
+python tests/manifest_integrity_test.py
 npm run test:e2e:ui    # Playwright interactive UI mode
 ```
 
-The two Python checks are included in `npm test`; their direct commands remain
+The four Python checks are included in `npm test`; their direct commands remain
 available for focused runs. Python dependencies are installed separately from
 the JavaScript dev tooling.
 

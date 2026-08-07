@@ -404,8 +404,14 @@ def validate_requirement_record(major, data):
             raise ValueError(f'{field} must be a non-negative integer')
     if data['total'] <= 0 or data['ects'] <= 0:
         raise ValueError('total and ects must be positive')
-    if sum(data[field] for field in REQUIRED_CREDIT_FIELDS) != data['total']:
-        raise ValueError('credit buckets do not add up to total')
+    # The category values are independent minimums, not a decomposition that
+    # must always add up to Total.  EE/ME curricula with the four-credit
+    # MATH212 route legitimately leave a two-credit gap which students fill
+    # elsewhere while still meeting the separately published overall Total.
+    # A sum above Total is still contradictory and must never replace known-
+    # good data.
+    if sum(data[field] for field in REQUIRED_CREDIT_FIELDS) > data['total']:
+        raise ValueError('credit bucket minimums exceed total')
     if data['humRequired'] not in (0, 1, 2):
         raise ValueError('humRequired must be 0, 1, or 2')
 

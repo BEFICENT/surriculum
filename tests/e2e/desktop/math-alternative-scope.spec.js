@@ -61,45 +61,70 @@ test.describe('MATH212 alternative is program-specific', () => {
     expect(eff.MATH201, 'nothing is redundant without MATH212').toBe('required');
   });
 
-  test('EE/ME keep the rule unapplied while their thresholds exclude the MATH212 path', async ({ page }) => {
-    // EE's required threshold (35) is the sum of a required list carrying
-    // MATH201+MATH202 (6cr). MATH212 is worth 4cr, so the MATH212 path tops out
-    // at 33 and an EE student on it is told they cannot graduate — a live bug in
-    // the threshold, not in this rule. Until that is settled the exclusion stays
-    // off for EE/ME: switching it on would also fail the students who hold all
-    // three courses and pass today.
-    //
-    // This test pins that decision so it cannot be flipped on by accident.
-    const [term, termName] = PRE_2025;
-    const courses = plans[term].EE;
-    for (const c of ['MATH201', 'MATH202', 'MATH212']) {
-      expect(courses, `fixture should contain ${c}`).toContain(c);
-    }
-    await seed(page, 'EE', term, termName, courses);
-    const eff = await effOf(page, ['MATH201', 'MATH202', 'MATH212']);
+  for (const [major, threshold, pairCredits] of [['EE', 33, 35], ['ME', 32, 34]]) {
+    test(`${major}: MATH212 and MATH201+MATH202 both meet Required`, async ({ page }) => {
+      const [term, termName] = PRE_2025;
+      const fixture = plans[term][major];
+      for (const code of ['MATH201', 'MATH202', 'MATH212']) {
+        expect(fixture, `fixture should contain ${code}`).toContain(code);
+      }
 
-    for (const c of ['MATH201', 'MATH202', 'MATH212']) {
-      expect(eff[c], `${c} still counts for EE (rule intentionally not applied)`).not.toBe('none');
-    }
-  });
-
-  test('the EE MATH212 path is short of the required threshold (bug #19)', async ({ page }) => {
-    // Documents the live defect rather than asserting the broken value is fine:
-    // a real EE student who takes MATH212 and never takes MATH201/202.
-    const [term, termName] = PRE_2025;
-    const courses = plans[term].EE.filter((c) => !['MATH201', 'MATH202'].includes(c));
-    await seed(page, 'EE', term, termName, courses);
-
-    const r = await page.evaluate(() => {
-      const s = window.curriculum.semesters;
-      return {
-        flag: window.curriculum.canGraduate(),
-        required: s.reduce((a, x) => a + (x.totalRequired || 0), 0),
+      const inspect = async (courses) => {
+        await seed(page, major, term, termName, courses);
+        return page.evaluate(() => ({
+          flag: window.curriculum.canGraduate(),
+          required: window.curriculum.semesters.reduce((sum, sem) => sum + (sem.totalRequired || 0), 0),
+        }));
       };
+
+      const via212 = await inspect(fixture.filter((code) => !['MATH201', 'MATH202'].includes(code)));
+      expect(via212.required, `${major}: 4-SU MATH212 route`).toBe(threshold);
+      expect(via212.flag, `${major}: MATH212 route must not fail Required`).not.toBe(2);
+
+      const viaPair = await inspect(fixture.filter((code) => code !== 'MATH212'));
+      expect(viaPair.required, `${major}: 6-SU MATH201+MATH202 route`).toBe(pairCredits);
+      expect(viaPair.flag, `${major}: complete pair must not fail Required`).not.toBe(2);
     });
-    // 29 non-maths required + 4 (MATH212) = 33, against a threshold of 35.
-    expect(r.required, 'the MATH212 path reaches only 33').toBe(33);
-    expect(r.flag, 'so the student is told their required credits are short').toBe(2);
+
+    test(`${major}: either half of the MATH201+MATH202 route alone remains insufficient`, async ({ page }) => {
+      const [term, termName] = PRE_2025;
+      const fixture = plans[term][major];
+      for (const kept of ['MATH201', 'MATH202']) {
+        const courses = fixture.filter((code) => (
+          code !== 'MATH212' && (code === kept || !['MATH201', 'MATH202'].includes(code))
+        ));
+        await seed(page, major, term, termName, courses);
+        const result = await page.evaluate(() => ({
+          flag: window.curriculum.canGraduate(),
+          total: window.curriculum.semesters.reduce((sum, sem) => sum + (sem.totalCredit || 0), 0),
+          required: window.curriculum.semesters.reduce((sum, sem) => sum + (sem.totalRequired || 0), 0),
+        }));
+        expect(result.total, `${major}/${kept}: total should not mask Required`).toBeGreaterThanOrEqual(125);
+        expect(result.required, `${major}/${kept}: one 3-SU half`).toBe(threshold - 1);
+        expect(result.flag, `${major}/${kept}: incomplete route`).toBe(2);
+      }
+    });
+  }
+
+  test('EE: category minima do not replace the independent 125-SU Total', async ({ page }) => {
+    const [term, termName] = PRE_2025;
+    await seed(page, 'EE', term, termName, ['EE395']);
+    const result = await page.evaluate(() => {
+      const req = window.getRequirementRecord('EE', '202301');
+      const sem = window.curriculum.semesters[0];
+      sem.totalUniversity = req.university;
+      sem.totalRequired = req.required;
+      sem.totalCore = req.core;
+      sem.totalArea = req.area;
+      sem.totalFree = req.free;
+      sem.totalScience = req.science;
+      sem.totalEngineering = req.engineering;
+      sem.totalECTS = req.ects;
+      sem.totalCredit = req.total - 1;
+      return { flag: window.curriculum.canGraduate(), total: sem.totalCredit };
+    });
+    expect(result.total).toBe(124);
+    expect(result.flag, 'overall Total remains a separate earlier check').toBe(5);
   });
 
   test('MAT/BIO/DSA are untouched — they state no such rule', async ({ page }) => {

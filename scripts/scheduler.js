@@ -334,10 +334,16 @@
   }
 
   function extractCoreqCourseIdsFromCoursePageInfoField(coreq) {
+    try {
+      const shared = (typeof window !== 'undefined') ? window.courseRequisites : null;
+      if (shared && typeof shared.extractCourseCodes === 'function') {
+        return shared.extractCourseCodes(coreq);
+      }
+    } catch (_) {}
     const s = String(coreq || '');
     if (!s) return [];
     const out = new Set();
-    const re = /([A-Z]{2,5})\s*([0-9]{3}[A-Z0-9]?)/g;
+    const re = /([A-Z]{2,5})\s*([0-9]{3,5}[A-Z]?)/g;
     let m;
     while ((m = re.exec(s)) !== null) {
       out.add((m[1] + m[2]).toUpperCase());
@@ -4141,10 +4147,20 @@
       const showUnmetPrereqs = checkPrereqs && !!(showUnmetPrereqToggle && showUnmetPrereqToggle.checked);
       const unmetPrereqById = new Map(); // course_id -> { mode, missing }
       const takenBeforeSet = checkPrereqs ? (computeTakenBeforeCurrentTermSet() || new Set()) : null;
+      const concurrentPrereqSet = (() => {
+        const out = new Set();
+        if (!checkPrereqs) return out;
+        try {
+          if (takenUpToTermSet instanceof Set) takenUpToTermSet.forEach((code) => out.add(code));
+          Object.keys(selected || {}).forEach((code) => out.add(normalizeCourseId(code)));
+        } catch (_) {}
+        return out;
+      })();
       const takenBeforeSig = (() => {
         try {
           if (!checkPrereqs || !takenBeforeSet || !(takenBeforeSet instanceof Set)) return '';
-          return Array.from(takenBeforeSet).sort().join('|');
+          return Array.from(takenBeforeSet).sort().join('|')
+            + '::' + Array.from(concurrentPrereqSet).sort().join('|');
         } catch (_) {
           return '';
         }
@@ -4181,10 +4197,27 @@
           const text = info && info.prerequisites ? String(info.prerequisites || '') : '';
           if (!text) return null;
 
+          // The planner uses this same evaluator. Keep the older local parser
+          // below only as a defensive fallback for a partially cached shell.
+          try {
+            const shared = (typeof window !== 'undefined') ? window.courseRequisites : null;
+            if (shared && typeof shared.evaluatePrerequisites === 'function') {
+              const sharedResult = shared.evaluatePrerequisites(text, takenBeforeSet, {
+                concurrentAvailableCodes: concurrentPrereqSet,
+              });
+              try {
+                if (prereqCheckCache && prereqCheckCache.map) {
+                  prereqCheckCache.map.set(cid, sharedResult);
+                }
+              } catch (_) {}
+              return sharedResult;
+            }
+          } catch (_) {}
+
           const tokenizePrereq = (s) => {
             const out = [];
             try {
-              const re = /([A-Z]{2,5})\s*([0-9]{3}[A-Z0-9]?)|(\()|(\))|\b(and|or)\b/ig;
+              const re = /([A-Z]{2,5})\s*([0-9]{3,5}[A-Z]?)|(\()|(\))|\b(and|or)\b/ig;
               let m;
               while ((m = re.exec(String(s || ''))) !== null) {
                 if (m[1] && m[2]) {

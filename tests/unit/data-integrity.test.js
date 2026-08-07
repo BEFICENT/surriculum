@@ -15,6 +15,7 @@ const TERM = '202401';
 const readJsonl = (p) => fs.readFileSync(p, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
 
 const reqs = readJsonl(path.join(ROOT, 'requirements', `${TERM}.jsonl`));
+const coursePageInfo = readJsonl(path.join(ROOT, 'courses', 'all_coursepage_info.jsonl'));
 const VALID_EL_TYPE = new Set(['university', 'required', 'core', 'area', 'free', 'unknown']);
 const CATEGORY_KEYS = ['university', 'required', 'core', 'area', 'free', 'total'];
 const isNonNegNumber = (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0;
@@ -30,8 +31,24 @@ test(`requirements/${TERM}: every major has non-negative numeric thresholds`, ()
     // The degree total can't be less than the sum of its category minimums.
     const catSum = r.university + r.required + r.core + r.area + r.free;
     assert.ok(r.total >= r.university, `${r.major}: total ${r.total} < university ${r.university}`);
+    assert.ok(catSum <= r.total, `${r.major}: category minimums ${catSum} exceed total ${r.total}`);
     assert.ok(catSum >= r.total * 0.5, `${r.major}: category mins (${catSum}) implausibly small vs total ${r.total}`);
   }
+});
+
+test('course-page prerequisite qualifiers stay within the reviewed rule set', () => {
+  const concurrent = coursePageInfo
+    .filter((row) => /can be taken concurrently/i.test(String(row.prerequisites || '')))
+    .map((row) => row.course_id)
+    .sort();
+  assert.deepEqual(concurrent, ['CS405', 'CS432', 'ENS205', 'POLS492', 'PSY306']);
+
+  const bindingMinS = coursePageInfo
+    .filter((row) => /Min Grade S/i.test(String(row.prerequisites || '')))
+    .filter((row) => !/Min Grade D/i.test(String(row.prerequisites || '')))
+    .map((row) => row.course_id)
+    .sort();
+  assert.deepEqual(bindingMinS, ['CIP102', 'CIP201', 'CIP202', 'CIP301', 'CIP302']);
 });
 
 for (const r of reqs) {
