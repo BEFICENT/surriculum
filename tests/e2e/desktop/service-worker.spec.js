@@ -3,6 +3,12 @@
 const { test, expect } = require('../fixtures');
 
 const PAGES_URL = 'http://127.0.0.1:8001/surriculum/';
+const PDFJS_CACHE_NAME = 'surriculum-pdfjs-6.2.108';
+const OLD_PDFJS_CACHE_NAME = 'surriculum-pdfjs-5.7.284';
+const PDFJS_URLS = [
+  PAGES_URL + 'assets/vendor/pdfjs-6.2.108/pdf.min.mjs',
+  PAGES_URL + 'assets/vendor/pdfjs-6.2.108/pdf.worker.min.mjs',
+];
 
 test('service worker is subpath-safe, preserves storage, and restores a warmed plan offline', async ({
   page,
@@ -39,6 +45,8 @@ test('service worker is subpath-safe, preserves storage, and restores a warmed p
     localStorage.setItem('surriculum.sw-test-sentinel', 'keep');
     const otherCache = await caches.open('other-pages-app-v1');
     await otherCache.put(baseUrl + 'other-app-sentinel', new Response('keep'));
+    const oldPdfJsCache = await caches.open('surriculum-pdfjs-5.7.284');
+    await oldPdfJsCache.put(baseUrl + 'assets/vendor/pdfjs-5.7.284/pdf.min.mjs', new Response('old'));
   }, PAGES_URL);
 
   await page.goto(PAGES_URL, { waitUntil: 'domcontentloaded' });
@@ -59,23 +67,38 @@ test('service worker is subpath-safe, preserves storage, and restores a warmed p
   const installed = await page.evaluate(async (baseUrl) => {
     const names = await caches.keys();
     const shellName = names.find(name => (
-      name.startsWith('surriculum-') && name !== 'surriculum-runtime-v1'
+      name.startsWith('surriculum-')
+      && name !== 'surriculum-runtime-v1'
+      && !name.startsWith('surriculum-pdfjs-')
     ));
-    const shell = await caches.open(shellName);
-    const shellUrls = (await shell.keys()).map(request => request.url);
+    const shellUrls = shellName
+      ? (await (await caches.open(shellName)).keys()).map(request => request.url)
+      : [];
+    const pdfJsUrls = (
+      await (await caches.open('surriculum-pdfjs-6.2.108')).keys()
+    ).map(request => request.url);
     return {
       names,
       shellName,
       shellUrls,
+      pdfJsUrls,
       sentinel: localStorage.getItem('surriculum.sw-test-sentinel'),
       allScoped: shellUrls.every(url => url.startsWith(baseUrl)),
+      pdfJsAllScoped: pdfJsUrls.every(url => url.startsWith(baseUrl)),
     };
   }, PAGES_URL);
 
   expect(installed.shellName).toBeTruthy();
+  expect(installed.shellName).not.toBe(PDFJS_CACHE_NAME);
   expect(installed.allScoped).toBe(true);
+  expect(installed.pdfJsAllScoped).toBe(true);
   expect(installed.shellUrls).toContain(PAGES_URL + 'index.html');
   expect(installed.shellUrls).toContain(PAGES_URL + 'scripts/course_requisites.js');
+  expect(installed.shellUrls).toContain(PAGES_URL + 'scripts/pdf_transcript_reader.js');
+  expect(installed.shellUrls.filter(url => PDFJS_URLS.includes(url))).toEqual([]);
+  expect(installed.pdfJsUrls).toEqual(PDFJS_URLS);
+  expect(installed.names).toContain(PDFJS_CACHE_NAME);
+  expect(installed.names).not.toContain(OLD_PDFJS_CACHE_NAME);
   expect(installed.names).toContain('other-pages-app-v1');
   expect(installed.sentinel).toBe('keep');
 
@@ -120,6 +143,10 @@ test('service worker is subpath-safe, preserves storage, and restores a warmed p
       expect.stringMatching(/\/requirements\/202401\.jsonl$/),
     ]),
   });
+  const runtimeUrls = await page.evaluate(async () => (
+    await (await caches.open('surriculum-runtime-v1')).keys()
+  ).map(request => request.url));
+  expect(runtimeUrls.filter(url => PDFJS_URLS.includes(url))).toEqual([]);
 
   const onlineVersion = await page.evaluate(() => window.APP_VERSION);
 
@@ -145,6 +172,17 @@ test('service worker is subpath-safe, preserves storage, and restores a warmed p
     planStorageReady: true,
     requirementTotal: 127,
     sentinel: 'keep',
+  });
+  expect(await page.evaluate(async () => {
+    const names = await caches.keys();
+    const pdfJsCache = await caches.open('surriculum-pdfjs-6.2.108');
+    return {
+      names,
+      pdfJsUrls: (await pdfJsCache.keys()).map(request => request.url),
+    };
+  })).toEqual({
+    names: expect.arrayContaining([PDFJS_CACHE_NAME]),
+    pdfJsUrls: PDFJS_URLS,
   });
 });
 

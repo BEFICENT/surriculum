@@ -11,9 +11,9 @@ a time and checked off only after the fix and its verification are complete.
   consented to their use. The maintainer has explicitly decided that these
   consented fixtures will remain public; this is settled, not an open release
   decision.
-- PDF.js 2.10.377 is formally affected by CVE-2024-4367. The disclosed exploit
-  path appears to require glyph rendering, while SUrriculum only extracts text,
-  but that reduced reachability is an inference rather than a vendor guarantee.
+- The old PDF.js 2.10.377 runtime was formally affected by CVE-2024-4367. It
+  has been replaced by the locally vendored, patched 6.2.108 release described
+  below.
 - Broad release-blocker coverage remains deferred. Focused graduation and
   scheduler regressions were added when specifically requested.
 - The `surriculum-3.1` branch is published but has not been merged into `main`.
@@ -24,8 +24,8 @@ a time and checked off only after the fix and its verification are complete.
 
 ## Verified baseline
 
-- [x] JavaScript/static unit gate passes: 199/199 tests.
-- [x] Playwright gate passes all 371 tests on the first attempt.
+- [x] JavaScript/static unit gate passes: 207/207 tests.
+- [x] Playwright gate passes all 377 tests.
 - [x] `python tests/scrape_groups_test.py` passes when run directly.
 - [x] `python tests/scrape_coursepages_fallback_test.py` passes: 3/3 tests.
 - [x] Python requirement validation and checked-in manifest integrity checks pass.
@@ -75,27 +75,36 @@ a time and checked off only after the fix and its verification are complete.
   explicitly confirmed by the maintainer and must not be reopened as an
   unresolved release item.
 - [x] Apply the official interim PDF.js mitigation. Completed on 2026-07-23:
-  user-selected PDFs are opened with `isEvalSupported: false`, Mozilla's
-  documented workaround for affected releases. The app remains on 2.10.377, so
-  this is defense in depth rather than an upgrade or a claim that the old
-  dependency is fully resolved.
-- [ ] Upgrade and self-host PDF.js before release. The CDN-loaded main library
-  and local worker currently match at 2.10.377, but releases through 4.1.392 are
-  covered by CVE-2024-4367 and the external CDN script has no integrity
-  check. The investigated target is a matched, locally vendored 6.1.200 legacy
-  ESM main/worker pair, lazy-loaded only when a PDF is selected. PDF.js 6.1.200
-  targets Safari 18 or newer; if Safari 16.4-17 support is required, 5.7.284 is
-  a possible compatibility bridge but is neither current nor an LTS release.
-  Decide the browser floor before migrating.
+  the old 2.10.377 runtime opened user-selected PDFs with
+  `isEvalSupported: false`, Mozilla's documented CVE-2024-4367 workaround. This
+  historical mitigation was retired with the completed upgrade below; the
+  option no longer exists in PDF.js 6.2.
+- [x] Upgrade and self-host PDF.js before release. Completed on 2026-08-08 with
+  the exact matched legacy-ESM main/worker pair from `pdfjs-dist@6.2.108`, plus
+  its Apache-2.0 license and recorded npm integrity/SHA-256 provenance. The
+  earlier 6.1.200/5.7.284 candidates were rejected after Mozilla disclosed
+  CVE-2026-16633: releases from 5.6.83 through 6.2.107 are affected, while
+  6.2.108 is patched. The old unpkg script and 2.10.377 worker are gone.
 
-  The migration must replace the classic global script with `import()`, set a
-  subpath-safe worker URL, preserve `isEvalSupported: false`, dispose of the
-  loading task/document after extraction, and choose either `useWasm: false`
-  for this text-only path or locally ship the matching WASM assets and licenses.
-  Add sensible file/page/text limits. Before accepting the upgrade, compare the
-  extracted text and parsed courses from both consented example PDFs, remove the
-  test harness's ignored `pdfjsLib is not defined` error, and include the local
-  PDF assets in the eventual service-worker/offline fix.
+  The runtime is lazy-imported from a same-origin, versioned path and uses its
+  matching subpath-safe module worker. This text-only importer disables optional
+  WASM loading, caps input at 10 MiB / 100 pages / 50,000 text fragments /
+  1,000,000 extracted characters, and always destroys the PDF loading task.
+  Main and worker are installed atomically into a dedicated versioned
+  service-worker cache, survive daily app/data cache rotations without another
+  download, and work on first use while offline. The supported legacy-build
+  floor for this PDF.js major is Firefox ESR+, Chrome 125+, and Safari 18+
+  (mostly); broader Firefox/WebKit application coverage remains a separate
+  test-suite item.
+
+  Real-fixture comparison found changed text-item segmentation but the same 38
+  parsed courses and import semantics for the normal Academic Records Summary.
+  Both old and new versions extract zero text from the Microsoft Print-to-PDF
+  fixture because it has no text layer; the UI now identifies that case and
+  gives browser Save-as-PDF, complete-HTML, and OCR guidance. A real Degree
+  Evaluation PDF remains rejected by the dedicated wrong-file path. Permanent
+  tests also verify same-origin loading, version/hash pairing, limits, mounted
+  `/surriculum/` URLs, and first-use offline extraction.
 - [x] Validate every nested field in imported plan JSON and custom courses.
   Completed on 2026-07-23: imports are size- and shape-bounded, nested plan,
   scheduler, and custom-course fields are normalized before storage, unknown or
@@ -287,7 +296,8 @@ a time and checked off only after the fix and its verification are complete.
   unsupported grade blend into the title. Define a bounded grade-like token
   grammar and add synthetic wrapped-title/missing-level cases before changing
   this fragile fallback. The Microsoft Print-to-PDF sample contains no PDF.js
-  text items at all and will still require a clearer re-export/OCR path.
+  text items at all; that separate condition now has explicit re-export/OCR
+  guidance and regression coverage.
 - [ ] Give unsuccessful attempts a distinct Summary state instead of placing
   them in the generic "untaken" bucket.
 - [x] Keep planner and scheduler offered-course data aligned. The planner now

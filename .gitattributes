@@ -12,3 +12,6 @@ Pre-Conversion*Files/** linguist-generated=true
 Example*Files/** linguist-generated=true
 minor_htmls/** linguist-generated=true
 updated_htmls/** linguist-generated=true
+assets/vendor/pdfjs-*/*.mjs text eol=lf linguist-vendored=true
+assets/vendor/pdfjs-*/LICENSE text eol=lf linguist-vendored=true
+assets/vendor/pdfjs-*/README.md text eol=lf linguist-vendored=true

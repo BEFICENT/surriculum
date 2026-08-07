@@ -112,7 +112,9 @@ Important notes:
 
 - If you upload a **Degree Evaluation** document, SUrriculum rejects it and shows a dedicated warning explaining how to export the correct file.
 - If you saved SIS pages as **HTML only** (instead of **Webpage, Complete**) and the file contains the known “no permission” page HTML, SUrriculum warns you to re-save correctly.
-- If import fails or imports **0 courses**, SUrriculum shows a generic troubleshooting modal. One common cause is generating PDFs using **Microsoft Print to PDF**; prefer a real “Save as PDF”.
+- If a PDF has no readable text layer, SUrriculum explains how to re-export it
+  with the browser's **Save as PDF**, save **Webpage, Complete** HTML, or run
+  OCR. **Microsoft Print to PDF** is a known source of image-only transcripts.
 
 ## Graduation and summaries
 

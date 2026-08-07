@@ -10,7 +10,7 @@ const base = require('@playwright/test');
 
 // Subresource load failures are browser-generated ("Failed to load resource:
 // ...") and aren't app-logic regressions, so they don't fail the suite:
-//  - external CDNs (Google Fonts, Font Awesome, pdf.js/unpkg) are blocked in
+//  - external CDNs (Google Fonts and Font Awesome) are blocked in
 //    sandboxed/offline runs but load fine in production;
 //  - the scheduler probes several candidate schedule-data paths and one 404s
 //    benignly while another succeeds.
@@ -30,9 +30,6 @@ const IGNORED_CONSOLE = [
 // bug. Each entry names a third-party thing that simply is not there when the
 // sandbox blocks its origin, and that loads fine in production.
 const IGNORED_PAGEERROR = [
-  // pdf.js is loaded from unpkg; blocked here, so its global is absent. The
-  // pdf-parser spec injects the library itself rather than relying on the CDN.
-  /pdfjsLib is not defined/,
   /Failed to register a ServiceWorker/,
 ];
 

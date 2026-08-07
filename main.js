@@ -2871,29 +2871,11 @@ function SUrriculum(major_chosen_by_user) {
                 };
 
                 if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-                    const arrayBuffer = await file.arrayBuffer();
-                    const pdf = await pdfjsLib.getDocument({
-                        data: new Uint8Array(arrayBuffer),
-                        // Defense in depth for PDF.js versions affected by
-                        // CVE-2024-4367. This importer only extracts text and
-                        // does not need eval-based font rendering.
-                        isEvalSupported: false
-                    }).promise;
-                    let text = '';
-                    let totalTextItems = 0;
-
-                    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-                        const page = await pdf.getPage(pageNum);
-                        const content = await page.getTextContent();
-                        totalTextItems += (content.items && content.items.length) ? content.items.length : 0;
-                        const strs = content.items.map(item => String(item.str || ''));
-                        const totalLen = strs.reduce((acc, s) => acc + s.length, 0);
-                        const avgLen = totalLen / Math.max(1, strs.length);
-                        // Some PDFs (notably "Microsoft Print to PDF") yield character-level
-                        // text items. Joining those with newlines destroys tokens. Use spaces
-                        // in that case; otherwise preserve the previous newline behavior.
-                        text += (avgLen <= 1.2 ? strs.join(' ') : strs.join('\n')) + '\n';
+                    if (!window.pdfTranscriptReader || typeof window.pdfTranscriptReader.extractText !== 'function') {
+                        throw new Error('The local PDF transcript reader is unavailable.');
                     }
+                    const extraction = await window.pdfTranscriptReader.extractText(file);
+                    const text = extraction.text;
                     // Academic Records PDFs may mention Degree Evaluation at the end.
                     // Reject only if it looks like Degree Evaluation AND does not
                     // contain "Academic Records Summary". Never apply this to YÖK transcripts.
@@ -2915,8 +2897,32 @@ function SUrriculum(major_chosen_by_user) {
                     parsedData = window.academicRecordsParser.parseAcademicRecords(htmlContent);
                 }
             } catch (err) {
-                console.error(err);
                 const ui = (typeof window !== 'undefined') ? window.uiModal : null;
+                const errorCode = err && typeof err.code === 'string' ? err.code : '';
+                const showImportAlert = async (title, body) => {
+                    if (ui && typeof ui.alert === 'function') await ui.alert(title, body);
+                    else await uiAlert(title, body);
+                };
+                if (errorCode === 'PDF_NO_TEXT') {
+                    try { fileInput.value = ''; } catch (_) {}
+                    await showImportAlert(
+                        'PDF has no readable text',
+                        '<p>The PDF contains pages, but it has no selectable text for SUrriculum to read.</p>' +
+                        '<p>This commonly happens with <strong>Microsoft Print to PDF</strong>. Open Academic Records Summary again and use your browser\'s <strong>Save as PDF</strong>, or save it as <strong>HTML (Webpage, Complete)</strong>.</p>' +
+                        '<p>If the document was scanned, run OCR before importing it.</p>'
+                    );
+                    return;
+                }
+                if (['PDF_FILE_TOO_LARGE', 'PDF_TOO_MANY_PAGES', 'PDF_TOO_COMPLEX'].includes(errorCode)) {
+                    try { fileInput.value = ''; } catch (_) {}
+                    await showImportAlert(
+                        'PDF is too large or complex',
+                        '<p>For safe local processing, transcript imports are limited to <strong>10 MB</strong>, <strong>100 pages</strong>, 50,000 text fragments, and 1,000,000 extracted characters.</p>' +
+                        '<p>Please export only Academic Records Summary, or save it as <strong>HTML (Webpage, Complete)</strong>.</p>'
+                    );
+                    return;
+                }
+                console.error(err);
                 if (ui && typeof ui.alert === 'function') {
                     await ui.alert('Import failed', '<p>Failed to read the file.</p><p>Please try exporting again as HTML (preferred) or PDF.</p>');
                 } else {

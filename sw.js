@@ -13,6 +13,10 @@ const CACHE_NAME = cacheNameFromSearch(self.location.search);
 // A student who has already loaded a term can therefore still reopen that
 // cached catalog offline after an automatic data refresh installs a new shell.
 const RUNTIME_CACHE_NAME = CACHE_PREFIX + 'runtime-v1';
+// PDF.js is large and changes independently from daily course-data refreshes.
+// Keep the matched API/worker pair in its own versioned, atomic cache so a data
+// refresh neither redownloads it nor risks pairing files from different builds.
+const PDFJS_CACHE_NAME = CACHE_PREFIX + 'pdfjs-6.2.108';
 
 // Resolve every precached URL against the worker's registration scope. On
 // GitHub Pages the scope is /surriculum/, not the origin root.
@@ -43,6 +47,7 @@ const APP_SHELL_PATHS = [
   'scripts/create_semester.js',
   'scripts/click.js',
   'scripts/academic_records_parser.js',
+  'scripts/pdf_transcript_reader.js',
   'scripts/domain/credits.js',
   'scripts/domain/grades.js',
   'scripts/data/catalog.js',
@@ -67,8 +72,19 @@ const APP_SHELL_PATHS = [
   'assets/tickw.png',
   'assets/open.png'
 ];
+const PDFJS_PATHS = [
+  'assets/vendor/pdfjs-6.2.108/pdf.min.mjs',
+  'assets/vendor/pdfjs-6.2.108/pdf.worker.min.mjs'
+];
 const ASSETS = APP_SHELL_PATHS.map(scopeUrl);
+const PDFJS_ASSETS = PDFJS_PATHS.map(scopeUrl);
 const APP_SHELL_URLS = new Set(ASSETS.map(url => {
+  const normalized = new URL(url);
+  normalized.search = '';
+  normalized.hash = '';
+  return normalized.href;
+}));
+const PDFJS_URLS = new Set(PDFJS_ASSETS.map(url => {
   const normalized = new URL(url);
   normalized.search = '';
   normalized.hash = '';
@@ -76,12 +92,28 @@ const APP_SHELL_URLS = new Set(ASSETS.map(url => {
 }));
 const RUNTIME_WARMUPS = new Map();
 
+async function ensurePdfJsAssets() {
+  let cache = await caches.open(PDFJS_CACHE_NAME);
+  const existing = await Promise.all(
+    PDFJS_ASSETS.map(url => cache.match(url, { ignoreSearch: true }))
+  );
+  if (existing.every(Boolean)) return;
+
+  // A partial pair is unusable: the API and worker must be the same version.
+  // Recreate this versioned cache and populate both files through one addAll.
+  await caches.delete(PDFJS_CACHE_NAME);
+  cache = await caches.open(PDFJS_CACHE_NAME);
+  await cache.addAll(PDFJS_ASSETS);
+}
+
 self.addEventListener('install', event => {
   // A failed shell download must fail the install so the last working worker
   // remains active. Only take over once the complete shell is available.
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(ASSETS))
+    Promise.all([
+      caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)),
+      ensurePdfJsAssets()
+    ])
       .then(() => self.skipWaiting())
   );
 });
@@ -98,6 +130,7 @@ self.addEventListener('activate', event => {
             key.startsWith(CACHE_PREFIX)
             && key !== CACHE_NAME
             && key !== RUNTIME_CACHE_NAME
+            && key !== PDFJS_CACHE_NAME
           ))
           .map(key => caches.delete(key))
       ))
@@ -126,12 +159,27 @@ function isAppShellRequest(requestUrl) {
   }
 }
 
+function isPdfJsRequest(requestUrl) {
+  try {
+    const normalized = new URL(requestUrl);
+    normalized.search = '';
+    normalized.hash = '';
+    return PDFJS_URLS.has(normalized.href);
+  } catch (_) {
+    return false;
+  }
+}
+
 async function matchCachedRequest(request) {
   const shellCache = await caches.open(CACHE_NAME);
   let cached = await shellCache.match(request, { ignoreSearch: true });
   if (!cached && request.mode === 'navigate') {
     cached = await shellCache.match(scopeUrl('index.html'));
   }
+  if (cached) return cached;
+
+  const pdfJsCache = await caches.open(PDFJS_CACHE_NAME);
+  cached = await pdfJsCache.match(request, { ignoreSearch: true });
   if (cached) return cached;
 
   const runtimeCache = await caches.open(RUNTIME_CACHE_NAME);
@@ -143,7 +191,7 @@ function normalizedWarmUrls(candidates) {
   for (const candidate of candidates) {
     let url;
     try { url = scopeUrl(String(candidate || '')); } catch (_) { continue; }
-    if (!candidate || !isRequestWithinScope(url) || isAppShellRequest(url)) continue;
+    if (!candidate || !isRequestWithinScope(url) || isAppShellRequest(url) || isPdfJsRequest(url)) continue;
     if (!urls.includes(url)) urls.push(url);
   }
   return urls.slice(0, 16).sort();
@@ -185,6 +233,20 @@ function warmRuntimeUrls(candidates) {
   return warmup;
 }
 
+async function servePdfJsAsset(request) {
+  const cache = await caches.open(PDFJS_CACHE_NAME);
+  const cached = await cache.match(request, { ignoreSearch: true });
+  if (cached) return cached;
+
+  // Activated workers normally have the complete pair from install. If Cache
+  // Storage was manually pruned, repair only the requested immutable asset.
+  const response = await fetch(request, { cache: 'no-store' });
+  if (response && response.ok) {
+    try { await cache.put(request, response.clone()); } catch (_) {}
+  }
+  return response;
+}
+
 // The app's legacy data loaders use synchronous XHR, which is not a reliable
 // way to populate Cache Storage. Once a plan is known, main.js explicitly asks
 // the worker to warm only that plan's small set of catalogs and requirements.
@@ -194,12 +256,19 @@ self.addEventListener('message', event => {
   event.waitUntil(warmRuntimeUrls(data.urls));
 });
 
-// Network-first: updated files always win; fall back to this version's cache
-// when offline. Only requests inside this worker's own scope are intercepted or
-// cached, so sibling GitHub Pages applications and third-party resources remain
-// untouched.
+// Shell/runtime data remains network-first so updated files win, with cached
+// offline fallback. The immutable, versioned PDF.js pair is cache-first below.
+// Only this worker's scope is intercepted, leaving sibling Pages applications
+// and third-party resources untouched.
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET' || !isRequestWithinScope(event.request.url)) return;
+
+  // These versioned files are immutable and were installed as a matched pair.
+  // Cache-first avoids downloading the 1.8 MB runtime again on every PDF use.
+  if (isPdfJsRequest(event.request.url)) {
+    event.respondWith(servePdfJsAsset(event.request));
+    return;
+  }
 
   const networkResponse = fetch(event.request, { cache: 'no-store' });
   const cacheWrite = networkResponse

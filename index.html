@@ -73,7 +73,7 @@
     <script src="scripts/create_semester.js"></script>
     <script src="scripts/click.js"></script>
     <script src="scripts/academic_records_parser.js"></script>
-    <script src="https://unpkg.com/pdfjs-dist@2.10.377/build/pdf.js"></script>
+    <script src="scripts/pdf_transcript_reader.js"></script>
     <!-- ES modules (deferred): expose pure helpers on window for the classic scripts above. -->
     <script type="module" src="scripts/domain/credits.js"></script>
     <script type="module" src="scripts/domain/grades.js"></script>
@@ -83,11 +83,6 @@
     <script src="scripts/requirements.js"></script>
     <script src="scripts/minor_requirements.js"></script>
     <script src="scripts/graduation_check.js"></script>
-
-    <script>
-        // Specify the path to the worker script
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'assets/pdf.worker.js';
-    </script>
 
     <script src="main.js" defer></script>
     <script src="theme.js" defer></script>
@@ -143,7 +138,7 @@
                             <p>Import your courses from Academic Records Summary:</p>
                             <ol>
                                 <li>Go to SUIS → Student → Student Records → Academic Transcript and view your Academic Records Summary</li>
-                                <li>Save the page as <strong>HTML (Webpage, Complete)</strong> (preferred) or print to <strong>PDF</strong></li>
+                                <li>Save the page as <strong>HTML (Webpage, Complete)</strong> (preferred) or use your browser's <strong>Save as PDF</strong></li>
                                 <li>Upload the saved HTML or PDF file below</li>
                             </ol>
                             <p>Or alternatively, upload your YÖK Transcript PDF file <strong>(not preferred)</strong></p>

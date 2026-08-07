@@ -117,8 +117,12 @@ function createWorker(options = {}) {
       ASSETS,
       CACHE_NAME,
       CACHE_PREFIX,
+      PDFJS_ASSETS,
+      PDFJS_CACHE_NAME,
+      PDFJS_PATHS,
       RUNTIME_CACHE_NAME,
       isAppShellRequest,
+      isPdfJsRequest,
       isRequestWithinScope
     };`,
     sandbox,
@@ -163,6 +167,7 @@ test('cache name derives from the registration version', () => {
 test('all precache URLs stay inside the nested GitHub Pages scope', () => {
   const worker = createWorker();
   const assets = Array.from(worker.exports.ASSETS);
+  const pdfJsAssets = Array.from(worker.exports.PDFJS_ASSETS);
 
   assert.ok(assets.length > 30);
   assert.ok(assets.every(url => url.startsWith(DEFAULT_SCOPE)));
@@ -170,6 +175,11 @@ test('all precache URLs stay inside the nested GitHub Pages scope', () => {
   assert.ok(assets.includes(DEFAULT_SCOPE + 'index.html'));
   assert.ok(assets.includes(DEFAULT_SCOPE + 'scripts/course_requisites.js'));
   assert.ok(!assets.includes('https://beficent.github.io/index.html'));
+  assert.deepEqual(pdfJsAssets, [
+    DEFAULT_SCOPE + 'assets/vendor/pdfjs-6.2.108/pdf.min.mjs',
+    DEFAULT_SCOPE + 'assets/vendor/pdfjs-6.2.108/pdf.worker.min.mjs',
+  ]);
+  assert.ok(pdfJsAssets.every(url => url.startsWith(DEFAULT_SCOPE)));
 });
 
 test('the app shell covers every local page resource and planner image', () => {
@@ -208,30 +218,90 @@ test('the app shell covers every local page resource and planner image', () => {
     !shellPaths.has('requirements/default.jsonl'),
     'the removed synthetic requirements file must not make installation fail',
   );
+  assert.ok(shellPaths.has('scripts/pdf_transcript_reader.js'));
+  assert.deepEqual(Array.from(createWorker().exports.PDFJS_PATHS), [
+    'assets/vendor/pdfjs-6.2.108/pdf.min.mjs',
+    'assets/vendor/pdfjs-6.2.108/pdf.worker.min.mjs',
+  ]);
 });
 
-test('install waits for the complete shell before taking over', async () => {
-  let finishPrecache;
+test('install reuses a complete PDF.js pair across shell rotations', async () => {
+  let finishShell;
   const worker = createWorker({
-    addAllImpl: () => new Promise(resolve => { finishPrecache = resolve; }),
+    matchImpl: (name, request) => Promise.resolve(
+      name === 'surriculum-pdfjs-6.2.108'
+      && String(request).includes('/assets/vendor/pdfjs-6.2.108/')
+        ? fakeResponse('cached-pdfjs')
+        : undefined,
+    ),
+    addAllImpl: (name) => (
+      name === 'surriculum-3.1-test-data'
+        ? new Promise(resolve => { finishShell = resolve; })
+        : Promise.resolve()
+    ),
   });
   const install = dispatch(worker, 'install');
 
-  await Promise.resolve();
+  await new Promise(resolve => setImmediate(resolve));
   assert.equal(worker.records.skipWaiting, 0);
-  assert.equal(worker.records.addAll.length, 1);
+  assert.deepEqual(worker.records.addAll.map(entry => entry.name), [worker.exports.CACHE_NAME]);
+  assert.equal(worker.records.deleted.includes(worker.exports.PDFJS_CACHE_NAME), false);
+  assert.deepEqual(
+    worker.records.matches
+      .filter(entry => entry.name === worker.exports.PDFJS_CACHE_NAME)
+      .map(entry => String(entry.request)),
+    Array.from(worker.exports.PDFJS_ASSETS),
+  );
 
-  finishPrecache();
+  finishShell();
   await install.lifetime;
   assert.equal(worker.records.skipWaiting, 1);
 });
 
-test('a failed precache rejects installation and keeps the old worker active', async () => {
+test('install deletes an incomplete PDF.js cache and atomically rebuilds the exact pair', async () => {
+  let finishPdfJs;
+  const worker = createWorker({
+    matchImpl: (name, request) => Promise.resolve(
+      name === 'surriculum-pdfjs-6.2.108'
+      && String(request).endsWith('/assets/vendor/pdfjs-6.2.108/pdf.min.mjs')
+        ? fakeResponse('cached-main-only')
+        : undefined,
+    ),
+    addAllImpl: (name) => (
+      name === 'surriculum-pdfjs-6.2.108'
+        ? new Promise(resolve => { finishPdfJs = resolve; })
+        : Promise.resolve()
+    ),
+  });
+  const install = dispatch(worker, 'install');
+
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(worker.records.skipWaiting, 0);
+  assert.ok(worker.records.deleted.includes(worker.exports.PDFJS_CACHE_NAME));
+  const vendorWrites = worker.records.addAll.filter(entry => (
+    entry.name === worker.exports.PDFJS_CACHE_NAME
+  ));
+  assert.equal(vendorWrites.length, 1);
+  assert.deepEqual(vendorWrites[0].assets, Array.from(worker.exports.PDFJS_ASSETS));
+
+  finishPdfJs();
+  await install.lifetime;
+  assert.equal(worker.records.skipWaiting, 1);
+});
+
+test('a failed PDF.js pair rebuild rejects installation and keeps the old worker active', async () => {
   const failure = new Error('precache failed');
-  const worker = createWorker({ addAllImpl: () => Promise.reject(failure) });
+  const worker = createWorker({
+    addAllImpl: (name) => (
+      name === 'surriculum-pdfjs-6.2.108'
+        ? Promise.reject(failure)
+        : Promise.resolve()
+    ),
+  });
   const install = dispatch(worker, 'install');
 
   await assert.rejects(install.lifetime, failure);
+  assert.ok(worker.records.deleted.includes(worker.exports.PDFJS_CACHE_NAME));
   assert.equal(worker.records.skipWaiting, 0);
 });
 
@@ -243,6 +313,8 @@ test('activation deletes only obsolete SUrriculum caches and preserves runtime d
       'surriculum-old',
       'surriculum-cache-v4',
       'surriculum-runtime-v1',
+      'surriculum-pdfjs-5.7.284',
+      'surriculum-pdfjs-6.2.108',
       'other-app-v1',
       'surriculumish-old',
       'surriculum-3.1-test-data',
@@ -252,7 +324,11 @@ test('activation deletes only obsolete SUrriculum caches and preserves runtime d
   const activation = dispatch(worker, 'activate');
 
   await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(worker.records.deleted.sort(), ['surriculum-cache-v4', 'surriculum-old']);
+  assert.deepEqual(worker.records.deleted.sort(), [
+    'surriculum-cache-v4',
+    'surriculum-old',
+    'surriculum-pdfjs-5.7.284',
+  ]);
   assert.equal(worker.records.claimed, 0);
 
   finishDeletes(true);
@@ -270,6 +346,9 @@ test('plan warmup caches only deduplicated runtime URLs inside the app scope', a
         'requirements/202503.jsonl',
         'courses/202503/CS.jsonl',
         'main.js',
+        'scripts/pdf_transcript_reader.js',
+        'assets/vendor/pdfjs-6.2.108/pdf.min.mjs',
+        'assets/vendor/pdfjs-6.2.108/pdf.worker.min.mjs',
         '../other-app/private.json',
         'https://untrusted.example.test/file.json',
       ],
@@ -360,6 +439,64 @@ test('app-shell refreshes stay in the versioned shell cache', async () => {
   assert.equal(worker.records.puts[0].name, worker.exports.CACHE_NAME);
 });
 
+test('PDF.js requests reuse the immutable dedicated cache without a download', async () => {
+  const cachedVendorAsset = fakeResponse('cached-pdfjs');
+  const worker = createWorker({
+    matchImpl: (name, request) => Promise.resolve(
+      name === 'surriculum-pdfjs-6.2.108'
+      && String(request && request.url ? request.url : request)
+        .includes('/assets/vendor/pdfjs-6.2.108/')
+        ? cachedVendorAsset
+        : undefined,
+    ),
+  });
+  const request = {
+    method: 'GET',
+    mode: 'cors',
+    url: DEFAULT_SCOPE + worker.exports.PDFJS_PATHS[0],
+  };
+  const fetchEvent = dispatch(worker, 'fetch', { request });
+
+  assert.equal(await fetchEvent.response, cachedVendorAsset);
+  assert.equal(worker.records.fetches.length, 0);
+  assert.equal(worker.records.puts.length, 0);
+});
+
+test('a missing immutable PDF.js asset is repaired in the dedicated cache', async () => {
+  const network = fakeResponse('fresh-pdfjs');
+  const worker = createWorker({ networkResponse: network });
+  const request = {
+    method: 'GET',
+    mode: 'cors',
+    url: DEFAULT_SCOPE + worker.exports.PDFJS_PATHS[0],
+  };
+  const fetchEvent = dispatch(worker, 'fetch', { request });
+
+  assert.equal(await fetchEvent.response, network);
+  assert.equal(worker.records.fetches.length, 1);
+  assert.equal(worker.records.puts.length, 1);
+  assert.equal(worker.records.puts[0].name, worker.exports.PDFJS_CACHE_NAME);
+});
+
+test('a PDF.js cache-write failure does not discard a valid online response', async () => {
+  const network = fakeResponse('fresh-pdfjs');
+  const worker = createWorker({
+    networkResponse: network,
+    putImpl: () => Promise.reject(new Error('quota exceeded')),
+  });
+  const request = {
+    method: 'GET',
+    mode: 'cors',
+    url: DEFAULT_SCOPE + worker.exports.PDFJS_PATHS[0],
+  };
+  const fetchEvent = dispatch(worker, 'fetch', { request });
+
+  assert.equal(await fetchEvent.response, network);
+  assert.equal(worker.records.fetches.length, 1);
+  assert.equal(worker.records.puts.length, 1);
+  assert.equal(worker.records.puts[0].name, worker.exports.PDFJS_CACHE_NAME);
+});
+
 test('a successful network response survives a cache-write failure', async () => {
   const network = fakeResponse('fresh');
   const worker = createWorker({
@@ -404,7 +541,38 @@ test('offline requests fall back to the preserved runtime cache', async () => {
   await fetchEvent.lifetime;
   assert.deepEqual(
     worker.records.matches.map(entry => entry.name),
-    [worker.exports.CACHE_NAME, worker.exports.RUNTIME_CACHE_NAME],
+    [
+      worker.exports.CACHE_NAME,
+      worker.exports.PDFJS_CACHE_NAME,
+      worker.exports.RUNTIME_CACHE_NAME,
+    ],
+  );
+});
+
+test('offline PDF.js requests use the matched vendor cache directly', async () => {
+  const cachedVendorAsset = fakeResponse('cached-pdfjs');
+  const worker = createWorker({
+    networkError: new Error('offline'),
+    matchImpl: (name, request) => Promise.resolve(
+      name === 'surriculum-pdfjs-6.2.108'
+      && String(request && request.url ? request.url : request)
+        .endsWith('/assets/vendor/pdfjs-6.2.108/pdf.min.mjs')
+        ? cachedVendorAsset
+        : undefined,
+    ),
+  });
+  const request = {
+    method: 'GET',
+    mode: 'cors',
+    url: DEFAULT_SCOPE + 'assets/vendor/pdfjs-6.2.108/pdf.min.mjs',
+  };
+  const fetchEvent = dispatch(worker, 'fetch', { request });
+
+  assert.equal(await fetchEvent.response, cachedVendorAsset);
+  await fetchEvent.lifetime;
+  assert.deepEqual(
+    worker.records.matches.map(entry => entry.name),
+    [worker.exports.PDFJS_CACHE_NAME],
   );
 });
 
