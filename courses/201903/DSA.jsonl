@@ -72,6 +72,7 @@
 {"Major": "CS", "Code": "440", "Course_Name": "Quantum Programming II", "ECTS": "6", "Engineering": 3.0, "Basic_Science": 3.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "CS", "Code": "449", "Course_Name": "Human Computer Interaction", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "CS", "Code": "48011", "Course_Name": "Special Topics in CS: Evolution and Biology for Artificial Intelligence", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
+{"Major": "CS", "Code": "48012", "Course_Name": "Special Topics in CS: Agentic AI Systems: Architecture and Deployment", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "ECON", "Code": "201", "Course_Name": "Games and Strategies", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "FASS"}
 {"Major": "ECON", "Code": "204", "Course_Name": "Microeconomics", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "FASS"}
 {"Major": "ECON", "Code": "321", "Course_Name": "Education Economics and Policy", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
@@ -204,7 +205,6 @@
 {"Major": "CS", "Code": "48007", "Course_Name": "Special Topics in CS: Internet of Things Sensing System", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CS", "Code": "48008", "Course_Name": "Special Topics in CS: Malware Analysis and Detection", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CS", "Code": "48010", "Course_Name": "Special Topics in CS: Performance Analysis and Engineering", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "CS", "Code": "48012", "Course_Name": "Special Topics in CS: Agentic AI Systems: Architecture and Deployment", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CULT", "Code": "299", "Course_Name": "Topics in Turkish Cultural Studies", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CULT", "Code": "322", "Course_Name": "Youth Culture", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CULT", "Code": "355", "Course_Name": "Urban Spaces and Cultures", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
