@@ -199,12 +199,15 @@ test('the app shell covers every local page resource and planner image', () => {
 
   for (const bootstrap of [
     'courses/terms.jsonl',
-    'requirements/default.jsonl',
     'requirements/minors.jsonl',
     'requirements/minors/terms.jsonl',
   ]) {
     assert.ok(shellPaths.has(bootstrap), `missing bootstrap data: ${bootstrap}`);
   }
+  assert.ok(
+    !shellPaths.has('requirements/default.jsonl'),
+    'the removed synthetic requirements file must not make installation fail',
+  );
 });
 
 test('install waits for the complete shell before taking over', async () => {

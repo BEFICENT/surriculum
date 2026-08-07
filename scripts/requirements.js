@@ -1,11 +1,14 @@
 // requirements.js
 // Degree requirements are stored as JSONL files under `requirements/<TERM>.jsonl`.
-// A selected term must load its exact, complete dataset; the stable
-// `requirements/default.jsonl` is used only when no term has been selected yet.
+// Requirements remain explicitly unavailable until main.js resolves a real
+// six-digit admit term, then that term's exact, complete dataset is loaded.
 // (For backward compatibility, legacy `.json` files are also supported.)
 
 let requirements = {};
-let requirementsStatus = {};
+let requirementsStatus = {
+  main: { term: '', available: false },
+  doubleMajor: { term: '', available: false },
+};
 let flatRequirementsTerm = '';
 
 const EXPECTED_REQUIREMENT_MAJORS = Object.freeze([
@@ -122,10 +125,9 @@ function normalizeRequirementsData(data) {
 }
 
 function loadRequirements(termCode) {
-  const requestedTerm = String(termCode || 'default').trim() || 'default';
-  const paths = requestedTerm === 'default'
-    ? ['./requirements/default.jsonl', './requirements/default.json']
-    : [`./requirements/${requestedTerm}.jsonl`, `./requirements/${requestedTerm}.json`];
+  const requestedTerm = String(termCode || '').trim();
+  if (!/^\d{6}$/.test(requestedTerm)) return null;
+  const paths = [`./requirements/${requestedTerm}.jsonl`, `./requirements/${requestedTerm}.json`];
   const tryLoad = (p) => {
     try {
       const xhr = new XMLHttpRequest();
@@ -158,12 +160,31 @@ function getRequirementRecord(majorCode, termCode, source) {
 }
 
 function initializeRequirements(mainTermCode, doubleMajorTermCode) {
-  const mainTerm = String(mainTermCode || 'default').trim() || 'default';
-  const dmTerm = String(doubleMajorTermCode || mainTerm).trim() || mainTerm;
-  const loadedMain = loadRequirements(mainTerm);
-  const loadedDM = dmTerm !== mainTerm ? loadRequirements(dmTerm) : loadedMain;
+  const rawMainTerm = String(mainTermCode || '').trim();
+  const mainTerm = /^\d{6}$/.test(rawMainTerm) ? rawMainTerm : '';
+  const rawDMTerm = String(doubleMajorTermCode || '').trim();
+  const dmTerm = !mainTerm
+    ? ''
+    : (!rawDMTerm ? mainTerm : (/^\d{6}$/.test(rawDMTerm) ? rawDMTerm : ''));
 
-  if (dmTerm !== mainTerm) {
+  if (!mainTerm) {
+    requirements = {};
+    flatRequirementsTerm = '';
+    requirementsStatus = {
+      main: { term: '', available: false },
+      doubleMajor: { term: '', available: false },
+    };
+    if (typeof window !== 'undefined') {
+      window.requirements = requirements;
+      window.requirementsStatus = requirementsStatus;
+    }
+    return requirements;
+  }
+
+  const loadedMain = loadRequirements(mainTerm);
+  const loadedDM = !dmTerm ? null : (dmTerm !== mainTerm ? loadRequirements(dmTerm) : loadedMain);
+
+  if (dmTerm && dmTerm !== mainTerm) {
     requirements = {
       [mainTerm]: loadedMain || {},
       [dmTerm]: loadedDM || {},
@@ -184,30 +205,6 @@ function initializeRequirements(mainTermCode, doubleMajorTermCode) {
   }
   return requirements;
 }
-
-let termName = '';
-let termNameDM = '';
-try {
-  const ps = (typeof window !== 'undefined') ? window.planStorage : null;
-  const get = (k) => {
-    try { return ps ? ps.getItem(k) : localStorage.getItem(k); } catch (_) {}
-    try { return localStorage.getItem(k); } catch (_) {}
-    return null;
-  };
-  termName = get('entryTerm') || '';
-  termNameDM = get('entryTermDM') || termName;
-} catch (_) {}
-
-let termCode = '';
-let termCodeDM = '';
-try {
-  if (typeof termNameToCode === 'function') {
-    termCode = termNameToCode(termName);
-    termCodeDM = termNameToCode(termNameDM);
-  }
-} catch (_) {}
-
-initializeRequirements(termCode || 'default', termCodeDM || termCode || 'default');
 
 // Expose the requirements object on the window in browser environments. This
 // allows other scripts to access `requirements` when modules are not

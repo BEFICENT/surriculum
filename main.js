@@ -470,10 +470,9 @@ function SUrriculum(major_chosen_by_user) {
     const entryTermMinor2Code = termNameToCode(entryTermMinor2Name);
     const entryTermMinor3Code = termNameToCode(entryTermMinor3Name);
 
-    // requirements.js runs before this deferred entry point. On a first visit
-    // the plan has no stored admit term yet, so its initial default load cannot
-    // be used for graduation. Reload the exact main/DM term files now that the
-    // validated selections are known.
+    // requirements.js starts unavailable. Load the exact main/DM term files
+    // only after the stored selections have been validated against the term
+    // manifest, so graduation never observes a synthetic or wrong-term record.
     try {
         if (typeof window.initializeRequirements === 'function') {
             window.initializeRequirements(entryTermCode, entryTermDMCode);

@@ -28,7 +28,6 @@ const APP_SHELL_PATHS = [
   'manifest.json',
   'data/manifest.json',
   'courses/terms.jsonl',
-  'requirements/default.jsonl',
   'requirements/minors.jsonl',
   'requirements/minors/terms.jsonl',
   'main.js',

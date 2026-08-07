@@ -24,12 +24,12 @@ a time and checked off only after the fix and its verification are complete.
 
 ## Verified baseline
 
-- [x] JavaScript/static unit gate passes: 192/192 tests.
-- [x] Playwright gate passes all 370 tests on the first attempt.
+- [x] JavaScript/static unit gate passes: 199/199 tests.
+- [x] Playwright gate passes all 371 tests on the first attempt.
 - [x] `python tests/scrape_groups_test.py` passes when run directly.
 - [x] `python tests/scrape_coursepages_fallback_test.py` passes: 3/3 tests.
 - [x] Python requirement validation and checked-in manifest integrity checks pass.
-- [x] All 228,387 JSONL rows parse successfully.
+- [x] All 228,375 JSONL rows parse successfully.
 - [x] Manifest hashes and the content-derived data version match the data tree.
 - [x] Extended 21-term catalog/requirements integrity audit passes.
 - [x] npm-managed dependencies report no known vulnerabilities.
@@ -143,9 +143,13 @@ a time and checked off only after the fix and its verification are complete.
   requirement such as EE 200 should ever be enforced beyond credit minima; the
   planner now warns about its EE 202 corequisite, but graduation remains purely
   credit/rule based as intended for this release.
-- [ ] Define the policy for `requirements/default.jsonl`. It matches no actual
-  admit term and mixes older thresholds with a partially newer VACD pool, so it
-  should either become an explicit frozen snapshot or track a named/latest term.
+- [x] Remove the synthetic `requirements/default.jsonl`. It matched no actual
+  admit term and mixed incompatible curriculum snapshots. Requirements now
+  start explicitly unavailable on the supported HTTP/GitHub Pages path, accept
+  only a validated six-digit admit term, and load that exact term before
+  graduation is evaluated. The service-worker shell no longer references the
+  deleted file, and the content-derived data manifest was rebuilt after its
+  removal.
 - [x] Ensure failed course attempts cannot satisfy degree rules that previously
   relied on `hasCourse`, internship, alternative-course, pool, or other
   degree-completion paths. Completed on
