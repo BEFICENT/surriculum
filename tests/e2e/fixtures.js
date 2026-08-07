@@ -65,18 +65,35 @@ const test = base.test.extend({
     // "entryTerms is not defined", the service worker failing to register. Those
     // are a broken RUN, not a broken app, and blanket-ignoring their messages
     // would blind this fixture to the real thing (a genuinely missing global
-    // looks identical). So instead: notice that a same-origin request failed,
-    // and decline to judge the errors at all — the retry gets a clean load.
-    let appResourceFailed = false;
+    // looks identical). Record the failed request so an otherwise-passing
+    // attempt is rejected and Playwright retries with a clean load.
+    const appResourceFailures = [];
     page.on('requestfailed', (req) => {
-      if (baseURL && req.url().startsWith(baseURL)) appResourceFailed = true;
+      if (baseURL && req.url().startsWith(baseURL)) {
+        appResourceFailures.push(req.url());
+        return;
+      }
+      // Some focused tests mount the same app on a second localhost origin
+      // (for example the GitHub Pages /surriculum/ service-worker check).
+      try {
+        const requestOrigin = new URL(req.url()).origin;
+        const pageOrigin = new URL(page.url()).origin;
+        if (requestOrigin === pageOrigin) appResourceFailures.push(req.url());
+      } catch (_) {}
     });
 
     await use(errors);
 
     // Only when the test would otherwise have passed: if it already failed, its
     // own failure is the more useful one and must not be masked.
-    if (errors.length && !appResourceFailed && testInfo.status === testInfo.expectedStatus) {
+    const otherwisePassed = testInfo.status === 'passed' && testInfo.expectedStatus === 'passed';
+    if (appResourceFailures.length && otherwisePassed) {
+      throw new Error(
+        `The app had ${appResourceFailures.length} failed same-origin request(s); retrying with a clean load:\n  `
+        + appResourceFailures.join('\n  '),
+      );
+    }
+    if (errors.length && otherwisePassed) {
       throw new Error(
         `The app emitted ${errors.length} uncaught error(s) during this test:\n  ` + errors.join('\n  '),
       );

@@ -8,9 +8,9 @@ a time and checked off only after the fix and its verification are complete.
 ## Decisions and constraints already recorded
 
 - The two academic-record PDFs belong to the maintainer or to a friend who
-  consented to their use. This substantially changes the privacy assessment.
-  They are nevertheless public downloads and remain recoverable from Git
-  history, so retaining real records should remain an explicit release decision.
+  consented to their use. The maintainer has explicitly decided that these
+  consented fixtures will remain public; this is settled, not an open release
+  decision.
 - PDF.js 2.10.377 is formally affected by CVE-2024-4367. The disclosed exploit
   path appears to require glyph rendering, while SUrriculum only extracts text,
   but that reduced reachability is an inference rather than a vendor guarantee.
@@ -24,8 +24,8 @@ a time and checked off only after the fix and its verification are complete.
 
 ## Verified baseline
 
-- [x] JavaScript/static unit gate passes: 178/178 tests.
-- [x] Playwright gate passes all 368 tests on the first attempt (5.3 minutes).
+- [x] JavaScript/static unit gate passes: 192/192 tests.
+- [x] Playwright gate passes all 370 tests on the first attempt.
 - [x] `python tests/scrape_groups_test.py` passes when run directly.
 - [x] `python tests/scrape_coursepages_fallback_test.py` passes: 3/3 tests.
 - [x] Python requirement validation and checked-in manifest integrity checks pass.
@@ -71,8 +71,9 @@ a time and checked off only after the fix and its verification are complete.
 
 ## Security and privacy decisions
 
-- [ ] Decide whether the consented real academic-record PDFs should remain in a
-  public repository or be replaced by synthetic fixtures before release.
+- [x] Keep the consented real academic-record PDFs public. This decision was
+  explicitly confirmed by the maintainer and must not be reopened as an
+  unresolved release item.
 - [x] Apply the official interim PDF.js mitigation. Completed on 2026-07-23:
   user-selected PDFs are opened with `isEvalSupported: false`, Mozilla's
   documented workaround for affected releases. The app remains on 2.10.377, so
@@ -338,18 +339,28 @@ a time and checked off only after the fix and its verification are complete.
 
 ## GitHub Pages and offline behavior
 
-- [ ] Fix service-worker URLs for the `/surriculum/` Pages subpath and add an
-  offline/subpath test during the future coverage pass. The app's ordinary
-  relative URLs are subpath-safe, but the service worker precaches leading-`/`
-  URLs at the account root. The atomic precache can therefore fail on Pages;
-  its swallowed install error can still allow an empty new cache to activate
-  and replace a previously useful one. Build URLs from
-  `self.registration.scope`, precache the complete shell atomically, and test a
-  mounted `/surriculum/` installation plus offline reload.
-- [ ] Restrict service-worker cache cleanup to SUrriculum-owned cache-name
-  prefixes instead of deleting other caches on the shared Pages origin. Runtime
-  caching should likewise be restricted to the worker's own scope and await
-  cache writes.
+- [x] Fix service-worker URLs for the `/surriculum/` Pages subpath. Completed on
+  2026-08-08: every app-shell URL is now derived from
+  `self.registration.scope`; installation precaches the complete local shell
+  plus small bootstrap manifests atomically, and a failed precache leaves the
+  previous worker active. A real Chromium test serves the repository at the
+  GitHub Pages-style `/surriculum/` mount and verifies installation, scoped
+  cache entries, a worker-controlled reload, and an offline reload of a saved
+  BIO plan with its real course, grade, catalog, and requirement record.
+- [x] Restrict cache ownership and preserve already-used plan data. Activation
+  now removes only obsolete `surriculum-*` caches, preserving unrelated
+  same-origin caches and all `localStorage` planner state. Network-first runtime
+  caching is limited to the worker scope and tracked through the fetch event.
+  Versioned shell caches are separated from a persistent runtime-data cache, and
+  the active main/double-major/minor plan's exact catalogs and requirements are
+  warmed after registration or selection changes. Unit tests cover install
+  failure, cache ownership, scope boundaries, offline fallbacks, and warmup URL
+  validation; the mounted browser test proves both an unrelated cache and a
+  localStorage sentinel survive activation and offline reload. A separate
+  browser upgrade case starts from the previously deployed worker behavior
+  (which ignores warmup messages) and proves the new controller warms the active
+  plan on the first upgraded visit. Completed warmups are marked per app/data
+  version and plan bundle to avoid downloading the same catalogs on every load.
 - [x] Choose an explicit 3.1 deployment path. Verified on 2026-07-28: GitHub
   Pages uses the legacy branch configuration and publishes the repository root
   from `main`. The final release will merge `surriculum-3.1` into `main`, which

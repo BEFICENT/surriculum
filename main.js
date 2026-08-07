@@ -10,6 +10,8 @@ let course_data;
 //can only be CS, BIO, MAT, EE, ME, IE, ECON, DSA, MAN, PSIR, PSY, VACD:
 let initial_major_chosen = 'CS'
 let saveInterval;
+let _serviceWorkerRegistration = null;
+let _serviceWorkerWarmTimer = null;
 
 const _planIdForSession = (() => {
     try {
@@ -37,12 +39,16 @@ function planSetItem(key, value) {
     if (typeof window !== 'undefined' && window.planStorage && typeof window.planStorage.setItem === 'function') {
         try {
             window.planStorage.setItem(key, value, _planIdForSession || undefined);
+            queueServiceWorkerPlanWarmup(key);
         } catch (err) {
             try { console.error('Failed to save plan data:', err); } catch (_) {}
         }
         return;
     }
-    try { localStorage.setItem(key, value); } catch (_) {}
+    try {
+        localStorage.setItem(key, value);
+        queueServiceWorkerPlanWarmup(key);
+    } catch (_) {}
 }
 
 function planRemoveItem(key) {
@@ -53,6 +59,99 @@ function planRemoveItem(key) {
         }
     } catch (_) {}
     try { localStorage.removeItem(key); } catch (_) {}
+}
+
+function termCodeForServiceWorker(value) {
+    const raw = String(value || '').trim();
+    if (/^\d{6}$/.test(raw)) return raw;
+    try {
+        if (typeof termNameToCode === 'function') {
+            const code = String(termNameToCode(raw) || '').trim();
+            if (/^\d{6}$/.test(code)) return code;
+        }
+    } catch (_) {}
+    return '';
+}
+
+function selectedPlanDataPaths() {
+    const paths = new Set();
+    const liveCurriculum = (typeof window !== 'undefined' && window.curriculum)
+        ? window.curriculum
+        : null;
+    const addDegree = (programValue, termValue) => {
+        const program = String(programValue || '').trim().toUpperCase();
+        const term = termCodeForServiceWorker(termValue);
+        if (!/^[A-Z]{2,5}$/.test(program) || !term) return;
+        paths.add(`requirements/${term}.jsonl`);
+        paths.add(`courses/${term}/${program}.jsonl`);
+    };
+    const addMinor = (programValue, termValue) => {
+        const program = String(programValue || '').trim().toUpperCase();
+        const term = termCodeForServiceWorker(termValue);
+        if (!/^[A-Z0-9-]{2,24}$/.test(program) || !term) return;
+        paths.add(`requirements/minors/${term}.jsonl`);
+        paths.add(`courses/minors/${term}/${program}.jsonl`);
+    };
+
+    addDegree(
+        (liveCurriculum && liveCurriculum.major) || planGetItem('major') || initial_major_chosen,
+        (liveCurriculum && liveCurriculum.entryTerm) || planGetItem('entryTerm'),
+    );
+    addDegree(
+        (liveCurriculum && liveCurriculum.doubleMajor) || planGetItem('doubleMajor'),
+        (liveCurriculum && liveCurriculum.entryTermDM)
+            || planGetItem('entryTermDM')
+            || planGetItem('entryTerm'),
+    );
+
+    const liveMinors = liveCurriculum && Array.isArray(liveCurriculum.minors)
+        ? liveCurriculum.minors
+        : null;
+    if (liveMinors) {
+        for (const minor of liveMinors) {
+            const liveTerm = liveCurriculum.minorTermsByCode
+                && liveCurriculum.minorTermsByCode[minor];
+            addMinor(minor, liveTerm || liveCurriculum.entryTermMinor);
+        }
+    } else {
+        addMinor(planGetItem('minor1'), planGetItem('entryTermMinor1') || planGetItem('entryTermMinor'));
+        addMinor(planGetItem('minor2'), planGetItem('entryTermMinor2') || planGetItem('entryTermMinor'));
+        addMinor(planGetItem('minor3'), planGetItem('entryTermMinor3') || planGetItem('entryTermMinor'));
+    }
+    return Array.from(paths);
+}
+
+function sendServiceWorkerPlanWarmup() {
+    const urls = selectedPlanDataPaths();
+    if (!urls.length) return;
+
+    const workers = new Set();
+    if (_serviceWorkerRegistration) {
+        workers.add(_serviceWorkerRegistration.installing);
+        workers.add(_serviceWorkerRegistration.waiting);
+        workers.add(_serviceWorkerRegistration.active);
+    }
+    try { workers.add(navigator.serviceWorker.controller); } catch (_) {}
+    workers.delete(null);
+    workers.delete(undefined);
+    for (const worker of workers) {
+        try { worker.postMessage({ type: 'CACHE_PLAN_URLS', urls }); } catch (_) {}
+    }
+}
+
+function queueServiceWorkerPlanWarmup(changedKey) {
+    const selectionKeys = [
+        'major', 'entryTerm', 'doubleMajor', 'entryTermDM',
+        'minor1', 'minor2', 'minor3', 'entryTermMinor',
+        'entryTermMinor1', 'entryTermMinor2', 'entryTermMinor3',
+    ];
+    if (changedKey && !selectionKeys.includes(String(changedKey))) return;
+    if (!_serviceWorkerRegistration) return;
+    if (_serviceWorkerWarmTimer) clearTimeout(_serviceWorkerWarmTimer);
+    _serviceWorkerWarmTimer = setTimeout(() => {
+        _serviceWorkerWarmTimer = null;
+        sendServiceWorkerPlanWarmup();
+    }, 100);
 }
 
 function escapeHtml(value) {
@@ -104,6 +203,12 @@ async function uiConfirm(title, bodyHtml, options) {
 }
 
 if ('serviceWorker' in navigator) {
+    // During an upgrade, ready may initially refer to the old active worker.
+    // Re-send after the newly installed worker takes control so the first 3.1
+    // visit is warm for offline use without requiring a second online reload.
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        sendServiceWorkerPlanWarmup();
+    });
     window.addEventListener('load', async () => {
         // Derive the service-worker cache key from the app version (version.js)
         // and the data version (data/manifest.json) so that a release OR a
@@ -119,10 +224,13 @@ if ('serviceWorker' in navigator) {
         const v = [appVersion, dataVersion].filter(Boolean).join('-');
         const url = v ? ('sw.js?v=' + encodeURIComponent(v)) : 'sw.js';
         try {
-            navigator.serviceWorker.register(url);
-        } catch (_) {
-            try { navigator.serviceWorker.register('sw.js'); } catch (_) {}
-        }
+            // Await the registration Promise so asynchronous failures are
+            // contained. The existing active worker remains available; an
+            // unversioned fallback would only create a second cache identity.
+            await navigator.serviceWorker.register(url);
+            _serviceWorkerRegistration = await navigator.serviceWorker.ready;
+            sendServiceWorkerPlanWarmup();
+        } catch (_) {}
     });
 }
 

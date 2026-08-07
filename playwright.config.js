@@ -8,6 +8,8 @@ const { defineConfig, devices } = require('@playwright/test');
 
 const PORT = 8000;
 const BASE_URL = `http://localhost:${PORT}`;
+const PAGES_PORT = 8001;
+const PAGES_BASE_URL = `http://127.0.0.1:${PAGES_PORT}/surriculum/`;
 
 module.exports = defineConfig({
   testDir: './tests/e2e',
@@ -42,10 +44,21 @@ module.exports = defineConfig({
       use: { ...devices['Pixel 7'] },
     },
   ],
-  webServer: {
-    command: 'python -m http.server ' + PORT,
-    url: BASE_URL,
-    reuseExistingServer: true,
-    timeout: 30000,
-  },
+  webServer: [
+    {
+      command: 'python -m http.server ' + PORT,
+      url: BASE_URL,
+      reuseExistingServer: true,
+      timeout: 30000,
+    },
+    {
+      // Mount the repository at the same /surriculum/ subpath used by GitHub
+      // Pages. The helper also exposes a test-only legacy worker for upgrades.
+      command: 'python tests/pages_server.py ' + PAGES_PORT,
+      cwd: __dirname,
+      url: PAGES_BASE_URL,
+      reuseExistingServer: true,
+      timeout: 30000,
+    },
+  ],
 });
