@@ -17,6 +17,40 @@ const TERM_NAME = 'Fall 2025-2026';
 const ME_REQUIRED = 45;
 
 test.describe('ME alternative-pair rule (2025+)', () => {
+  test('the structured 21-SU Core minimum is enforced at its boundary', async ({ page }) => {
+    const courses = plans[TERM].ME;
+    await seedPlan(page, {
+      major: 'ME',
+      entryTerm: TERM_NAME,
+      curriculum: [courses],
+      grades: [courses.map(() => 'A')],
+      dates: [TERM_NAME],
+    });
+
+    const result = await page.evaluate(() => {
+      const req = window.getRequirementRecord('ME', '202501');
+      const sem = window.curriculum.semesters[0];
+      sem.totalUniversity = req.university;
+      sem.totalRequired = req.required;
+      sem.totalArea = req.area;
+      sem.totalFree = req.free;
+      sem.totalScience = req.science;
+      sem.totalEngineering = req.engineering;
+      sem.totalECTS = req.ects;
+      sem.totalCredit = req.total;
+
+      sem.totalCore = req.core - 1;
+      const below = window.curriculum.canGraduate();
+      sem.totalCore = req.core;
+      const atMinimum = window.curriculum.canGraduate();
+      return { core: req.core, below, atMinimum };
+    });
+
+    expect(result.core).toBe(21);
+    expect(result.below).toBe(3);
+    expect(result.atMinimum).not.toBe(3);
+  });
+
   test('taking both of each pair keeps required met and sends the extra to core', async ({ page }) => {
     // The generated ME plan contains every required course, so it contains BOTH
     // members of both alternative pairs.

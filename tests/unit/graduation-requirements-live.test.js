@@ -13,8 +13,8 @@
 //
 // Category minima are allowed to total less than the independent overall-credit
 // threshold. This matters for the captured EE/ME curricula whose MATH212 route
-// is two credits lighter than MATH201+MATH202. ME 202501+ remains a separate
-// source ambiguity because its numeric Core summary and category prose differ.
+// is two credits lighter than MATH201+MATH202. For ME 202501+, the structured
+// numeric summary is authoritative where its Core value conflicts with prose.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -115,6 +115,13 @@ const LIVE_SUMMARIES = [
       202401: [41, 32, 26, 9, 15, 125, 240],
       202402: [41, 32, 26, 9, 15, 125, 240],
       202403: [41, 32, 26, 9, 15, 125, 240],
+    },
+  },
+  {
+    label: 'ME 2025 numeric Core summary is authoritative', major: 'ME', program: 'BSME', snapshots: {
+      202501: [41, 45, 21, 9, 15, 131, 240],
+      202502: [41, 45, 21, 9, 15, 131, 240],
+      202503: [41, 45, 21, 9, 15, 131, 240],
     },
   },
   {

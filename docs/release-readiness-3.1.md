@@ -131,10 +131,11 @@ a time and checked off only after the fix and its verification are complete.
   separate 125-SU check. The current live `202601`-`202603` pages validate; they
   are not local yet because the generated term window does not include them
   before Fall 2026-2027 becomes current.
-- [ ] Resolve the separate ME `202501`-onward source ambiguity. Its numeric
-  summary says Core 21 while category prose says minimum 26; keep the numeric
-  summary provisionally, document the authority decision, and re-confirm it
-  before release.
+- [x] Resolve the separate ME `202501`-onward source ambiguity. The structured
+  numeric summary is authoritative over the inconsistent prose, so Core remains
+  21 for `202501`-`202503`. Those values sum exactly to the independent 131-SU
+  Total, have remained stable across repeated live scraper refreshes, and are
+  now pinned for all three terms plus the 20/21-SU graduation boundary.
 - [ ] Decide the rare pre-2025 EE/ME mathematics edge policy when a student has
   all three of MATH 201, MATH 202, and MATH 212. Ordinary valid routes are now
   correct; no extra course is excluded in the all-three case until repeat/order
