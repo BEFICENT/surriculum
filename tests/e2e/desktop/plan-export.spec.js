@@ -5,6 +5,66 @@ const { test, expect } = require('../fixtures');
 const { seedPlan } = require('../helpers/plan');
 
 test.describe('plan export / import round-trip (desktop)', () => {
+  test('round-trips reviewed language metadata and an unallocated custom category', async ({ page }) => {
+    const languageCourse = {
+      Major: 'LANG', Code: '240', Course_Name: 'Swedish Conversation',
+      ECTS: '5', Engineering: 0, Basic_Science: 0, SU_credit: '2.5',
+      Faculty: '', Faculty_Course: 'No', EL_Type: 'unknown', Language_Level: 'other',
+    };
+    await seedPlan(page, {
+      major: 'CS', entryTerm: 'Fall 2024-2025',
+      customCourses: { CS: [languageCourse] },
+      curriculum: [], grades: [], dates: [],
+    });
+
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.evaluate(() => window.planStorage.exportPlan()),
+    ]);
+    const exported = JSON.parse(fs.readFileSync(await download.path(), 'utf8'));
+    expect(exported.plan.state.customCourses.CS).toEqual([
+      expect.objectContaining({
+        Major: 'LANG', Code: '240', EL_Type: 'unknown', Language_Level: 'other',
+      }),
+    ]);
+
+    const stored = await page.evaluate((obj) => {
+      const id = window.planStorage.importPlanObject(obj);
+      return JSON.parse(window.planStorage.getItem('customCourses_CS', id));
+    }, exported);
+    expect(stored).toEqual(exported.plan.state.customCourses.CS);
+  });
+
+  test('rejects malformed imported language classifications atomically', async ({ page }) => {
+    await page.goto('/');
+    const result = await page.evaluate(() => {
+      const base = {
+        Major: 'LANG', Code: '100', Course_Name: 'Swedish', ECTS: '6',
+        Engineering: 0, Basic_Science: 0, SU_credit: '3', Faculty: '',
+        Faculty_Course: 'No', EL_Type: 'free',
+      };
+      const levels = ['advanced', 1, { value: 'basic' }];
+      const before = window.planStorage.getPlans().length;
+      const messages = levels.map((Language_Level) => {
+        try {
+          window.planStorage.importPlanObject({
+            type: 'surriculum_plan', version: 3,
+            plan: {
+              name: 'Bad language level',
+              state: { major: 'MAN', customCourses: { MAN: [{ ...base, Language_Level }] } },
+            },
+          });
+          return null;
+        } catch (error) {
+          return String(error && error.message ? error.message : error);
+        }
+      });
+      return { before, after: window.planStorage.getPlans().length, messages };
+    });
+    expect(result.after).toBe(result.before);
+    expect(result.messages.every((message) => /Language_Level/.test(message))).toBe(true);
+  });
+
   test('exporting then re-importing a plan preserves courses, credits, GPA and weekend blocks', async ({ page }) => {
     const PLAN = {
       major: 'CS',

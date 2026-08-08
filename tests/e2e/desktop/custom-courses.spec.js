@@ -166,6 +166,7 @@ test.describe('custom course form', () => {
     const modal = await openForm(page);
 
     await expect(modal.locator('.cc-faculty'), 'default is "none"').toHaveValue('');
+    await expect(modal.locator('.cc-language-level-row'), 'non-language courses keep the extra field out of the way').toBeHidden();
 
     await fill(modal, { code: 'XYZ301', name: 'Exchange Course', su: '3' });
     await modal.locator('.cc-buttons button', { hasText: /save|add|create/i }).first().click();
@@ -175,6 +176,27 @@ test.describe('custom course form', () => {
     expect(rec, 'the course should be saved').toBeTruthy();
     expect(rec.Faculty, 'a transfer/exchange course claims no faculty').toBe('');
     expect(rec.Faculty_Course, 'a custom course is never in the faculty-course pool').toBe('No');
+    expect(Object.hasOwn(rec, 'Language_Level'), 'non-language records remain unchanged').toBe(false);
+  });
+
+  test('language level is reviewable and only explicit Basic/Beginning wording is suggested', async ({ page }) => {
+    await seedPlan(page, { major: 'CS', entryTerm: TERM_NAME, curriculum: [], grades: [], dates: [] });
+    const modal = await openForm(page);
+
+    await fill(modal, { code: 'LANG901', name: 'Basic Icelandic', su: '3' });
+    const level = modal.getByRole('combobox', { name: 'Language level:' });
+    await expect(level).toBeVisible();
+    await expect(level).toHaveAttribute('aria-describedby', 'cc-language-level-help');
+    await expect(modal.locator('#cc-language-level-help')).toContainText('two-course free-elective limit');
+    await expect(level, 'the literal title safely seeds the review').toHaveValue('basic');
+
+    // The suggestion stays user-reviewable; choosing the other classification
+    // must win and persist rather than being recomputed from the title.
+    await level.selectOption('other');
+    await modal.getByRole('button', { name: 'Save', exact: true }).click();
+    const rec = (await savedCourses(page))
+      .find((course) => `${course.Major}${course.Code}` === 'LANG901');
+    expect(rec).toMatchObject({ Language_Level: 'other' });
   });
 
   test('a chosen faculty is persisted and counts toward faculty rules', async ({ page }) => {

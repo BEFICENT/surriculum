@@ -188,6 +188,66 @@ function isProgramEffectiveType(value) {
     return PROGRAM_EFFECTIVE_TYPES.has(String(value || '').trim().toLowerCase());
 }
 
+function programRecordCountsTowardCombinedDegree(record, isMainRecord) {
+    if (!record) return false;
+    // Main allocation has historically admitted a small fallback class of
+    // DM-catalog courses to the generic degree total without assigning a main
+    // category. Preserve that valid fallback, while DM records must have an
+    // actual program allocation to join the union.
+    return isProgramEffectiveType(record.effective)
+        || (isMainRecord && record.countsTotal === true);
+}
+
+function programUnionGenericRecords(mainRecords, dmRecords) {
+    const main = mainRecords instanceof Map ? mainRecords : new Map();
+    const dm = dmRecords instanceof Map ? dmRecords : new Map();
+    const courses = new Set([...main.keys(), ...dm.keys()]);
+    const union = new Map();
+    courses.forEach((course) => {
+        const mainRecord = main.get(course);
+        const dmRecord = dm.get(course);
+        const mainCounts = programRecordCountsTowardCombinedDegree(mainRecord, true);
+        const dmCounts = programRecordCountsTowardCombinedDegree(dmRecord, false);
+        if (!mainCounts && !dmCounts) return;
+        // Course credit/ECTS are inherent. Prefer the main record when both
+        // programs accept it, and include exactly one copy in the union.
+        const source = mainCounts ? mainRecord : dmRecord;
+        union.set(course, { ...source, countsTotal: true });
+    });
+    return union;
+}
+
+function totalsForGenericRecords(records) {
+    const totals = { total: 0, science: 0, engineering: 0, ects: 0 };
+    const rows = records instanceof Map ? records : new Map();
+    rows.forEach((record) => {
+        if (!record || record.countsTotal !== true) return;
+        totals.total += Number(record.credit || 0) || 0;
+        totals.science += Number(record.science || 0) || 0;
+        totals.engineering += Number(record.engineering || 0) || 0;
+        totals.ects += Number(record.ects || 0) || 0;
+    });
+    return totals;
+}
+
+function combinedDegreeMetricsFromAllocations(semesters) {
+    const totals = { total: 0, science: 0, engineering: 0, ects: 0 };
+    const rows = Array.isArray(semesters) ? semesters : [];
+    for (let i = 0; i < rows.length; i++) {
+        const courses = rows[i] && Array.isArray(rows[i].courses) ? rows[i].courses : [];
+        for (let j = 0; j < courses.length; j++) {
+            const course = courses[j];
+            if (!course || (!isProgramEffectiveType(course.effective_type)
+                && !isProgramEffectiveType(course.effective_type_dm))) continue;
+            totals.total += creditOfCourse(course);
+            totals.science += Number(course.Basic_Science || 0) || 0;
+            totals.engineering += Number(course.Engineering || 0) || 0;
+            totals.ects += Number(course.ECTS || 0) || 0;
+        }
+    }
+    return totals;
+}
+
 function courseCanHaveProgramGpaMembership(course) {
     if (!course) return false;
     const outcome = evaluateCourseGrade(gradeForCourse(course), course.gradingBasis);
@@ -333,12 +393,67 @@ const ME_2025_ALT_PAIRS = [['ME403', 'ME425'], ['CS404', 'CS412']];
 const PSY_PHILOSOPHY_PAIR = [['PHIL300', 'PHIL301']];
 
 // Beginning/Basic level language courses — SUIS caps how many of these may
-// count toward free electives. These are the School of Languages courses
-// (catalog `Faculty: 'SL'`) whose names begin with "Basic". The Intermediate
-// ones (FRE130/140, GER130/140, TUR201) and TLL/ENG/AL are NOT capped.
+// count toward free electives. Keep the complete known Sabanci catalog set
+// explicit: several historical languages disappeared from newer program
+// catalogs, which made a title-only/current-catalog check silently miss them.
+// Intermediate/higher courses (for example FRE130/140 and TUR201) are NOT
+// capped. Exchange placeholder courses use the reviewed `Language_Level`
+// metadata instead; LANG by itself never implies a level.
 const BASIC_LANGUAGE_COURSES = new Set([
-    'FRE110', 'FRE120', 'GER110', 'GER120', 'SPA110', 'SPA120', 'TUR101', 'TUR102',
+    'ARA110', 'ARA120', 'CHI110', 'CHI120', 'FRE110', 'FRE120',
+    'GER110', 'GER120', 'ITA110', 'ITA120', 'JAP110', 'JAP120',
+    'LAT110', 'LAT120', 'PERS110', 'PERS120', 'RUS110', 'RUS120',
+    'SPA110', 'SPA120', 'TUR101', 'TUR102',
 ]);
+
+const BASIC_LANGUAGE_EXCLUSION_REASON = 'Not counted — basic-language limit';
+const LANGUAGE_LEVEL_REVIEW_REASON = 'Not counted — review language level';
+
+function normalizedLanguageLevel(value) {
+    const level = String(value || '').trim().toLowerCase();
+    return level === 'basic' || level === 'other' ? level : '';
+}
+
+// `record` is the selected program's catalog/custom-course record. A trusted
+// built-in code always wins; otherwise only an explicit reviewed level may
+// classify a foreign LANG course as basic. Missing metadata remains unknown.
+function isBasicLanguageCourse(course, record, languageLevelField) {
+    const code = normalizeCourseCode(course && course.code);
+    if (BASIC_LANGUAGE_COURSES.has(code)) return true;
+    if (record) return normalizedLanguageLevel(record.Language_Level) === 'basic';
+    const field = languageLevelField || 'Language_Level';
+    return normalizedLanguageLevel(course && course[field]) === 'basic';
+}
+
+function isExactExchangeLanguageCourse(course, record) {
+    const recordCode = record
+        ? String(record.Major || '') + String(record.Code || '')
+        : '';
+    const code = normalizeCourseCode(recordCode || (course && course.code));
+    const match = code.match(/^([A-Z]+)(\d[A-Z0-9]*)$/);
+    return !!match && match[1] === 'LANG';
+}
+
+// Transcript import persists its provisional custom record before opening the
+// review dialog so the transcript course itself is never lost. If that dialog
+// is interrupted by a reload/page close, fail closed: an exact LANG course is
+// not degree-eligible until the user explicitly reviews its level.
+function languageCourseNeedsLevelReview(course, record) {
+    return !!record
+        && isExactExchangeLanguageCourse(course, record)
+        && normalizedLanguageLevel(record.Language_Level) === '';
+}
+
+function languageCapForRequirements(req) {
+    const groups = req && Array.isArray(req.groups) ? req.groups : [];
+    for (let i = 0; i < groups.length; i++) {
+        if (groups[i] && groups[i].rule === 'languageCap') {
+            const max = Number(groups[i].max);
+            return Number.isFinite(max) && max >= 0 ? max : null;
+        }
+    }
+    return null;
+}
 
 // University Courses HUM pools — identical in every major's catalog.
 const HUM_200_LEVEL = ['HUM201', 'HUM202', 'HUM207'];
@@ -432,8 +547,7 @@ function selectCorePools(sortedSems, creditGroups, isExcluded, isEligible) {
 // One helper for all ten call sites (five majors x main/double-major pass):
 // hand-copying this rule per major is how the last several bugs survived.
 // `effField` selects the pass: 'effective_type' or 'effective_type_dm'.
-const BASIC_LANGUAGE_LIMIT = 2;
-function countBasicLanguageInFree(semesters, effField, isEligible) {
+function countBasicLanguageInFree(semesters, effField, isEligible, languageLevelField) {
     const eligible = isEligible || isDegreeEligibleCourse;
     let count = 0;
     for (let i = 0; i < semesters.length; i++) {
@@ -442,7 +556,7 @@ function countBasicLanguageInFree(semesters, effField, isEligible) {
             const course = courses[j];
             if (!course || !eligible(course, semesters[i])) continue;
             if (String(course[effField] || '').toLowerCase() !== 'free') continue;
-            if (BASIC_LANGUAGE_COURSES.has(course.code)) count++;
+            if (isBasicLanguageCourse(course, null, languageLevelField)) count++;
         }
     }
     return count;
@@ -696,6 +810,8 @@ function resolveAlternativeRules(major, entryTerm, sortedSems, allSems, getInfoF
 const MAIN_FIELDS = {
     category: 'category',
     effective: 'effective_type',
+    languageLevel: 'Language_Level',
+    exclusionReason: 'degreeExclusionReason',
     total: {
         core: 'totalCore', area: 'totalArea', free: 'totalFree',
         required: 'totalRequired', university: 'totalUniversity',
@@ -704,6 +820,8 @@ const MAIN_FIELDS = {
 const DM_FIELDS = {
     category: 'categoryDM',
     effective: 'effective_type_dm',
+    languageLevel: 'Language_LevelDM',
+    exclusionReason: 'degreeExclusionReasonDM',
     total: {
         core: 'totalCoreDM', area: 'totalAreaDM', free: 'totalFreeDM',
         required: 'totalRequiredDM', university: 'totalUniversityDM',
@@ -715,6 +833,8 @@ function progressAllocationFields(view, layer) {
     return {
         category: key + '_category',
         effective: key + '_effective',
+        languageLevel: key + '_language_level',
+        exclusionReason: key + '_exclusion_reason',
         total: {
             core: key + '_core', area: key + '_area', free: key + '_free',
             required: key + '_required', university: key + '_university',
@@ -907,7 +1027,9 @@ const RULE_EVALUATORS = {
     // Faculty courses span at least `min` distinct areas (flag 18).
     facultyAreas: (ctx, r) => tallyFacultyAreas(ctx.semesters, ctx.fields.effective, ctx.isEligible).size >= r.min,
     // At most `max` basic/beginning language courses among the free electives.
-    languageCap: (ctx, r) => countBasicLanguageInFree(ctx.semesters, ctx.fields.effective, ctx.isEligible) <= r.max,
+    languageCap: (ctx, r) => countBasicLanguageInFree(
+        ctx.semesters, ctx.fields.effective, ctx.isEligible, ctx.fields.languageLevel,
+    ) <= r.max,
     // Credits from courses with a code prefix in a STATIC catalog category
     // (EE 400-level core, flag 23).
     levelCreditSum: (ctx, r) => {
@@ -1258,8 +1380,18 @@ function groupProgressFor(ctx, groups, facultyReq) {
                 break;
             }
             case 'languageCap': {
-                const current = countBasicLanguageInFree(ctx.semesters, fields.effective, ctx.isEligible);
-                out.push({ ...base, current, target: g.max, unit: 'course', isCap: true, ok: current <= g.max });
+                const current = countBasicLanguageInFree(
+                    ctx.semesters, fields.effective, ctx.isEligible, fields.languageLevel,
+                );
+                let excluded = 0;
+                forEachCourse(ctx.semesters, (course) => {
+                    if (course[fields.exclusionReason] === BASIC_LANGUAGE_EXCLUSION_REASON) excluded++;
+                }, ctx.isEligible);
+                const note = excluded > 0
+                    ? `${excluded} additional basic language course${excluded === 1 ? '' : 's'} excluded from degree credit`
+                    : undefined;
+                out.push({ ...base, current, target: g.max, unit: 'course', isCap: true,
+                    ok: current <= g.max, ...(note ? { note } : {}) });
                 break;
             }
             default:
@@ -1297,6 +1429,11 @@ function renderAllocationLabels(curriculum) {
     if (typeof document === 'undefined') return;
     const isDouble = !!curriculum.doubleMajor;
     const label = (v) => (String(v || '').toLowerCase() === 'none' ? 'N/A' : String(v || '').toUpperCase());
+    const displayLabel = (value, reason) => {
+        if (reason === BASIC_LANGUAGE_EXCLUSION_REASON) return 'N/A (BASIC-LANGUAGE LIMIT)';
+        if (reason === LANGUAGE_LEVEL_REVIEW_REASON) return 'N/A (REVIEW LANGUAGE LEVEL)';
+        return label(value);
+    };
     const movedDown = (base, eff) => {
         const b = String(base || '').toLowerCase();
         const e = String(eff || '').toLowerCase();
@@ -1315,9 +1452,12 @@ function renderAllocationLabels(curriculum) {
                 typeSpan = elem ? elem.querySelector('.course_type') : null;
             } catch (_) {}
             if (!typeSpan) continue;
+            typeSpan.title = '';
             if (isDouble && course.effective_type_dm) {
-                const mt = label(course.effective_type);
-                const dt = label(course.effective_type_dm);
+                const mainReason = course.degreeExclusionReason || '';
+                const dmReason = course.degreeExclusionReasonDM || '';
+                const mt = displayLabel(course.effective_type, mainReason);
+                const dt = displayLabel(course.effective_type_dm, dmReason);
                 const mainCls = movedDown(course.category, course.effective_type) ? 'is-overflow-type' : '';
                 const dmCls = movedDown(course.categoryDM, course.effective_type_dm) ? 'is-overflow-type' : '';
                 try {
@@ -1325,12 +1465,14 @@ function renderAllocationLabels(curriculum) {
                     const mainPart = document.createElement('span');
                     mainPart.className = 'course_type_part ct-main' + (mainCls ? ' ' + mainCls : '');
                     mainPart.textContent = mt;
+                    if (mainReason) mainPart.title = mainReason;
                     const separator = document.createElement('span');
                     separator.className = 'ct-sep';
                     separator.textContent = ' / ';
                     const dmPart = document.createElement('span');
                     dmPart.className = 'course_type_part ct-dm' + (dmCls ? ' ' + dmCls : '');
                     dmPart.textContent = dt;
+                    if (dmReason) dmPart.title = dmReason;
                     typeSpan.appendChild(mainPart);
                     typeSpan.appendChild(separator);
                     typeSpan.appendChild(dmPart);
@@ -1343,7 +1485,9 @@ function renderAllocationLabels(curriculum) {
                 // Single label. In double-major mode overflow is coloured per
                 // part, so the whole-span class is cleared (matches the old DM
                 // render); in single-major mode it toggles with the main overflow.
-                typeSpan.textContent = label(course.effective_type);
+                const reason = course.degreeExclusionReason || '';
+                typeSpan.textContent = displayLabel(course.effective_type, reason);
+                typeSpan.title = reason;
                 try {
                     if (isDouble) typeSpan.classList.remove('is-overflow-type');
                     else typeSpan.classList.toggle('is-overflow-type', movedDown(course.category, course.effective_type));
@@ -1670,6 +1814,8 @@ function s_curriculum()
                 semesterByCourse.set(course, sem);
                 course[fields.effective] = 'none';
                 delete course[fields.category];
+                course[fields.languageLevel] = '';
+                course[fields.exclusionReason] = '';
 
                 // Named-pool selection reads credit metadata before the main
                 // cascade. Seed it from this program's catalog first.
@@ -1683,6 +1829,7 @@ function s_curriculum()
                     course.ECTS = parseFloat(info.ECTS || '0') || 0;
                     course.Faculty_Course = info.Faculty_Course || course.Faculty_Course || 'No';
                     course.Faculty = info.Faculty || course.Faculty || '';
+                    course[fields.languageLevel] = normalizedLanguageLevel(info.Language_Level);
                 }
             }
         }
@@ -1692,6 +1839,8 @@ function s_curriculum()
         const hasEligible = (code) => hasDegreeEligibleCourse(this.semesters, code, eligible);
         const reqs = { required: req.required || 0, core: req.core || 0, area: req.area || 0 };
         const counters = { required: 0, core: 0, area: 0 };
+        const basicLanguageLimit = languageCapForRequirements(req);
+        let basicLanguagesCounted = 0;
         const forceCSCore = major === 'IE' && hasEligible('CS201') && hasEligible('DSA201');
         const alternatives = resolveAlternativeRules(
             major, entryTerm, sorted, this.semesters, lookup, catalog,
@@ -1745,6 +1894,11 @@ function s_curriculum()
                 if (alternatives.typeOverride.has(course)) {
                     staticType = alternatives.typeOverride.get(course);
                 }
+                course[fields.languageLevel] = normalizedLanguageLevel(info.Language_Level);
+                if (languageCourseNeedsLevelReview(course, info)) {
+                    course[fields.exclusionReason] = LANGUAGE_LEVEL_REVIEW_REASON;
+                    continue;
+                }
                 if (staticType === 'unknown') continue;
 
                 const credit = (typeof parseCreditValue === 'function')
@@ -1766,6 +1920,18 @@ function s_curriculum()
                 const pinCore = alternatives.forceCore.has(course)
                     || (forceCSCore && course.code === 'CS201');
                 const effective = allocateCascade(staticType, credit, counters, reqs, pinCore);
+                if (effective === 'free' && basicLanguageLimit !== null
+                    && isBasicLanguageCourse(course, info)) {
+                    if (basicLanguagesCounted >= basicLanguageLimit) {
+                        course[fields.effective] = 'none';
+                        course[fields.exclusionReason] = BASIC_LANGUAGE_EXCLUSION_REASON;
+                        records.set(course, { effective: 'none', category: staticType,
+                            credit, science, engineering, ects, countsTotal: false,
+                            reason: BASIC_LANGUAGE_EXCLUSION_REASON });
+                        continue;
+                    }
+                    basicLanguagesCounted++;
+                }
                 course[fields.effective] = effective || 'none';
                 const totalField = fields.total[effective];
                 if (totalField) sem[totalField] += credit;
@@ -1880,17 +2046,18 @@ function s_curriculum()
     const combinedProgressSnapshot = (view, programSnapshot, mainSnapshot) => {
         if (view !== 'dm') return { ...programSnapshot, genericRecords: programSnapshot.records,
             mainProgramRecords: programSnapshot.records };
-        const mainTotals = mainSnapshot && mainSnapshot.totals ? mainSnapshot.totals : {};
+        const genericRecords = programUnionGenericRecords(
+            mainSnapshot && mainSnapshot.records,
+            programSnapshot && programSnapshot.records,
+        );
+        const unionTotals = totalsForGenericRecords(genericRecords);
         return {
             ...programSnapshot,
             totals: {
                 ...programSnapshot.totals,
-                total: mainTotals.total || 0,
-                science: mainTotals.science || 0,
-                engineering: mainTotals.engineering || 0,
-                ects: mainTotals.ects || 0,
+                ...unionTotals,
             },
-            genericRecords: mainSnapshot && mainSnapshot.records ? mainSnapshot.records : new Map(),
+            genericRecords,
             mainProgramRecords: mainSnapshot && mainSnapshot.records ? mainSnapshot.records : new Map(),
         };
     };
@@ -2328,6 +2495,8 @@ function s_curriculum()
         // the next. `counters` is mutated in place as courses are placed.
         const counters = { required: 0, core: 0, area: 0 };
         const reqs = { required: reqRequired, core: reqCore, area: reqArea };
+        const basicLanguageLimit = languageCapForRequirements(req);
+        let basicLanguagesCounted = 0;
         // Special-case: for IE majors, if both DSA201 and CS201 are taken,
         // CS201 must always count towards core regardless of when it is
         // taken. Record the condition once so it can be applied inside the
@@ -2353,6 +2522,8 @@ function s_curriculum()
             // Iterate courses in the order they appear within the semester.
             for (let j = 0; j < sem.courses.length; j++) {
                 const course = sem.courses[j];
+                delete course.degreeExclusionReason;
+                course.Language_Level = '';
                 // Failed/unsuccessful attempts remain in the plan but do not
                 // take credits, categories, pair positions or requirement slots.
                 if (!this.isDegreeEligibleCourse(course)) {
@@ -2477,9 +2648,16 @@ function s_curriculum()
                 }
                 // Use information from the main major catalog
                 staticType = (infoMain['EL_Type'] || '').toLowerCase();
+                course.Language_Level = normalizedLanguageLevel(infoMain.Language_Level);
                 // ME 2025+ alternative pairs: the extra course of a pair counts
                 // toward Core Elective rather than occupying a required slot.
                 if (typeOverride.has(course)) staticType = typeOverride.get(course);
+                if (languageCourseNeedsLevelReview(course, infoMain)) {
+                    course.effective_type = 'none';
+                    course.degreeExclusionReason = LANGUAGE_LEVEL_REVIEW_REASON;
+                    delete course.category;
+                    continue;
+                }
                 // SUIS: a course the catalog types `unknown` is "not included in
                 // any course pool" for this program, so it counts toward NOTHING
                 // — not a pool and not the independent degree total. A gap
@@ -2515,12 +2693,6 @@ function s_curriculum()
                 // course pool. Rules worded "offered by X" need this one.
                 course.Faculty = infoMain['Faculty'] || '';
 
-                // Update generic totals (credits, science, engineering, ECTS)
-                sem.totalCredit += credit;
-                sem.totalScience += scienceVal;
-                sem.totalEngineering += engVal;
-                sem.totalECTS += ectsVal;
-
                 // Assign category to the course for major-specific checks.  Use
                 // capitalized form (e.g., "Core", "Area", etc.).  This
                 // property is consumed by checks such as EE 400-level core
@@ -2533,8 +2705,26 @@ function s_curriculum()
                 const pinCore = forceCore.has(course)
                     || (forceCSCore && course.code === 'CS201');
                 const effectiveType = allocateCascade(staticType, credit, counters, reqs, pinCore);
+                if (effectiveType === 'free' && basicLanguageLimit !== null
+                    && isBasicLanguageCourse(course, infoMain)) {
+                    if (basicLanguagesCounted >= basicLanguageLimit) {
+                        course.effective_type = 'none';
+                        course.degreeExclusionReason = BASIC_LANGUAGE_EXCLUSION_REASON;
+                        continue;
+                    }
+                    basicLanguagesCounted++;
+                }
                 // Persist the effective type on the course object
                 course.effective_type = effectiveType;
+
+                // Generic degree totals exclude courses beyond the published
+                // basic-language limit just as they exclude every other
+                // effective-N/A course. Their grade and credit metadata remain
+                // on the course, so CGPA calculation is unaffected.
+                sem.totalCredit += credit;
+                sem.totalScience += scienceVal;
+                sem.totalEngineering += engVal;
+                sem.totalECTS += ectsVal;
 
                 // Update semester category totals based on the effective type.
                 if (effectiveType === 'core') {
@@ -2656,6 +2846,8 @@ function s_curriculum()
         // (allocateCascade), the double-major counterpart of the main pass.
         const dmCounters = { required: 0, core: 0, area: 0 };
         const dmReqs = { required: dmReqRequired, core: dmCoreReq, area: dmAreaReq };
+        const dmBasicLanguageLimit = languageCapForRequirements(dmReq);
+        let dmBasicLanguagesCounted = 0;
         // For IE as a double major, ensure CS201 always counts as core when
         // both CS201 and DSA201 are present. Capture the condition once here
         // so the allocation loop can enforce it deterministically regardless
@@ -2710,6 +2902,8 @@ function s_curriculum()
             const sem = sorted[i];
             for (let j = 0; j < sem.courses.length; j++) {
                 const course = sem.courses[j];
+                delete course.degreeExclusionReasonDM;
+                course.Language_LevelDM = '';
                 if (!this.isDegreeEligibleCourse(course)) {
                     course.effective_type_dm = 'none';
                     delete course.categoryDM;
@@ -2762,9 +2956,16 @@ function s_curriculum()
                 delete course.categoryDM;
                 if (info) {
                     dmStaticType = (info['EL_Type'] || '').toLowerCase();
+                    course.Language_LevelDM = normalizedLanguageLevel(info.Language_Level);
                     // Alternative pairs: the extra course of a pair counts
                     // toward an elective pool rather than a required slot.
                     if (typeOverrideDM.has(course)) dmStaticType = typeOverrideDM.get(course);
+                    if (languageCourseNeedsLevelReview(course, info)) {
+                        course.effective_type_dm = 'none';
+                        course.degreeExclusionReasonDM = LANGUAGE_LEVEL_REVIEW_REASON;
+                        delete course.categoryDM;
+                        continue;
+                    }
                     // SUIS: `unknown` means "not included in any course pool" for
                     // this program — see the main-major pass for the full note.
                     if (dmStaticType === 'unknown') {
@@ -2778,6 +2979,16 @@ function s_curriculum()
                     credit = (typeof parseCreditValue === 'function')
                         ? parseCreditValue(info['SU_credit'] || '0')
                         : (parseFloat(info['SU_credit'] || '0') || 0);
+                    // Credit metrics are inherent to the course. Hydrate them
+                    // from the accepting DM record as well, so a course that is
+                    // N/A in the main program can still enter the combined
+                    // main+DM union with the correct values.
+                    course.SU_credit = credit;
+                    course.Basic_Science = parseFloat(info['Basic_Science'] || '0') || 0;
+                    course.Engineering = parseFloat(info['Engineering'] || '0') || 0;
+                    course.ECTS = parseFloat(info['ECTS'] || '0') || 0;
+                    course.Faculty_Course = info['Faculty_Course'] || course.Faculty_Course || 'No';
+                    course.Faculty = info['Faculty'] || course.Faculty || '';
                     // The allocation cascade (shared with the main-major pass).
                     const dmPinCore = forceCoreDM.has(course)
                         || (dmForceCSCore && course.code === 'CS201');
@@ -2792,6 +3003,15 @@ function s_curriculum()
                     dmType = 'none';
                     dmStaticType = 'none';
                     delete course.categoryDM;
+                }
+                if (dmType === 'free' && dmBasicLanguageLimit !== null
+                    && isBasicLanguageCourse(course, info)) {
+                    if (dmBasicLanguagesCounted >= dmBasicLanguageLimit) {
+                        course.effective_type_dm = 'none';
+                        course.degreeExclusionReasonDM = BASIC_LANGUAGE_EXCLUSION_REASON;
+                        continue;
+                    }
+                    dmBasicLanguagesCounted++;
                 }
                 // Assign DM effective type
                 course.effective_type_dm = dmType;
@@ -2860,6 +3080,10 @@ function s_curriculum()
      * corresponding to the missing requirement. Codes align with those in
      * canGraduate().
      */
+    this.getCombinedDegreeMetrics = function() {
+        return combinedDegreeMetricsFromAllocations(this.semesters);
+    };
+
     this.canGraduateDouble = function() {
         if (!this.doubleMajor) return 0;
         const req = getReq(this.doubleMajor, this.entryTermDM);
@@ -2871,13 +3095,13 @@ function s_curriculum()
         let free = 0;
         let university = 0;
         let required = 0;
-        let total = 0;
-        let science = 0;
-        let engineering = 0;
-        let ects = 0;
+        const combinedMetrics = combinedDegreeMetricsFromAllocations(this.semesters);
+        const total = combinedMetrics.total;
+        const science = combinedMetrics.science;
+        const engineering = combinedMetrics.engineering;
+        const ects = combinedMetrics.ects;
         for (let i = 0; i < this.semesters.length; i++) {
             const sem = this.semesters[i];
-            total += sem.totalCredit;
             area += (sem.totalAreaDM || 0);
             core += (sem.totalCoreDM || 0);
             free += (sem.totalFreeDM || 0);
@@ -2887,9 +3111,6 @@ function s_curriculum()
             // properly counted even when absent in the primary major.
             university += (sem.totalUniversityDM !== undefined ? sem.totalUniversityDM : sem.totalUniversity);
             required += (sem.totalRequiredDM !== undefined ? sem.totalRequiredDM : sem.totalRequired);
-            science += sem.totalScience;
-            engineering += sem.totalEngineering;
-            ects += sem.totalECTS;
         }
         // Fetch requirements for double major and adjust SU/ECTS thresholds
         const totalReq = (req.total || 0) + 30;

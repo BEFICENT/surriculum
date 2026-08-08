@@ -1530,6 +1530,28 @@ function SUrriculum(major_chosen_by_user) {
             return match ? { combined, major: match[1], code: match[2] } : null;
         }
 
+        const CUSTOM_LANGUAGE_PREFIXES = new Set([
+            'ARA', 'CHI', 'FRE', 'GER', 'ITA', 'JAP', 'LANG', 'LAT', 'PERS',
+            'RUS', 'SPA', 'TUR',
+        ]);
+
+        function titleExplicitlySaysBasicLanguage(value) {
+            return /\b(?:basic|beginning)\b/i.test(String(value || ''));
+        }
+
+        function isCustomLanguageCandidate(code, name, faculty, languageLevel) {
+            const parsed = splitCombinedCourseCode(code);
+            const prefix = parsed ? parsed.major : '';
+            if (languageLevel === 'basic' || languageLevel === 'other') return true;
+            if (CUSTOM_LANGUAGE_PREFIXES.has(prefix)) return true;
+            // A School of Languages custom record with explicit wording is a
+            // safe candidate too. Faculty alone is intentionally insufficient:
+            // TLL, AL and professional ENG courses are also offered by SL but
+            // are not part of the beginning-language cap.
+            return String(faculty || '').toUpperCase() === 'SL'
+                && titleExplicitlySaysBasicLanguage(name);
+        }
+
         function findCustomCourseStorageIndex(list, combinedCode, preferredIndex) {
             const target = normalizeCombinedCourseCode(combinedCode);
             if (Number.isInteger(preferredIndex) && preferredIndex >= 0 && preferredIndex < list.length
@@ -1725,6 +1747,78 @@ function SUrriculum(major_chosen_by_user) {
             }
         }
 
+        function persistLinkedProgramLanguageLevel(programCourses, primaryProgram, fallbackCode, languageLevel) {
+            const noopTransaction = { ok: true, rollback: function() { return true; } };
+            if (!Array.isArray(programCourses) || !programCourses.length) return noopTransaction;
+            const primary = String(primaryProgram || '').toUpperCase();
+            const completed = [];
+            const objectBackups = [];
+            const seen = new Set();
+
+            const restoreCompleted = function() {
+                let restored = true;
+                for (let i = completed.length - 1; i >= 0; i--) {
+                    if (restoreStoredValue(completed[i].key, completed[i].previousRaw) === false) {
+                        restored = false;
+                    }
+                }
+                objectBackups.forEach(function(backup) {
+                    if (backup.hadLanguageLevel) backup.course.Language_Level = backup.languageLevel;
+                    else delete backup.course.Language_Level;
+                });
+                return restored;
+            };
+
+            for (let i = 0; i < programCourses.length; i++) {
+                const link = programCourses[i] || {};
+                const program = String(link.program || '').toUpperCase();
+                if (!program || program === primary || seen.has(program)) continue;
+                seen.add(program);
+
+                const target = getCombinedCodeFromCourseObj(link.course) || fallbackCode;
+                const key = 'customCourses_' + program;
+                const previousRaw = planGetItem(key);
+                const stored = loadCustomCoursesForMajor(program);
+                let index = -1;
+                for (let j = stored.length - 1; j >= 0; j--) {
+                    if (getCombinedCodeFromCourseObj(stored[j]) === target) {
+                        index = j;
+                        break;
+                    }
+                }
+                if (index < 0) {
+                    restoreCompleted();
+                    return { ok: false, rollback: function() { return true; } };
+                }
+
+                const updated = Object.assign({}, stored[index]);
+                if (languageLevel) updated.Language_Level = languageLevel;
+                else delete updated.Language_Level;
+                const next = stored.slice();
+                next[index] = updated;
+                completed.push({ key, previousRaw });
+                if (!saveCustomCoursesForMajor(program, next)) {
+                    restoreCompleted();
+                    return { ok: false, rollback: function() { return true; } };
+                }
+            }
+
+            // The importer also keeps these definitions in the live primary/
+            // double-major catalogs. Mutate only the shared language metadata;
+            // each program's independently selected EL_Type remains untouched.
+            programCourses.forEach(function(link) {
+                if (!link || !link.course || typeof link.course !== 'object') return;
+                objectBackups.push({
+                    course: link.course,
+                    hadLanguageLevel: Object.prototype.hasOwnProperty.call(link.course, 'Language_Level'),
+                    languageLevel: link.course.Language_Level,
+                });
+                if (languageLevel) link.course.Language_Level = languageLevel;
+                else delete link.course.Language_Level;
+            });
+            return { ok: true, rollback: restoreCompleted };
+        }
+
         function refreshCourseDatalistsAndTypes() {
             try {
                 document.querySelectorAll('datalist.course_list').forEach(function(dl) {
@@ -1869,7 +1963,10 @@ function SUrriculum(major_chosen_by_user) {
                     line2.textContent =
                         `SU ${course.SU_credit || '0'} • ECTS ${course.ECTS || '0'} • ` +
                         `BS ${course.Basic_Science || 0} • ENG ${course.Engineering || 0} • ` +
-                        `Type ${String(course.EL_Type || 'none')}`;
+                        `Type ${String(course.EL_Type || 'none')}` +
+                        (course.Language_Level
+                            ? ` • Language ${course.Language_Level === 'basic' ? 'beginning/basic' : 'higher/other'}`
+                            : '');
                     info.appendChild(line2);
 
                     const actions = document.createElement('div');
@@ -1917,7 +2014,7 @@ function SUrriculum(major_chosen_by_user) {
             boardDom.appendChild(overlay);
         }
 
-        function showCustomCourseForm(prefill = null, courseObj = null, onSaveCallback = null, onCancelCallback = null, courseStorageIndex = null) {
+        function showCustomCourseForm(prefill = null, courseObj = null, onSaveCallback = null, onCancelCallback = null, courseStorageIndex = null, linkedProgramCourses = null) {
             // Prevent multiple modals
             if (document.querySelector('.custom_course_modal')) return;
 
@@ -2006,10 +2103,12 @@ function SUrriculum(major_chosen_by_user) {
             typeLabel.innerText = 'Category (EL_Type):';
             typeRow.appendChild(typeLabel);
             const typeSelect = document.createElement('select');
-            ['core', 'area', 'university', 'free', 'required', 'none'].forEach(function(opt) {
+            ['core', 'area', 'university', 'free', 'required', 'none', 'unknown'].forEach(function(opt) {
                 const option = document.createElement('option');
                 option.value = opt;
-                option.innerText = opt.charAt(0).toUpperCase() + opt.slice(1);
+                option.innerText = opt === 'unknown'
+                    ? 'N/A (not allocated)'
+                    : opt.charAt(0).toUpperCase() + opt.slice(1);
                 typeSelect.appendChild(option);
             });
             typeRow.appendChild(typeSelect);
@@ -2072,6 +2171,78 @@ function SUrriculum(major_chosen_by_user) {
 
             modal.appendChild(facultyRow);
 
+            // Language courses need one piece of metadata that cannot be
+            // inferred from an exchange transcript code: whether this is a
+            // beginning/basic course subject to the two-course cap, or a
+            // higher/other language course. Keep an unreviewed state distinct
+            // from an explicit "other" classification.
+            const languageLevelRow = document.createElement('div');
+            languageLevelRow.classList.add('cc-row', 'cc-language-level-row');
+            const languageLevelLabel = document.createElement('label');
+            languageLevelLabel.innerText = 'Language level:';
+            languageLevelLabel.htmlFor = 'cc-language-level';
+            languageLevelRow.appendChild(languageLevelLabel);
+
+            const languageLevelSelect = document.createElement('select');
+            languageLevelSelect.id = 'cc-language-level';
+            languageLevelSelect.className = 'cc-language-level';
+            [
+                ['', 'Choose after reviewing the course'],
+                ['basic', 'Beginning / basic'],
+                ['other', 'Higher level / other'],
+            ].forEach(function(pair) {
+                const option = document.createElement('option');
+                option.value = pair[0];
+                option.innerText = pair[1];
+                languageLevelSelect.appendChild(option);
+            });
+            languageLevelRow.appendChild(languageLevelSelect);
+
+            const languageLevelHelp = document.createElement('p');
+            languageLevelHelp.id = 'cc-language-level-help';
+            languageLevelHelp.className = 'cc-language-note';
+            languageLevelHelp.textContent = 'Only beginning/basic language courses use the two-course free-elective limit. Higher-level language courses do not use that limit.';
+            languageLevelSelect.setAttribute('aria-describedby', languageLevelHelp.id);
+            languageLevelRow.appendChild(languageLevelHelp);
+            modal.appendChild(languageLevelRow);
+
+            const initialLanguageLevel = (() => {
+                const raw = courseObj && courseObj.Language_Level !== undefined
+                    ? courseObj.Language_Level
+                    : (prefill && prefill.languageLevel !== undefined ? prefill.languageLevel : '');
+                const normalized = String(raw || '').trim().toLowerCase();
+                return normalized === 'basic' || normalized === 'other' ? normalized : '';
+            })();
+            let languageLevelTouched = !!initialLanguageLevel;
+            languageLevelSelect.value = initialLanguageLevel;
+
+            const updateLanguageLevelRow = function() {
+                const candidate = isCustomLanguageCandidate(
+                    codeInput.value,
+                    nameInput.value,
+                    facultySelect.value,
+                    languageLevelSelect.value || initialLanguageLevel
+                );
+                languageLevelRow.hidden = !candidate;
+                languageLevelRow.classList.toggle('is-hidden', !candidate);
+                if (!candidate) {
+                    languageLevelSelect.value = '';
+                    languageLevelSelect.required = false;
+                    return;
+                }
+                languageLevelSelect.required = true;
+                if (!languageLevelTouched) {
+                    languageLevelSelect.value = titleExplicitlySaysBasicLanguage(nameInput.value)
+                        ? 'basic' : '';
+                }
+            };
+            languageLevelSelect.addEventListener('change', function() {
+                languageLevelTouched = true;
+            });
+            codeInput.addEventListener('input', updateLanguageLevelRow);
+            nameInput.addEventListener('input', updateLanguageLevelRow);
+            facultySelect.addEventListener('change', updateLanguageLevelRow);
+
             // Optional DM category control (only when a DM is selected).
             let dmTypeSelect = null;
             const dmProgramCode = (() => {
@@ -2118,10 +2289,12 @@ function SUrriculum(major_chosen_by_user) {
                 keepOpt.value = '';
                 keepOpt.innerText = initialDmType ? 'Keep current DM category' : 'No DM category change';
                 dmTypeSelect.appendChild(keepOpt);
-                ['core', 'area', 'university', 'free', 'required', 'none'].forEach(function(opt) {
+                ['core', 'area', 'university', 'free', 'required', 'none', 'unknown'].forEach(function(opt) {
                     const option = document.createElement('option');
                     option.value = opt;
-                    option.innerText = opt.charAt(0).toUpperCase() + opt.slice(1);
+                    option.innerText = opt === 'unknown'
+                        ? 'N/A (not allocated)'
+                        : opt.charAt(0).toUpperCase() + opt.slice(1);
                     dmTypeSelect.appendChild(option);
                 });
                 if (initialDmType) dmTypeSelect.value = initialDmType;
@@ -2181,6 +2354,8 @@ function SUrriculum(major_chosen_by_user) {
                 }
             }
 
+            updateLanguageLevelRow();
+
         // Buttons container
         const buttonsRow = document.createElement('div');
         buttonsRow.classList.add('cc-buttons');
@@ -2224,9 +2399,19 @@ function SUrriculum(major_chosen_by_user) {
                 const originalCombinedCode = courseObj ? getCombinedCodeFromCourseObj(courseObj) : '';
                 const combinedCodeNow = parsedIdentity.combined;
                 const dmTypeSelected = dmTypeSelect ? String(dmTypeSelect.value || '').toLowerCase() : '';
+                const languageLevel = languageLevelRow.hidden
+                    ? '' : String(languageLevelSelect.value || '').toLowerCase();
+                if (!languageLevelRow.hidden && languageLevel !== 'basic' && languageLevel !== 'other') {
+                    await uiAlert(
+                        'Choose the language level',
+                        '<p>Select whether this is a <strong>Beginning / basic</strong> or <strong>Higher level / other</strong> language course. This determines whether the beginning-language limit applies.</p>'
+                    );
+                    languageLevelSelect.focus();
+                    return;
+                }
                 let candidate;
                 try {
-                    candidate = normalizeCustomCourseForStorage({
+                    const candidateInput = {
                         Major: parsedMajor,
                         Code: parsedCode,
                         Course_Name: nameInput.value.trim() || rawCode,
@@ -2237,7 +2422,9 @@ function SUrriculum(major_chosen_by_user) {
                         Faculty: facultySelect.value,
                         EL_Type: typeSelect.value,
                         Faculty_Course: 'No'
-                    });
+                    };
+                    if (languageLevel) candidateInput.Language_Level = languageLevel;
+                    candidate = normalizeCustomCourseForStorage(candidateInput);
                 } catch (validationError) {
                     await uiAlert(
                         'Invalid custom course',
@@ -2274,6 +2461,20 @@ function SUrriculum(major_chosen_by_user) {
                     await uiAlert('Could not save custom course', `<p><strong>${escapeHtml(combinedCodeNow)}</strong> was not changed because browser storage rejected the update.</p>`);
                     return;
                 }
+                const linkedLanguageTransaction = persistLinkedProgramLanguageLevel(
+                    linkedProgramCourses,
+                    majorKey,
+                    originalCombinedCode || combinedCodeNow,
+                    languageLevel
+                );
+                if (!linkedLanguageTransaction.ok) {
+                    restoreStoredValue(key, previousRaw);
+                    await uiAlert(
+                        'Could not save language classification',
+                        `<p><strong>${escapeHtml(combinedCodeNow)}</strong> was not changed because its language level could not be saved consistently for every selected program.</p>`
+                    );
+                    return;
+                }
 
                 let previousRecord = null;
                 let previousCourseDataIndex = -1;
@@ -2299,6 +2500,7 @@ function SUrriculum(major_chosen_by_user) {
                 const saveRequested = requestPlanSave();
                 if (codeChanged && (!saveRequested || !flushPlanSaves())) {
                     restoreStoredValue(key, previousRaw);
+                    linkedLanguageTransaction.rollback();
                     if (previousRecord) primaryCustomCourseRecords.splice(storageIndex, 1, previousRecord);
                     if (previousCourseDataIndex >= 0 && previousRecord) course_data[previousCourseDataIndex] = previousRecord;
                     renameSemesterOccurrences(combinedCodeNow, originalCombinedCode, previousRecord || courseObj);
@@ -2347,7 +2549,7 @@ function SUrriculum(major_chosen_by_user) {
                             const identityDM = splitCombinedCourseCode(combo);
                             const mDM = identityDM ? identityDM.major : '';
                             const nDM = identityDM ? identityDM.code : '';
-                            return {
+                            const dmCourse = {
                                 Major: mDM,
                                 Code: nDM,
                                 Course_Name: sourceForDM.Course_Name || combo,
@@ -2359,6 +2561,10 @@ function SUrriculum(major_chosen_by_user) {
                                 EL_Type: selectedType || 'none',
                                 Faculty_Course: 'No'
                             };
+                            if (sourceForDM && sourceForDM.Language_Level) {
+                                dmCourse.Language_Level = sourceForDM.Language_Level;
+                            }
+                            return dmCourse;
                         };
 
                         if (renameIntoDmCatalog) {
@@ -2420,6 +2626,9 @@ function SUrriculum(major_chosen_by_user) {
                                         EL_Type: selectedType,
                                         Faculty_Course: 'No'
                                     };
+                                    if (sourceForDM && sourceForDM.Language_Level) {
+                                        newCourseDM.Language_Level = sourceForDM.Language_Level;
+                                    }
                                     const keyDM = 'customCourses_' + curriculum.doubleMajor;
                                     const existingDM = JSON.parse(planGetItem(keyDM) || '[]');
                                     existingDM.push(newCourseDM);
@@ -2600,23 +2809,68 @@ function SUrriculum(major_chosen_by_user) {
             if (!pendingCourse || !targetCode) return true;
 
             const majorKey = String((curriculum && curriculum.major) || major_chosen_by_user || '').toUpperCase();
-            const stored = loadCustomCoursesForMajor(majorKey);
-            let storedIndex = -1;
-            for (let i = stored.length - 1; i >= 0; i--) {
-                if (getCombinedCodeFromCourseObj(stored[i]) === targetCode) {
-                    storedIndex = i;
-                    break;
+            const linkedPrograms = Array.isArray(entry && entry.programCourses)
+                && entry.programCourses.length
+                ? entry.programCourses
+                : [{ program: majorKey, course: pendingCourse }];
+            const storageBackups = [];
+            const seenPrograms = new Set();
+            const restoreStorageBackups = function() {
+                let restored = true;
+                for (let i = storageBackups.length - 1; i >= 0; i--) {
+                    if (restoreStoredValue(storageBackups[i].key, storageBackups[i].previousRaw) === false) {
+                        restored = false;
+                    }
                 }
-            }
-            if (storedIndex >= 0) {
+                return restored;
+            };
+            const rollbackStorageFailed = function() {
+                restoreStorageBackups();
+                uiAlert(
+                    'Could not remove imported course',
+                    `<p><strong>${escapeHtml(targetCode)}</strong> is still saved because browser storage rejected the rollback. The review form has been left open.</p>`
+                );
+                return false;
+            };
+            for (let linkIndex = 0; linkIndex < linkedPrograms.length; linkIndex++) {
+                const link = linkedPrograms[linkIndex] || {};
+                const program = String(link.program || majorKey).toUpperCase();
+                if (!program || seenPrograms.has(program)) continue;
+                seenPrograms.add(program);
+                const linkedCode = getCombinedCodeFromCourseObj(link.course) || targetCode;
+                const key = 'customCourses_' + program;
+                const previousRaw = planGetItem(key);
+                let stored;
+                try {
+                    stored = JSON.parse(previousRaw || '[]');
+                    if (!Array.isArray(stored)) return rollbackStorageFailed();
+                } catch (_) {
+                    return rollbackStorageFailed();
+                }
+                let storedIndex = -1;
+                for (let i = stored.length - 1; i >= 0; i--) {
+                    if (getCombinedCodeFromCourseObj(stored[i]) === linkedCode) {
+                        storedIndex = i;
+                        break;
+                    }
+                }
+                // The importer durably wrote every linked definition before it
+                // opened this review. A missing one means storage changed under
+                // us, so fail closed instead of dismissing the review with a
+                // partially rolled-back plan.
+                if (storedIndex < 0) return rollbackStorageFailed();
                 const nextStored = stored.slice();
-                nextStored.splice(storedIndex, 1);
-                if (!saveCustomCoursesForMajor(majorKey, nextStored)) {
-                    uiAlert(
-                        'Could not remove imported course',
-                        `<p><strong>${escapeHtml(targetCode)}</strong> is still saved because browser storage rejected the rollback. The review form has been left open.</p>`
-                    );
-                    return false;
+                if (link.previousCourse && typeof link.previousCourse === 'object') {
+                    // Restore only this record, not the import-time whole-list
+                    // snapshot. Other LANG courses may have been queued after
+                    // this one and must remain available for their own review.
+                    nextStored[storedIndex] = link.previousCourse;
+                } else {
+                    nextStored.splice(storedIndex, 1);
+                }
+                storageBackups.push({ key, previousRaw });
+                if (planSetItem(key, JSON.stringify(nextStored)) === false) {
+                    return rollbackStorageFailed();
                 }
             }
 
@@ -2667,17 +2921,81 @@ function SUrriculum(major_chosen_by_user) {
             });
 
             try {
-                let idx = course_data.lastIndexOf(pendingCourse);
-                if (idx < 0) {
-                    for (let i = course_data.length - 1; i >= 0; i--) {
-                        if (getCombinedCodeFromCourseObj(course_data[i]) === targetCode) {
-                            idx = i;
-                            break;
-                        }
+                const dataMutation = entry && entry.courseDataMutation;
+                if (dataMutation && dataMutation.kind === 'replaced'
+                    && dataMutation.previousCourse && typeof dataMutation.previousCourse === 'object') {
+                    let idx = course_data.indexOf(pendingCourse);
+                    if (idx < 0 && Number.isInteger(dataMutation.index)
+                        && dataMutation.index >= 0 && dataMutation.index < course_data.length
+                        && getCombinedCodeFromCourseObj(course_data[dataMutation.index]) === targetCode) {
+                        idx = dataMutation.index;
                     }
+                    if (idx >= 0) course_data[idx] = dataMutation.previousCourse;
+                } else if (!dataMutation || dataMutation.kind === 'inserted') {
+                    // Remove only the exact runtime object inserted by this
+                    // import. Falling back to a code match could delete a base
+                    // catalog row when the imported definition was never added.
+                    const idx = course_data.lastIndexOf(pendingCourse);
+                    if (idx >= 0) course_data.splice(idx, 1);
                 }
-                if (idx >= 0) course_data.splice(idx, 1);
             } catch (_) {}
+
+            // Restore the linked contextual definitions in the live custom
+            // catalogs too. A re-import can temporarily replace an existing
+            // definition, so simply removing the importer object would leave
+            // storage and the running planner out of sync.
+            linkedPrograms.forEach(function(link) {
+                if (!link) return;
+                const program = String(link.program || majorKey).toUpperCase();
+                const linkedCode = getCombinedCodeFromCourseObj(link.course) || targetCode;
+                const previousCourse = link.previousCourse && typeof link.previousCourse === 'object'
+                    ? link.previousCourse : null;
+
+                if (program === majorKey) {
+                    let index = primaryCustomCourseRecords.indexOf(link.course);
+                    if (index < 0) {
+                        index = primaryCustomCourseRecords.findIndex(function(record) {
+                            return getCombinedCodeFromCourseObj(record) === linkedCode;
+                        });
+                    }
+                    if (previousCourse) {
+                        if (index >= 0) {
+                            const runtimeRecord = primaryCustomCourseRecords[index];
+                            primaryCustomCourseRecords[index] = previousCourse;
+                            const runtimeIndex = course_data.indexOf(runtimeRecord);
+                            if (runtimeIndex >= 0) course_data[runtimeIndex] = previousCourse;
+                        } else {
+                            primaryCustomCourseRecords.push(previousCourse);
+                            if (!course_data.some(function(record) {
+                                return getCombinedCodeFromCourseObj(record) === linkedCode;
+                            })) course_data.push(previousCourse);
+                        }
+                    } else if (index >= 0 && primaryCustomCourseRecords[index] === link.course) {
+                        const runtimeRecord = primaryCustomCourseRecords[index];
+                        primaryCustomCourseRecords.splice(index, 1);
+                        const runtimeIndex = course_data.indexOf(runtimeRecord);
+                        if (runtimeIndex >= 0) course_data.splice(runtimeIndex, 1);
+                    }
+                    return;
+                }
+
+                const dmProgram = String((curriculum && curriculum.doubleMajor) || '').toUpperCase();
+                if (!dmProgram || program !== dmProgram) return;
+                let dmIndex = doubleMajorCustomCourseRecords.indexOf(link.course);
+                if (dmIndex < 0) {
+                    dmIndex = doubleMajorCustomCourseRecords.findIndex(function(record) {
+                        return getCombinedCodeFromCourseObj(record) === linkedCode;
+                    });
+                }
+                if (previousCourse) {
+                    replaceDoubleMajorCustomRecordAt(dmIndex, previousCourse);
+                } else if (dmIndex >= 0 && doubleMajorCustomCourseRecords[dmIndex] === link.course) {
+                    removeDoubleMajorCustomRecordAt(dmIndex);
+                }
+            });
+            if (curriculum && curriculum.doubleMajor) {
+                curriculum.doubleMajorCourseData = doubleMajorCourseData;
+            }
 
             refreshCourseDatalistsAndTypes();
             requestPlanSave();
@@ -2712,13 +3030,20 @@ function SUrriculum(major_chosen_by_user) {
                 prefill.engineering = next.course.Engineering;
                 prefill.elType = next.course.EL_Type;
             }
+            if (next.parsedInfo && next.parsedInfo.Language_Level !== undefined) {
+                prefill.languageLevel = next.parsedInfo.Language_Level;
+            } else if (next.course && next.course.Language_Level !== undefined) {
+                prefill.languageLevel = next.course.Language_Level;
+            }
             // Show the custom course form. Pass the existing course object so
             // that the save handler updates it instead of creating a new one.
             showCustomCourseForm(
                 prefill,
                 next.course,
                 function() { processPendingCustomCourses(list); },
-                function() { return rollbackPendingTranscriptCustomCourse(next); }
+                function() { return rollbackPendingTranscriptCustomCourse(next); },
+                null,
+                next.programCourses
             );
         }
 
@@ -2859,6 +3184,9 @@ function SUrriculum(major_chosen_by_user) {
                         EL_Type: selectedType,
                         Faculty_Course: 'No'
                     };
+                    if (source && source.Language_Level) {
+                        newCourseDM.Language_Level = source.Language_Level;
+                    }
                     // Persist the definition before changing the live DM model.
                     let persisted = false;
                     try {

@@ -128,6 +128,15 @@ Open **Import Records** in the header and upload one of:
 Important notes:
 
 - If you upload a **Degree Evaluation** document, SUrriculum rejects it and shows a dedicated warning explaining how to export the correct file.
+- Erasmus/exchange courses with the transcript subject `LANG` are retained with
+  their actual recorded grade and credits. During review, identify whether the
+  course is beginning/basic or higher-level. Language electives count as free
+  electives only for programs whose degree rules permit them; FENS keeps them
+  as effective N/A, where a letter grade can still affect CGPA.
+- At most two beginning/basic language courses receive free-elective and degree
+  credit. Additional beginning/basic courses remain visible, including their
+  recorded grade, but are labelled as excluded from degree credit. Higher-level
+  language courses do not consume this two-course allowance.
 - If you saved SIS pages as **HTML only** (instead of **Webpage, Complete**) and the file contains the known “no permission” page HTML, SUrriculum warns you to re-save correctly.
 - If a PDF has no readable text layer, SUrriculum explains how to re-export it
   with the browser's **Save as PDF**, save **Webpage, Complete** HTML, or run

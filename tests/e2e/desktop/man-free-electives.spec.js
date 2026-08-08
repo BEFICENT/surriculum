@@ -18,10 +18,9 @@ const { seedPlan } = require('../helpers/plan');
 //     membership of the FACULTY-COURSE pool (~66 of 670 courses) — instead of
 //     `Faculty`, the offering faculty (every course has one). Regular FASS/FENS
 //     free electives counted for nothing.
-//  2. The basic-language cap listed LANG101-104, which exist in no catalog (the
-//     source comment said "Example codes"), so the cap could never fire. The
-//     real School of Languages basic courses are FRE110/120, GER110/120,
-//     SPA110/120, TUR101/102.
+//  2. The basic-language cap listed LANG101-104, which exist in no catalog. The
+//     classifier now covers every known current/historical basic-language code
+//     and reviewed exchange metadata.
 const TERM = 'Fall 2024-2025';
 
 const seedMan = (page, courses) => seedPlan(page, {
@@ -71,9 +70,9 @@ test.describe('MAN free-elective rules', () => {
   test('basic language courses are recognised; intermediate ones are not', async ({ page }) => {
     await seedMan(page, ['FRE110', 'FRE120', 'GER110', 'FRE130', 'TUR201']);
     const r = await readFree(page);
-    // FRE110 + FRE120 + GER110 are "Basic"; FRE130/TUR201 are "Intermediate"
-    // and are deliberately outside the cap.
-    expect(r.basicLang, 'the three Basic courses should be counted').toBe(3);
+    // FRE110 + FRE120 fill the two allowed positions. GER110 remains in the
+    // plan as degree N/A; FRE130/TUR201 are Intermediate and stay uncapped.
+    expect(r.basicLang, 'only two Basic courses should receive free credit').toBe(2);
   });
 
   test('the SL language courses the cap targets really exist', async ({ page }) => {

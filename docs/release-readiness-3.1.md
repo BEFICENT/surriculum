@@ -27,21 +27,45 @@ a time and checked off only after the fix and its verification are complete.
 
 ## Verified baseline
 
-- [x] JavaScript/static unit gate passes: 225/225 tests.
-- [x] Chromium Playwright gate passes: 431/431 tests (416 desktop and 15
-  mobile), run in three deterministic desktop shards plus the mobile project
-  with zero retries.
+- [x] JavaScript/static unit gate passes: 235/235 tests.
+- [ ] The current Chromium Playwright inventory is 451 tests (436 desktop and
+  15 mobile). On 2026-08-08, the complete local run plus a failed-case rerun
+  cleared 448 scenarios; the three remaining cases are the mounted
+  GitHub-Pages/offline service-worker checks, which were blocked by repeated
+  Windows localhost `ERR_NETWORK_ACCESS_DENIED`/`WinError 10053` failures before
+  their app assertions could run. Rerun the full 451-test gate in a stable
+  environment before release. The new language-course focused browser suites
+  pass 31/31.
 - [x] Focused cross-browser gate passes: 2/2 critical flows (Firefox and
   WebKit), also with zero retries.
 - [x] `python tests/scrape_groups_test.py` passes when run directly.
 - [x] `python tests/scrape_coursepages_fallback_test.py` passes: 3/3 tests.
 - [x] SUIS degree-page validation/publication regressions pass: 16/16 tests.
 - [x] Python requirement validation and checked-in manifest integrity checks pass.
-- [x] All 227,341 deterministic runtime JSONL rows parse successfully.
+- [x] All 219,412 deterministic runtime JSONL rows parse successfully.
 - [x] Manifest hashes and the content-derived data version match the data tree.
 - [x] Extended 23-term catalog/requirements integrity audit passes.
 - [x] npm-managed dependencies report no known vulnerabilities.
 - [x] No runtime analytics, telemetry, or transcript upload was found.
+
+## Exchange and language-course handling
+
+- [x] Import exact `LANG` transcript subjects for every selected program while
+  preserving the recorded grade, title, SU credits, ECTS, and semester. The
+  importer never synthesizes a `T` grade: non-FENS definitions are free
+  electives, while FENS definitions are effective N/A. Main and double-major
+  classifications are stored independently and rolled back together if review
+  is skipped or persistence fails.
+- [x] Add a reviewed language-level field for foreign/custom courses. Only
+  explicit **Basic**/**Beginning** title wording seeds a suggestion; otherwise
+  the user must choose beginning/basic or higher/other. The value survives plan
+  export/import validation.
+- [x] Enforce the published maximum of two beginning/basic language courses as
+  an allocation rule. The first two eligible attempts receive free/degree
+  credit; later ones remain visible and CGPA-active but are labelled effective
+  N/A and excluded from degree totals. Higher-level courses remain uncapped,
+  and the recognized built-in set includes historical ARA/CHI/ITA/JAP/LAT/
+  PERS/RUS courses rather than only the former eight-code subset.
 
 ## Release-history cleanup
 

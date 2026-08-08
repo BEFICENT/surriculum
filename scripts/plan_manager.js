@@ -610,7 +610,10 @@
   const IMPORT_MAX_SCHEDULE_NAME_LENGTH = 200;
   const IMPORT_MAX_SNAPSHOT_TEXT_LENGTH = 4000;
   const IMPORT_MAX_GLOBAL_COURSE_METADATA = 2000;
-  const IMPORT_COURSE_TYPES = new Set(['core', 'area', 'university', 'free', 'required', 'none']);
+  const IMPORT_COURSE_TYPES = new Set([
+    'core', 'area', 'university', 'free', 'required', 'none', 'unknown',
+  ]);
+  const IMPORT_LANGUAGE_LEVELS = new Set(['', 'basic', 'other']);
   const IMPORT_FACULTIES = new Set(['', 'FENS', 'FASS', 'SBS', 'SL']);
   const IMPORT_GRADES = new Set(['', 'S', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'F', 'T', 'P', 'I', 'U', 'W', 'NA']);
   const IMPORT_GRADING_BASES = new Set(['unknown', 'letter', 'satisfactory']);
@@ -905,7 +908,7 @@
     const course = requirePlainObject(value, path);
     requireKnownFields(course, new Set([
       'Major', 'Code', 'Course_Name', 'ECTS', 'Engineering', 'Basic_Science',
-      'SU_credit', 'Faculty', 'Faculty_Course', 'EL_Type',
+      'SU_credit', 'Faculty', 'Faculty_Course', 'EL_Type', 'Language_Level',
     ]), path);
 
     if (!hasOwn(course, 'Major')) importError(`${path}.Major`, 'is required');
@@ -948,7 +951,18 @@
       importError(`${path}.Faculty_Course`, 'expected text');
     }
 
-    return {
+    let languageLevel = '';
+    if (hasOwn(course, 'Language_Level')) {
+      if (typeof course.Language_Level !== 'string') {
+        importError(`${path}.Language_Level`, 'expected text');
+      }
+      languageLevel = course.Language_Level.trim().toLowerCase();
+      if (!IMPORT_LANGUAGE_LEVELS.has(languageLevel)) {
+        importError(`${path}.Language_Level`, 'expected "basic", "other", or an empty value');
+      }
+    }
+
+    const normalized = {
       Major: major,
       Code: code,
       Course_Name: name,
@@ -962,6 +976,11 @@
       Faculty_Course: 'No',
       EL_Type: courseType,
     };
+    // Absence and an empty string both mean "not reviewed yet". Omitting that
+    // state keeps legacy/non-language custom-course exports unchanged while a
+    // reviewed language course carries an explicit, validated classification.
+    if (languageLevel) normalized.Language_Level = languageLevel;
+    return normalized;
   }
 
   function validateCustomCourses(value, path) {

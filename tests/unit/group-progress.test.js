@@ -14,7 +14,12 @@ const { loadScriptGlobals } = require('./helpers/load-script');
 
 const { groupProgressFor, facultyProgress } = loadScriptGlobals('scripts/s_curriculum.js');
 
-const FIELDS = { effective: 'effective_type', category: 'category' };
+const FIELDS = {
+  effective: 'effective_type',
+  category: 'category',
+  languageLevel: 'Language_Level',
+  exclusionReason: 'degreeExclusionReason',
+};
 
 // A minimal ctx over a flat course list (same shape the real curriculum passes).
 function ctxOf(courses, entryTerm) {
@@ -34,6 +39,8 @@ const C = (code, opts = {}) => ({
   effective_type: opts.eff,
   category: opts.cat,
   Faculty: opts.fac,
+  Language_Level: opts.languageLevel,
+  degreeExclusionReason: opts.exclusionReason,
   SU_credit: opts.cr != null ? String(opts.cr) : '3',
 });
 const row = (r) => ({ ...r });
@@ -96,6 +103,20 @@ test('languageCap is a max (ok when under, isCap flagged)', () => {
     id: 'lang_cap', label: 'Basic language cap', base: 'free', suis: 's',
     current: 0, target: 2, unit: 'course', isCap: true, ok: true,
   });
+});
+
+test('languageCap reports automatically excluded courses as an advisory', () => {
+  const g = { id: 'lang_cap', label: 'Basic language cap', base: 'free', suis: 's',
+    rule: 'languageCap', max: 2 };
+  const courses = [
+    C('FRE110', { eff: 'free' }),
+    C('FRE120', { eff: 'free' }),
+    C('GER110', { eff: 'none', exclusionReason: 'Not counted — basic-language limit' }),
+  ];
+  const result = row(groupProgressFor(ctxOf(courses), [g])[0]);
+  assert.equal(result.current, 2);
+  assert.equal(result.ok, true);
+  assert.equal(result.note, '1 additional basic language course excluded from degree credit');
 });
 
 test('facultyProgress emits the ticker rows in order with derived ok', () => {

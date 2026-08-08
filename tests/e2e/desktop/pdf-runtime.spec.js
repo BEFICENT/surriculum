@@ -93,6 +93,8 @@ test.describe('local PDF transcript runtime (desktop)', () => {
         grade: course.grade,
         semester: course.semester,
         gradingBasis: course.gradingBasis || null,
+        suCredits: course.suCredits,
+        ects: course.ects,
       }));
       return {
         version: extraction.pdfjsVersion,
@@ -105,6 +107,7 @@ test.describe('local PDF transcript runtime (desktop)', () => {
         supersededCount: parsed.supersededCourses.length,
         cs201: courses.find((course) => course.code === 'CS201') || null,
         cip101n: courses.find((course) => course.code === 'CIP101N') || null,
+        lang100: courses.find((course) => course.code === 'LANG100') || null,
       };
     });
 
@@ -126,6 +129,14 @@ test.describe('local PDF transcript runtime (desktop)', () => {
         grade: 'S',
         semester: 'Fall 2022-2023',
         gradingBasis: 'satisfactory',
+      },
+      lang100: {
+        code: 'LANG100',
+        grade: 'B+',
+        semester: 'Fall 2024-2025',
+        gradingBasis: 'letter',
+        suCredits: 2,
+        ects: 3,
       },
     });
     expect(result.textItemCount).toBeGreaterThan(1000);

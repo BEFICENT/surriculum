@@ -621,7 +621,7 @@ test.describe('summary panel', () => {
     await expect(untakenRow.locator('.ms-state-chip')).toHaveText('Not taken');
   });
 
-  test('a future course that exceeds a cap is shown as over-limit', async ({ page }) => {
+  test('a future basic-language course beyond the cap is shown as excluded', async ({ page }) => {
     const terms = await livePastCurrentFuture(page);
     await seedPlan(page, {
       major: 'ECON',
@@ -635,10 +635,10 @@ test.describe('summary panel', () => {
     await overlay.locator('.summary_detail_btn').first().click();
     const group = overlay.locator('.ms-group').filter({ hasText: 'beginning/basic language cap' });
     await expect(group).toHaveCount(1);
-    await expect(group).toHaveClass(/is-over/);
-    await expect(group.locator('.ms-group-nums')).toHaveText('3/2');
+    await expect(group).not.toHaveClass(/is-over/);
+    await expect(group.locator('.ms-group-nums')).toHaveText('2/2');
     await expect(group.locator('.ms-group-earned')).toHaveText('2 earned');
-    await expect(group.locator('.ms-group-badge')).toHaveText('Over limit');
-    await expect(overlay.locator('.ms-groups-section .ms-header .ms-req')).toContainText('projected');
+    await expect(group.locator('.ms-group-badge')).toHaveText('OK');
+    await expect(group).toContainText('1 additional basic language course excluded from degree credit');
   });
 });

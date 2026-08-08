@@ -24,6 +24,8 @@ unreleased until the branch is merged, published, and tagged.
   with app-owned caches and active-plan offline warming.
 - An **Estimated class level** based on earned SU credits, using the
   undergraduate 34/64/94-credit thresholds.
+- Program-aware Erasmus/exchange `LANG` imports with an explicit reviewed
+  beginning/basic versus higher-level classification.
 
 ### Changed
 
@@ -37,6 +39,9 @@ unreleased until the branch is merged, published, and tagged.
 - Transcript-created custom courses use an explicit **Save & Keep** or
   **Skip & Remove** review step; removal rolls back the imported occurrence and
   saved definition together.
+- `LANG` imports preserve the transcript's actual grade and credits. They count
+  as free electives only where the selected program permits language electives;
+  FENS retains them as effective N/A without changing their CGPA treatment.
 - Planner autosave now flushes shortly after mutations and on page hiding while
   preserving plan deletion/reset boundaries and multi-tab isolation.
 - Semester totals now show a non-blocking overload advisory above 8 SU in
@@ -63,6 +68,10 @@ unreleased until the branch is merged, published, and tagged.
 - Requirements, major-catalog, and minor scrapers now reject complete-looking
   HTTP-200 fallback pages unless their displayed admit term exactly matches the
   requested term; failed refreshes preserve the last-known catalog index.
+- The beginning/basic-language rule now recognizes current and historical
+  language subjects and excludes courses beyond the first two from degree/free
+  credit instead of merely blocking graduation. Higher-level language courses
+  remain uncapped.
 - The structured-data block no longer publishes an unverified aggregate rating.
 
 ### Security and privacy

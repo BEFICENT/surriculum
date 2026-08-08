@@ -38,6 +38,16 @@ When an import needs a custom-course definition, its review form now offers
 occurrence and stored custom definition together. Image-only PDFs still require
 a browser **Save as PDF** export, complete HTML, or OCR.
 
+Erasmus/exchange `LANG` rows are now imported for every major without inventing
+a transfer grade: the grade, title, SU credits, and ECTS recorded on the
+transcript are preserved. The review asks whether the course is beginning/basic
+or higher-level because a foreign course number is not a reliable level signal.
+The category is program-specific: eligible non-FENS programs receive free-
+elective treatment, while FENS retains the course as effective N/A with its
+normal CGPA effect. Only the first two beginning/basic language courses receive
+degree/free credit; later ones remain visible and clearly labelled as excluded.
+Higher-level language courses do not use that allowance.
+
 ### Planner and scheduler reliability
 
 The planner gives yellow, non-blocking prerequisite warnings and checks only

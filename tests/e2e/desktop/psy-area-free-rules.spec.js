@@ -13,7 +13,7 @@ const plans = require('../fixtures/passing-plans-multiterm.json');
 //     Psychology courses."            -> flag 39
 //   Free electives: "at most two of the beginning/basic level second language
 //     courses can be used to fulfill the free elective requirements."
-//                                     -> flag 40
+//     The allocator now enforces this directly; flag 40 remains an invariant.
 //
 // The 6-course minimum needs no check of its own: `area` is 18 credits = 6x3cr
 // and the PSY catalog types only PSY-coded courses as area, so the generic area
@@ -48,12 +48,14 @@ const seedPsy = ({ page, add = [], front = [] }) => {
 const read = (page) => page.evaluate(() => {
   const psy4xx = [];
   const basicLang = [];
+  const excludedBasicLang = [];
   window.curriculum.semesters.forEach((s) => s.courses.forEach((c) => {
     const eff = (c.effective_type || '').toLowerCase();
     if (eff === 'area' && /^PSY4\d{2}$/.test(c.code)) psy4xx.push(c.code);
     if (eff === 'free' && ['FRE110', 'FRE120', 'GER110', 'GER120', 'SPA110', 'SPA120', 'TUR101', 'TUR102'].includes(c.code)) basicLang.push(c.code);
+    if (eff === 'none' && /basic-language limit/i.test(c.degreeExclusionReason || '')) excludedBasicLang.push(c.code);
   }));
-  return { flag: window.curriculum.canGraduate(), psy4xx, basicLang };
+  return { flag: window.curriculum.canGraduate(), psy4xx, basicLang, excludedBasicLang };
 });
 
 test.describe('PSY area + free elective rules', () => {
@@ -80,16 +82,17 @@ test.describe('PSY area + free elective rules', () => {
     expect(r.flag, 'SUIS requires at least 2, so one must still flag').toBe(AREA_4XX_FLAG);
   });
 
-  test('more than two basic language courses in free electives are flagged', async ({ page }) => {
+  test('a third basic language course is excluded instead of blocking graduation', async ({ page }) => {
     const langs = ['FRE110', 'FRE120', 'GER110'];
     await seedPsy({
       page,
       add: [THIRD_AREA_FACULTY_COURSE, ...PSY_4XX, ...langs],
-      front: PSY_4XX, // keep the 4XX rule satisfied so flag 40 is the one left
+      front: PSY_4XX, // keep the separate 4XX rule satisfied
     });
     const r = await read(page);
-    expect(r.basicLang.sort(), 'the three basic language courses land in free electives').toEqual(langs.sort());
-    expect(r.flag, 'at most 2 basic language courses may count').toBe(BASIC_LANGUAGE_FLAG);
+    expect(r.basicLang, 'only two basic language courses land in free electives').toEqual(['FRE110', 'FRE120']);
+    expect(r.excludedBasicLang, 'the third remains visible but degree-excluded').toEqual(['GER110']);
+    expect(r.flag, 'the enforced cap is not a graduation failure').not.toBe(BASIC_LANGUAGE_FLAG);
   });
 
   test('exactly two basic language courses are allowed', async ({ page }) => {
@@ -103,7 +106,7 @@ test.describe('PSY area + free elective rules', () => {
     expect(r.flag, 'two is the cap, not a violation').not.toBe(BASIC_LANGUAGE_FLAG);
   });
 
-  test('both reachable PSY rule flags have messages', async ({ page }) => {
+  test('both PSY rule flags have messages', async ({ page }) => {
     await page.goto('/');
     const msgs = await page.evaluate(async () => {
       const { buildFlagMessages } = await import('/cases/flagMessages.js');
