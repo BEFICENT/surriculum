@@ -16,6 +16,10 @@
   const MAX_PLANS = 10;
   const DEFAULT_PLAN_NAME = 'Default Plan';
   const PLAN_EXPORT_VERSION = 3;
+  // Bound once during boot. The shared index's activeId may be changed by a
+  // different tab, but code running in this page must keep reading and writing
+  // the plan that this page actually rendered.
+  let sessionPlanId = null;
   const LEGACY_KEYS = [
     'major', 'doubleMajor',
     'entryTerm', 'entryTermDM',
@@ -347,6 +351,10 @@
 
   function getActivePlanId() {
     return ensureIndex().activeId;
+  }
+
+  function getSessionPlanId() {
+    return sessionPlanId;
   }
 
   function getPlanMeta(id) {
@@ -1420,13 +1428,13 @@
     const openDropdown = () => dropdown.classList.add('active');
 
     const setHeaderName = () => {
-      const active = getPlanMeta(getActivePlanId());
+      const active = getPlanMeta(sessionPlanId);
       nameSpan.textContent = active?.name || DEFAULT_PLAN_NAME;
     };
 
     function render() {
       const idx = ensureIndex();
-      const activeId = idx.activeId;
+      const activeId = sessionPlanId;
       setHeaderName();
 
       const list = dropdown.querySelector('.plan-list');
@@ -1449,7 +1457,7 @@
         select.textContent = p.name;
         select.addEventListener('click', (e) => {
           e.stopPropagation();
-          if (p.id === getActivePlanId()) {
+          if (p.id === sessionPlanId) {
             closeDropdown();
             return;
           }
@@ -1581,7 +1589,7 @@
           return;
         }
 
-        const currentId = getActivePlanId();
+        const currentId = sessionPlanId;
         uiModal
           .prompt('New plan', '<p>Name your new plan.</p>', { value: `Plan ${idx.plans.length + 1}`, confirmText: 'Continue' })
           .then((val) => {
@@ -1672,6 +1680,7 @@
     maxPlans: MAX_PLANS,
     ensureIndex,
     getActivePlanId,
+    getSessionPlanId,
     getPlans() {
       return ensureIndex().plans.slice();
     },
@@ -1802,8 +1811,11 @@
       // The page save hook is bound to the plan that was active when this
       // session loaded. Flush it before removing that namespace; running the
       // hook afterwards would recreate orphaned keys for the deleted plan.
-      if (idx.activeId === id) {
-        flushSaves();
+      const deletingSessionPlan = sessionPlanId === id;
+      const deletingSharedActivePlan = idx.activeId === id;
+      const reloadsThisPage = deletingSessionPlan || deletingSharedActivePlan;
+      if (reloadsThisPage && !flushSaves()) {
+        return { ok: false, message: 'The visible plan could not be saved, so nothing was deleted.' };
       }
 
       // Remove all plan-scoped keys for this plan id
@@ -1815,14 +1827,18 @@
 
       idx.plans = idx.plans.filter(p => p.id !== id);
       let reloaded = false;
-      if (idx.activeId === id) {
-        idx.activeId = idx.plans[0].id;
-        saveIndex(idx);
+      if (deletingSharedActivePlan) {
+        // Another tab may have made the deleted plan globally active. Keep
+        // this page on the plan it actually rendered whenever that plan still
+        // exists, instead of jumping to an unrelated first plan.
+        idx.activeId = idx.plans.some((plan) => plan && plan.id === sessionPlanId)
+          ? sessionPlanId : idx.plans[0].id;
+      }
+      saveIndex(idx);
+      if (reloadsThisPage) {
         suspendSaves();
         location.reload();
         reloaded = true;
-      } else {
-        saveIndex(idx);
       }
       return { ok: true, reloaded };
     },
@@ -1842,8 +1858,8 @@
       return true;
     },
     exportPlan(id) {
-      const pid = id || getActivePlanId();
-      if (pid === getActivePlanId()) {
+      const pid = id || sessionPlanId || getActivePlanId();
+      if (pid === sessionPlanId) {
         if (!flushSaves()) {
           showSaveFailure();
           return false;
@@ -1886,6 +1902,7 @@
   // Boot
   ensureIndex();
   migrateLegacyIfNeeded();
+  sessionPlanId = ensureIndex().activeId;
   initStorageSchemaVersion();
   window.planStorage = planStorage;
   window.uiModal = window.uiModal || uiModal;

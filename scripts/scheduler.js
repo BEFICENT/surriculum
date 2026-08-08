@@ -2,6 +2,16 @@
 // Loads meeting times from courses/schedule/<termCode>.jsonl.
 
 (function () {
+  const PLAN_ID_FOR_SESSION = (() => {
+    try {
+      const ps = (typeof window !== 'undefined') ? window.planStorage : null;
+      return (ps && typeof ps.getSessionPlanId === 'function')
+        ? ps.getSessionPlanId() : null;
+    } catch (_) {
+      return null;
+    }
+  })();
+
   const DAYS = [
     { key: 'M', label: 'Mon' },
     { key: 'T', label: 'Tue' },
@@ -25,21 +35,23 @@
   }
 
   function planGetItem(key) {
-    try {
-      const ps = (typeof window !== 'undefined') ? window.planStorage : null;
-      return ps ? ps.getItem(key) : localStorage.getItem(key);
-    } catch (_) {}
+    const ps = (typeof window !== 'undefined') ? window.planStorage : null;
+    if (ps && typeof ps.getItem === 'function') {
+      if (!PLAN_ID_FOR_SESSION) return null;
+      try { return ps.getItem(key, PLAN_ID_FOR_SESSION); } catch (_) { return null; }
+    }
     try { return localStorage.getItem(key); } catch (_) {}
     return null;
   }
 
   function planSetItem(key, value) {
-    try {
-      const ps = (typeof window !== 'undefined') ? window.planStorage : null;
-      if (ps) return ps.setItem(key, value);
-      return localStorage.setItem(key, value);
-    } catch (_) {}
-    try { return localStorage.setItem(key, value); } catch (_) {}
+    const ps = (typeof window !== 'undefined') ? window.planStorage : null;
+    if (ps && typeof ps.setItem === 'function') {
+      if (!PLAN_ID_FOR_SESSION) return false;
+      try { return ps.setItem(key, value, PLAN_ID_FOR_SESSION); } catch (_) { return false; }
+    }
+    try { localStorage.setItem(key, value); return true; } catch (_) {}
+    return false;
   }
 
   function termNameToCodeSafe(name) {

@@ -118,9 +118,18 @@ test('batch append requests only named codes, de-duplicates them, and reports mi
 
 test('plan-scoped metadata snapshots preserve resolver backfills', () => {
   const stored = new Map();
+  const sessionPlanId = 'plan-loaded-in-this-tab';
+  const observedPlanIds = [];
   h.planStorage = {
-    getItem(key) { return stored.has(key) ? stored.get(key) : null; },
-    setItem(key, value) { stored.set(key, value); },
+    getSessionPlanId() { return sessionPlanId; },
+    getItem(key, planId) {
+      observedPlanIds.push(planId);
+      return stored.has(key) ? stored.get(key) : null;
+    },
+    setItem(key, value, planId) {
+      observedPlanIds.push(planId);
+      stored.set(key, value);
+    },
   };
   try {
     h.rememberGlobalCourseDefinition({
@@ -135,6 +144,8 @@ test('plan-scoped metadata snapshots preserve resolver backfills', () => {
     assert.equal(restored.title, 'Political Sociology');
     assert.equal(restored.suCredits, 2.5);
     assert.equal(restored.ects, 5);
+    assert.ok(observedPlanIds.length >= 3);
+    assert.ok(observedPlanIds.every((planId) => planId === sessionPlanId));
   } finally {
     delete h.planStorage;
   }

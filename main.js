@@ -16,8 +16,8 @@ let _planWriteFailed = false;
 
 const _planIdForSession = (() => {
     try {
-        if (typeof window !== 'undefined' && window.planStorage && typeof window.planStorage.getActivePlanId === 'function') {
-            return window.planStorage.getActivePlanId();
+        if (typeof window !== 'undefined' && window.planStorage && typeof window.planStorage.getSessionPlanId === 'function') {
+            return window.planStorage.getSessionPlanId();
         }
     } catch (_) {}
     return null;
@@ -3068,6 +3068,8 @@ function SUrriculum(major_chosen_by_user) {
                     excluded: 'marked <strong>Excluded</strong> on the transcript and was not imported.',
                     'ambiguous-existing-occurrence': 'multiple matching entries already exist in the plan, so no occurrence was changed.',
                     'invalid-course-code': 'the course code could not be interpreted.',
+                    'missing-or-unrecognized-semester': 'the record has a <strong>missing or unrecognized semester</strong> (expected Fall, Spring, or Summer), so it was not imported.',
+                    'custom-course-storage-failed': 'the custom-course definition could not be saved safely, so the course was not imported.',
                     'create-failed': 'the course could not be added to the plan.',
                     'create-unavailable': 'course creation was unavailable.'
                 };

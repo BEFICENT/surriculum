@@ -1534,8 +1534,15 @@ function s_curriculum()
             if (typeof localStorage === 'undefined') return null;
             const key = 'customCourses_' + major;
             const ps = (typeof window !== 'undefined') ? window.planStorage : null;
+            const planId = (ps && typeof ps.getSessionPlanId === 'function')
+                ? ps.getSessionPlanId() : null;
             let stored = null;
-            try { stored = ps ? ps.getItem(key) : localStorage.getItem(key); } catch (_) {}
+            if (ps && typeof ps.getItem === 'function') {
+                if (!planId) return null;
+                try { stored = ps.getItem(key, planId); } catch (_) { return null; }
+            } else {
+                try { stored = localStorage.getItem(key); } catch (_) {}
+            }
             if (!stored) return null;
             return catalogRecordFor(JSON.parse(stored), code);
         } catch (_) {
@@ -2323,8 +2330,13 @@ function s_curriculum()
                         if (typeof localStorage !== 'undefined') {
                             const key = 'customCourses_' + this.major;
                             const ps = (typeof window !== 'undefined') ? window.planStorage : null;
+                            const planId = (ps && typeof ps.getSessionPlanId === 'function')
+                                ? ps.getSessionPlanId() : null;
                             const get = (k) => {
-                                try { return ps ? ps.getItem(k) : localStorage.getItem(k); } catch (_) {}
+                                if (ps && typeof ps.getItem === 'function') {
+                                    if (!planId) return null;
+                                    try { return ps.getItem(k, planId); } catch (_) { return null; }
+                                }
                                 try { return localStorage.getItem(k); } catch (_) {}
                                 return null;
                             };
@@ -2656,8 +2668,13 @@ function s_curriculum()
                         if (typeof localStorage !== 'undefined') {
                             const keyDM = 'customCourses_' + this.doubleMajor;
                             const ps = (typeof window !== 'undefined') ? window.planStorage : null;
+                            const planId = (ps && typeof ps.getSessionPlanId === 'function')
+                                ? ps.getSessionPlanId() : null;
                             const get = (k) => {
-                                try { return ps ? ps.getItem(k) : localStorage.getItem(k); } catch (_) {}
+                                if (ps && typeof ps.getItem === 'function') {
+                                    if (!planId) return null;
+                                    try { return ps.getItem(k, planId); } catch (_) { return null; }
+                                }
                                 try { return localStorage.getItem(k); } catch (_) {}
                                 return null;
                             };

@@ -102,8 +102,13 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
             let entryTermName = '';
             try {
                 const ps = (typeof window !== 'undefined') ? window.planStorage : null;
+                const planId = (ps && typeof ps.getSessionPlanId === 'function')
+                    ? ps.getSessionPlanId() : null;
                 const get = (k) => {
-                    try { return ps ? ps.getItem(k) : localStorage.getItem(k); } catch (_) {}
+                    if (ps && typeof ps.getItem === 'function') {
+                        if (!planId) return null;
+                        try { return ps.getItem(k, planId); } catch (_) { return null; }
+                    }
                     try { return localStorage.getItem(k); } catch (_) {}
                     return null;
                 };

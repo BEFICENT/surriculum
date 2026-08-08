@@ -1175,6 +1175,15 @@ function resolveGlobalCourseDefinition(code, overrides) {
 
 const GLOBAL_COURSE_METADATA_STORAGE_KEY = 'globalCourseMetadata';
 
+function getPlanStorageSessionId(storage) {
+    try {
+        if (storage && typeof storage.getSessionPlanId === 'function') {
+            return storage.getSessionPlanId() || null;
+        }
+    } catch (_) {}
+    return null;
+}
+
 function globalCourseMetadataFromRecord(record) {
     if (!record || typeof record !== 'object') return null;
     const code = normalizeGlobalCourseDefinitionCode(record);
@@ -1205,7 +1214,13 @@ function getStoredGlobalCourseMetadata() {
     try {
         const ps = (typeof window !== 'undefined') ? window.planStorage : null;
         let raw = null;
-        try { raw = ps ? ps.getItem(GLOBAL_COURSE_METADATA_STORAGE_KEY) : localStorage.getItem(GLOBAL_COURSE_METADATA_STORAGE_KEY); } catch (_) {}
+        if (ps && typeof ps.getItem === 'function') {
+            const planId = getPlanStorageSessionId(ps);
+            if (!planId) return byCode;
+            try { raw = ps.getItem(GLOBAL_COURSE_METADATA_STORAGE_KEY, planId); } catch (_) { return byCode; }
+        } else {
+            try { raw = localStorage.getItem(GLOBAL_COURSE_METADATA_STORAGE_KEY); } catch (_) {}
+        }
         const parsed = JSON.parse(raw || '[]');
         if (!Array.isArray(parsed)) return byCode;
         for (let i = 0; i < parsed.length && i < 2000; i++) {
@@ -1227,8 +1242,13 @@ function rememberGlobalCourseDefinition(record) {
         });
         const value = JSON.stringify(rows);
         const ps = (typeof window !== 'undefined') ? window.planStorage : null;
-        if (ps && typeof ps.setItem === 'function') ps.setItem(GLOBAL_COURSE_METADATA_STORAGE_KEY, value);
-        else if (typeof localStorage !== 'undefined') localStorage.setItem(GLOBAL_COURSE_METADATA_STORAGE_KEY, value);
+        if (ps && typeof ps.setItem === 'function') {
+            const planId = getPlanStorageSessionId(ps);
+            if (!planId) return metadata;
+            ps.setItem(GLOBAL_COURSE_METADATA_STORAGE_KEY, value, planId);
+        } else if (typeof localStorage !== 'undefined') {
+            localStorage.setItem(GLOBAL_COURSE_METADATA_STORAGE_KEY, value);
+        }
     } catch (_) {}
     return metadata;
 }
@@ -1618,8 +1638,12 @@ function reload(curriculum, course_data)
 {
     let data, grades, gradingBases, dates;
     const ps = (typeof window !== 'undefined') ? window.planStorage : null;
+    const planId = getPlanStorageSessionId(ps);
     const get = (k) => {
-        try { return ps ? ps.getItem(k) : localStorage.getItem(k); } catch (_) {}
+        if (ps && typeof ps.getItem === 'function') {
+            if (!planId) return null;
+            try { return ps.getItem(k, planId); } catch (_) { return null; }
+        }
         try { return localStorage.getItem(k); } catch (_) {}
         return null;
     };
