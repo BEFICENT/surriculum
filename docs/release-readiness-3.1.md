@@ -17,7 +17,7 @@ a time and checked off only after the fix and its verification are complete.
 - Broad release-blocker coverage remains deferred. Focused graduation and
   scheduler regressions were added when specifically requested.
 - The `surriculum-3.1` branch is published but has not been merged into `main`.
-  The local branch currently contains 19 additional commits that are being held
+  The local branch currently contains 21 additional commits that are being held
   for the production-ready push, as requested.
 - Claude co-author trailers were removed from the rewritten branch history.
 - Preserve the individual 3.1 commits. Do not squash or rebase the branch merely
@@ -27,7 +27,7 @@ a time and checked off only after the fix and its verification are complete.
 ## Verified baseline
 
 - [x] JavaScript/static unit gate passes: 207/207 tests.
-- [x] Playwright gate passes all 386 tests.
+- [x] Playwright gate passes all 392 tests.
 - [x] `python tests/scrape_groups_test.py` passes when run directly.
 - [x] `python tests/scrape_coursepages_fallback_test.py` passes: 3/3 tests.
 - [x] Python requirement validation and checked-in manifest integrity checks pass.
@@ -65,7 +65,7 @@ a time and checked off only after the fix and its verification are complete.
   `C:\Users\mehme\repos\surriculum-before-ancestry-repair-20260722-223259.bundle`.
 
   As of 2026-08-08, the published feature branch is 110 ahead and 34 behind
-  `origin/main`; the local branch, including this correction, is 129 ahead and
+  `origin/main`; the local branch, including these fixes, is 131 ahead and
   34 behind. To reach 0 behind
   while retaining every divergent commit and avoiding a rebase, merge current
   `origin/main` into `surriculum-3.1`; this does not merge or release 3.1 into
@@ -295,15 +295,18 @@ a time and checked off only after the fix and its verification are complete.
   out of scope for 3.1. As an interim safeguard, the import result now lists
   every added, updated, already-present, superseded, skipped, invalid-grade, and
   not-found course and explains the `Repeated` ambiguity instead of guessing.
-- [ ] Harden shifted-layout PDF transcript grade-column detection. The normal
-  tracked PDF extracts correctly, but the fallback parsers still infer a grade
-  from token position: wrapped title/status text after a missing column can be
-  reported as an unsupported grade, while a missing level marker can let an
-  unsupported grade blend into the title. Define a bounded grade-like token
-  grammar and add synthetic wrapped-title/missing-level cases before changing
-  this fragile fallback. The Microsoft Print-to-PDF sample contains no PDF.js
-  text items at all; that separate condition now has explicit re-export/OCR
-  guidance and regression coverage.
+- [x] Harden shifted-layout PDF transcript grade-column detection. Completed on
+  2026-08-08: both Academic Records PDF fallbacks now establish a bounded course
+  row, locate plausible adjacent SU-credit/ECTS columns, and infer a grade only
+  from the token anchored immediately before those columns. Canonical grade
+  policy remains authoritative; narrowly grade-shaped unsupported values such as
+  `A+` are reported for review instead of being imported. Wrapped title/status
+  text, missing level markers, split signs, short title words such as Art/Law/AI,
+  and numeric title fragments are covered without changing the explicit-column
+  HTML or YÖK parsers. The real tracked Academic Records Summary still produces
+  the same 38 courses, three status skips, and no invalid grades. The Microsoft
+  Print-to-PDF sample contains no PDF.js text items at all; that separate
+  condition retains its explicit re-export/OCR guidance and regression coverage.
 - [ ] Give unsuccessful attempts a distinct Summary state instead of placing
   them in the generic "untaken" bucket.
 - [x] Keep planner and scheduler offered-course data aligned. The planner now
@@ -343,8 +346,17 @@ a time and checked off only after the fix and its verification are complete.
   a weekly projection, and none self-overlap on an actual date. Seven frozen
   browser regressions cover repeated intensives, disjoint/shared dates, a
   no-shared-weekday boundary, and a section whose timetable changes mid-term.
-- [ ] Make scheduler replacement transactional so a rendering/build failure
-  cannot leave the plan partially cleared.
+- [x] Make scheduler replacement transactional so a rendering/build failure
+  cannot leave the plan partially cleared. Completed on 2026-08-08: schedule and
+  course metadata are loaded and validated before the first planner mutation,
+  lab/recitation-only selections fail without touching the plan, and a persisted
+  checkpoint is flushed immediately before one synchronous model/DOM commit.
+  Existing course objects and DOM nodes are reused so moves retain stable IDs,
+  grades, grading bases, hydrated metadata, and CRN updates. A thrown
+  recalculation/render error or final snapshot failure restores the exact model,
+  DOM, totals, course IDs, and persisted arrays, then shows a visible failure.
+  Model term identity also prevents a duplicate semester while its date editor
+  temporarily hides the rendered label, and a busy guard rejects double updates.
 - [x] Replace origin-wide `localStorage.clear()` with deletion of only known
   SUrriculum keys. Completed on 2026-07-23: reset now removes namespaced plan
   data plus the explicit legacy, preference, scheduler, and valid dynamic keys;

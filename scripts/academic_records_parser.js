@@ -78,6 +78,78 @@ function normalizeTranscriptGradeRecord(rawGrade, explicitBasis) {
     };
 }
 
+// PDF text extraction can omit an empty column, but it does not tell us that
+// the column was omitted.  Only short, grade-shaped values may therefore be
+// treated as unsupported grades.  This deliberately excludes arbitrary title
+// and status words while still surfacing tokens such as A+ (not a supported SU
+// undergraduate grade) for review.  Canonical aliases such as "Registered"
+// and "--" are accepted through normalizeTranscriptGrade first.
+function isTranscriptGradeLikeToken(rawToken) {
+    const token = String(rawToken === null || rawToken === undefined ? '' : rawToken).trim();
+    if (!token) return false;
+    if (normalizeTranscriptGrade(token) !== null) return true;
+    // Unsupported SU letter-grade shapes are deliberately much narrower than
+    // "one to three letters": Art, Law, The, AI, A, and I are all plausible
+    // title fragments. Supported administrative tokens still come from the
+    // canonical policy above.
+    return /^[A-F][+-]$/.test(token.toUpperCase());
+}
+
+function isTranscriptNumberToken(rawToken) {
+    const token = String(rawToken === null || rawToken === undefined ? '' : rawToken).trim();
+    return !!token && /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(token);
+}
+
+function findTranscriptCreditPair(values, start, end) {
+    const limit = Math.min(values.length, Math.max(0, Number(end)));
+    let lastPlausible = -1;
+    let lastGradeAnchored = -1;
+    for (let index = Math.max(0, Number(start) || 0); index + 1 < limit; index++) {
+        if (!isTranscriptNumberToken(values[index]) || !isTranscriptNumberToken(values[index + 1])) continue;
+        const suCredits = Number(values[index]);
+        const ects = Number(values[index + 1]);
+        // Catalogued SU courses currently top out at 4/10. The wider bounds
+        // leave room for unusual records while rejecting years, page counts,
+        // and other obviously non-credit numeric pairs.
+        if (suCredits < 0 || suCredits > 10 || ects < 0 || ects > 30) continue;
+        lastPlausible = index;
+        if (readTranscriptGradeBeforeCredits(values, index, start)) lastGradeAnchored = index;
+    }
+    // A supported/grade-shaped token immediately before a plausible pair is
+    // the strongest column signal. With an omitted grade, use the final pair so
+    // an earlier numeric title fragment (for example "Studio 1 2") cannot win.
+    return lastGradeAnchored !== -1 ? lastGradeAnchored : lastPlausible;
+}
+
+// A grade is inferred only from the token immediately before the two numeric
+// SU-credit/ECTS columns. This row-local anchor is what distinguishes a genuine
+// A or I grade from the same short token inside a course title.
+function readTranscriptGradeBeforeCredits(values, creditIndex, rowStart) {
+    if (creditIndex <= rowStart || creditIndex > values.length) return null;
+
+    let gradeIndex = creditIndex - 1;
+    let raw = String(values[gradeIndex] || '').trim();
+    const upper = raw.toUpperCase();
+    if ((upper === '+' || upper === '-') && gradeIndex - 1 >= rowStart) {
+        const letter = String(values[gradeIndex - 1] || '').trim().toUpperCase();
+        if (!/^[A-Z]$/.test(letter)) return null;
+        gradeIndex--;
+        raw = letter + upper;
+    }
+
+    if (!isTranscriptGradeLikeToken(raw)) return null;
+    const gradeRecord = normalizeTranscriptGradeRecord(raw);
+    if (gradeRecord) {
+        return { gradeRecord: gradeRecord, start: gradeIndex };
+    }
+    return { invalidGrade: raw, start: gradeIndex };
+}
+
+function isTranscriptRowStatusToken(rawToken) {
+    const token = String(rawToken || '').trim().toLowerCase().replace(/[.:]+$/, '');
+    return token === 'completed' || token === 'repeated' || token === 'excluded';
+}
+
 function makeParsedCourse(details, gradeRecord) {
     const parsed = Object.assign({}, details, { grade: gradeRecord.grade });
     if (gradeRecord.gradingBasis) parsed.gradingBasis = gradeRecord.gradingBasis;
@@ -450,31 +522,6 @@ function parseAcademicRecordsPdf(pdfText) {
             if (!String(tok || '').trim()) return false;
             return normalizeTranscriptGrade(tok) !== null;
         };
-        const readGradeAt = (idx) => {
-            const a = tokens[idx] || '';
-            const aU = upper(a);
-            const bU = upper(tokens[idx + 1] || '');
-            if ((aU === 'A' || aU === 'B' || aU === 'C' || aU === 'D') && (bU === '+' || bU === '-')) {
-                const g = aU + bU;
-                const gradeRecord = normalizeTranscriptGradeRecord(g);
-                return gradeRecord
-                    ? { gradeRecord: gradeRecord, next: idx + 2 }
-                    : { invalidGrade: g, next: idx + 2 };
-            }
-            const gradeRecord = normalizeTranscriptGradeRecord(a);
-            if (String(a).trim() && gradeRecord) return { gradeRecord: gradeRecord, next: idx + 1 };
-            // At this point the cursor is immediately after the level/title.
-            // A non-numeric token is therefore a grade candidate; reject it
-            // explicitly instead of silently importing the course as ungraded.
-            if (String(a).trim() && isNaN(parseFloat(a))) {
-                return { invalidGrade: a, next: idx + 1 };
-            }
-            return null;
-        };
-        const isNumberToken = (t) => {
-            if (!t) return false;
-            return !isNaN(parseFloat(t));
-        };
         const isSemesterAt = (idx) => {
             const t = tokens[idx];
             const y = tokens[idx + 1];
@@ -553,78 +600,68 @@ function parseAcademicRecordsPdf(pdfText) {
             }
 
             let code = start.code.replace(/\s+/g, '');
-            i = start.next;
+            const rowStart = start.next;
+            let rowEnd = rowStart;
+            while (rowEnd < tokens.length && !isSemesterAt(rowEnd) && !isCourseStartAt(rowEnd)) {
+                rowEnd++;
+            }
 
             // Skip ELAE entries (legacy behavior) without terminating parsing.
             if (code.includes('ELAE')) {
+                i = rowEnd;
                 continue;
             }
 
-            // Find the "level" token (UG/GR/...) nearby; Microsoft Print to PDF
-            // often flattens rows into a single token stream.
+            // Find the structural columns inside this row only. A grade is not
+            // inferred until the two adjacent numeric credit columns are known.
             let levelIdx = -1;
-            for (let j = i; j < Math.min(tokens.length, i + 40); j++) {
+            for (let j = rowStart; j < rowEnd; j++) {
                 if (levelTokens.has(upper(tokens[j]))) {
                     levelIdx = j;
                     break;
                 }
-                // Stop early if we obviously reached the next record.
-                if (isSemesterAt(j) || isCourseStartAt(j)) break;
             }
+            const creditIdx = findTranscriptCreditPair(
+                tokens, levelIdx === -1 ? rowStart : levelIdx + 1, rowEnd
+            );
+            const gradeToken = creditIdx === -1
+                ? null : readTranscriptGradeBeforeCredits(tokens, creditIdx, rowStart);
+            const titleEnd = gradeToken ? gradeToken.start : (creditIdx === -1 ? rowEnd : creditIdx);
 
             const titleTokens = [];
-            let cursor = i;
-            if (levelIdx !== -1 && levelIdx > i) {
-                for (let j = i; j < levelIdx; j++) {
-                    const tok = tokens[j];
-                    // Avoid accidentally slurping grade/credit tokens as title.
-                    if (isGradeToken(tok) || isNumberToken(tok)) break;
-                    titleTokens.push(tok);
+            const leadingStatusTokens = [];
+            if (levelIdx !== -1) {
+                for (let j = rowStart; j < levelIdx; j++) titleTokens.push(tokens[j]);
+                for (let j = levelIdx + 1; j < titleEnd; j++) {
+                    if (isTranscriptRowStatusToken(tokens[j])) leadingStatusTokens.push(tokens[j]);
+                    else titleTokens.push(tokens[j]);
                 }
-                cursor = levelIdx + 1;
             } else {
-                // Fallback: collect title tokens until we hit grade/credits.
-                while (cursor < tokens.length) {
-                    const tok = tokens[cursor];
-                    if (levelTokens.has(upper(tok)) || isGradeToken(tok) || isNumberToken(tok) || isSemesterAt(cursor) || isCourseStartAt(cursor)) break;
-                    titleTokens.push(tok);
-                    cursor++;
-                    if (titleTokens.length > 30) break;
+                for (let j = rowStart; j < titleEnd; j++) {
+                    if (isTranscriptRowStatusToken(tokens[j])) leadingStatusTokens.push(tokens[j]);
+                    else titleTokens.push(tokens[j]);
                 }
-                if (levelTokens.has(upper(tokens[cursor]))) cursor++;
             }
 
             const courseTitle = titleTokens.join(' ').trim();
 
             let gradeRecord = normalizeTranscriptGradeRecord('');
             let invalidGrade = null;
-            const g = readGradeAt(cursor);
-            if (g) {
-                if (g.gradeRecord) gradeRecord = g.gradeRecord;
-                else invalidGrade = g.invalidGrade;
-                cursor = g.next;
+            if (gradeToken) {
+                if (gradeToken.gradeRecord) gradeRecord = gradeToken.gradeRecord;
+                else invalidGrade = gradeToken.invalidGrade;
             }
 
-            let suCredits = 0;
-            if (cursor < tokens.length && isNumberToken(tokens[cursor])) {
-                suCredits = parseFloat(tokens[cursor]) || 0;
-                cursor++;
-            }
-
-            let ects = 0;
-            if (cursor < tokens.length && isNumberToken(tokens[cursor])) {
-                ects = parseFloat(tokens[cursor]) || 0;
-                cursor++;
-            }
+            const suCredits = creditIdx === -1 ? 0 : (parseFloat(tokens[creditIdx]) || 0);
+            const ects = creditIdx === -1 ? 0 : (parseFloat(tokens[creditIdx + 1]) || 0);
 
             // Scan status tokens until the next course/semester header to detect
             // "repeated/excluded" rows.
-            const statusTokens = [];
-            let j = cursor;
-            while (j < tokens.length && !isSemesterAt(j) && !isCourseStartAt(j)) {
+            const statusTokens = leadingStatusTokens.slice();
+            let j = creditIdx === -1 ? titleEnd : creditIdx + 2;
+            while (j < rowEnd) {
                 statusTokens.push(tokens[j]);
                 j++;
-                if (statusTokens.length > 60) break;
             }
             const statusText = statusTokens.join(' ').toLowerCase();
             const skipReason = statusText.includes('excluded')
@@ -634,7 +671,7 @@ function parseAcademicRecordsPdf(pdfText) {
                 addTranscriptSkip(out, code,
                     invalidGrade !== null ? invalidGrade : (gradeRecord ? gradeRecord.grade : ''),
                     sem, skipReason);
-                i = j;
+                i = rowEnd;
                 continue;
             }
 
@@ -648,7 +685,7 @@ function parseAcademicRecordsPdf(pdfText) {
             gradeRecord && gradeRecord.gradingBasis,
             { sourceOrder: tokenSourceOrder++ }));
 
-            i = j;
+            i = rowEnd;
         }
 
         return finalizeTranscriptResult(out, tokenCandidates);
@@ -665,51 +702,59 @@ function parseAcademicRecordsPdf(pdfText) {
 
         if (courseCodeRegex.test(line)) {
             let code = line.replace(/\s+/g, '');
-            i++;
+            const rowStart = i + 1;
+            let rowEnd = rowStart;
+            while (rowEnd < lines.length &&
+                   !courseCodeRegex.test(lines[rowEnd]) &&
+                   !semesterRegex.test(lines[rowEnd]) &&
+                   lines[rowEnd] !== 'SABANCI UNIVERSITY ACADEMIC RECORDS GUIDE') {
+                rowEnd++;
+            }
+
+            let levelIdx = -1;
+            for (let j = rowStart; j < rowEnd; j++) {
+                if (levelTokens.has(String(lines[j] || '').toUpperCase())) {
+                    levelIdx = j;
+                    break;
+                }
+            }
+            const creditIdx = findTranscriptCreditPair(
+                lines, levelIdx === -1 ? rowStart : levelIdx + 1, rowEnd
+            );
+            const gradeToken = creditIdx === -1
+                ? null : readTranscriptGradeBeforeCredits(lines, creditIdx, rowStart);
+            const titleEnd = gradeToken ? gradeToken.start : (creditIdx === -1 ? rowEnd : creditIdx);
+
             const titleTokens = [];
-            while (i < lines.length &&
-                   !levelTokens.has(lines[i]) &&
-                   !courseCodeRegex.test(lines[i]) &&
-                   !semesterRegex.test(lines[i])) {
-                titleTokens.push(lines[i]);
-                i++;
+            const leadingStatusTokens = [];
+            if (levelIdx !== -1) {
+                for (let j = rowStart; j < levelIdx; j++) titleTokens.push(lines[j]);
+                for (let j = levelIdx + 1; j < titleEnd; j++) {
+                    if (isTranscriptRowStatusToken(lines[j])) leadingStatusTokens.push(lines[j]);
+                    else titleTokens.push(lines[j]);
+                }
+            } else {
+                for (let j = rowStart; j < titleEnd; j++) {
+                    if (isTranscriptRowStatusToken(lines[j])) leadingStatusTokens.push(lines[j]);
+                    else titleTokens.push(lines[j]);
+                }
             }
+
             const courseTitle = titleTokens.join(' ').trim();
-
-            if (i >= lines.length) break;
-
-            if (levelTokens.has(lines[i])) {
-                i++;
-            }
 
             let gradeRecord = normalizeTranscriptGradeRecord('');
             let invalidGrade = null;
-            if (i < lines.length && isNaN(parseFloat(lines[i]))) {
-                const candidate = normalizeTranscriptGradeRecord(lines[i]);
-                if (candidate) gradeRecord = candidate;
-                else invalidGrade = lines[i];
-                i++;
+            if (gradeToken) {
+                if (gradeToken.gradeRecord) gradeRecord = gradeToken.gradeRecord;
+                else invalidGrade = gradeToken.invalidGrade;
             }
 
-            let suCredits = 0;
-            if (i < lines.length && !isNaN(parseFloat(lines[i]))) {
-                suCredits = parseFloat(lines[i]);
-                i++;
-            }
+            const suCredits = creditIdx === -1 ? 0 : (parseFloat(lines[creditIdx]) || 0);
+            const ects = creditIdx === -1 ? 0 : (parseFloat(lines[creditIdx + 1]) || 0);
 
-            let ects = 0;
-            if (i < lines.length && !isNaN(parseFloat(lines[i]))) {
-                ects = parseFloat(lines[i]);
-                i++;
-            }
-
-            const statusTokens = [];
-            while (i < lines.length &&
-                   !courseCodeRegex.test(lines[i]) &&
-                   !semesterRegex.test(lines[i]) && lines[i] !== 'SABANCI UNIVERSITY ACADEMIC RECORDS GUIDE')
-            {
-                statusTokens.push(lines[i]);
-                i++;
+            const statusTokens = leadingStatusTokens.slice();
+            for (let j = creditIdx === -1 ? titleEnd : creditIdx + 2; j < rowEnd; j++) {
+                statusTokens.push(lines[j]);
             }
             const statusText = statusTokens.join(' ').toLowerCase();
             const skipReason = statusText.includes('excluded')
@@ -719,11 +764,13 @@ function parseAcademicRecordsPdf(pdfText) {
                 addTranscriptSkip(result, code,
                     invalidGrade !== null ? invalidGrade : (gradeRecord ? gradeRecord.grade : ''),
                     currentSemester, skipReason);
+                i = rowEnd;
                 continue;
             }
 
             // Correct the condition to skip courses with ELAE code
             if (code.includes('ELAE')) {
+                i = rowEnd;
                 continue; // Skip this iteration
             }
 
@@ -736,6 +783,7 @@ function parseAcademicRecordsPdf(pdfText) {
             }, invalidGrade !== null ? invalidGrade : gradeRecord.grade,
             gradeRecord && gradeRecord.gradingBasis,
             { sourceOrder: sourceOrder++ }));
+            i = rowEnd;
             continue;
         }
 

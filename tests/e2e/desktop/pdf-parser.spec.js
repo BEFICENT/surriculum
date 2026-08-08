@@ -120,4 +120,71 @@ test.describe('PDF transcript parsing (desktop)', () => {
       expect.objectContaining({ code: 'MATH101', grade: 'D', keptSemester: 'Spring 2024-2025' }),
     ]);
   });
+
+  test('a missing grade column keeps wrapped title and status text out of invalid grades', async ({ page }) => {
+    await page.goto('/');
+    const text = [
+      'Fall 2024-2025',
+      'CS201',
+      'Programming',
+      'UG',
+      'Fundamentals',
+      '3',
+      '6',
+      'Completed',
+      'MATH101',
+      'Calculus',
+      'UG',
+      'Completed',
+      '3',
+      '6',
+    ].join('\n');
+
+    const result = await page.evaluate(
+      (pdfText) => window.academicRecordsParser.parseAcademicRecordsPdf(pdfText),
+      text,
+    );
+
+    expect(result.courses).toEqual([
+      expect.objectContaining({
+        code: 'CS201', title: 'Programming Fundamentals', grade: '', suCredits: 3, ects: 6,
+      }),
+      expect.objectContaining({
+        code: 'MATH101', title: 'Calculus', grade: '', suCredits: 3, ects: 6,
+      }),
+    ]);
+    expect(result.invalidGradeCourses).toEqual([]);
+  });
+
+  test('a missing level marker uses the numeric columns to distinguish titles from grades', async ({ page }) => {
+    await page.goto('/');
+    const text = [
+      'Fall 2024-2025',
+      'ART101 Art and Law 1 2 Survey 3 6 Completed',
+      'CS201 A History of AI I A 3 6 Completed',
+      'MATH101 Calculus B + 3 6 Completed',
+      'HUM101 Art and Law A+ 3 6 Completed',
+    ].join('\n');
+
+    const result = await page.evaluate(
+      (pdfText) => window.academicRecordsParser.parseAcademicRecordsPdf(pdfText),
+      text,
+    );
+
+    expect(result.courses).toEqual([
+      expect.objectContaining({
+        code: 'ART101', title: 'Art and Law 1 2 Survey', grade: '', suCredits: 3, ects: 6,
+      }),
+      expect.objectContaining({
+        code: 'CS201', title: 'A History of AI I', grade: 'A', suCredits: 3, ects: 6,
+      }),
+      expect.objectContaining({
+        code: 'MATH101', title: 'Calculus', grade: 'B+', suCredits: 3, ects: 6,
+      }),
+    ]);
+    expect(result.invalidGradeCourses).toEqual([
+      { code: 'HUM101', grade: 'A+', semester: 'Fall 2024-2025' },
+    ]);
+    expect(result.detectedRecords).toBe(4);
+  });
 });
