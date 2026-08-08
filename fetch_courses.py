@@ -10,9 +10,11 @@ import argparse
 import concurrent.futures
 import random
 import threading
+import tempfile
 import time
 
 from term_utils import generate_terms
+from suis_page_validation import require_matching_admit_term, validate_suis_term_code
 
 COURSES_DIR = 'courses'
 
@@ -206,10 +208,12 @@ def crawl_list(url, category):
 
 
 def crawl_program(code, term):
+    term = validate_suis_term_code(term)
     url = (BASE + 'SU_DEGREE.p_degree_detail?P_PROGRAM={code}&P_LANG=EN&P_LEVEL=UG'
            '&P_TERM={term}&P_SUBMIT=Select').format(code=code, term=term)
     html = fetch_html(url)
     soup = BeautifulSoup(html, 'lxml')
+    require_matching_admit_term(soup, term)
     results = []
     seen_courses = set()  # Track seen courses to avoid duplicates
 
@@ -404,6 +408,68 @@ def crawl_program(code, term):
     return results
 
 
+def merge_course_terms_index_atomic(successful_terms):
+    """Publish complete term rows without dropping last-known-good entries."""
+    if not successful_terms:
+        return False
+
+    target = os.path.join(COURSES_DIR, 'terms.jsonl')
+    merged = {}
+    if os.path.exists(target):
+        with open(target, 'r', encoding='utf-8') as fh:
+            for line_number, line in enumerate(fh, 1):
+                if not line.strip():
+                    continue
+                try:
+                    record = json.loads(line)
+                    term = validate_suis_term_code(record.get('term'))
+                    majors = record.get('majors')
+                    if not isinstance(majors, list) or not majors or not all(
+                        isinstance(major, str) and major.strip() for major in majors
+                    ):
+                        raise ValueError('majors must be a list of non-empty strings')
+                    if term in merged:
+                        raise ValueError(f'duplicate term {term}')
+                except Exception as exc:
+                    raise ValueError(
+                        f'Invalid course term index row {line_number}: {exc}'
+                    ) from exc
+                merged[term] = record
+
+    for raw_term, raw_majors in successful_terms.items():
+        term = validate_suis_term_code(raw_term)
+        if not isinstance(raw_majors, (list, tuple, set)) or not raw_majors or not all(
+            isinstance(major, str) and major.strip() for major in raw_majors
+        ):
+            raise ValueError(f'Cannot publish incomplete course term row for {term}')
+        majors = sorted(set(raw_majors))
+        merged[term] = {'term': term, 'majors': majors}
+
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode='w',
+            encoding='utf-8',
+            newline='\n',
+            dir=COURSES_DIR,
+            prefix='.terms.',
+            suffix='.tmp',
+            delete=False,
+        ) as fh:
+            temp_path = fh.name
+            for term in sorted(merged):
+                fh.write(json.dumps(merged[term], ensure_ascii=False) + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(temp_path, target)
+        temp_path = None
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.unlink(temp_path)
+
+    return True
+
+
 def main():
     global _net_semaphore, _http_timeout_s, _http_retries, _http_backoff_s, _http_sleep_s
 
@@ -434,19 +500,27 @@ def main():
 
     os.makedirs(COURSES_DIR, exist_ok=True)
 
-    programs = get_program_codes()
-
     if args.terms.strip():
-        terms = [t.strip() for t in args.terms.split(",") if t.strip()]
+        terms = [validate_suis_term_code(t) for t in args.terms.split(",") if t.strip()]
     else:
         # Generate terms dynamically (same date rules as the web app) so we do
         # not have to bump a hard-coded year cap each year.
-        terms = generate_terms(start_year=2019)
+        terms = [validate_suis_term_code(t) for t in generate_terms(start_year=2019)]
 
     if args.max_terms and args.max_terms > 0:
         terms = terms[: int(args.max_terms)]
 
+    # Validate explicit term input before making any remote discovery request.
+    programs = get_program_codes()
+    missing_programs = sorted(set(PROGRAM_FILES) - set(programs))
+    if missing_programs:
+        raise RuntimeError(
+            "SUIS program list is missing expected undergraduate programs: "
+            + ", ".join(missing_programs)
+        )
+
     majors_by_term = {}
+    failed_terms = []
 
     workers = max(1, int(args.workers))
     program_items = list(PROGRAM_FILES.items())
@@ -480,14 +554,30 @@ def main():
                         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
                 print(f"Updated {fname} for term {term} with {len(data)} records")
 
-            if majors_found:
+            if len(majors_found) == len(futures) and majors_found:
                 # Keep deterministic output regardless of thread completion order.
                 majors_by_term[term] = sorted(set(majors_found))
+            else:
+                failed_terms.append(term)
+                print(
+                    f"Incomplete catalog refresh for {term}: "
+                    f"accepted {len(majors_found)}/{len(futures)} programs; "
+                    "preserving the existing term index."
+                )
 
-    # Write mapping of majors per term
-    with open(os.path.join(COURSES_DIR, 'terms.jsonl'), 'w', encoding='utf-8') as f:
-        for term in sorted(majors_by_term.keys()):
-            f.write(json.dumps({"term": term, "majors": majors_by_term[term]}, ensure_ascii=False) + "\n")
+    # Publish only complete rows. Existing unrequested and failed term rows
+    # remain last-known-good, and the merged manifest is replaced atomically.
+    if majors_by_term and not args.max_programs:
+        merge_course_terms_index_atomic(majors_by_term)
+    else:
+        print("No complete term rows to publish; preserving the existing term index.")
+
+    if failed_terms:
+        print(
+            "Course catalog refresh failed for: " + ", ".join(failed_terms)
+            + ". Existing catalog files and the term index remain discoverable."
+        )
+        return 1
 
     if not args.skip_minors:
         # Fetch minor catalogs + requirements. By default we only fetch the
@@ -518,7 +608,8 @@ def main():
                     check=True
                 )
         except Exception as e:
-            print(f"Warning: failed to fetch minors: {e}")
+            print(f"Failed to fetch minors: {e}")
+            return 1
 
     if not args.skip_coursepages:
         # Populate Basic_Science / Engineering credits by scraping course pages.
@@ -526,6 +617,8 @@ def main():
         print("\nRunning scrape_coursepages.py to update credits in JSON files...\n")
         subprocess.run(['python', 'scrape_coursepages.py'], check=True)
 
+    return 0
+
 
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main())

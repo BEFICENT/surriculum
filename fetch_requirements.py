@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 
 from term_utils import generate_terms
+from suis_page_validation import require_matching_admit_term, validate_suis_term_code
 
 REQUIREMENTS_DIR = 'requirements'
 BASE = 'https://suis.sabanciuniv.edu/prod/'
@@ -64,6 +65,7 @@ def fetch_requirements(program, term, offline_dir=None, timeout_s: float = 30.0)
     Returns a dict with ``ects`` and ``total`` keys if found.
     """
 
+    term = validate_suis_term_code(term)
     html = None
     major = PROGRAM_CODES.get(program, program)
     if offline_dir:
@@ -83,6 +85,7 @@ def fetch_requirements(program, term, offline_dir=None, timeout_s: float = 30.0)
         html = resp.text
 
     soup = BeautifulSoup(html, 'lxml')
+    require_matching_admit_term(soup, term)
     # Summary table usually has class "t_mezuniyet"; fall back to the first
     # table containing "SUMMARY OF DEGREE" text.
     table = soup.find('table', class_='t_mezuniyet')
@@ -493,11 +496,11 @@ def main():
     os.makedirs(REQUIREMENTS_DIR, exist_ok=True)
 
     if args.terms.strip():
-        terms = [t.strip() for t in args.terms.split(",") if t.strip()]
+        terms = [validate_suis_term_code(t) for t in args.terms.split(",") if t.strip()]
     else:
         # Generate terms dynamically (same date rules as the web app) so we do
         # not have to bump a hard-coded year cap each year.
-        terms = generate_terms(start_year=2019)
+        terms = [validate_suis_term_code(t) for t in generate_terms(start_year=2019)]
 
     if args.max_terms and args.max_terms > 0:
         terms = terms[: int(args.max_terms)]
@@ -572,7 +575,8 @@ def main():
                 check=True,
             )
         except Exception as e:
-            print(f"Warning: failed to fetch minors: {e}")
+            print(f"Failed to fetch minors: {e}")
+            return 1
 
     return 0
 

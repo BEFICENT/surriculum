@@ -20,12 +20,13 @@ npm run test:e2e:cross-browser  # one critical flow in Firefox + WebKit
 python tests/scrape_groups_test.py
 python tests/scrape_coursepages_fallback_test.py
 python tests/requirements_validation_test.py
+python tests/scraper_term_identity_test.py
 python tests/manifest_integrity_test.py
 python tests/pages_artifact_test.py
 npm run test:e2e:ui    # Playwright interactive UI mode
 ```
 
-The five Python checks are included in `npm test`; their direct commands remain
+The six Python checks are included in `npm test`; their direct commands remain
 available for focused runs. Python dependencies are installed separately from
 the JavaScript dev tooling. The cross-browser command is intentionally separate
 from `npm test`: it repeats one release-critical planner flow, not the complete

@@ -101,6 +101,7 @@ jobs:
       - name: Validate refreshed requirements and data manifest
         run: |
           python tests/requirements_validation_test.py
+          python tests/scraper_term_identity_test.py
           python tests/manifest_integrity_test.py
 
       - name: Create pull request if anything changed

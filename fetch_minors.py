@@ -3,6 +3,8 @@ import json
 import os
 import re
 import random
+import shutil
+import tempfile
 import threading
 import time
 import concurrent.futures
@@ -12,6 +14,8 @@ from urllib.parse import parse_qs, urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
+
+from suis_page_validation import require_matching_admit_term, validate_suis_term_code
 
 BASE = "https://suis.sabanciuniv.edu/prod/"
 LIST_URL = BASE + "SU_DEGREE.p_list_degree?P_LEVEL=UG&P_LANG=EN&P_PRG_TYPE=MINOR"
@@ -500,7 +504,11 @@ def load_minor_detail_html(program: str, term: Optional[str], offline_dir: Optio
         path = os.path.join(offline_dir, fname)
         if os.path.exists(path):
             with open(path, "r", encoding="utf-8") as f:
-                return f.read()
+                html = f.read()
+            if term:
+                term = validate_suis_term_code(term)
+                require_matching_admit_term(BeautifulSoup(html, "lxml"), term)
+            return html
 
     # Online: if term is not provided, fall back to the latest term exposed.
     if not term:
@@ -511,11 +519,127 @@ def load_minor_detail_html(program: str, term: Optional[str], offline_dir: Optio
         term = opt.get("value") if opt else None
         if not term:
             raise RuntimeError(f"Could not determine latest term for {program}")
+    term = validate_suis_term_code(term)
     detail_url = (
         BASE
         + "SU_DEGREE.p_degree_detail?P_PROGRAM={p}&P_LANG=EN&P_LEVEL=UG&P_TERM={t}&P_SUBMIT=Select"
     ).format(p=program, t=term)
-    return fetch_html(detail_url, timeout=timeout)
+    html = fetch_html(detail_url, timeout=timeout)
+    require_matching_admit_term(BeautifulSoup(html, "lxml"), term)
+    return html
+
+
+def _jsonl_text(records: List[Dict]) -> str:
+    return "".join(json.dumps(record, ensure_ascii=False) + "\n" for record in records)
+
+
+def _load_minor_requirement_records(path: str) -> Dict[str, Dict]:
+    """Load a term snapshot without silently discarding records in subset mode."""
+    records: Dict[str, Dict] = {}
+    if not os.path.exists(path):
+        return records
+    with open(path, "r", encoding="utf-8") as req_in:
+        for line_number, line in enumerate(req_in, start=1):
+            line = (line or "").strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except Exception as exc:
+                raise ValueError(f"invalid JSON on line {line_number} of {path}") from exc
+            if not isinstance(record, dict) or not str(record.get("minor") or "").strip():
+                raise ValueError(f"invalid minor requirement record on line {line_number} of {path}")
+            program = str(record["minor"]).strip()
+            if program in records:
+                raise ValueError(f"duplicate minor {program} in {path}")
+            records[program] = record
+    return records
+
+
+def _load_minor_terms_manifest(path: str) -> set[str]:
+    terms: set[str] = set()
+    if not os.path.exists(path):
+        return terms
+    with open(path, "r", encoding="utf-8") as manifest_in:
+        for line_number, line in enumerate(manifest_in, start=1):
+            line = (line or "").strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except Exception as exc:
+                raise ValueError(f"invalid JSON on line {line_number} of {path}") from exc
+            term = record.get("term") if isinstance(record, dict) else None
+            if not term or not re.fullmatch(r"\d{6}", str(term)):
+                raise ValueError(f"invalid minor term record on line {line_number} of {path}")
+            terms.add(str(term))
+    return terms
+
+
+def _publish_text_files_atomically(files: Dict[str, str]) -> None:
+    """Stage a related set of files and roll it back if any replacement fails."""
+    staged: Dict[str, str] = {}
+    backups: Dict[str, str] = {}
+    replaced: List[str] = []
+    try:
+        for target in sorted(files):
+            parent = os.path.dirname(target) or "."
+            os.makedirs(parent, exist_ok=True)
+            fd, staged_path = tempfile.mkstemp(
+                prefix=f".{os.path.basename(target)}.", suffix=".tmp", dir=parent
+            )
+            staged[target] = staged_path
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as staged_out:
+                    staged_out.write(files[target])
+                    staged_out.flush()
+                    os.fsync(staged_out.fileno())
+            except Exception:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+                raise
+
+        # Backups live beside their targets so every move stays on one filesystem.
+        for target in sorted(files):
+            if not os.path.exists(target):
+                continue
+            parent = os.path.dirname(target) or "."
+            fd, backup_path = tempfile.mkstemp(
+                prefix=f".{os.path.basename(target)}.", suffix=".bak", dir=parent
+            )
+            os.close(fd)
+            backups[target] = backup_path
+            shutil.copy2(target, backup_path)
+
+        for target in sorted(files):
+            staged_path = staged[target]
+            os.replace(staged_path, target)
+            staged.pop(target)
+            replaced.append(target)
+    except Exception as exc:
+        rollback_errors: List[str] = []
+        for target in reversed(replaced):
+            try:
+                backup_path = backups.pop(target, None)
+                if backup_path:
+                    os.replace(backup_path, target)
+                elif os.path.exists(target):
+                    os.remove(target)
+            except Exception as rollback_exc:
+                rollback_errors.append(f"{target}: {rollback_exc}")
+        if rollback_errors:
+            raise RuntimeError(
+                f"publication failed ({exc}); rollback also failed: {'; '.join(rollback_errors)}"
+            ) from exc
+        raise
+    finally:
+        for temporary_path in list(staged.values()) + list(backups.values()):
+            try:
+                os.remove(temporary_path)
+            except FileNotFoundError:
+                pass
 
 
 def main():
@@ -547,6 +671,15 @@ def main():
     os.makedirs(REQUIREMENTS_DIR, exist_ok=True)
     os.makedirs(os.path.dirname(REQUIREMENTS_LEGACY_PATH), exist_ok=True)
 
+    terms_arg = (args.terms or "").strip()
+    terms: List[str] = []
+    if terms_arg:
+        terms = [
+            validate_suis_term_code(part)
+            for part in terms_arg.split(",")
+            if part.strip()
+        ]
+
     if offline_dir:
         list_path = os.path.join(offline_dir, "SU_DEGREE_minor.html")
         if not os.path.exists(list_path):
@@ -556,28 +689,26 @@ def main():
     else:
         list_html = fetch_html(LIST_URL, timeout=timeout)
 
-    minors = parse_minor_list(list_html)
+    discovered = {minor.program.upper(): minor for minor in parse_minor_list(list_html)}
+    minors = [discovered[program] for program in sorted(discovered)]
+    if not minors:
+        print("Failed to discover any minor programs; existing minor data was preserved.")
+        return 1
+
+    programs_arg = (args.programs or "").strip()
+    subset_mode = bool(programs_arg or (args.max_programs and args.max_programs > 0))
+    if programs_arg:
+        wanted = {p.strip().upper() for p in programs_arg.split(",") if p.strip()}
+        missing = sorted(wanted - set(discovered))
+        if not wanted or missing:
+            missing_label = ", ".join(missing) if missing else programs_arg
+            print(f"No matching minor programs found for: {missing_label}")
+            return 1
+        minors = [m for m in minors if m.program.upper() in wanted]
     if args.max_programs and args.max_programs > 0:
         minors = minors[: int(args.max_programs)]
 
-    programs_arg = (args.programs or "").strip()
-    subset_mode = False
-    if programs_arg:
-        wanted = {p.strip().upper() for p in programs_arg.split(",") if p.strip()}
-        minors = [m for m in minors if m.program.upper() in wanted]
-        subset_mode = True
-        if not minors:
-            raise SystemExit(f"No matching minor programs found for --programs: {programs_arg}")
-
-    terms_arg = (args.terms or "").strip()
-    terms: List[str] = []
     coursepage_credit_lookup = load_coursepage_credit_lookup()
-    if terms_arg:
-        for part in terms_arg.split(","):
-            p = part.strip()
-            if p:
-                terms.append(p)
-    terms = [t for t in terms if re.fullmatch(r"\d{6}", t)]
 
     # Default term: try to read it from the first minor program's selector.
     if not terms and not offline_dir and minors:
@@ -587,7 +718,7 @@ def main():
             sel_soup = BeautifulSoup(sel_html, "lxml")
             opt = sel_soup.select_one('select[name=P_TERM] option')
             if opt and opt.get("value"):
-                terms = [opt.get("value")]
+                terms = [validate_suis_term_code(opt.get("value"))]
         except Exception:
             terms = []
 
@@ -599,25 +730,15 @@ def main():
     if not terms:
         raise SystemExit("No terms provided and could not determine a default term.")
 
-    # Maintain a stable manifest of available minor term codes for the UI.
-    # We merge with any existing manifest so partial runs don't shrink it.
+    # Only complete runs advertise a term. Subset/debug runs can refresh an
+    # existing snapshot, but must not make a partial new term discoverable.
     existing_terms: set[str] = set()
-    try:
-        if os.path.exists(REQUIREMENTS_TERMS_MANIFEST):
-            with open(REQUIREMENTS_TERMS_MANIFEST, "r", encoding="utf-8") as mf_in:
-                for line in mf_in:
-                    line = (line or "").strip()
-                    if not line:
-                        continue
-                    try:
-                        rec = json.loads(line)
-                        t = rec.get("term") if isinstance(rec, dict) else None
-                        if t and re.fullmatch(r"\d{6}", str(t)):
-                            existing_terms.add(str(t))
-                    except Exception:
-                        continue
-    except Exception:
-        existing_terms = set()
+    if not subset_mode:
+        try:
+            existing_terms = _load_minor_terms_manifest(REQUIREMENTS_TERMS_MANIFEST)
+        except Exception as exc:
+            print(f"Failed to read the existing minor term index: {exc}")
+            return 1
 
     # Write per-term requirements and per-term course catalogs.
     legacy_term = None
@@ -627,148 +748,119 @@ def main():
     except Exception:
         legacy_term = None
 
-    successful_terms: set[str] = set()
+    failed_terms: List[str] = []
     for term in terms:
         is_offline = term == "offline"
+        label = term if not is_offline else "offline"
 
         req_path = REQUIREMENTS_LEGACY_PATH if is_offline else os.path.join(REQUIREMENTS_DIR, f"{term}.jsonl")
         term_courses_dir = COURSES_DIR if is_offline else os.path.join(COURSES_DIR, term)
 
-        os.makedirs(term_courses_dir, exist_ok=True)
-
         write_legacy_here = bool(args.write_legacy and (legacy_term and term == legacy_term) and not is_offline)
-        legacy_req_out = None
+        # Fetch and parse every selected minor before constructing any output.
+        results: Dict[str, Tuple[Dict, List[Dict]]] = {}
+        failures: List[Tuple[str, str]] = []
+
+        def _worker(prog: MinorProgram):
+            detail_html = load_minor_detail_html(prog.program, None if is_offline else term, offline_dir, timeout)
+            req = parse_minor_requirements(detail_html)
+            rec = {
+                "minor": prog.program,
+                "name": prog.name,
+                "termCode": None if is_offline else term,
+                **req,
+            }
+            courses = parse_minor_courses(
+                detail_html,
+                program=prog.program,
+                offline_dir=offline_dir,
+                timeout=timeout,
+            )
+            # Pages without a real course list are usually blocked/invalid.
+            # Treat as failure so we don't overwrite existing data with empty files.
+            if not courses and not is_offline:
+                raise ValueError("no courses parsed")
+            return prog.program, rec, courses
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+            futs = {executor.submit(_worker, minor): minor for minor in minors}
+            for future in concurrent.futures.as_completed(futs):
+                minor = futs[future]
+                try:
+                    program, rec, courses = future.result()
+                    results[program] = (rec, courses)
+                except Exception as exc:
+                    failures.append((minor.program, str(exc)))
+                    print(f"Failed {minor.program} ({label}): {exc}")
+
+        if failures or len(results) != len(minors):
+            failed_terms.append(label)
+            print(
+                f"Incomplete minor refresh for {label}: accepted {len(results)}/{len(minors)} programs; "
+                "all existing requirements and catalogs for the term were preserved."
+            )
+            continue
+
         try:
-            # Fetch/parse all minors for this term in parallel, then write in a
-            # stable order so git diffs remain readable.
-            results: Dict[str, Tuple[Dict, List[Dict]]] = {}
+            req_records = _load_minor_requirement_records(req_path) if subset_mode else {}
+            for program, (record, _courses) in results.items():
+                req_records[program] = record
 
-            def _worker(prog: MinorProgram):
-                detail_html = load_minor_detail_html(prog.program, None if is_offline else term, offline_dir, timeout)
-                req = parse_minor_requirements(detail_html)
-                rec = {
-                    "minor": prog.program,
-                    "name": prog.name,
-                    "termCode": None if is_offline else term,
-                    **req,
-                }
-                courses = parse_minor_courses(
-                    detail_html,
-                    program=prog.program,
-                    offline_dir=offline_dir,
-                    timeout=timeout,
+            publication: Dict[str, str] = {
+                req_path: _jsonl_text([req_records[program] for program in sorted(req_records)])
+            }
+
+            for minor in minors:
+                _record, courses = results[minor.program]
+                course_path = os.path.join(term_courses_dir, f"{minor.program}.jsonl")
+                courses = enrich_minor_course_credits(
+                    courses,
+                    coursepage_lookup=coursepage_credit_lookup,
+                    existing_lookup=load_existing_minor_credit_lookup(course_path),
                 )
-                # Pages without a real course list are usually blocked/invalid.
-                # Treat as failure so we don't overwrite existing data with empty files.
-                if not courses and not is_offline:
-                    raise ValueError("no courses parsed")
-                return prog.program, rec, courses
+                results[minor.program] = (_record, courses)
+                publication[course_path] = _jsonl_text(courses)
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-                futs = {executor.submit(_worker, m): m for m in minors}
-                for fut in concurrent.futures.as_completed(futs):
-                    prog = futs[fut]
-                    try:
-                        program, rec, courses = fut.result()
-                        results[program] = (rec, courses)
-                    except Exception as e:
-                        label = term if not is_offline else "offline"
-                        print(f"Failed {prog.program} ({label}): {e}")
+            if write_legacy_here:
+                if subset_mode:
+                    legacy_req_records = _load_minor_requirement_records(REQUIREMENTS_LEGACY_PATH)
+                    for program, (record, _courses) in results.items():
+                        legacy_req_records[program] = record
+                else:
+                    legacy_req_records = req_records
+                publication[REQUIREMENTS_LEGACY_PATH] = _jsonl_text(
+                    [legacy_req_records[program] for program in sorted(legacy_req_records)]
+                )
+                for minor in minors:
+                    _record, courses = results[minor.program]
+                    publication[os.path.join(COURSES_DIR, f"{minor.program}.jsonl")] = _jsonl_text(courses)
 
-            if not results:
-                label = term if not is_offline else "offline"
-                print(f"Warning: no minor programs scraped for term {label}; leaving existing files unchanged.")
-            else:
-                if write_legacy_here:
-                    try:
-                        legacy_req_out = open(REQUIREMENTS_LEGACY_PATH, "w", encoding="utf-8")
-                    except Exception:
-                        legacy_req_out = None
+            if not is_offline and not subset_mode:
+                next_terms = set(existing_terms)
+                next_terms.add(term)
+                publication[REQUIREMENTS_TERMS_MANIFEST] = _jsonl_text(
+                    [{"term": indexed_term} for indexed_term in sorted(next_terms, key=int, reverse=True)]
+                )
 
-                # Build the requirements records to write. If --programs was
-                # used, merge into the existing term file (if present) so we
-                # don't accidentally drop other minors from the requirements
-                # JSONL.
-                req_records: Dict[str, Dict] = {}
-                if subset_mode and os.path.exists(req_path):
-                    try:
-                        with open(req_path, "r", encoding="utf-8") as rf:
-                            for line in rf:
-                                line = (line or "").strip()
-                                if not line:
-                                    continue
-                                try:
-                                    rec0 = json.loads(line)
-                                except Exception:
-                                    continue
-                                code0 = rec0.get("minor") if isinstance(rec0, dict) else None
-                                if code0:
-                                    req_records[str(code0)] = rec0
-                    except Exception:
-                        req_records = {}
+            _publish_text_files_atomically(publication)
+        except Exception as exc:
+            failed_terms.append(label)
+            print(f"Failed to publish minor data for {label}: {exc}; existing files were preserved.")
+            continue
 
-                # Apply updates from this run
-                for program, (rec, _courses) in results.items():
-                    req_records[program] = rec
+        if not is_offline and not subset_mode:
+            existing_terms.add(term)
+        for minor in minors:
+            print(f"Updated {minor.program} ({label}): {len(results[minor.program][1])} courses")
 
-                # Write requirements file deterministically
-                with open(req_path, "w", encoding="utf-8") as req_out:
-                    for program in sorted(req_records.keys()):
-                        req_out.write(json.dumps(req_records[program], ensure_ascii=False) + "\n")
-
-                # Optional legacy snapshot for the newest term processed.
-                if legacy_req_out:
-                    try:
-                        for program in sorted(req_records.keys()):
-                            legacy_req_out.write(json.dumps(req_records[program], ensure_ascii=False) + "\n")
-                    except Exception:
-                        pass
-
-                # Write course catalogs for the programs we processed.
-                for m in minors:
-                    if m.program not in results:
-                        continue
-                    _rec, courses = results[m.program]
-                    course_path = os.path.join(term_courses_dir, f"{m.program}.jsonl")
-                    existing_lookup = load_existing_minor_credit_lookup(course_path)
-                    courses = enrich_minor_course_credits(
-                        courses,
-                        coursepage_lookup=coursepage_credit_lookup,
-                        existing_lookup=existing_lookup,
-                    )
-                    with open(course_path, "w", encoding="utf-8") as c_out:
-                        for c in courses:
-                            c_out.write(json.dumps(c, ensure_ascii=False) + "\n")
-
-                    if legacy_req_out:
-                        legacy_course_path = os.path.join(COURSES_DIR, f"{m.program}.jsonl")
-                        with open(legacy_course_path, "w", encoding="utf-8") as lc_out:
-                            for c in courses:
-                                lc_out.write(json.dumps(c, ensure_ascii=False) + "\n")
-
-                    label = term if not is_offline else "offline"
-                    print(f"Updated {m.program} ({label}): {len(courses)} courses")
-
-            if not is_offline and results:
-                successful_terms.add(term)
-        finally:
-            try:
-                if legacy_req_out:
-                    legacy_req_out.close()
-            except Exception:
-                pass
-
-    # Update term manifest after the scrape based on successful terms.
-    try:
-        merged = set(existing_terms)
-        merged.update(successful_terms)
-        merged = {t for t in merged if re.fullmatch(r"\d{6}", str(t))}
-        with open(REQUIREMENTS_TERMS_MANIFEST, "w", encoding="utf-8") as mf_out:
-            for t in sorted(merged, key=lambda x: int(x), reverse=True):
-                mf_out.write(json.dumps({"term": t}, ensure_ascii=False) + "\n")
-    except Exception:
-        pass
+    if failed_terms:
+        print(
+            "Minor refresh failed for: " + ", ".join(failed_terms)
+            + ". No incomplete term snapshot was published."
+        )
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
