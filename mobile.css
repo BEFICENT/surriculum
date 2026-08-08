@@ -354,6 +354,47 @@ body.is-mobile[data-mobile-tab="planner"] .date .tick {
     flex-shrink: 0;
 }
 
+/* Very narrow screens cannot fit the term, credit pill, and four semester
+   actions on one line. Keep the term and credit total together, then move the
+   actions to a dedicated row instead of squeezing the term into a few
+   characters. Date-edit mode retains its single-row select treatment above. */
+@media (max-width: 380px) {
+    body.is-mobile[data-mobile-tab="planner"]
+        .container_semester:not(.m-collapsed)
+        .subcontainer_semester
+        .date:not(:has(.select-control)) {
+        flex-wrap: wrap;
+        align-items: flex-start;
+        padding-right: 0;
+        row-gap: 6px;
+    }
+
+    body.is-mobile[data-mobile-tab="planner"]
+        .container_semester:not(.m-collapsed)
+        .date:not(:has(.select-control)) > p {
+        flex: 0 0 calc(100% - 92px);
+        max-width: calc(100% - 92px);
+        min-width: 0;
+        box-sizing: border-box;
+        overflow-wrap: anywhere;
+    }
+
+    body.is-mobile[data-mobile-tab="planner"]
+        .container_semester:not(.m-collapsed)
+        .date:not(:has(.select-control)) > .icons {
+        flex: 1 0 100%;
+        justify-content: flex-end;
+        gap: 6px;
+    }
+
+    body.is-mobile[data-mobile-tab="planner"]
+        .container_semester:not(.m-collapsed)
+        .date:not(:has(.select-control)) .m-sem-chevron {
+        top: 2px;
+        transform: rotate(180deg);
+    }
+}
+
 /* ============================================================
  * CONTROLS — the sidebar reorganized into mobile sections.
  * NOTE: keyed on the fixed order of the 8 .control-group blocks in the
@@ -462,6 +503,8 @@ body.is-mobile[data-mobile-tab="progress"] .m-progress {
     position: absolute;
     inset: 0;
     overflow-y: auto;
+    overflow-x: hidden;
+    box-sizing: border-box;
     padding: 14px;
     background: var(--bg-main);
 }
@@ -553,6 +596,140 @@ body.is-mobile[data-mobile-tab="progress"] .m-progress {
 .m-progress .m-prog-detail .ms-section.m-sec-collapsed > .ms-group-list,
 .m-progress .m-prog-detail .ms-section.m-sec-collapsed > .ms-untaken-toggle {
     display: none;
+}
+
+/* A detailed course can carry progress state, BS, engineering and SU chips,
+   plus an allocation note. On phones those tokens must not compete with the
+   course identity for one unbroken row. */
+body.is-mobile .m-progress .m-prog-detail .ms-course {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 6px;
+}
+
+body.is-mobile .m-progress .m-prog-detail .ms-course-left {
+    display: flex;
+    align-items: flex-start;
+    width: 100%;
+    min-width: 0;
+}
+
+body.is-mobile .m-progress .m-prog-detail .ms-dot {
+    margin-top: 0.36em;
+}
+
+body.is-mobile .m-progress .m-prog-detail .ms-code {
+    flex: 0 0 auto;
+}
+
+body.is-mobile .m-progress .m-prog-detail .ms-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+}
+
+body.is-mobile .m-progress .m-prog-detail .ms-meta {
+    display: flex;
+    align-items: center;
+    align-content: flex-start;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    padding-left: 16px;
+    white-space: normal;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+body.is-mobile .m-progress .m-prog-detail .ms-chip,
+body.is-mobile .m-progress .m-prog-detail .ms-state-chip {
+    flex: 0 0 auto;
+    max-width: 100%;
+}
+
+body.is-mobile .m-progress .m-prog-detail .ms-state-chip {
+    margin-right: 0;
+}
+
+body.is-mobile .m-progress .m-prog-detail .ms-meta-note {
+    flex: 1 0 100%;
+    min-width: 0;
+}
+
+/* Special-requirement labels and their four-part count/status cluster are
+   clearer as two wrapping rows on mobile. */
+body.is-mobile .m-progress .m-prog-detail .ms-group-top {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    row-gap: 6px;
+}
+
+body.is-mobile .m-progress .m-prog-detail .ms-group-labels,
+body.is-mobile .m-progress .m-prog-detail .ms-group-count {
+    flex: 1 0 100%;
+    width: 100%;
+    min-width: 0;
+}
+
+body.is-mobile .m-progress .m-prog-detail .ms-group-count {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    white-space: normal;
+}
+
+body.is-mobile .m-progress .m-prog-detail .ms-group-badge {
+    margin-left: auto;
+}
+
+/* On narrow phones, put the requirement summary beneath the section title
+   instead of forcing both into the old fixed 100px title grid. */
+@media (max-width: 420px) {
+    body.is-mobile .m-progress .m-prog-detail .ms-header {
+        flex-wrap: wrap;
+        align-items: flex-start;
+    }
+
+    body.is-mobile .m-progress .m-prog-detail .ms-header .ms-title {
+        order: 0;
+        flex: 1 1 calc(100% - 24px);
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    body.is-mobile .m-progress .m-prog-detail .ms-header::after {
+        order: 1;
+        margin-left: auto;
+    }
+
+    body.is-mobile .m-progress .m-prog-detail .ms-header .ms-req {
+        order: 2;
+        flex: 1 0 100%;
+        min-width: 0;
+        line-height: 1.3;
+        overflow-wrap: anywhere;
+    }
+}
+
+/* Keep dynamic custom-course dialogs inside ultra-narrow mobile viewports. */
+body.is-mobile .custom_course_overlay {
+    box-sizing: border-box;
+    padding: 12px;
+}
+
+body.is-mobile .custom_course_modal {
+    width: 100%;
+    min-width: 0;
+    max-width: 500px;
+    box-sizing: border-box;
 }
 
 /* ============================================================

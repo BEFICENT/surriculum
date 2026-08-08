@@ -72,6 +72,8 @@ unreleased until the branch is merged, published, and tagged.
   language subjects and excludes courses beyond the first two from degree/free
   credit instead of merely blocking graduation. Higher-level language courses
   remain uncapped.
+- Dense mobile Progress rows, Special Requirements badges, and narrow semester
+  headers now wrap into deliberate rows instead of clipping names or controls.
 - The structured-data block no longer publishes an unverified aggregate rating.
 
 ### Security and privacy

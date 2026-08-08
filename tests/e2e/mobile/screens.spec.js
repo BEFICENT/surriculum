@@ -11,6 +11,18 @@ const PLAN = {
   dates: ['Fall 2024-2025', 'Spring 2024-2025'],
 };
 
+const progressSection = (page, title) => page.locator(
+  `#mProgress .m-prog-detail .ms-section:has(> .ms-header .ms-title:text-is("${title}"))`,
+);
+
+const expandProgressSection = async (section) => {
+  await expect(section).toHaveCount(1);
+  if (await section.evaluate((element) => element.classList.contains('m-sec-collapsed'))) {
+    await section.locator(':scope > .ms-header').click();
+  }
+  await expect(section).not.toHaveClass(/m-sec-collapsed/);
+};
+
 test.describe('mobile screens', () => {
   test('planner is a collapsible accordion of semesters', async ({ page }) => {
     await seedPlan(page, PLAN);
@@ -72,6 +84,103 @@ test.describe('mobile screens', () => {
     await expect(warning).toBeHidden();
   });
 
+  test('expanded semester header controls stay contained and non-overlapping at 320px', async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 320, height: 800 });
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: 'Fall 2024-2025',
+      curriculum: [['MATH101']],
+      grades: [['A']],
+      dates: ['Spring 2024-2025'],
+    });
+
+    const semester = page.locator('.container_semester').first();
+    await expect(semester).toBeVisible();
+    if (await semester.evaluate((element) => element.classList.contains('m-collapsed'))) {
+      await semester.locator('.date').click();
+    }
+    await expect(semester).not.toHaveClass(/m-collapsed/);
+    await expect(semester.locator('.date p')).toHaveText('Spring 2024-2025');
+    await expect(semester.locator('.semester-move-controls')).toBeVisible();
+    await expect(semester.locator('.total_credit_text')).toContainText('Total: 3 credits');
+
+    await testInfo.attach('expanded-semester-header-320', {
+      body: await semester.screenshot({ animations: 'disabled' }),
+      contentType: 'image/png',
+    });
+
+    const layout = await semester.evaluate((card) => {
+      const date = card.querySelector('.date');
+      const label = date && date.querySelector('p');
+      const icons = date && date.querySelector('.icons');
+      const chevron = date && date.querySelector('.m-sem-chevron');
+      const credit = card.querySelector('.total_credit');
+      const board = card.closest('.board');
+      const visibleButtons = icons ? Array.from(icons.querySelectorAll('button')).filter((button) => {
+        const style = getComputedStyle(button);
+        const box = button.getBoundingClientRect();
+        return style.display !== 'none' && style.visibility !== 'hidden' && box.width > 0 && box.height > 0;
+      }) : [];
+      const rect = (element) => {
+        const box = element.getBoundingClientRect();
+        return { left: box.left, right: box.right, top: box.top, bottom: box.bottom };
+      };
+      const inside = (child, parent, tolerance = 1) => child.left >= parent.left - tolerance
+        && child.right <= parent.right + tolerance
+        && child.top >= parent.top - tolerance
+        && child.bottom <= parent.bottom + tolerance;
+      const overlapArea = (first, second) => Math.max(
+        0, Math.min(first.right, second.right) - Math.max(first.left, second.left),
+      ) * Math.max(
+        0, Math.min(first.bottom, second.bottom) - Math.max(first.top, second.top),
+      );
+      const cardBox = rect(card);
+      const dateBox = rect(date);
+      const labelBox = rect(label);
+      const iconsBox = rect(icons);
+      const chevronBox = rect(chevron);
+      const creditBox = rect(credit);
+      const buttonBoxes = visibleButtons.map(rect);
+      return {
+        visibleButtonCount: buttonBoxes.length,
+        cardInViewport: cardBox.left >= -1 && cardBox.right <= window.innerWidth + 1,
+        dateInCard: inside(dateBox, cardBox),
+        labelInDate: inside(labelBox, dateBox),
+        iconsInDate: inside(iconsBox, dateBox),
+        chevronInDate: inside(chevronBox, dateBox),
+        creditInCard: inside(creditBox, cardBox),
+        buttonsInIcons: buttonBoxes.every((box) => inside(box, iconsBox)),
+        buttonsInCard: buttonBoxes.every((box) => inside(box, cardBox)),
+        labelIconsOverlap: overlapArea(labelBox, iconsBox),
+        labelChevronOverlap: overlapArea(labelBox, chevronBox),
+        labelCreditOverlap: overlapArea(labelBox, creditBox),
+        iconsCreditOverlap: overlapArea(iconsBox, creditBox),
+        cardOverflow: card.scrollWidth - card.clientWidth,
+        dateOverflow: date.scrollWidth - date.clientWidth,
+        boardOverflow: board.scrollWidth - board.clientWidth,
+      };
+    });
+
+    expect(layout.visibleButtonCount, 'edit, two move buttons, and delete are measurable').toBe(4);
+    expect(layout).toMatchObject({
+      cardInViewport: true,
+      dateInCard: true,
+      labelInDate: true,
+      iconsInDate: true,
+      chevronInDate: true,
+      creditInCard: true,
+      buttonsInIcons: true,
+      buttonsInCard: true,
+    });
+    expect(layout.labelIconsOverlap).toBeLessThanOrEqual(0.5);
+    expect(layout.labelChevronOverlap).toBeLessThanOrEqual(0.5);
+    expect(layout.labelCreditOverlap).toBeLessThanOrEqual(0.5);
+    expect(layout.iconsCreditOverlap).toBeLessThanOrEqual(0.5);
+    expect(layout.cardOverflow).toBeLessThanOrEqual(1);
+    expect(layout.dateOverflow).toBeLessThanOrEqual(1);
+    expect(layout.boardOverflow).toBeLessThanOrEqual(1);
+  });
+
   test('progress screen renders a program card with a completion bar', async ({ page }) => {
     await seedPlan(page, PLAN);
 
@@ -82,6 +191,95 @@ test.describe('mobile screens', () => {
     await expect(card).toBeVisible({ timeout: 10000 });
     await expect(card.locator('.m-prog-title')).not.toBeEmpty();
     await expect(card.locator('.m-prog-bar')).toBeVisible();
+  });
+
+  test('tag-dense progress course cards wrap without clipping or horizontal overlap', async ({ page }, testInfo) => {
+    // Three Area courses consume CS's 9-SU allowance. The deliberately long
+    // MATH484 row then overflows to Free and renders every metadata affordance:
+    // progress state, BS, ENG, SU, and a "Counts as FREE" note.
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: 'Fall 2024-2025',
+      curriculum: [['CS414', 'CS415', 'CS435', 'MATH484']],
+      grades: [['A', 'A', 'A', 'A']],
+      dates: ['Fall 2024-2025'],
+    });
+
+    await page.locator('.m-nav-item[data-mtab="progress"]').click();
+    await expect(page.locator('#mProgress .m-prog-detail .major-summary')).toBeVisible({ timeout: 10000 });
+    const area = progressSection(page, 'AREA');
+    await expandProgressSection(area);
+    const row = area.locator('.ms-course:has(.ms-code:text-is("MATH484"))');
+    await expect(row).toHaveCount(1);
+    await expect(row.locator('.ms-state-chip')).toHaveText('Earned');
+    await expect(row.locator('.ms-chip')).toHaveText(['BS 3', 'ENG 3', 'SU 3']);
+    await expect(row.locator('.ms-meta-note')).toContainText('Counts as FREE');
+
+    const defaultWidth = await page.evaluate(() => window.innerWidth);
+    const widths = [...new Set([defaultWidth, 360, 320])];
+    for (const width of widths) {
+      await page.setViewportSize({ width, height: 800 });
+      await expect(row).toBeVisible();
+      await testInfo.attach(`tag-dense-progress-row-${width}`, {
+        body: await row.screenshot({ animations: 'disabled' }),
+        contentType: 'image/png',
+      });
+
+      const layout = await row.evaluate((card) => {
+        const identity = card.querySelector('.ms-course-left');
+        const meta = card.querySelector('.ms-meta');
+        const section = card.closest('.ms-section');
+        const screen = card.closest('#mProgress');
+        const tokens = Array.from(meta.querySelectorAll('.ms-state-chip, .ms-chip, .ms-meta-note'));
+        const rect = (element) => {
+          const box = element.getBoundingClientRect();
+          return { left: box.left, right: box.right, top: box.top, bottom: box.bottom };
+        };
+        const inside = (child, parent, tolerance = 1) => child.left >= parent.left - tolerance
+          && child.right <= parent.right + tolerance
+          && child.top >= parent.top - tolerance
+          && child.bottom <= parent.bottom + tolerance;
+        const overlapArea = (first, second) => Math.max(
+          0, Math.min(first.right, second.right) - Math.max(first.left, second.left),
+        ) * Math.max(
+          0, Math.min(first.bottom, second.bottom) - Math.max(first.top, second.top),
+        );
+        const cardBox = rect(card);
+        const identityBox = rect(identity);
+        const metaBox = rect(meta);
+        const sectionBox = rect(section);
+        const tokenBoxes = tokens.map(rect);
+        return {
+          tokenCount: tokenBoxes.length,
+          cardInSection: inside(cardBox, sectionBox),
+          cardInViewport: cardBox.left >= -1 && cardBox.right <= window.innerWidth + 1,
+          metaInCard: inside(metaBox, cardBox),
+          tokensInMeta: tokenBoxes.every((box) => inside(box, metaBox)),
+          tokensInCard: tokenBoxes.every((box) => inside(box, cardBox)),
+          tokensHaveArea: tokenBoxes.every((box) => box.right > box.left && box.bottom > box.top),
+          identityMetaOverlap: overlapArea(identityBox, metaBox),
+          cardOverflow: card.scrollWidth - card.clientWidth,
+          metaOverflow: meta.scrollWidth - meta.clientWidth,
+          screenOverflow: screen.scrollWidth - screen.clientWidth,
+          documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        };
+      });
+
+      expect(layout.tokenCount, `${width}px fixture must retain all five metadata tokens`).toBe(5);
+      expect(layout, `${width}px dense course-card containment`).toMatchObject({
+        cardInSection: true,
+        cardInViewport: true,
+        metaInCard: true,
+        tokensInMeta: true,
+        tokensInCard: true,
+        tokensHaveArea: true,
+      });
+      expect(layout.identityMetaOverlap, `${width}px identity/meta collision`).toBeLessThanOrEqual(0.5);
+      expect(layout.cardOverflow, `${width}px course-card horizontal overflow`).toBeLessThanOrEqual(1);
+      expect(layout.metaOverflow, `${width}px metadata horizontal overflow`).toBeLessThanOrEqual(1);
+      expect(layout.screenOverflow, `${width}px Progress screen horizontal overflow`).toBeLessThanOrEqual(1);
+      expect(layout.documentOverflow, `${width}px document horizontal overflow`).toBeLessThanOrEqual(1);
+    }
   });
 
   test('future-only grades show unavailable actual GPA for majors and minors', async ({ page }) => {
@@ -204,5 +402,89 @@ test.describe('mobile screens', () => {
     }
     await expect(section).toHaveClass(/m-sec-collapsed/);
     await expect(section.locator(':scope > .ms-group-list')).toBeHidden();
+  });
+
+  test('special-requirement counts stay inside their cards at 320px', async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 320, height: 800 });
+    await seedPlan(page, {
+      major: 'VACD',
+      entryTerm: 'Fall 2024-2025',
+      curriculum: [['HART292', 'VA202']],
+      grades: [['A', 'A']],
+      dates: ['Fall 2024-2025'],
+    });
+    await page.locator('.m-nav-item[data-mtab="progress"]').click();
+    await expect(page.locator('#mProgress .m-prog-detail .major-summary')).toBeVisible({ timeout: 10000 });
+
+    const section = progressSection(page, 'SPECIAL REQUIREMENTS');
+    await expandProgressSection(section);
+    const group = section.locator('.ms-group').filter({
+      has: page.locator('.ms-group-label', { hasText: /beginning\/basic language cap/i }),
+    });
+    await expect(group).toHaveCount(1);
+    await expect(group.locator('.ms-group-count > *')).toHaveCount(4);
+    await expect(group.locator('.ms-group-badge')).not.toBeEmpty();
+
+    await testInfo.attach('special-requirement-language-cap-320', {
+      body: await group.screenshot({ animations: 'disabled' }),
+      contentType: 'image/png',
+    });
+
+    const layout = await group.evaluate((card) => {
+      const top = card.querySelector('.ms-group-top');
+      const labels = card.querySelector('.ms-group-labels');
+      const count = card.querySelector('.ms-group-count');
+      const screen = card.closest('#mProgress');
+      const countItems = Array.from(count.children);
+      const rect = (element) => {
+        const box = element.getBoundingClientRect();
+        return { left: box.left, right: box.right, top: box.top, bottom: box.bottom };
+      };
+      const inside = (child, parent, tolerance = 1) => child.left >= parent.left - tolerance
+        && child.right <= parent.right + tolerance
+        && child.top >= parent.top - tolerance
+        && child.bottom <= parent.bottom + tolerance;
+      const overlapArea = (first, second) => Math.max(
+        0, Math.min(first.right, second.right) - Math.max(first.left, second.left),
+      ) * Math.max(
+        0, Math.min(first.bottom, second.bottom) - Math.max(first.top, second.top),
+      );
+      const cardBox = rect(card);
+      const topBox = rect(top);
+      const labelsBox = rect(labels);
+      const countBox = rect(count);
+      const itemBoxes = countItems.map(rect);
+      return {
+        countItemCount: itemBoxes.length,
+        cardInViewport: cardBox.left >= -1 && cardBox.right <= window.innerWidth + 1,
+        topInCard: inside(topBox, cardBox),
+        countInTop: inside(countBox, topBox),
+        countInCard: inside(countBox, cardBox),
+        itemsInCount: itemBoxes.every((box) => inside(box, countBox)),
+        itemsInCard: itemBoxes.every((box) => inside(box, cardBox)),
+        itemsHaveArea: itemBoxes.every((box) => box.right > box.left && box.bottom > box.top),
+        labelsCountOverlap: overlapArea(labelsBox, countBox),
+        cardOverflow: card.scrollWidth - card.clientWidth,
+        topOverflow: top.scrollWidth - top.clientWidth,
+        countOverflow: count.scrollWidth - count.clientWidth,
+        screenOverflow: screen.scrollWidth - screen.clientWidth,
+      };
+    });
+
+    expect(layout.countItemCount).toBe(4);
+    expect(layout).toMatchObject({
+      cardInViewport: true,
+      topInCard: true,
+      countInTop: true,
+      countInCard: true,
+      itemsInCount: true,
+      itemsInCard: true,
+      itemsHaveArea: true,
+    });
+    expect(layout.labelsCountOverlap).toBeLessThanOrEqual(0.5);
+    expect(layout.cardOverflow).toBeLessThanOrEqual(1);
+    expect(layout.topOverflow).toBeLessThanOrEqual(1);
+    expect(layout.countOverflow).toBeLessThanOrEqual(1);
+    expect(layout.screenOverflow).toBeLessThanOrEqual(1);
   });
 });
