@@ -2851,9 +2851,19 @@ function SUrriculum(major_chosen_by_user) {
 
             try {
                 const ui = (typeof window !== 'undefined') ? window.uiModal : null;
-                const isDegreeEvaluation = (text) => {
+                const mentionsDegreeEvaluation = (text) => {
                     try {
                         return /degree\s+evaluation/i.test(String(text || ''));
+                    } catch (_) {
+                        return false;
+                    }
+                };
+                const isEngineeringCreditDistribution = (text) => {
+                    try {
+                        const t = String(text || '');
+                        return /\bbasic\s+science\s+and\s+engineering\b/i.test(t) &&
+                               /\bects\b/i.test(t) &&
+                               /\bdistribution\b/i.test(t);
                     } catch (_) {
                         return false;
                     }
@@ -2908,6 +2918,28 @@ function SUrriculum(major_chosen_by_user) {
                         }
                     } catch (_) {}
                 };
+                const showCreditDistributionWarning = async () => {
+                    const title = 'Wrong file: course credit-distribution list';
+                    const body = (
+                        '<p>This is a <strong>Basic Science and Engineering ECTS credit-distribution list</strong>, not a student transcript. SUrriculum can only import from your <strong>Academic Records Summary</strong>.</p>' +
+                        '<p>Please upload the correct file:</p>' +
+                        '<ol>' +
+                        '<li>Go to <strong>SUIS</strong> → <strong>Student</strong> → <strong>Student Records</strong> → <strong>Academic Transcript</strong></li>' +
+                        '<li>Open your <strong>Academic Records Summary</strong></li>' +
+                        '<li>Save it as <strong>HTML (preferred)</strong> or print to <strong>PDF</strong></li>' +
+                        '<li>Upload that file here</li>' +
+                        '</ol>' +
+                        '<p>You can also upload your <strong>YÖK Transcript PDF</strong> (not preferred).</p>'
+                    );
+                    try { fileInput.value = ''; } catch (_) {}
+                    try {
+                        if (ui && typeof ui.alert === 'function') {
+                            await ui.alert(title, body);
+                        } else {
+                            await uiAlert(title, body);
+                        }
+                    } catch (_) {}
+                };
                 const showHtmlSaveWarning = async () => {
                     const title = 'Cannot import this HTML file';
                     const body =
@@ -2935,11 +2967,17 @@ function SUrriculum(major_chosen_by_user) {
                     const extraction = await window.pdfTranscriptReader.extractText(file);
                     const text = extraction.text;
                     // Academic Records PDFs may mention Degree Evaluation at the end.
-                    // Reject only if it looks like Degree Evaluation AND does not
-                    // contain "Academic Records Summary". Never apply this to YÖK transcripts.
-                    if (!isYokTranscript(text) && isDegreeEvaluation(text) && !isAcademicRecordsSummary(text)) {
-                        await showDegreeEvalWarning();
-                        return;
+                    // Classify known non-transcript documents before using that phrase
+                    // as a Degree Evaluation signal. Never apply this to YÖK transcripts.
+                    if (!isYokTranscript(text) && !isAcademicRecordsSummary(text)) {
+                        if (isEngineeringCreditDistribution(text)) {
+                            await showCreditDistributionWarning();
+                            return;
+                        }
+                        if (mentionsDegreeEvaluation(text)) {
+                            await showDegreeEvalWarning();
+                            return;
+                        }
                     }
                     parsedData = window.academicRecordsParser.parseAcademicRecordsPdf(text);
                 } else {
@@ -2948,9 +2986,15 @@ function SUrriculum(major_chosen_by_user) {
                         await showHtmlSaveWarning();
                         return;
                     }
-                    if (isDegreeEvaluation(htmlContent) && !isAcademicRecordsSummary(htmlContent)) {
-                        await showDegreeEvalWarning();
-                        return;
+                    if (!isAcademicRecordsSummary(htmlContent)) {
+                        if (isEngineeringCreditDistribution(htmlContent)) {
+                            await showCreditDistributionWarning();
+                            return;
+                        }
+                        if (mentionsDegreeEvaluation(htmlContent)) {
+                            await showDegreeEvalWarning();
+                            return;
+                        }
                     }
                     parsedData = window.academicRecordsParser.parseAcademicRecords(htmlContent);
                 }

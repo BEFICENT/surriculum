@@ -17,6 +17,8 @@ a time and checked off only after the fix and its verification are complete.
 - Broad release-blocker coverage remains deferred. Focused graduation and
   scheduler regressions were added when specifically requested.
 - The `surriculum-3.1` branch is published but has not been merged into `main`.
+  The local branch currently contains 19 additional commits that are being held
+  for the production-ready push, as requested.
 - Claude co-author trailers were removed from the rewritten branch history.
 - Preserve the individual 3.1 commits. Do not squash or rebase the branch merely
   to simplify GitHub's ahead/behind display; the intended history edits are only
@@ -57,16 +59,18 @@ a time and checked off only after the fix and its verification are complete.
   Completed on 2026-07-22. The repaired and pushed tip is `e1151f1`. All 108
   commits retain identical trees, per-commit changes, ordering, authors,
   timestamps, and non-Claude message content. The final application tree is
-  byte-for-byte identical to both pre-repair tips, and the resulting topology
-  against current `origin/main` is 108 ahead and 22 behind. A complete recovery
-  bundle is stored outside the repository at
+  byte-for-byte identical to both pre-repair tips. At the time of that repair,
+  its topology against `origin/main` was 108 ahead and 22 behind. A complete
+  recovery bundle is stored outside the repository at
   `C:\Users\mehme\repos\surriculum-before-ancestry-repair-20260722-223259.bundle`.
 
-  To reach 0 behind while retaining every divergent commit
-  and avoiding a rebase, merge current `origin/main` into `surriculum-3.1`; this
-  does not merge or release 3.1 into `main`. It should then be about 109 ahead and
-  0 behind. If no merge commit is wanted in either direction, the truthful Git
-  topology must remain 22 behind—Git cannot record current `main` as an ancestor
+  As of 2026-08-08, the published feature branch is 110 ahead and 34 behind
+  `origin/main`; the local branch, including this correction, is 129 ahead and
+  34 behind. To reach 0 behind
+  while retaining every divergent commit and avoiding a rebase, merge current
+  `origin/main` into `surriculum-3.1`; this does not merge or release 3.1 into
+  `main`. If no merge commit is wanted in either direction, the truthful Git
+  topology must remain behind—Git cannot record current `main` as an ancestor
   while preserving the divergent chain without either a merge or a rebase.
 
 ## Security and privacy decisions
@@ -101,8 +105,10 @@ a time and checked off only after the fix and its verification are complete.
   parsed courses and import semantics for the normal Academic Records Summary.
   Both old and new versions extract zero text from the Microsoft Print-to-PDF
   fixture because it has no text layer; the UI now identifies that case and
-  gives browser Save-as-PDF, complete-HTML, and OCR guidance. A real Degree
-  Evaluation PDF remains rejected by the dedicated wrong-file path. Permanent
+  gives browser Save-as-PDF, complete-HTML, and OCR guidance. The real Basic
+  Science and Engineering ECTS credit-distribution catalog remains rejected by
+  its accurately labelled wrong-file path; it is not a Degree Evaluation
+  document. Permanent
   tests also verify same-origin loading, version/hash pairing, limits, mounted
   `/surriculum/` URLs, and first-use offline extraction.
 - [x] Validate every nested field in imported plan JSON and custom courses.

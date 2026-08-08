@@ -15,7 +15,7 @@ const MICROSOFT_PRINT_TO_PDF_TRANSCRIPT = path.join(
   'Example Files',
   'Academic Records Summary_microsoft_printtopdf.pdf',
 );
-const DEGREE_EVALUATION = path.join(
+const CREDIT_DISTRIBUTION_CATALOG = path.join(
   REPOSITORY_ROOT,
   'Pre-Conversion Files',
   'katalog_basic_eng_degerler_202401_yuklenen_07.05.2025.pdf',
@@ -212,17 +212,18 @@ test.describe('local PDF transcript runtime (desktop)', () => {
       .filter((url) => /assets\/vendor\/pdfjs-/.test(url)))).toEqual(runtimeLoadsBefore);
   });
 
-  test('a real Degree Evaluation PDF is rejected without mutating the plan', async ({ page }) => {
+  test('a Basic Science and Engineering credit-distribution PDF is rejected without mutating the plan', async ({ page }) => {
     await seedStablePlan(page);
     const before = await snapshotPlan(page);
 
-    await page.locator('#academicRecordsInput').setInputFiles(DEGREE_EVALUATION);
+    await page.locator('#academicRecordsInput').setInputFiles(CREDIT_DISTRIBUTION_CATALOG);
     await page.evaluate(() => document.getElementById('importAcademicRecords').click());
 
-    const modal = page.locator('.modal-overlay').filter({ hasText: /Wrong file: Degree Evaluation/i });
+    const modal = page.locator('.modal-overlay').filter({ hasText: /Wrong file: course credit-distribution list/i });
     await expect(modal).toBeVisible();
-    await expect(modal).toContainText('Please do not upload Degree Evaluation');
+    await expect(modal).toContainText('Basic Science and Engineering ECTS credit-distribution list');
     await expect(modal).toContainText('Academic Records Summary');
+    await expect(modal).not.toContainText('This looks like a Degree Evaluation');
     await expect(page.locator('#academicRecordsInput')).toHaveValue('');
     expect(await snapshotPlan(page)).toEqual(before);
   });
