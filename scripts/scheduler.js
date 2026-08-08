@@ -4963,11 +4963,28 @@
       resultsEl.innerHTML = '<div class="scheduler-muted">Cleared. Search to add courses.</div>';
     });
 
-    const findOrCreatePlannerSemester = (targetTermCode) => {
+    const findPlannerSemester = (targetTermCode) => {
       const cur = (typeof window !== 'undefined') ? window.curriculum : null;
       if (!cur) return null;
       const targetTermName = displayTermNameSafe(targetTermCode);
       if (!targetTermName) return null;
+      // Prefer stable model identity. A term picker temporarily replaces the
+      // rendered <p>, so DOM text alone can incorrectly create a duplicate.
+      const targetCode = String(targetTermCode || '').trim();
+      const modelSemester = (Array.isArray(cur.semesters) ? cur.semesters : []).find((semester) => (
+        String((semester && semester.termCode) || '').trim() === targetCode
+        || String((semester && semester.termName) || '').trim() === targetTermName
+      ));
+      if (modelSemester && modelSemester.id) {
+        const semesterEl = document.getElementById(modelSemester.id);
+        const container = semesterEl && semesterEl.closest
+          ? semesterEl.closest('.container_semester') : null;
+        if (semesterEl && container) {
+          return { container, semesterEl, semesterObj: modelSemester };
+        }
+      }
+      // Legacy semesters may not yet carry termCode/termName; retain the DOM
+      // fallback until their next save upgrades the model.
       const containers = document.querySelectorAll('.container_semester');
       for (let i = 0; i < containers.length; i++) {
         const c = containers[i];
@@ -4979,38 +4996,28 @@
         const semObj = cur.getSemester(semEl.id);
         return { container: c, semesterEl: semEl, semesterObj: semObj };
       }
-      // Create a semester for the selected term if missing.
-      try {
-        if (typeof createSemeter === 'function') {
-          const board = document.querySelector('.board');
-          const ghost = board ? board.querySelector('.add-semester-ghost') : null;
-          const created = createSemeter(true, [], cur, course_data, [], targetTermName);
-          if (created && board && ghost) {
-            // Keep the "+ New Semester" ghost at the end like the normal flow.
-            board.insertBefore(created, ghost);
-          }
-          if (created) {
-            const semEl = created.querySelector('.semester');
-            const semObj = semEl ? cur.getSemester(semEl.id) : null;
-            return { container: created, semesterEl: semEl, semesterObj: semObj };
-          }
-        }
-      } catch (_) {}
-      // Retry lookup after creation attempt.
-      try {
-        const containers2 = document.querySelectorAll('.container_semester');
-        for (let i = 0; i < containers2.length; i++) {
-          const c = containers2[i];
-          const p = c.querySelector('.date p');
-          const name = p ? String(p.textContent || '').trim() : '';
-          if (name !== targetTermName) continue;
-          const semEl = c.querySelector('.semester');
-          if (!semEl) continue;
-          const semObj = cur.getSemester(semEl.id);
-          return { container: c, semesterEl: semEl, semesterObj: semObj };
-        }
-      } catch (_) {}
       return null;
+    };
+
+    const createPlannerSemester = (targetTermCode) => {
+      const cur = (typeof window !== 'undefined') ? window.curriculum : null;
+      const targetTermName = displayTermNameSafe(targetTermCode);
+      if (!cur || !targetTermName || typeof createSemeter !== 'function') {
+        throw new Error('The planner semester could not be created.');
+      }
+      const board = document.querySelector('.board');
+      const ghost = board ? board.querySelector('.add-semester-ghost') : null;
+      const created = createSemeter(true, [], cur, course_data, [], targetTermName);
+      if (created && board && ghost) {
+        // Keep the "+ New Semester" ghost at the end like the normal flow.
+        board.insertBefore(created, ghost);
+      }
+      const semEl = created ? created.querySelector('.semester') : null;
+      const semObj = semEl ? cur.getSemester(semEl.id) : null;
+      if (!created || !semEl || !semObj) {
+        throw new Error('The planner semester could not be created.');
+      }
+      return { container: created, semesterEl: semEl, semesterObj: semObj };
     };
 
     const refreshPlannerTotalsForContainer = (container, semesterObj) => {
@@ -5026,30 +5033,9 @@
       } catch (_) {}
     };
 
-    const removeCourseFromOtherSemesters = (courseCode, keepSemesterId) => {
-      try {
-        const cur = (typeof window !== 'undefined') ? window.curriculum : null;
-        if (!cur || !Array.isArray(cur.semesters)) return;
-        const target = normalizePlannerCode(courseCode);
-        for (let i = 0; i < cur.semesters.length; i++) {
-          const sem = cur.semesters[i];
-          if (!sem || sem.id === keepSemesterId) continue;
-          if (!Array.isArray(sem.courses)) continue;
-          for (let j = sem.courses.length - 1; j >= 0; j--) {
-            const c = sem.courses[j];
-            if (!c) continue;
-            if (normalizePlannerCode(c.code) !== target) continue;
-            try {
-              const el = document.getElementById(c.id);
-              if (el) el.remove();
-            } catch (_) {}
-            try { sem.deleteCourse(c.id); } catch (_) {}
-          }
-        }
-      } catch (_) {}
-    };
-
-    const createPlannerCourseDom = (courseCode, courseId, info) => {
+    const createPlannerCourseDom = (course, info) => {
+      const courseCode = normalizePlannerCode(course && course.code);
+      const courseId = String((course && course.id) || '');
       const domCourse = document.createElement('div');
       domCourse.classList.add('course');
       domCourse.id = courseId;
@@ -5088,7 +5074,7 @@
 
       const grade = document.createElement('div');
       grade.classList.add('grade');
-      grade.textContent = 'Add grade';
+      grade.textContent = course && course.grade ? String(course.grade) : 'Add grade';
 
       cContainer.appendChild(cLabel);
       cContainer.appendChild(cInfo);
@@ -5097,13 +5083,271 @@
       return domCourse;
     };
 
-    pickPlanBtn.addEventListener('click', async () => {
-      try {
-        const keys = Object.keys(selected);
-        if (!keys.length) {
-          if (ui && typeof ui.alert === 'function') ui.alert('Nothing selected', '<p>Select at least one section first.</p>');
-          return;
+    const plannerCourseInfoFromPage = (code, entry, section) => {
+      let info = null;
+      try { info = getPlannerInfo(code); } catch (_) {}
+      if (!info && coursePageInfoMap && typeof coursePageInfoMap.get === 'function') {
+        const pi = coursePageInfoMap.get(code);
+        if (pi) {
+          info = {
+            Course_Name: pi.title || pi.header_text || '',
+            EL_Type: '',
+            SU_credit: (pi.su_credits != null) ? pi.su_credits : 0,
+            Basic_Science: (pi.basic_science != null) ? pi.basic_science : 0,
+            Engineering: (pi.engineering != null) ? pi.engineering : 0,
+            ECTS: (pi.ects != null) ? pi.ects : 0,
+            Faculty_Course: pi.faculty_course || 'No',
+            Faculty: pi.faculty || '',
+          };
         }
+      }
+      if (!info && entry) {
+        info = {
+          Course_Name: entry.title || '',
+          EL_Type: '',
+          // The schedule index aggregates course entries; credits remain on
+          // the individual section selected by the user.
+          SU_credit: (section && section.credits != null) ? section.credits : 0,
+          Basic_Science: 0,
+          Engineering: 0,
+          ECTS: 0,
+        };
+      }
+      return info;
+    };
+
+    const applyPlannerMetadata = (course, info) => {
+      if (!course || !info) return;
+      const credit = (typeof window !== 'undefined' && typeof window.parseCreditValue === 'function')
+        ? window.parseCreditValue(info.SU_credit || 0)
+        : (parseFloat(info.SU_credit || 0) || 0);
+      course.SU_credit = credit;
+      course.Basic_Science = parseFloat(info.Basic_Science || 0) || 0;
+      course.Engineering = parseFloat(info.Engineering || 0) || 0;
+      course.ECTS = parseFloat(info.ECTS || 0) || 0;
+      course.Faculty_Course = info.Faculty_Course || 'No';
+      course.Faculty = info.Faculty || '';
+    };
+
+    const isPlannerComponent = (section) => {
+      const component = String(section && section.component ? section.component : '').trim().toLowerCase();
+      return !(component.includes('rec') || component.includes('lab'));
+    };
+
+    const captureOwnState = (value) => Object.getOwnPropertyDescriptors(value);
+    const restoreOwnState = (value, descriptors) => {
+      Object.keys(value).forEach((key) => {
+        if (!Object.prototype.hasOwnProperty.call(descriptors, key)) {
+          try { delete value[key]; } catch (_) {}
+        }
+      });
+      Object.defineProperties(value, descriptors);
+    };
+
+    const capturePlannerRollback = (cur) => {
+      const semesters = Array.isArray(cur.semesters) ? cur.semesters.slice() : [];
+      const curState = captureOwnState(cur);
+      const semesterStates = semesters.map((semester) => ({
+        semester,
+        state: captureOwnState(semester),
+      }));
+      const courseStates = [];
+      semesters.forEach((semester) => {
+        (Array.isArray(semester.courses) ? semester.courses : []).forEach((course) => {
+          if (course) courseStates.push({ course, state: captureOwnState(course) });
+        });
+      });
+
+      const board = document.querySelector('.board');
+      const boardChildren = board ? Array.from(board.childNodes) : [];
+      const semesterDomStates = Array.from(document.querySelectorAll('.semester')).map((element) => ({
+        element,
+        children: Array.from(element.childNodes),
+      }));
+      const subcontainerDomStates = Array.from(document.querySelectorAll('.subcontainer_semester')).map((element) => ({
+        element,
+        children: Array.from(element.childNodes),
+      }));
+      const visualStates = Array.from(document.querySelectorAll(
+        '.container_semester, .course_type, .total_credit_text span'
+      )).map((element) => ({
+        element,
+        className: element.className,
+        html: element.matches('.course_type, .total_credit_text span') ? element.innerHTML : null,
+      }));
+
+      return () => {
+        courseStates.forEach(({ course, state }) => restoreOwnState(course, state));
+        semesterStates.forEach(({ semester, state }) => restoreOwnState(semester, state));
+        restoreOwnState(cur, curState);
+        cur.semesters = semesters.slice();
+        semesterDomStates.forEach(({ element, children }) => element.replaceChildren(...children));
+        subcontainerDomStates.forEach(({ element, children }) => element.replaceChildren(...children));
+        if (board) board.replaceChildren(...boardChildren);
+        visualStates.forEach(({ element, className, html }) => {
+          element.className = className;
+          if (html !== null) element.innerHTML = html;
+        });
+      };
+    };
+
+    const recomputePlannerSemesterGpa = (semester) => {
+      let totalGPA = 0;
+      let totalGPACredits = 0;
+      (Array.isArray(semester && semester.courses) ? semester.courses : []).forEach((course) => {
+        let outcome = null;
+        if (typeof evaluateGradeForLegacyTotals === 'function') {
+          outcome = evaluateGradeForLegacyTotals(course && course.grade, course && course.gradingBasis);
+        } else {
+          const policy = (typeof window !== 'undefined') ? window.gradePolicy : null;
+          if (policy && typeof policy.evaluateGrade === 'function') {
+            outcome = policy.evaluateGrade(course && course.grade, course && course.gradingBasis);
+          }
+        }
+        if (!outcome || !outcome.countsInGpa) return;
+        const info = plannerCourseInfoFromPage(normalizePlannerCode(course && course.code), null);
+        const rawCredit = course && course.SU_credit != null
+          ? course.SU_credit : (info ? info.SU_credit : 0);
+        const credit = (typeof window !== 'undefined' && typeof window.parseCreditValue === 'function')
+          ? window.parseCreditValue(rawCredit || 0)
+          : (parseFloat(rawCredit || 0) || 0);
+        totalGPA += credit * outcome.gpaPoints;
+        totalGPACredits += credit;
+      });
+      semester.totalGPA = totalGPA;
+      semester.totalGPACredits = totalGPACredits;
+    };
+
+    const preparePlannerReplacement = (selectionSnapshot, idx, cur) => {
+      const existingByCode = new Map();
+      (Array.isArray(cur.semesters) ? cur.semesters : []).forEach((semester) => {
+        (Array.isArray(semester.courses) ? semester.courses : []).forEach((course) => {
+          const code = normalizePlannerCode(course && course.code);
+          if (code && !existingByCode.has(code)) existingByCode.set(code, course);
+        });
+      });
+
+      let nextCourseId = Number(cur.course_id || 0);
+      const seen = new Set();
+      const rows = [];
+      selectionSnapshot.forEach(({ raw, crn }) => {
+        const entry = idx && idx.get ? idx.get(raw) : null;
+        const section = entry && Array.isArray(entry.sections)
+          ? entry.sections.find((candidate) => String(candidate && candidate.crn) === String(crn || ''))
+          : null;
+        if (!entry || !section) {
+          throw new Error(`The selected section for ${raw} is no longer available. Re-pick it and try again.`);
+        }
+        // Component-only sections never belong in the planner. Filter them
+        // before deciding which existing course occurrences must move.
+        if (!isPlannerComponent(section)) return;
+        const code = normalizePlannerCode(raw);
+        if (!code || seen.has(code)) return;
+        seen.add(code);
+
+        const info = plannerCourseInfoFromPage(code, entry, section);
+        let course = existingByCode.get(code) || null;
+        let domCourse = course && course.id ? document.getElementById(course.id) : null;
+        if (!course) {
+          nextCourseId += 1;
+          course = new s_course(code, 'c' + nextCourseId);
+          applyPlannerMetadata(course, info);
+        }
+        if (!domCourse) domCourse = createPlannerCourseDom(course, info);
+        rows.push({ code, course, domCourse, crn: String(crn || '') });
+      });
+      return { rows, nextCourseId };
+    };
+
+    const commitPlannerReplacement = (prepared, cur) => {
+      const rollback = capturePlannerRollback(cur);
+      let loc = null;
+      try {
+        loc = findPlannerSemester(termCode) || createPlannerSemester(termCode);
+        if (!loc || !loc.container || !loc.semesterEl || !loc.semesterObj) {
+          throw new Error(`The planner semester for ${termName} could not be prepared.`);
+        }
+
+        const desiredCodes = new Set(prepared.rows.map((row) => row.code));
+        const desiredCourses = prepared.rows.map((row) => row.course);
+        cur.course_id = prepared.nextCourseId;
+
+        // Apply every model mutation synchronously. Existing course objects are
+        // reused, which preserves grades, grading bases, and hydrated metadata.
+        (Array.isArray(cur.semesters) ? cur.semesters : []).forEach((semester) => {
+          if (semester === loc.semesterObj) {
+            semester.courses = desiredCourses.slice();
+            return;
+          }
+          semester.courses = (Array.isArray(semester.courses) ? semester.courses : [])
+            .filter((course) => !desiredCodes.has(normalizePlannerCode(course && course.code)));
+        });
+        prepared.rows.forEach((row) => {
+          row.course.scheduler_crn = row.crn;
+        });
+
+        // Mirror the already-committed model in the DOM without any await gap.
+        loc.semesterEl.querySelectorAll('.course').forEach((element) => element.remove());
+        loc.container.querySelectorAll('.input_container').forEach((element) => element.remove());
+        document.querySelectorAll('.container_semester .course').forEach((element) => {
+          if (element.closest('.container_semester') === loc.container) return;
+          const codeNode = element.querySelector('.course_code');
+          const code = normalizePlannerCode(codeNode ? codeNode.textContent : '');
+          if (desiredCodes.has(code)) element.remove();
+        });
+        prepared.rows.forEach((row) => loc.semesterEl.appendChild(row.domCourse));
+
+        if (typeof cur.recalcEffectiveTypes === 'function') cur.recalcEffectiveTypes(course_data);
+        (Array.isArray(cur.semesters) ? cur.semesters : []).forEach((semester) => {
+          recomputePlannerSemesterGpa(semester);
+          const semesterEl = document.getElementById(semester.id);
+          const container = semesterEl && semesterEl.closest
+            ? semesterEl.closest('.container_semester') : null;
+          refreshPlannerTotalsForContainer(container, semester);
+        });
+        if (typeof window !== 'undefined' && typeof window.updateCurrentTermHighlights === 'function') {
+          window.updateCurrentTermHighlights();
+        }
+
+        const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+        if (!storage || typeof storage.requestSave !== 'function'
+            || typeof storage.flushSaves !== 'function') {
+          throw new Error('Planner saving is unavailable.');
+        }
+        if (storage.requestSave() === false || storage.flushSaves() === false) {
+          throw new Error('The updated planner could not be saved.');
+        }
+        return loc;
+      } catch (error) {
+        try { rollback(); } catch (rollbackError) {
+          try { console.error('Failed to roll back scheduler planner update:', rollbackError); } catch (_) {}
+        }
+        // A semester creation may have queued a save. Flush the restored model
+        // so an autosave cannot later persist the failed intermediate state.
+        try {
+          const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+          if (storage && typeof storage.requestSave === 'function') storage.requestSave();
+          if (storage && typeof storage.flushSaves === 'function') storage.flushSaves();
+        } catch (_) {}
+        throw error;
+      }
+    };
+
+    let plannerUpdateInProgress = false;
+    pickPlanBtn.addEventListener('click', async () => {
+      if (plannerUpdateInProgress) return;
+      const keys = Object.keys(selected);
+      if (!keys.length) {
+        if (ui && typeof ui.alert === 'function') ui.alert('Nothing selected', '<p>Select at least one section first.</p>');
+        return;
+      }
+      plannerUpdateInProgress = true;
+      pickPlanBtn.disabled = true;
+      try {
+        const selectionSnapshot = keys.map((raw) => ({
+          raw,
+          crn: selected[raw] && selected[raw].crn ? String(selected[raw].crn) : '',
+        }));
         const ok = (ui && typeof ui.confirm === 'function')
           ? await ui.confirm(
               `Update ${termName}`,
@@ -5113,114 +5357,33 @@
           : true;
         if (!ok) return;
 
-        const loc = findOrCreatePlannerSemester(termCode);
-        if (!loc || !loc.container || !loc.semesterEl || !loc.semesterObj) {
-          if (ui && typeof ui.alert === 'function') ui.alert('Update failed', `<p>Could not find (or create) the planner semester for <strong>${escapeHtml(termName)}</strong>.</p>`);
-          return;
-        }
-
-        // Avoid duplicates across semesters: move any matching courses into the selected planner term.
-        for (let i = 0; i < keys.length; i++) {
-          removeCourseFromOtherSemesters(keys[i], loc.semesterObj.id);
-        }
-
-        // Clear selected planner semester DOM + any open add-course inputs.
-        try { loc.semesterEl.querySelectorAll('.course').forEach(el => el.remove()); } catch (_) {}
-        try { loc.container.querySelectorAll('.input_container').forEach(el => el.remove()); } catch (_) {}
-
-        // Clear selected planner semester model.
-        try {
-          loc.semesterObj.courses = [];
-          loc.semesterObj.totalCredit = 0;
-          loc.semesterObj.totalArea = 0;
-          loc.semesterObj.totalCore = 0;
-          loc.semesterObj.totalFree = 0;
-          loc.semesterObj.totalUniversity = 0;
-          loc.semesterObj.totalRequired = 0;
-          loc.semesterObj.totalScience = 0.0;
-          loc.semesterObj.totalEngineering = 0.0;
-          loc.semesterObj.totalECTS = 0.0;
-          loc.semesterObj.totalGPA = 0.0;
-          loc.semesterObj.totalGPACredits = 0.0;
-        } catch (_) {}
-        refreshPlannerTotalsForContainer(loc.container, loc.semesterObj);
-
-        // Ensure schedule index is loaded for possible title/credits fallbacks.
+        // Complete every asynchronous load before the first planner mutation.
         const idx = scheduleIndex || await loadTermScheduleIndex(termCode);
-        if (idx) scheduleIndex = idx;
-
-        const cur = (typeof window !== 'undefined') ? window.curriculum : null;
-        for (let i = 0; i < keys.length; i++) {
-          const raw = keys[i];
-          const code = normalizePlannerCode(raw);
-          if (!code) continue;
-
-          // Do NOT add lab/recitation sections to the term plan; only add the course itself.
-          // Scheduler still tracks labs/recitations, but the planner semester should stay clean.
-          try {
-            const sec = getSelectedSection(raw);
-            const comp = String(sec && sec.component ? sec.component : '').toLowerCase();
-            if (comp && (comp.includes('rec') || comp.includes('lab'))) {
-              continue;
-            }
-          } catch (_) {}
-
-          try {
-            if (cur && typeof cur.hasCourse === 'function' && cur.hasCourse(code)) continue;
-          } catch (_) {}
-
-          try { cur.course_id = (cur.course_id || 0) + 1; } catch (_) {}
-          const newId = 'c' + (cur ? cur.course_id : Date.now());
-          const myCourse = new s_course(code, newId);
-
-          // Keep CRN around for future integrations.
-          try {
-            const pick = selected[raw];
-            if (pick && pick.crn) myCourse.scheduler_crn = String(pick.crn);
-          } catch (_) {}
-
-          // Prefer planner catalog info; fall back to course-page index.
-          let info = null;
-          try { info = getPlannerInfo(code); } catch (_) {}
-          if (!info && coursePageInfoMap && typeof coursePageInfoMap.get === 'function') {
-            const pi = coursePageInfoMap.get(code);
-            if (pi) {
-              info = {
-                Course_Name: pi.title || pi.header_text || '',
-                EL_Type: '',
-                SU_credit: (pi.su_credits != null) ? pi.su_credits : 0,
-                Basic_Science: (pi.basic_science != null) ? pi.basic_science : 0,
-                Engineering: (pi.engineering != null) ? pi.engineering : 0,
-                ECTS: (pi.ects != null) ? pi.ects : 0,
-              };
-            }
-          }
-
-          try { loc.semesterObj.addCourse(myCourse); } catch (_) {
-            try { loc.semesterObj.courses.push(myCourse); } catch (_) {}
-          }
-
-          const domCourse = createPlannerCourseDom(code, newId, info);
-          loc.semesterEl.appendChild(domCourse);
+        if (!idx) throw new Error(`Schedule data for ${termName} could not be loaded.`);
+        scheduleIndex = idx;
+        try {
+          const loadInfo = (typeof window !== 'undefined') ? window.loadCoursePageInfoIndex : null;
+          if (typeof loadInfo === 'function') coursePageInfoMap = await loadInfo();
+        } catch (_) {
+          // Planner catalog and schedule metadata remain valid fallbacks.
         }
-
-        // Recompute effective categories and totals and refresh semester highlights.
-        try {
-          if (cur && typeof cur.recalcEffectiveTypes === 'function') cur.recalcEffectiveTypes(course_data);
-          if (cur && cur.doubleMajor && typeof cur.recalcEffectiveTypesDouble === 'function') {
-            cur.recalcEffectiveTypesDouble(cur.doubleMajorCourseData);
-          }
-          if (typeof window !== 'undefined' && typeof window.updateCurrentTermHighlights === 'function') {
-            window.updateCurrentTermHighlights();
-          }
-        } catch (_) {}
-
-        refreshPlannerTotalsForContainer(loc.container, loc.semesterObj);
-
-        try {
-          const storage = (typeof window !== 'undefined') ? window.planStorage : null;
-          if (storage && typeof storage.requestSave === 'function') storage.requestSave();
-        } catch (_) {}
+        const cur = (typeof window !== 'undefined') ? window.curriculum : null;
+        if (!cur || !Array.isArray(cur.semesters)) throw new Error('The planner is not ready yet.');
+        const prepared = preparePlannerReplacement(selectionSnapshot, idx, cur);
+        if (!prepared.rows.length) {
+          throw new Error('Only lab or recitation sections are selected; there are no planner courses to add.');
+        }
+        // Establish a known-good persisted checkpoint immediately before the
+        // synchronous commit. If current edits cannot be saved, leave both the
+        // planner model and DOM completely untouched.
+        const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+        if (!storage || typeof storage.requestSave !== 'function'
+            || typeof storage.flushSaves !== 'function'
+            || storage.requestSave() === false
+            || storage.flushSaves() === false) {
+          throw new Error('Your current planner changes could not be saved, so the update was cancelled.');
+        }
+        const loc = commitPlannerReplacement(prepared, cur);
 
         // Refresh scheduler planner-semester pills.
         try {
@@ -5240,7 +5403,15 @@
           if (scheduleIndex) renderResults(scheduleIndex, lastQuery);
           if (scheduleIndex) renderGrid(scheduleIndex);
         } catch (_) {}
-      } catch (_) {}
+      } catch (error) {
+        if (ui && typeof ui.alert === 'function') {
+          const message = error && error.message ? error.message : 'The planner was left unchanged.';
+          ui.alert('Update failed', `<p>${escapeHtml(message)}</p><p>Your previous planner courses were kept.</p>`);
+        }
+      } finally {
+        plannerUpdateInProgress = false;
+        pickPlanBtn.disabled = false;
+      }
     });
 
     selectedEl.addEventListener('click', async (e) => {
