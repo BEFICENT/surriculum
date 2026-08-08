@@ -278,9 +278,11 @@ test.describe('summary panel', () => {
       grades: [['A']],
       dates: [TERM_NAME],
     });
-    await openSummary(page);
+    const overlay = await openSummary(page);
 
     await expect(page.locator('.summary_modal'), 'one card per program').toHaveCount(2);
+    await expect(overlay.locator('.summary_class_level'), 'class level belongs only to the main card')
+      .toHaveCount(1);
     const limits = await page.evaluate(() => {
       const out = [];
       document.querySelectorAll('.summary_modal').forEach((card) => {
@@ -294,6 +296,7 @@ test.describe('summary panel', () => {
     expect(limits.sort((a, b) => a - b), 'CS and ME required limits').toEqual([REQS.CS.required, REQS.ME.required].sort((a, b) => a - b));
 
     const dmCard = page.locator('.summary_modal').nth(1);
+    await expect(dmCard.locator('.summary_class_level')).toHaveCount(0);
     await expect(dmCard.locator('.summary_metric[data-metric="main_pgpa"] .summary_metric_head span'))
       .toHaveText('Main PGPA');
     await expect(dmCard.locator('.summary_metric[data-metric="pgpa"] .summary_metric_head span'))
@@ -383,6 +386,77 @@ test.describe('summary panel', () => {
     const chips = overlay.locator('.major-summary .ms-state-chip');
     const chipTexts = await chips.allTextContents();
     expect(chipTexts).toEqual(expect.arrayContaining(['Earned', 'Current', 'Future', 'Needs grade']));
+  });
+
+  test('estimated class level uses all earned SU but not unfinished current or future plan credits', async ({ page }) => {
+    const terms = await livePastCurrentFuture(page);
+    const earned27 = [
+      'HIST191', 'HIST192', 'IF100', 'MATH101', 'MATH102',
+      'NS101', 'NS102', 'SPS101', 'SPS102',
+    ];
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: TERM_NAME,
+      curriculum: [earned27, ['CS201'], ['CS204']],
+      grades: [earned27.map(() => 'A'), [''], ['A']],
+      dates: [terms.past, terms.current, terms.future],
+    });
+
+    let progress = await page.evaluate(() => {
+      const value = window.curriculum.getGraduationProgress('main');
+      return {
+        earnedSuCredits: value.earnedSuCredits,
+        estimatedClassLevel: value.estimatedClassLevel.label,
+        projectedDegreeCredits: value.breakdown.total.projected,
+      };
+    });
+    expect(progress).toEqual({
+      earnedSuCredits: 27,
+      estimatedClassLevel: 'Freshman',
+      projectedDegreeCredits: 33,
+    });
+
+    let overlay = await openSummary(page);
+    let classRow = overlay.locator('.summary_class_level');
+    await expect(classRow).toHaveCount(1);
+    await expect(classRow).toHaveAttribute('data-estimated-class-level', 'Freshman');
+    await expect(classRow).toHaveAttribute('data-earned-su-credits', '27');
+    await expect(classRow).toContainText('30/60/90-credit estimate');
+    await expect(classRow).toContainText('not an official university classification');
+    await expect(classRow).toContainText('Unfinished current-term, future, needs-grade, and unsuccessful courses are excluded');
+
+    await overlay.click({ position: { x: 2, y: 2 } });
+    await expect(overlay).toBeHidden();
+    await page.evaluate(() => {
+      const course = window.curriculum.semesters
+        .flatMap((semester) => semester.courses || [])
+        .find((candidate) => candidate && candidate.code === 'CS201');
+      course.grade = 'A';
+    });
+
+    progress = await page.evaluate(() => {
+      const value = window.curriculum.getGraduationProgress('main');
+      return {
+        earnedSuCredits: value.earnedSuCredits,
+        estimatedClassLevel: value.estimatedClassLevel.label,
+      };
+    });
+    expect(progress).toEqual({ earnedSuCredits: 30, estimatedClassLevel: 'Sophomore' });
+
+    overlay = await openSummary(page);
+    classRow = overlay.locator('.summary_class_level');
+    await expect(classRow).toHaveAttribute('data-estimated-class-level', 'Sophomore');
+    await expect(classRow).toHaveAttribute('data-earned-su-credits', '30');
+    await overlay.click({ position: { x: 2, y: 2 } });
+    await expect(overlay).toBeHidden();
+
+    await page.locator('.check').click();
+    const graduation = page.locator('.graduation_modal_overlay');
+    await expect(graduation).toBeVisible();
+    const standingDetails = graduation.locator('.graduation_meta_item')
+      .filter({ hasText: 'Estimated class level:' });
+    await expect(standingDetails).toHaveCount(1);
+    await expect(standingDetails).toContainText('Sophomore (30 earned SU overall');
   });
 
   test('earned summary segments agree with an independently complete earned audit', async ({ page }) => {

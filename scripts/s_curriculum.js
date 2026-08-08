@@ -304,6 +304,8 @@ if (typeof window !== 'undefined') {
     window.isProgramEffectiveType = isProgramEffectiveType;
     window.calculateGpaForMembership = calculateGpaForMembership;
     window.doubleMajorAverageThreshold = doubleMajorAverageThreshold;
+    window.calculateEarnedSuCredits = calculateEarnedSuCredits;
+    window.estimatedClassLevelForEarnedCredits = estimatedClassLevelForEarnedCredits;
 }
 
 // SUIS rule (VACD): "Only one of the following course pairs will be counted
@@ -727,6 +729,48 @@ function progressAllocationFields(view, layer) {
 const creditOfCourse = (course) => ((typeof parseCreditValue === 'function')
     ? parseCreditValue(course.SU_credit || '0')
     : (parseFloat(course.SU_credit || '0') || 0));
+
+// Class level is an informational estimate, not a graduation allocation. It
+// therefore uses every course whose term/grade state is genuinely earned,
+// including a known course that does not belong to the selected program's
+// pools. Current, future, unverified, and unsuccessful work is deliberately
+// excluded. The 30/60/90 bands are SUrriculum app policy rather than a
+// published Sabancı University rule; the UI labels the result accordingly.
+function calculateEarnedSuCredits(semesters, explicitCurrentTermCode) {
+    const rows = Array.isArray(semesters) ? semesters : [];
+    let total = 0;
+    for (let i = 0; i < rows.length; i++) {
+        const sem = rows[i];
+        const courses = sem && Array.isArray(sem.courses) ? sem.courses : [];
+        for (let j = 0; j < courses.length; j++) {
+            const course = courses[j];
+            if (!course || courseProgressState(course, sem, explicitCurrentTermCode)
+                !== COURSE_PROGRESS_STATES.EARNED) continue;
+            const credit = Number(creditOfCourse(course));
+            if (isFinite(credit) && credit > 0) total += credit;
+        }
+    }
+    return total;
+}
+
+function estimatedClassLevelForEarnedCredits(value) {
+    const parsed = Number(value);
+    const earnedCredits = isFinite(parsed) && parsed > 0 ? parsed : 0;
+    if (earnedCredits >= 90) {
+        return { label: 'Senior', earnedCredits, nextLabel: null,
+            nextThreshold: null, creditsToNext: 0, estimated: true };
+    }
+    if (earnedCredits >= 60) {
+        return { label: 'Junior', earnedCredits, nextLabel: 'Senior',
+            nextThreshold: 90, creditsToNext: 90 - earnedCredits, estimated: true };
+    }
+    if (earnedCredits >= 30) {
+        return { label: 'Sophomore', earnedCredits, nextLabel: 'Junior',
+            nextThreshold: 60, creditsToNext: 60 - earnedCredits, estimated: true };
+    }
+    return { label: 'Freshman', earnedCredits, nextLabel: 'Sophomore',
+        nextThreshold: 30, creditsToNext: 30 - earnedCredits, estimated: true };
+}
 
 // Tally the student's FACULTY COURSES by pool. `Faculty_Course` is the
 // faculty-course pool marker (only ~10% of courses carry one) — NOT the offering
@@ -1798,6 +1842,16 @@ function s_curriculum()
         return actualProgressGpa(explicitCurrentTermCode);
     };
 
+    this.getEarnedSuCredits = function(explicitCurrentTermCode) {
+        return calculateEarnedSuCredits(this.semesters, explicitCurrentTermCode);
+    };
+
+    this.getEstimatedClassLevel = function(explicitCurrentTermCode) {
+        return estimatedClassLevelForEarnedCredits(
+            this.getEarnedSuCredits(explicitCurrentTermCode),
+        );
+    };
+
     // Program GPA uses the program-specific effective allocation. Its private
     // membership pass can classify an F/letter-basis NA without awarding the
     // course any degree credit or changing the planner's visible allocation.
@@ -1977,6 +2031,8 @@ function s_curriculum()
             && projectedFlag !== REQUIREMENTS_UNAVAILABLE_FLAG;
         const status = !available ? 'unavailable'
             : (earnedFlag === 0 ? 'complete' : (projectedFlag === 0 ? 'projected' : 'incomplete'));
+        const estimatedClassLevel = this.getEstimatedClassLevel(currentTerm);
+        const earnedSuCredits = estimatedClassLevel.earnedCredits;
         const courseStates = [];
         for (let i = 0; i < this.semesters.length; i++) {
             const sem = this.semesters[i];
@@ -1993,6 +2049,7 @@ function s_curriculum()
         return { view: programView, status, available, earnedFlag, projectedFlag,
             breakdown, layers, courseStates, gpa: cgpa, cgpa, pgpa, projectedPgpa,
             mainPgpa, projectedMainPgpa, averageThreshold,
+            earnedSuCredits, estimatedClassLevel,
             averageChecks: {
                 cgpa: cgpa.resolved && cgpa.credits > 0 && cgpa.value >= averageThreshold,
                 pgpa: pgpa.resolved && pgpa.credits > 0 && pgpa.value >= averageThreshold,

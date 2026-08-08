@@ -489,6 +489,16 @@ function displayGraduationResults(curriculum) {
             if (b.future) parts.push(`${b.future} future`);
             if (b.unverified) parts.push(`${b.unverified} needs grade verification`);
             const details = [{ text: `SU credits: ${parts.join(' + ')} = ${b.projected} projected`, tone: 'muted' }];
+            const standing = progress.estimatedClassLevel;
+            if (progress.view === 'main' && standing && standing.label) {
+                const earned = Number(standing.earnedCredits) || 0;
+                const earnedText = Math.abs(earned - Math.round(earned)) < 1e-9
+                    ? String(Math.round(earned)) : earned.toFixed(1);
+                details.push({
+                    text: `Estimated class level: ${standing.label} (${earnedText} earned SU overall; SUrriculum 30/60/90-credit estimate, not an official university classification; unfinished current-term, future, needs-grade, and unsuccessful courses excluded).`,
+                    tone: 'muted',
+                });
+            }
             const threshold = Number(progress.averageThreshold) || (progress.view === 'dm' ? 3.20 : 2.00);
             const pushAverage = (label, result) => {
                 const value = result && Number(result.value);
@@ -1626,6 +1636,11 @@ function displaySummary(curriculum, major_chosen_by_user) {
 
     // Helper to build a summary modal for a given set of totals and limits.
     function buildSummaryModal(totals, limits, gpa, majorCode, view, requirementsAvailable = true, progress = null) {
+        const formatValue = (value) => {
+            const n = Number(value || 0);
+            if (!isFinite(n)) return '0';
+            return Math.abs(n - Math.round(n)) < 1e-9 ? String(Math.round(n)) : n.toFixed(1);
+        };
         const modal = document.createElement('div');
         modal.classList.add('summary_modal');
         cardsRowEl.appendChild(modal);
@@ -1634,6 +1649,29 @@ function displaySummary(curriculum, major_chosen_by_user) {
             header.classList.add('summary_modal_title');
             header.textContent = majorNames[majorCode] || majorCode;
             modal.appendChild(header);
+        }
+        const standing = progress && progress.estimatedClassLevel;
+        if (view === 'main' && standing && standing.label) {
+            const standingRow = document.createElement('div');
+            standingRow.className = 'summary_modal_child summary_class_level';
+            standingRow.dataset.estimatedClassLevel = String(standing.label);
+            standingRow.dataset.earnedSuCredits = String(Number(standing.earnedCredits) || 0);
+
+            const head = document.createElement('div');
+            head.className = 'summary_metric_head';
+            const label = document.createElement('span');
+            label.textContent = 'Estimated class level';
+            const value = document.createElement('strong');
+            value.textContent = String(standing.label);
+            head.appendChild(label);
+            head.appendChild(value);
+
+            const explanation = document.createElement('div');
+            explanation.className = 'summary_metric_equation';
+            explanation.textContent = `SUrriculum 30/60/90-credit estimate based on ${formatValue(standing.earnedCredits)} earned SU credits overall; not an official university classification. Unfinished current-term, future, needs-grade, and unsuccessful courses are excluded.`;
+            standingRow.appendChild(head);
+            standingRow.appendChild(explanation);
+            modal.appendChild(standingRow);
         }
         if (!requirementsAvailable) {
             const unavailable = document.createElement('div');
@@ -1647,11 +1685,6 @@ function displaySummary(curriculum, major_chosen_by_user) {
         const labels = ['CGPA: ', 'SU Credits: ', 'ECTS: ', 'University: ',  'Required: ', 'Core: ', 'Area: ', 'Free: ',  'Basic Science: ', 'Engineering: '];
         const metricKeys = ['gpa', 'total', 'ects', 'university', 'required', 'core', 'area', 'free', 'science', 'engineering'];
         const total_values = [gpa, totals.total, totals.ects, totals.university, totals.required, totals.core, totals.area, totals.free, totals.science, totals.engineering];
-        const formatValue = (value) => {
-            const n = Number(value || 0);
-            if (!isFinite(n)) return '0';
-            return Math.abs(n - Math.round(n)) < 1e-9 ? String(Math.round(n)) : n.toFixed(1);
-        };
         const appendAverage = (key, label, result, fallbackValue, projectedResult) => {
             const child = document.createElement('div');
             child.classList.add('summary_modal_child');

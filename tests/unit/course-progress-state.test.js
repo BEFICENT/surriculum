@@ -56,3 +56,56 @@ test('term-code ordering spans academic years', () => {
   assert.equal(classify('', '202601', '202503'), 'future');
   assert.equal(classify('', '202501', '202503'), 'unverified');
 });
+
+test('estimated class-level bands use the 30/60/90 app-policy boundaries', () => {
+  const level = (credits) => g.estimatedClassLevelForEarnedCredits(credits).label;
+  assert.equal(level(-1), 'Freshman');
+  assert.equal(level(0), 'Freshman');
+  assert.equal(level(29.99), 'Freshman');
+  assert.equal(level(30), 'Sophomore');
+  assert.equal(level(59.99), 'Sophomore');
+  assert.equal(level(60), 'Junior');
+  assert.equal(level(89.99), 'Junior');
+  assert.equal(level(90), 'Senior');
+  assert.equal(level(125), 'Senior');
+
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(g.estimatedClassLevelForEarnedCredits(57))),
+    {
+      label: 'Sophomore', earnedCredits: 57, nextLabel: 'Junior',
+      nextThreshold: 60, creditsToNext: 3, estimated: true,
+    },
+  );
+});
+
+test('earned SU credits are grade/term based and independent of program allocation', () => {
+  const semesters = [
+    {
+      termCode: '202501',
+      courses: [
+        { code: 'PASTA', grade: 'A', SU_credit: 3, effective_type: 'none' },
+        { code: 'PASTT', grade: 'T', SU_credit: 2, effective_type: 'none' },
+        { code: 'PASTF', grade: 'F', SU_credit: 3, effective_type: 'required' },
+        { code: 'PASTU', grade: 'U', SU_credit: 2, effective_type: 'required' },
+      ],
+    },
+    {
+      termCode: '202502',
+      courses: [
+        { code: 'CURRENTD', grade: 'D', SU_credit: 2, effective_type: 'free' },
+        { code: 'CURRENTS', grade: 'S', SU_credit: 1, effective_type: 'free' },
+        { code: 'CURRENTBLANK', grade: '', SU_credit: 3, effective_type: 'free' },
+      ],
+    },
+    {
+      termCode: '202503',
+      courses: [{ code: 'FUTUREA', grade: 'A', SU_credit: 4, effective_type: 'required' }],
+    },
+    {
+      termCode: '',
+      courses: [{ code: 'UNKNOWNTERM', grade: 'A', SU_credit: 5, effective_type: 'required' }],
+    },
+  ];
+
+  assert.equal(g.calculateEarnedSuCredits(semesters, '202502'), 8);
+});
