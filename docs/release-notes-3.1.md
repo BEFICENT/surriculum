@@ -15,9 +15,8 @@ courses; only the earned audit can report **Complete**.
 
 The main Summary and Graduation Check also show an **Estimated class level**
 from earned SU credits overall. It excludes unfinished current-term, future,
-needs-grade, and unsuccessful work. The Freshman/Sophomore/Junior/Senior
-30/60/90-credit bands are SUrriculum's transparent estimate, not an official
-university classification or eligibility decision.
+needs-grade, and unsuccessful work. The undergraduate bands are Freshman
+0–33.99, Sophomore 34–63.99, Junior 64–93.99, and Senior 94 or more credits.
 
 The graduation views also show CGPA and program GPA (PGPA) separately. The main
 degree requires both to reach 2.00. Double-major checks use 3.20, or 2.72 for

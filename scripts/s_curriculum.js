@@ -734,8 +734,9 @@ const creditOfCourse = (course) => ((typeof parseCreditValue === 'function')
 // therefore uses every course whose term/grade state is genuinely earned,
 // including a known course that does not belong to the selected program's
 // pools. Current, future, unverified, and unsuccessful work is deliberately
-// excluded. The 30/60/90 bands are SUrriculum app policy rather than a
-// published Sabancı University rule; the UI labels the result accordingly.
+// excluded. Undergraduate class levels begin at 34, 64, and 94 earned credits;
+// the UI labels the result as an estimate because it is calculated from the
+// academic record currently stored in the planner.
 function calculateEarnedSuCredits(semesters, explicitCurrentTermCode) {
     const rows = Array.isArray(semesters) ? semesters : [];
     let total = 0;
@@ -756,20 +757,20 @@ function calculateEarnedSuCredits(semesters, explicitCurrentTermCode) {
 function estimatedClassLevelForEarnedCredits(value) {
     const parsed = Number(value);
     const earnedCredits = isFinite(parsed) && parsed > 0 ? parsed : 0;
-    if (earnedCredits >= 90) {
+    if (earnedCredits >= 94) {
         return { label: 'Senior', earnedCredits, nextLabel: null,
             nextThreshold: null, creditsToNext: 0, estimated: true };
     }
-    if (earnedCredits >= 60) {
+    if (earnedCredits >= 64) {
         return { label: 'Junior', earnedCredits, nextLabel: 'Senior',
-            nextThreshold: 90, creditsToNext: 90 - earnedCredits, estimated: true };
+            nextThreshold: 94, creditsToNext: 94 - earnedCredits, estimated: true };
     }
-    if (earnedCredits >= 30) {
+    if (earnedCredits >= 34) {
         return { label: 'Sophomore', earnedCredits, nextLabel: 'Junior',
-            nextThreshold: 60, creditsToNext: 60 - earnedCredits, estimated: true };
+            nextThreshold: 64, creditsToNext: 64 - earnedCredits, estimated: true };
     }
     return { label: 'Freshman', earnedCredits, nextLabel: 'Sophomore',
-        nextThreshold: 30, creditsToNext: 30 - earnedCredits, estimated: true };
+        nextThreshold: 34, creditsToNext: 34 - earnedCredits, estimated: true };
 }
 
 // Tally the student's FACULTY COURSES by pool. `Faculty_Course` is the

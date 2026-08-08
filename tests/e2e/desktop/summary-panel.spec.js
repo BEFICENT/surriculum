@@ -390,15 +390,15 @@ test.describe('summary panel', () => {
 
   test('estimated class level uses all earned SU but not unfinished current or future plan credits', async ({ page }) => {
     const terms = await livePastCurrentFuture(page);
-    const earned27 = [
+    const earned31 = [
       'HIST191', 'HIST192', 'IF100', 'MATH101', 'MATH102',
-      'NS101', 'NS102', 'SPS101', 'SPS102',
+      'NS101', 'NS102', 'SPS101', 'SPS102', 'MATH212',
     ];
     await seedPlan(page, {
       major: 'CS',
       entryTerm: TERM_NAME,
-      curriculum: [earned27, ['CS201'], ['CS204']],
-      grades: [earned27.map(() => 'A'), [''], ['A']],
+      curriculum: [earned31, ['CS201'], ['CS204']],
+      grades: [earned31.map(() => 'A'), [''], ['A']],
       dates: [terms.past, terms.current, terms.future],
     });
 
@@ -411,18 +411,17 @@ test.describe('summary panel', () => {
       };
     });
     expect(progress).toEqual({
-      earnedSuCredits: 27,
+      earnedSuCredits: 31,
       estimatedClassLevel: 'Freshman',
-      projectedDegreeCredits: 33,
+      projectedDegreeCredits: 37,
     });
 
     let overlay = await openSummary(page);
     let classRow = overlay.locator('.summary_class_level');
     await expect(classRow).toHaveCount(1);
     await expect(classRow).toHaveAttribute('data-estimated-class-level', 'Freshman');
-    await expect(classRow).toHaveAttribute('data-earned-su-credits', '27');
-    await expect(classRow).toContainText('30/60/90-credit estimate');
-    await expect(classRow).toContainText('not an official university classification');
+    await expect(classRow).toHaveAttribute('data-earned-su-credits', '31');
+    await expect(classRow).toContainText('undergraduate 34/64/94-credit thresholds');
     await expect(classRow).toContainText('Unfinished current-term, future, needs-grade, and unsuccessful courses are excluded');
 
     await overlay.click({ position: { x: 2, y: 2 } });
@@ -441,12 +440,12 @@ test.describe('summary panel', () => {
         estimatedClassLevel: value.estimatedClassLevel.label,
       };
     });
-    expect(progress).toEqual({ earnedSuCredits: 30, estimatedClassLevel: 'Sophomore' });
+    expect(progress).toEqual({ earnedSuCredits: 34, estimatedClassLevel: 'Sophomore' });
 
     overlay = await openSummary(page);
     classRow = overlay.locator('.summary_class_level');
     await expect(classRow).toHaveAttribute('data-estimated-class-level', 'Sophomore');
-    await expect(classRow).toHaveAttribute('data-earned-su-credits', '30');
+    await expect(classRow).toHaveAttribute('data-earned-su-credits', '34');
     await overlay.click({ position: { x: 2, y: 2 } });
     await expect(overlay).toBeHidden();
 
@@ -456,7 +455,7 @@ test.describe('summary panel', () => {
     const standingDetails = graduation.locator('.graduation_meta_item')
       .filter({ hasText: 'Estimated class level:' });
     await expect(standingDetails).toHaveCount(1);
-    await expect(standingDetails).toContainText('Sophomore (30 earned SU overall');
+    await expect(standingDetails).toContainText('Sophomore (34 earned SU overall');
   });
 
   test('earned summary segments agree with an independently complete earned audit', async ({ page }) => {

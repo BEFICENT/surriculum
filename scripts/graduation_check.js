@@ -495,7 +495,7 @@ function displayGraduationResults(curriculum) {
                 const earnedText = Math.abs(earned - Math.round(earned)) < 1e-9
                     ? String(Math.round(earned)) : earned.toFixed(1);
                 details.push({
-                    text: `Estimated class level: ${standing.label} (${earnedText} earned SU overall; SUrriculum 30/60/90-credit estimate, not an official university classification; unfinished current-term, future, needs-grade, and unsuccessful courses excluded).`,
+                    text: `Estimated class level: ${standing.label} (${earnedText} earned SU overall; based on the undergraduate 34/64/94-credit thresholds; unfinished current-term, future, needs-grade, and unsuccessful courses excluded).`,
                     tone: 'muted',
                 });
             }
@@ -1668,7 +1668,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
 
             const explanation = document.createElement('div');
             explanation.className = 'summary_metric_equation';
-            explanation.textContent = `SUrriculum 30/60/90-credit estimate based on ${formatValue(standing.earnedCredits)} earned SU credits overall; not an official university classification. Unfinished current-term, future, needs-grade, and unsuccessful courses are excluded.`;
+            explanation.textContent = `Based on ${formatValue(standing.earnedCredits)} earned SU credits overall and the undergraduate 34/64/94-credit thresholds. Unfinished current-term, future, needs-grade, and unsuccessful courses are excluded.`;
             standingRow.appendChild(head);
             standingRow.appendChild(explanation);
             modal.appendChild(standingRow);

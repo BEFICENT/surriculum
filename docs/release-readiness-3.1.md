@@ -239,9 +239,8 @@ a time and checked off only after the fix and its verification are complete.
   Summary and Graduation Check show one main-plan `Estimated class level` based
   on all earned SU credits, independent of selected-program allocation.
   Unfinished current-term, future, unverified, and unsuccessful credits do not
-  advance it. The Freshman/Sophomore/Junior/Senior 30/60/90 bands are explicitly
-  documented and displayed as SUrriculum app policy, not an official university
-  rule.
+  advance it. The displayed undergraduate bands are Freshman 0–33.99,
+  Sophomore 34–63.99, Junior 64–93.99, and Senior 94 or more credits.
 - [x] Align special-grade and GPA semantics with university rules. Completed on
   2026-08-01: one canonical policy now defines the accepted grade vocabulary,
   letter points, credit eligibility, pending states, and GPA treatment. S and T

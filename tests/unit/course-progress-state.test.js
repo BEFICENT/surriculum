@@ -57,23 +57,23 @@ test('term-code ordering spans academic years', () => {
   assert.equal(classify('', '202501', '202503'), 'unverified');
 });
 
-test('estimated class-level bands use the 30/60/90 app-policy boundaries', () => {
+test('estimated class-level bands use the undergraduate 34/64/94 boundaries', () => {
   const level = (credits) => g.estimatedClassLevelForEarnedCredits(credits).label;
   assert.equal(level(-1), 'Freshman');
   assert.equal(level(0), 'Freshman');
-  assert.equal(level(29.99), 'Freshman');
-  assert.equal(level(30), 'Sophomore');
-  assert.equal(level(59.99), 'Sophomore');
-  assert.equal(level(60), 'Junior');
-  assert.equal(level(89.99), 'Junior');
-  assert.equal(level(90), 'Senior');
+  assert.equal(level(33.99), 'Freshman');
+  assert.equal(level(34), 'Sophomore');
+  assert.equal(level(63.99), 'Sophomore');
+  assert.equal(level(64), 'Junior');
+  assert.equal(level(93.99), 'Junior');
+  assert.equal(level(94), 'Senior');
   assert.equal(level(125), 'Senior');
 
   assert.deepEqual(
     JSON.parse(JSON.stringify(g.estimatedClassLevelForEarnedCredits(57))),
     {
       label: 'Sophomore', earnedCredits: 57, nextLabel: 'Junior',
-      nextThreshold: 60, creditsToNext: 3, estimated: true,
+      nextThreshold: 64, creditsToNext: 7, estimated: true,
     },
   );
 });

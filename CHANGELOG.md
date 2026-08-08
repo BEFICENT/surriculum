@@ -22,8 +22,8 @@ unreleased until the branch is merged, published, and tagged.
   and JSON input.
 - A service worker scoped correctly for the `/surriculum/` GitHub Pages path,
   with app-owned caches and active-plan offline warming.
-- An explicitly non-official **Estimated class level** based on earned SU
-  credits, using documented 30/60/90-credit bands.
+- An **Estimated class level** based on earned SU credits, using the
+  undergraduate 34/64/94-credit thresholds.
 
 ### Changed
 

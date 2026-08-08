@@ -145,9 +145,8 @@ From the graduation/summary UI you can:
 - See earned and projected credit separately. Only the earned audit can report
   **Complete**; planned work can report **Projected complete**.
 - See an **Estimated class level** based only on earned SU credits across the
-  academic record. SUrriculum uses 30/60/90-credit Freshman, Sophomore, Junior,
-  and Senior bands as an app estimate; these are not presented as an official
-  Sabancı University classification rule.
+  academic record, using the undergraduate thresholds: Freshman 0–33.99,
+  Sophomore 34–63.99, Junior 64–93.99, and Senior 94 or more credits.
 - See overall CGPA separately from the PGPA calculated for each selected
   program. Effective N/A courses remain in letter-grade CGPA but do not enter a
   program's PGPA.
