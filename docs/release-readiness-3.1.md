@@ -27,7 +27,7 @@ a time and checked off only after the fix and its verification are complete.
 ## Verified baseline
 
 - [x] JavaScript/static unit gate passes: 207/207 tests.
-- [x] Playwright gate passes all 392 tests.
+- [x] Playwright gate passes all 399 tests.
 - [x] `python tests/scrape_groups_test.py` passes when run directly.
 - [x] `python tests/scrape_coursepages_fallback_test.py` passes: 3/3 tests.
 - [x] Python requirement validation and checked-in manifest integrity checks pass.
@@ -65,7 +65,7 @@ a time and checked off only after the fix and its verification are complete.
   `C:\Users\mehme\repos\surriculum-before-ancestry-repair-20260722-223259.bundle`.
 
   As of 2026-08-08, the published feature branch is 110 ahead and 34 behind
-  `origin/main`; the local branch, including these fixes, is 131 ahead and
+  `origin/main`; the local branch, including these fixes, is 133 ahead and
   34 behind. To reach 0 behind
   while retaining every divergent commit and avoiding a rebase, merge current
   `origin/main` into `surriculum-3.1`; this does not merge or release 3.1 into
@@ -307,6 +307,14 @@ a time and checked off only after the fix and its verification are complete.
   the same 38 courses, three status skips, and no invalid grades. The Microsoft
   Print-to-PDF sample contains no PDF.js text items at all; that separate
   condition retains its explicit re-export/OCR guidance and regression coverage.
+  Missing, malformed, non-consecutive, or unsupported semester headings now
+  fail closed in HTML, line-PDF, token-PDF, YÖK, and direct importer inputs.
+  A malformed boundary clears the prior valid semester so later courses cannot
+  inherit it accidentally, while the next valid heading resumes parsing. Every
+  rejected row is named in the import report, and no `Unknown Semester` planner
+  term is created. Transcript-created custom-course placeholders are also made
+  visible only after their session-plan storage succeeds; a failed write is
+  reported without changing the catalog, planner, or legacy storage.
 - [ ] Give unsuccessful attempts a distinct Summary state instead of placing
   them in the generic "untaken" bucket.
 - [x] Keep planner and scheduler offered-course data aligned. The planner now
@@ -378,12 +386,18 @@ a time and checked off only after the fix and its verification are complete.
   cover page hiding, mobile-style backgrounding, immediate setting reloads,
   plan import, deletion, reset, partial-write rollback, and stale-page snapshot
   suppression.
-- [ ] Complete multi-tab isolation for interactive scheduler and
-  transcript/global-metadata writes. Autosave snapshots and main planner writes
-  are bound to the page's captured plan and cannot recreate a plan deleted in
-  another tab, but older helper wrappers still resolve the globally active plan
-  at write time. This is a pre-existing non-blocking follow-up, not a quick-close
-  data-loss regression.
+- [x] Complete multi-tab isolation for interactive plan-scoped helpers.
+  Completed on 2026-08-08: the storage layer captures one immutable session plan
+  before deferred application scripts run. Main planner state, scheduler term
+  and schedule state, transcript/global metadata, custom-course catalogs,
+  semester creation/reload, plus plan-menu header/copy/delete/export actions,
+  all use that same identifier instead of whichever plan another tab most
+  recently activated.
+  Once the visible plan is deleted elsewhere, stale reads/writes fail closed and
+  cannot alter the other plan, recreate the deleted namespace, or fall back to
+  legacy unscoped keys. A real two-page browser regression also distinguishes
+  intentionally shared preferences such as scheduler preview settings from
+  plan-scoped data.
 
 ## GitHub Pages and offline behavior
 

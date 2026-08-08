@@ -187,4 +187,80 @@ test.describe('PDF transcript parsing (desktop)', () => {
     ]);
     expect(result.detectedRecords).toBe(4);
   });
+
+  test('PDF and YOK records without a recognizable semester are skipped explicitly', async ({ page }) => {
+    await page.goto('/');
+    const [pdfResult, yokResult] = await page.evaluate(([pdfText, yokText]) => [
+      window.academicRecordsParser.parseAcademicRecordsPdf(pdfText),
+      window.academicRecordsParser.parseAcademicRecordsPdf(yokText),
+    ], [
+      'CS201 Programming Fundamentals UG A 3 6 Completed',
+      [
+        'NOT DOKUM BELGESI',
+        'MATH101', 'Matematik', '(Calculus)', 'Completed', 'English',
+        '3', '0', '3', '6', 'A', '-',
+      ].join('\n'),
+    ]);
+
+    expect(pdfResult.courses).toEqual([]);
+    expect(pdfResult.skippedCourses).toEqual([{
+      code: 'CS201', grade: 'A', semester: 'Unknown Semester',
+      reason: 'missing-or-unrecognized-semester',
+    }]);
+    expect(pdfResult.detectedRecords).toBe(1);
+
+    expect(yokResult.courses).toEqual([]);
+    expect(yokResult.skippedCourses).toEqual([{
+      code: 'MATH101', grade: 'A', semester: 'Unknown Semester',
+      reason: 'missing-or-unrecognized-semester',
+    }]);
+    expect(yokResult.detectedRecords).toBe(1);
+  });
+
+  test('malformed semester boundaries clear stale terms and parsing recovers afterward', async ({ page }) => {
+    await page.goto('/');
+    const linePdf = [
+      'Fall 2023-2024',
+      'CS201', 'Programming', 'UG', 'A', '3', '6', 'Completed',
+      'Fall 2024-2027',
+      'MATH101', 'Calculus', 'UG', 'B', '3', '6', 'Completed',
+      'Spring 2025-2026',
+      'HUM101', 'Humanity', 'UG', 'C', '3', '6', 'Completed',
+    ].join('\n');
+    const tokenPdf = linePdf
+      .replace('Fall 2024-2027', 'Autumn 2024-2025')
+      .replace(/\n/g, ' ');
+    const yokRow = (code, title, grade) => [
+      code, title, `(${title})`, 'Completed', 'English',
+      '3', '0', '3', '6', grade, '-',
+    ];
+    const yokPdf = [
+      'NOT DOKUM BELGESI',
+      '(2023-2024 Fall Term)',
+      ...yokRow('CS201', 'Programming', 'A'),
+      '(2024-2027 Fall Term)',
+      ...yokRow('MATH101', 'Calculus', 'B'),
+      '(2025-2026 Spring Term)',
+      ...yokRow('HUM101', 'Humanity', 'C'),
+    ].join('\n');
+
+    const results = await page.evaluate(([lineText, tokenText, yokText]) => [
+      window.academicRecordsParser.parseAcademicRecordsPdf(lineText),
+      window.academicRecordsParser.parseAcademicRecordsPdf(tokenText),
+      window.academicRecordsParser.parseAcademicRecordsPdf(yokText),
+    ], [linePdf, tokenPdf, yokPdf]);
+
+    const issueTerms = ['Fall 2024-2027', 'Autumn 2024-2025', 'Fall 2024-2027'];
+    results.forEach((result, index) => {
+      expect(result.courses.map(({ code, semester }) => ({ code, semester }))).toEqual([
+        { code: 'CS201', semester: 'Fall 2023-2024' },
+        { code: 'HUM101', semester: 'Spring 2025-2026' },
+      ]);
+      expect(result.skippedCourses).toEqual([{
+        code: 'MATH101', grade: 'B', semester: issueTerms[index],
+        reason: 'missing-or-unrecognized-semester',
+      }]);
+      expect(result.detectedRecords).toBe(3);
+    });
+  });
 });

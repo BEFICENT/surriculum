@@ -131,6 +131,37 @@ test.describe('academic records parsing (desktop)', () => {
     ]);
   });
 
+  test('an invalid HTML semester table does not inherit a neighboring valid term', async ({ page }) => {
+    await page.goto('/');
+    const html = `
+      <table class="courseTable">
+        <thead><tr><th><b>Fall 2023-2024</b></th></tr></thead>
+        <tbody><tr><td>CS201</td><td>Programming</td><td>1</td><td>A</td><td>3</td><td>6</td><td>Completed</td></tr></tbody>
+      </table>
+      <table class="courseTable">
+        <thead><tr><th><b>Autumn 2024-2025</b></th></tr></thead>
+        <tbody><tr><td>MATH101</td><td>Calculus</td><td>1</td><td>B</td><td>3</td><td>6</td><td>Completed</td></tr></tbody>
+      </table>
+      <table class="courseTable">
+        <thead><tr><th><b>Spring 2025-2026</b></th></tr></thead>
+        <tbody><tr><td>HUM101</td><td>Humanity</td><td>1</td><td>C</td><td>3</td><td>6</td><td>Completed</td></tr></tbody>
+      </table>`;
+
+    const result = await page.evaluate(
+      (content) => window.academicRecordsParser.parseAcademicRecords(content),
+      html,
+    );
+    expect(result.courses.map(({ code, semester }) => ({ code, semester }))).toEqual([
+      { code: 'CS201', semester: 'Fall 2023-2024' },
+      { code: 'HUM101', semester: 'Spring 2025-2026' },
+    ]);
+    expect(result.skippedCourses).toEqual([{
+      code: 'MATH101', grade: 'B', semester: 'Autumn 2024-2025',
+      reason: 'missing-or-unrecognized-semester',
+    }]);
+    expect(result.detectedRecords).toBe(3);
+  });
+
   test('import passes canonical grades and parallel grading bases to createSemeter', async ({ page }) => {
     await page.goto('/');
 
@@ -145,12 +176,14 @@ test.describe('academic records parsing (desktop)', () => {
           { code: 'SPS101', Major: 'SPS', Code: '101' },
           { code: 'CHEM101', Major: 'CHEM', Code: '101' },
           { code: 'HUM101', Major: 'HUM', Code: '101' },
+          { code: 'NS101', Major: 'NS', Code: '101' },
         ];
         const imported = window.academicRecordsParser.importParsedCourses([
           { code: 'MATH101', semester: 'Fall 2024-2025', grade: ' a- ' },
           { code: 'SPS101', semester: 'Fall 2024-2025', grade: 'S' },
           { code: 'CHEM101', semester: 'Fall 2024-2025', grade: 'NA' },
           { code: 'HUM101', semester: 'Fall 2024-2025', grade: 'A+' },
+          { code: 'NS101', semester: 'Fall 2024-2027', grade: 'A' },
         ], courseData, curriculum);
         return {
           grades: calls[0][4],
@@ -168,6 +201,112 @@ test.describe('academic records parsing (desktop)', () => {
     expect(result.stats.invalidGradeCourses).toEqual([
       { code: 'HUM101', grade: 'A+', semester: 'Fall 2024-2025' },
     ]);
+    expect(result.stats.skippedCourses).toEqual([
+      {
+        code: 'NS101', grade: 'A', semester: 'Fall 2024-2027',
+        reason: 'missing-or-unrecognized-semester',
+      },
+    ]);
+  });
+
+  test('transcript custom-course storage stays bound to the session plan and fails closed', async ({ page }) => {
+    await page.goto('/');
+
+    const result = await page.evaluate(() => {
+      const originalStorage = window.planStorage;
+      const originalResolver = window.resolveGlobalCourseDefinition;
+      const originalCreateSemester = window.createSemeter;
+      const storageCalls = { get: [], set: [], save: [] };
+      const createCalls = [];
+      let persistedCustomCourses = [];
+      const sessionPlanId = 'session-plan-under-test';
+      const stubStorage = Object.assign({}, originalStorage, {
+        getSessionPlanId: () => sessionPlanId,
+        getItem(key, planId) {
+          storageCalls.get.push({ key, planId });
+          return JSON.stringify(persistedCustomCourses);
+        },
+        setItem(key, value, planId) {
+          persistedCustomCourses = JSON.parse(value);
+          storageCalls.set.push({ key, value: persistedCustomCourses, planId });
+          return true;
+        },
+        requestSave(planId) {
+          storageCalls.save.push(planId);
+          return true;
+        },
+      });
+      window.planStorage = stubStorage;
+      window.resolveGlobalCourseDefinition = () => null;
+      window.createSemeter = (_interactive, courses) => createCalls.push(courses.slice());
+      localStorage.setItem('customCourses_CS', JSON.stringify(['legacy-unscoped-sentinel']));
+
+      try {
+        const curriculum = { major: 'CS', recalcEffectiveTypes() {} };
+        const successfulCourseData = [];
+        const successfulImport = window.academicRecordsParser.importParsedCourses([{
+          code: 'FEL999', title: 'Transcript Elective', semester: 'Fall 2024-2025',
+          grade: 'A', suCredits: 3, ects: 6,
+        }], successfulCourseData, curriculum);
+
+        // Once planStorage exists, a read error must not consult or combine
+        // the legacy unscoped key with the current session plan.
+        stubStorage.getItem = (key, planId) => {
+          storageCalls.get.push({ key, planId, failed: true });
+          throw new Error('synthetic plan storage failure');
+        };
+        const failedCourseData = [];
+        const failedImport = window.academicRecordsParser.importParsedCourses([{
+          code: 'FEL998', title: 'Second Transcript Elective', semester: 'Spring 2024-2025',
+          grade: 'B', suCredits: 3, ects: 6,
+        }], failedCourseData, curriculum);
+
+        return {
+          storageCalls,
+          createCalls,
+          persistedCustomCourses,
+          successfulCourseData,
+          successfulPendingCount: successfulImport.pendingCustomCourses.length,
+          failedCourseData,
+          failedPendingCount: failedImport.pendingCustomCourses.length,
+          failedStats: failedImport.stats,
+          legacyRaw: JSON.parse(localStorage.getItem('customCourses_CS')),
+        };
+      } finally {
+        window.planStorage = originalStorage;
+        window.resolveGlobalCourseDefinition = originalResolver;
+        window.createSemeter = originalCreateSemester;
+        localStorage.removeItem('customCourses_CS');
+      }
+    });
+
+    expect(result.storageCalls.get).toEqual([
+      { key: 'customCourses_CS', planId: 'session-plan-under-test' },
+      { key: 'customCourses_CS', planId: 'session-plan-under-test', failed: true },
+    ]);
+    expect(result.storageCalls.set).toHaveLength(1);
+    expect(result.storageCalls.set[0]).toMatchObject({
+      key: 'customCourses_CS', planId: 'session-plan-under-test',
+    });
+    expect(result.storageCalls.set[0].value).toEqual([
+      expect.objectContaining({ Major: 'FEL', Code: '999', EL_Type: 'free' }),
+    ]);
+    expect(result.storageCalls.save).toEqual(['session-plan-under-test']);
+    expect(result.createCalls).toEqual([['FEL999']]);
+    expect(result.persistedCustomCourses).toEqual([
+      expect.objectContaining({ Major: 'FEL', Code: '999', EL_Type: 'free' }),
+    ]);
+    expect(result.successfulCourseData).toEqual(result.persistedCustomCourses);
+    expect(result.successfulPendingCount).toBe(1);
+    expect(result.failedCourseData).toEqual([]);
+    expect(result.failedPendingCount).toBe(0);
+    expect(result.failedStats.importedCourses).toBe(0);
+    expect(result.failedStats.changedCourses).toBe(0);
+    expect(result.failedStats.skippedCourses).toEqual([{
+      code: 'FEL998', grade: 'B', semester: 'Spring 2024-2025',
+      reason: 'custom-course-storage-failed',
+    }]);
+    expect(result.legacyRaw).toEqual(['legacy-unscoped-sentinel']);
   });
 
   test('re-import updates the matching planned occurrence without adding a semester', async ({ page }) => {
@@ -642,6 +781,45 @@ test.describe('academic records parsing (desktop)', () => {
     await expect(overlay).toContainText(/unsupported/i);
   });
 
+  test('an unrecognized transcript term is explained without mutating the plan', async ({ page }) => {
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: 'Fall 2024-2025',
+      curriculum: [['MATH101']],
+      grades: [['A']],
+      dates: ['Fall 2024-2025'],
+    });
+    const before = await page.evaluate(() => ({
+      curriculum: serializator(window.curriculum),
+      grades: grades_serializator(window.curriculum),
+      dates: dates_serializator(window.curriculum),
+    }));
+    const html = `
+      <table class="courseTable">
+        <thead><tr><th><b>Autumn 2024-2025</b></th></tr></thead>
+        <tbody><tr><td>NS101</td><td>Science of Nature</td><td>1</td><td>A</td><td>4</td><td>8</td><td>Completed</td></tr></tbody>
+      </table>`;
+    await page.locator('#academicRecordsInput').setInputFiles({
+      name: 'synthetic-missing-term.html',
+      mimeType: 'text/html',
+      buffer: Buffer.from(html),
+    });
+    await page.evaluate(() => document.getElementById('importAcademicRecords').click());
+
+    const overlay = page.locator('.modal-overlay').filter({ hasText: /No importable courses/i });
+    await expect(overlay).toBeVisible();
+    await expect(overlay).toContainText('NS101');
+    await expect(overlay).toContainText('Autumn 2024-2025');
+    await expect(overlay).toContainText(/missing or unrecognized semester/i);
+    expect(await page.evaluate(() => ({
+      curriculum: serializator(window.curriculum),
+      grades: grades_serializator(window.curriculum),
+      dates: dates_serializator(window.curriculum),
+    }))).toEqual(before);
+    expect(await page.evaluate(() => window.curriculum.semesters
+      .some((semester) => semester.termName === 'Unknown Semester'))).toBe(false);
+  });
+
   test('successful import identifies every non-imported and superseded transcript record', async ({ page }) => {
     await seedPlan(page, {
       major: 'CS',
@@ -668,6 +846,10 @@ test.describe('academic records parsing (desktop)', () => {
           <tr><td>MATH101</td><td>Calculus</td><td>2</td><td>A</td><td>3</td><td>6</td><td>Completed</td></tr>
           <tr><td>ZZZ999</td><td>Unknown Course</td><td>1</td><td>B</td><td>3</td><td>6</td><td>Completed</td></tr>
         </tbody>
+      </table>
+      <table class="courseTable">
+        <thead><tr><th>Missing term heading</th></tr></thead>
+        <tbody><tr><td>NS101</td><td>Science of Nature</td><td>1</td><td>B+</td><td>4</td><td>8</td><td>Completed</td></tr></tbody>
       </table>`;
     await page.locator('#academicRecordsInput').setInputFiles({
       name: 'synthetic-import-report.html',
@@ -684,9 +866,11 @@ test.describe('academic records parsing (desktop)', () => {
     await expect(overlay).toContainText('ZZZ999');
     await expect(overlay).toContainText(/Older duplicate records \(1\)/i);
     await expect(overlay).toContainText(/Fall 2023-2024.*kept latest record.*Fall 2024-2025/i);
-    await expect(overlay).toContainText(/Skipped \(2\)/i);
+    await expect(overlay).toContainText(/Skipped \(3\)/i);
     await expect(overlay).toContainText('HIST191');
     await expect(overlay).toContainText('PROJ201');
+    await expect(overlay).toContainText('NS101');
+    await expect(overlay).toContainText(/missing or unrecognized semester/i);
     await expect(overlay).toContainText(/both repeated and substituted courses/i);
     await expect(overlay).toContainText(/marked Excluded/i);
   });
