@@ -1194,13 +1194,20 @@ body.is-mobile .scheduler-details-disclosure-body {
         width: 100%;
         height: 100%;
         border: none;
-        background: none;
-        color: var(--text-secondary);
+        background: var(--primary);
+        color: #fff;
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 72%, #fff);
         cursor: pointer;
         font-size: 0.95rem;
+        transition: background 0.15s ease, box-shadow 0.15s ease;
     }
     body.is-mobile .scheduler-modal.m-scheduler .m-sched-corner-search:hover {
-        color: var(--primary);
+        background: var(--primary-hover);
+        color: #fff;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .m-sched-corner-search:active {
+        background: var(--primary-active);
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 62%, #fff);
     }
     body.is-mobile .scheduler-modal.m-scheduler .m-sched-sheet-close {
         display: inline-flex;

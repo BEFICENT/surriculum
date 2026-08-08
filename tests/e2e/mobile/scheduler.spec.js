@@ -86,6 +86,41 @@ test.describe('mobile scheduler', () => {
       await expect(modal.locator(`.scheduler-day-col[data-day="${d}"]`)).toBeVisible();
     }
 
+    // The landscape-only Add courses trigger occupies the grid corner. Keep it
+    // visually prominent instead of rendering it as a low-contrast bare icon.
+    const addCourses = modal.getByRole('button', { name: 'Add courses' });
+    await expect(addCourses).toBeVisible();
+    const triggerColors = await addCourses.evaluate((button) => {
+      const resolveColor = (value) => {
+        const probe = document.createElement('span');
+        probe.style.color = value;
+        document.body.appendChild(probe);
+        const color = getComputedStyle(probe).color;
+        probe.remove();
+        return color;
+      };
+      const root = getComputedStyle(document.documentElement);
+      const styles = getComputedStyle(button);
+      return {
+        background: styles.backgroundColor,
+        foreground: styles.color,
+        primary: resolveColor(root.getPropertyValue('--primary').trim()),
+        white: resolveColor('#fff'),
+      };
+    });
+    expect(triggerColors.background).toBe(triggerColors.primary);
+    expect(triggerColors.foreground).toBe(triggerColors.white);
+    await addCourses.click();
+    await expect(modal).toHaveClass(/m-sheet-open/);
+    const sidebar = modal.locator('.scheduler-sidebar');
+    await expect.poll(async () => sidebar.evaluate((panel) => {
+      const box = panel.getBoundingClientRect();
+      return box.left >= -1 && box.right <= window.innerWidth + 1
+        && box.top >= -1 && box.bottom <= window.innerHeight + 1;
+    })).toBe(true);
+    await sidebar.getByRole('button', { name: 'Close' }).click();
+    await expect(modal).not.toHaveClass(/m-sheet-open/);
+
     // The fit scale (px-per-minute) is set so the day compresses to fit.
     const ppm = await page.evaluate(
       () => getComputedStyle(document.documentElement).getPropertyValue('--m-fit-ppm').trim(),
