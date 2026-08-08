@@ -38,3 +38,12 @@ test('CSP permits only the reviewed inline structured-data block', () => {
 test('structured data does not claim an unverified aggregate rating', () => {
   assert.doesNotMatch(HTML, /aggregateRating|ratingValue|ratingCount/);
 });
+
+test('search metadata includes the common sucurriculum spelling', () => {
+  const keywords = HTML.match(/<meta\s+name=["']keywords["']\s+content=["']([^"']*)["']/i);
+  assert.ok(keywords, 'keywords metadata is missing');
+  assert.ok(
+    keywords[1].split(',').map((value) => value.trim().toLowerCase()).includes('sucurriculum'),
+    'the exact sucurriculum search token is missing'
+  );
+});

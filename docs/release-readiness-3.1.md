@@ -27,14 +27,15 @@ a time and checked off only after the fix and its verification are complete.
 
 ## Verified baseline
 
-- [x] JavaScript/static unit gate passes: 221/221 tests.
-- [x] Chromium Playwright gate passes: 425/425 tests (410 desktop and 15
+- [x] JavaScript/static unit gate passes: 224/224 tests.
+- [x] Chromium Playwright gate passes: 426/426 tests (411 desktop and 15
   mobile), run in three deterministic desktop shards plus the mobile project
   with zero retries.
 - [x] Focused cross-browser gate passes: 2/2 critical flows (Firefox and
   WebKit), also with zero retries.
 - [x] `python tests/scrape_groups_test.py` passes when run directly.
 - [x] `python tests/scrape_coursepages_fallback_test.py` passes: 3/3 tests.
+- [x] SUIS degree-page validation/publication regressions pass: 16/16 tests.
 - [x] Python requirement validation and checked-in manifest integrity checks pass.
 - [x] All 227,341 deterministic runtime JSONL rows parse successfully.
 - [x] Manifest hashes and the content-derived data version match the data tree.
@@ -146,6 +147,21 @@ a time and checked off only after the fix and its verification are complete.
   fetched and validated before a same-directory temporary file atomically
   replaces the term; failures preserve the last-known-good file and return a
   nonzero command status.
+- [x] Reject valid-looking SUIS fallback pages returned with HTTP 200 for an
+  unavailable term. Completed on 2026-08-08: major requirements, major course
+  catalogs, and minor detail scrapes now accept only `YYYY01`/`02`/`03` term
+  codes and require the page's displayed **Admit Term** to match the requested
+  term before parsing. Missing or blank headings, mismatches, and
+  complete-looking fallback curriculum pages fail closed. Course-catalog
+  discovery also requires the complete expected program list. Successful term
+  rows merge atomically into `courses/terms.jsonl`; failed and unrequested rows
+  remain last-known-good. Full minor-term refreshes stage requirements, catalogs,
+  optional legacy snapshots, and the term manifest together and roll back if
+  any selected minor or publication fails. `--programs`/`--max-programs` runs
+  merge without truncating unselected data. Minor subprocess failures propagate
+  through both parent scrapers. Sixteen offline regressions cover response
+  identity, input rejection, manifest merging, atomic preservation, debug
+  limits, and subprocess status; the fast daily data gate runs them.
 - [x] Validate required programs and requirement schemas at load time; if data
   is unavailable or incomplete, graduation evaluation must fail closed and show
   a clear message. Completed on 2026-07-22: selected admit terms now load exact
@@ -219,6 +235,13 @@ a time and checked off only after the fix and its verification are complete.
   aligned with the same time-aware actual GPA: future-term entered grades no
   longer leak through the zero-credit fallback, while posted current-term
   grades still count immediately.
+- [x] Show an earned-credit class-level estimate. Completed on 2026-08-08:
+  Summary and Graduation Check show one main-plan `Estimated class level` based
+  on all earned SU credits, independent of selected-program allocation.
+  Unfinished current-term, future, unverified, and unsuccessful credits do not
+  advance it. The Freshman/Sophomore/Junior/Senior 30/60/90 bands are explicitly
+  documented and displayed as SUrriculum app policy, not an official university
+  rule.
 - [x] Align special-grade and GPA semantics with university rules. Completed on
   2026-08-01: one canonical policy now defines the accepted grade vocabulary,
   letter points, credit eligibility, pending states, and GPA treatment. S and T
@@ -418,11 +441,11 @@ a time and checked off only after the fix and its verification are complete.
   Unit and browser checks cover copy-only migration,
   storage failure, reload persistence, scheduler mirroring, and multi-tab
   sharing without crossing plan-scoped state.
-- [ ] Retire the ambiguous pre-multi-plan raw plan keys with explicit migration
-  provenance and a reset tombstone. This must preserve the privacy promise that
-  Reset removes known legacy academic data while avoiding deletion of a sibling
-  Pages app's coincidentally named `major`, `grades`, or `dates` keys; guessing
-  ownership from the key name alone cannot satisfy both requirements.
+- [x] Accept the ambiguous pre-multi-plan raw plan keys for 3.1. The maintainer
+  explicitly chose not to add migration provenance or a reset tombstone for
+  generic legacy names such as `major`, `grades`, and `dates`. Current 3.1 plan
+  writes remain namespaced; this accepted edge concerns only old-schema
+  migration/reset on an origin where another app uses the same raw names.
 - [x] Save on mutations with a short debounce and flush on `pagehide` or hidden
   visibility so quick closes/mobile backgrounding do not lose recent edits.
   Completed on 2026-08-08: planner mutations coalesce into a 250 ms snapshot,

@@ -13,6 +13,12 @@ grade entered in a future term remains a projection. Summaries distinguish
 earned, current, future, needs-grade, unsuccessful, and genuinely not-taken
 courses; only the earned audit can report **Complete**.
 
+The main Summary and Graduation Check also show an **Estimated class level**
+from earned SU credits overall. It excludes unfinished current-term, future,
+needs-grade, and unsuccessful work. The Freshman/Sophomore/Junior/Senior
+30/60/90-credit bands are SUrriculum's transparent estimate, not an official
+university classification or eligibility decision.
+
 The graduation views also show CGPA and program GPA (PGPA) separately. The main
 degree requires both to reach 2.00. Double-major checks use 3.20, or 2.72 for
 pre-2019 admits, across CGPA, main PGPA, and double-major PGPA. Minor checks use
@@ -44,6 +50,12 @@ when weekend or late-hour rows are not visible. Saturday, Sunday, and extended
 hours appear only when a selected section or active preview needs them. Updating
 a planner semester is transactional: a load, render, recalculation, or storage
 failure restores the previous term rather than leaving it partly replaced.
+
+Automated degree-data refreshes no longer trust HTTP status alone. Requirements,
+major catalogs, and minor catalogs accept a degree-detail page only when its
+displayed **Admit Term** exactly matches the requested term. A complete-looking
+wrong-term fallback is rejected, and failed catalog refreshes keep the prior
+term index discoverable.
 
 ### Local-first security and offline behavior
 

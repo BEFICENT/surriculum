@@ -22,6 +22,8 @@ unreleased until the branch is merged, published, and tagged.
   and JSON input.
 - A service worker scoped correctly for the `/surriculum/` GitHub Pages path,
   with app-owned caches and active-plan offline warming.
+- An explicitly non-official **Estimated class level** based on earned SU
+  credits, using documented 30/60/90-credit bands.
 
 ### Changed
 
@@ -56,6 +58,9 @@ unreleased until the branch is merged, published, and tagged.
   recalculation, or persistence fails.
 - Schedule scraping and the planner's offered-course filter now reconcile into
   the same available data.
+- Requirements, major-catalog, and minor scrapers now reject complete-looking
+  HTTP-200 fallback pages unless their displayed admit term exactly matches the
+  requested term; failed refreshes preserve the last-known catalog index.
 - The structured-data block no longer publishes an unverified aggregate rating.
 
 ### Security and privacy

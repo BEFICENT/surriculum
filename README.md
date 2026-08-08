@@ -144,6 +144,10 @@ From the graduation/summary UI you can:
   - How overflow (upper → lower pool) courses are counted (color-coded)
 - See earned and projected credit separately. Only the earned audit can report
   **Complete**; planned work can report **Projected complete**.
+- See an **Estimated class level** based only on earned SU credits across the
+  academic record. SUrriculum uses 30/60/90-credit Freshman, Sophomore, Junior,
+  and Senior bands as an app estimate; these are not presented as an official
+  Sabancı University classification rule.
 - See overall CGPA separately from the PGPA calculated for each selected
   program. Effective N/A courses remain in letter-grade CGPA but do not enter a
   program's PGPA.
@@ -229,6 +233,14 @@ Update requirement rules:
 ```bash
 python fetch_requirements.py
 ```
+
+The degree-detail scrapers reject successful HTTP responses unless the page's
+displayed **Admit Term** exactly matches the requested `YYYY01`/`02`/`03` term.
+An unavailable-term fallback therefore cannot overwrite requirements. Complete
+course-catalog rows merge into `courses/terms.jsonl` atomically while failed and
+unrequested terms remain discoverable. Full minor-term refreshes publish only
+after every selected minor succeeds; program-limited runs merge with the
+existing snapshot instead of truncating it.
 
 Scrape course pages for metadata (including Basic Science/Engineering credit breakdowns and “offered term” history):
 
