@@ -141,6 +141,71 @@ function displayTermIdentifier(term) {
     return normalized;
 }
 
+// These are advisory approval-free semester loads, not hard planner limits.
+// Students may retain an overload in the plan; the UI only highlights it.
+const REGULAR_SEMESTER_CREDIT_LIMIT = 20;
+const SUMMER_SEMESTER_CREDIT_LIMIT = 8;
+
+function isSummerTerm(termOrSemester) {
+    if (termOrSemester && typeof termOrSemester === 'object') {
+        const stableCode = String(termOrSemester.termCode || '').trim();
+        if (/^\d{4}(01|02|03)$/.test(stableCode)) return stableCode.endsWith('03');
+        return isSummerTerm(termOrSemester.termName);
+    }
+    const raw = String(termOrSemester || '').trim();
+    if (!raw) return false;
+    const normalized = normalizeTermIdentifier(raw);
+    return /^\d{4}03$/.test(normalized);
+}
+
+function semesterCreditLimit(termOrSemester) {
+    return isSummerTerm(termOrSemester)
+        ? SUMMER_SEMESTER_CREDIT_LIMIT
+        : REGULAR_SEMESTER_CREDIT_LIMIT;
+}
+
+function isSemesterCreditOverLimit(termOrSemester, explicitTotal) {
+    const rawTotal = explicitTotal !== undefined
+        ? explicitTotal
+        : (termOrSemester && typeof termOrSemester === 'object'
+            ? termOrSemester.totalCredit : 0);
+    const total = Number(rawTotal);
+    return Number.isFinite(total) && total > semesterCreditLimit(termOrSemester);
+}
+
+function updateSemesterCreditIndicator(span, semester, explicitTotal) {
+    if (!span) return null;
+    const rawTotal = explicitTotal !== undefined
+        ? explicitTotal
+        : (semester && semester.totalCredit !== undefined ? semester.totalCredit : 0);
+    const total = Number(rawTotal) || 0;
+    const totalText = String(total);
+    const limit = semesterCreditLimit(semester);
+    const overLimit = isSemesterCreditOverLimit(semester, total);
+    const seasonLabel = isSummerTerm(semester) ? 'Summer' : 'regular semester';
+
+    span.textContent = 'Total: ' + totalText + ' credits';
+    span.classList.toggle('is-overlimit', overLimit);
+    span.dataset.creditLimit = String(limit);
+    span.dataset.overloadAdvisory = overLimit ? 'true' : 'false';
+    if (overLimit) {
+        const message = `Total ${totalText} credits. Above the standard ${limit}-credit ${seasonLabel} load; an overload may be possible with approval.`;
+        span.title = message;
+        span.setAttribute('aria-label', message);
+    } else {
+        span.removeAttribute('title');
+        span.setAttribute('aria-label', `Total ${totalText} credits. Standard ${seasonLabel} load threshold: ${limit} credits.`);
+    }
+    return { total, limit, overLimit };
+}
+
+if (typeof window !== 'undefined') {
+    window.isSummerTerm = isSummerTerm;
+    window.semesterCreditLimit = semesterCreditLimit;
+    window.isSemesterCreditOverLimit = isSemesterCreditOverLimit;
+    window.updateSemesterCreditIndicator = updateSemesterCreditIndicator;
+}
+
 function buildCourseHistoryTableElement(rows, options) {
     try {
         const list = Array.isArray(rows) ? rows : [];

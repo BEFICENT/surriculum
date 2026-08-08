@@ -5053,11 +5053,14 @@
         const span = container ? container.querySelector('.total_credit_text span') : null;
         if (!span) return;
         const tc = semesterObj ? (semesterObj.totalCredit || 0) : 0;
-        const totalText = (typeof window !== 'undefined' && typeof window.formatCreditValue === 'function')
-          ? window.formatCreditValue(tc)
-          : (Number(tc).toFixed(1));
-        span.innerHTML = 'Total: ' + totalText + ' credits';
-        try { span.classList.toggle('is-overlimit', tc > 20); } catch (_) {}
+        if (typeof window !== 'undefined' && typeof window.updateSemesterCreditIndicator === 'function') {
+          window.updateSemesterCreditIndicator(span, semesterObj, tc);
+        } else {
+          const totalText = (typeof window !== 'undefined' && typeof window.formatCreditValue === 'function')
+            ? window.formatCreditValue(tc)
+            : (Number(tc).toFixed(1));
+          span.textContent = 'Total: ' + totalText + ' credits';
+        }
       } catch (_) {}
     };
 

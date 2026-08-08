@@ -44,6 +44,10 @@ The planner gives yellow, non-blocking prerequisite warnings and checks only
 genuinely separate corequisite codes. These warnings support planning and do not
 change graduation eligibility, so special approvals remain possible.
 
+Semester credit totals turn red above the standard load of 8 SU in Summer or
+20 SU in Fall/Spring. This is an advisory warning only: the planner retains the
+courses, and an overload remains possible with approval.
+
 The scheduler now accounts for date-specific meetings and detects conflicts even
 when weekend or late-hour rows are not visible. Saturday, Sunday, and extended
 hours appear only when a selected section or active preview needs them. Updating

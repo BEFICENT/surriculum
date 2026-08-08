@@ -27,8 +27,8 @@ a time and checked off only after the fix and its verification are complete.
 
 ## Verified baseline
 
-- [x] JavaScript/static unit gate passes: 224/224 tests.
-- [x] Chromium Playwright gate passes: 426/426 tests (411 desktop and 15
+- [x] JavaScript/static unit gate passes: 225/225 tests.
+- [x] Chromium Playwright gate passes: 431/431 tests (416 desktop and 15
   mobile), run in three deterministic desktop shards plus the mobile project
   with zero retries.
 - [x] Focused cross-browser gate passes: 2/2 critical flows (Firefox and
@@ -216,6 +216,14 @@ a time and checked off only after the fix and its verification are complete.
   transcript courses can satisfy later prerequisites but do not receive planning
   warnings themselves. Warnings remain completely outside graduation and
   allocation logic.
+- [x] Apply term-specific advisory semester loads. Completed on 2026-08-08:
+  semester totals turn red only above 8 SU in Summer or 20 SU in Fall/Spring.
+  The threshold follows stable model term identity and updates immediately after
+  term edits, reloads, imports, manual changes, and scheduler replacement. It is
+  display-only: overload courses remain in the plan, and the accessible warning
+  explicitly notes that an overload may be possible with approval. Unit and
+  browser tests cover exact boundaries, both regular terms, retained overloads,
+  and Summer/regular term switching.
 - [x] Separate projected-plan credit from completed/earned credit. Completed on
   2026-07-30: semesters now retain stable term codes and every course is
   classified as earned, current, future, unverified-past, or unsuccessful. A

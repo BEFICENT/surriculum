@@ -44,7 +44,7 @@ All plans and progress are stored locally in your browser. Use the plan
   - Main major and double major each have an admit term selector.
   - Each minor slot (`Minor 1/2/3`) has its own admit term selector.
 - **Plans**: keep up to **10 saved plans**, reorder them by dragging in the plan menu, rename, export, import, and delete (while keeping at least 1 plan).
-- **Planner board**: add semesters and courses, reorder semesters with their drag handle (mouse or touch), remove courses, and see per-semester totals. Course cards themselves are not draggable between semesters; move one by removing it and adding it to the destination term.
+- **Planner board**: add semesters and courses, reorder semesters with their drag handle (mouse or touch), remove courses, and see per-semester totals. Totals turn red above the standard 8-credit Summer or 20-credit Fall/Spring load, but this is advisory and does not prevent an approved overload. Course cards themselves are not draggable between semesters; move one by removing it and adding it to the destination term.
 - **Course details**: open a details view for planned courses using the course row actions.
 - **Import transcript**: import **Academic Records Summary** (HTML/PDF) or a **YÖK transcript PDF** (not preferred).
 - **Graduation + summaries**: check requirement progress and open detailed summaries for majors and minors.

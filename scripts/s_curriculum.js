@@ -1363,8 +1363,11 @@ function renderAllocationLabels(curriculum) {
             }
             const span = containerElem && containerElem.querySelector('.total_credit_text span');
             if (span) {
-                span.textContent = 'Total: ' + sem.totalCredit + ' credits';
-                try { span.classList.toggle('is-overlimit', (sem.totalCredit || 0) > 20); } catch (_) {}
+                if (typeof updateSemesterCreditIndicator === 'function') {
+                    updateSemesterCreditIndicator(span, sem);
+                } else {
+                    span.textContent = 'Total: ' + sem.totalCredit + ' credits';
+                }
             }
         } catch (_) {}
     }

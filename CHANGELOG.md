@@ -39,6 +39,8 @@ unreleased until the branch is merged, published, and tagged.
   saved definition together.
 - Planner autosave now flushes shortly after mutations and on page hiding while
   preserving plan deletion/reset boundaries and multi-tab isolation.
+- Semester totals now show a non-blocking overload advisory above 8 SU in
+  Summer or 20 SU in Fall/Spring; approved overloads remain fully editable.
 - Shared preferences use SUrriculum-owned storage keys and copy legacy values
   without changing their plan-independent behavior. Ambiguous generic keys are
   deliberately left untouched for other same-origin applications.

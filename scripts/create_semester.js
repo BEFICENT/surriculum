@@ -339,14 +339,15 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
             dom_semester.insertBefore(dom_course, dom_semester.querySelector(".addCourse"));
 
             let dom_tc = dom_course.parentNode.parentNode.parentNode.querySelector('span');
-            const totalText = (typeof formatCreditValue === 'function')
-                ? formatCreditValue(curriculum.getSemester(semester.id).totalCredit)
-                : (Number(curriculum.getSemester(semester.id).totalCredit || 0).toFixed(1));
-            dom_tc.textContent = 'Total: ' + totalText + ' credits';
-            try {
-                const tc = curriculum.getSemester(semester.id).totalCredit || 0;
-                dom_tc.classList.toggle('is-overlimit', tc > 20);
-            } catch (_) {}
+            const semesterObj = curriculum.getSemester(semester.id);
+            if (typeof updateSemesterCreditIndicator === 'function') {
+                updateSemesterCreditIndicator(dom_tc, semesterObj);
+            } else {
+                const totalText = (typeof formatCreditValue === 'function')
+                    ? formatCreditValue(semesterObj.totalCredit)
+                    : (Number(semesterObj.totalCredit || 0).toFixed(1));
+                dom_tc.textContent = 'Total: ' + totalText + ' credits';
+            }
         }
     }
 

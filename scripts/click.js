@@ -556,13 +556,14 @@ function dynamic_click(e, curriculum, course_data)
             e.target.parentNode.parentNode.querySelector('.semester').appendChild(course);
             // changing total credits element in DOM:
             let dom_tc = e.target.parentNode.parentNode.parentNode.querySelector('span');
-            const totalText = (typeof formatCreditValue === 'function')
-                ? formatCreditValue(sem.totalCredit)
-                : (Number(sem.totalCredit || 0).toFixed(1));
-            dom_tc.textContent = 'Total: ' + totalText + ' credits';
-            try {
-                dom_tc.classList.toggle('is-overlimit', (sem.totalCredit || 0) > 20);
-            } catch (_) {}
+            if (typeof updateSemesterCreditIndicator === 'function') {
+                updateSemesterCreditIndicator(dom_tc, sem);
+            } else {
+                const totalText = (typeof formatCreditValue === 'function')
+                    ? formatCreditValue(sem.totalCredit)
+                    : (Number(sem.totalCredit || 0).toFixed(1));
+                dom_tc.textContent = 'Total: ' + totalText + ' credits';
+            }
             // Remove input container after adding course
             e.target.parentNode.remove();
             // Recalculate categories for main (and DM via recalc) after adding
@@ -935,15 +936,14 @@ function dynamic_click(e, curriculum, course_data)
                 dom_tc = semElem ? semElem.parentNode?.parentNode?.querySelector('span') : null;
             } catch (_) {}
         }
-        {
+        if (typeof updateSemesterCreditIndicator === 'function') {
+            updateSemesterCreditIndicator(dom_tc, semObj);
+        } else {
             const totalText = (typeof formatCreditValue === 'function')
                 ? formatCreditValue(semObj.totalCredit)
                 : (Number(semObj.totalCredit || 0).toFixed(1));
             if (dom_tc) dom_tc.textContent = 'Total: ' + totalText + ' credits';
         }
-        try {
-            if (dom_tc) dom_tc.classList.toggle('is-overlimit', (semObj.totalCredit || 0) > 20);
-        } catch (_) {}
 
         const gradeOutcome = (typeof evaluateGradeForLegacyTotals === 'function')
             ? evaluateGradeForLegacyTotals(grade, courseObj && courseObj.gradingBasis) : null;

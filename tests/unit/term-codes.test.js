@@ -45,3 +45,20 @@ test('normalizeTermIdentifier / displayTermIdentifier round-trip names and codes
   assert.equal(h.displayTermIdentifier('202402'), 'Spring 2024-2025');
   assert.equal(h.displayTermIdentifier('Spring 2024-2025'), 'Spring 2024-2025');
 });
+
+test('semester credit limits are advisory and Summer-specific', () => {
+  assert.equal(h.semesterCreditLimit('Fall 2024-2025'), 20);
+  assert.equal(h.semesterCreditLimit('Spring 2024-2025'), 20);
+  assert.equal(h.semesterCreditLimit('Summer 2024-2025'), 8);
+  assert.equal(h.semesterCreditLimit('202403'), 8);
+  assert.equal(h.semesterCreditLimit({ termCode: '202403', termName: 'Summer 2024-2025' }), 8);
+  assert.equal(h.semesterCreditLimit({ termCode: '', termName: 'Summer 2024-2025' }), 8);
+  assert.equal(h.semesterCreditLimit({ termCode: '202402', termName: 'Spring 2024-2025' }), 20);
+  assert.equal(h.semesterCreditLimit({ termCode: '202402', termName: 'Summer 2024-2025' }), 20);
+  assert.equal(h.semesterCreditLimit('not a term'), 20);
+
+  assert.equal(h.isSemesterCreditOverLimit({ termCode: '202403', totalCredit: 8 }), false);
+  assert.equal(h.isSemesterCreditOverLimit({ termCode: '202403', totalCredit: 8.01 }), true);
+  assert.equal(h.isSemesterCreditOverLimit({ termCode: '202401', totalCredit: 20 }), false);
+  assert.equal(h.isSemesterCreditOverLimit({ termCode: '202401', totalCredit: 20.01 }), true);
+});
