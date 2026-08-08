@@ -263,4 +263,343 @@ test.describe('editing a custom course', () => {
     expect(rec.Course_Name, 'the name change should persist').toBe('Renamed Course');
     expect(rec.Faculty, 'and the faculty must not be reset by the edit').toBe('FASS');
   });
+
+  test('cancelling a normal edit keeps the stored custom course unchanged', async ({ page }) => {
+    await seedWithFass(page);
+    const form = await openEditForm(page);
+
+    await form.locator('.cc-row').nth(1).locator('input').fill('Unsaved Name');
+    await form.locator('.cc-faculty').selectOption('FENS');
+    await form.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(form).toBeHidden();
+
+    const rec = await page.evaluate(
+      () => JSON.parse(window.planStorage.getItem('customCourses_CS') || '[]')
+        .find((course) => String(course.Major) + String(course.Code) === 'QQQ400'),
+    );
+    expect(rec.Course_Name).toBe('Original Name');
+    expect(rec.Faculty).toBe('FASS');
+  });
+});
+
+test.describe('custom course identity and destructive changes', () => {
+  const openManage = async (page) => {
+    await page.locator('.manageCustomCourses').click();
+    const manage = page.locator('.custom_course_manage_overlay');
+    await expect(manage).toBeVisible({ timeout: 10000 });
+    return manage;
+  };
+
+  const openEdit = async (page, code) => {
+    const manage = await openManage(page);
+    await manage.locator('.custom_course_manage_item', { hasText: code })
+      .getByRole('button', { name: /edit/i }).click();
+    const form = page.locator('.custom_course_modal');
+    await expect(form).toBeVisible();
+    return form;
+  };
+
+  const fillAddForm = async (page, code) => {
+    await page.locator('.customCourse').click();
+    const form = page.locator('.custom_course_modal');
+    await expect(form).toBeVisible();
+    const rows = form.locator('.cc-row');
+    await rows.nth(0).locator('input').fill(code);
+    await rows.nth(1).locator('input').fill(`Custom ${code}`);
+    await rows.nth(2).locator('input').fill('3');
+    await rows.nth(3).locator('input').fill('6');
+    return form;
+  };
+
+  const dismissAlert = async (page, title) => {
+    const alert = page.locator('.modal-overlay').filter({ hasText: title });
+    await expect(alert).toBeVisible();
+    await alert.getByRole('button', { name: 'OK', exact: true }).click();
+  };
+
+  test('renaming an in-use custom course preserves its attempt and stays coherent after reload', async ({ page }) => {
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: TERM_NAME,
+      customCourses: { CS: [custom('QQQ400', 'core', { Course_Name: 'Original custom' })] },
+      curriculum: [['QQQ400', 'CS201']],
+      grades: [['B+', 'A']],
+      gradingBases: [['letter', 'letter']],
+      dates: [TERM_NAME],
+    });
+
+    const form = await openEdit(page, 'QQQ400');
+    await form.locator('.cc-row').nth(0).locator('input').fill('QQQ401');
+    await form.locator('.cc-row').nth(1).locator('input').fill('Renamed custom');
+    await form.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(form).toBeHidden();
+
+    const live = await page.evaluate(() => {
+      const occurrence = window.curriculum.semesters.flatMap((semester) => semester.courses)
+        .find((course) => course.code === 'QQQ401');
+      const stored = JSON.parse(window.planStorage.getItem('customCourses_CS') || '[]');
+      return {
+        oldOccurrence: window.curriculum.hasCourse('QQQ400'),
+        occurrence: occurrence && {
+          code: occurrence.code,
+          grade: occurrence.grade,
+          gradingBasis: occurrence.gradingBasis,
+          id: occurrence.id,
+        },
+        storedCodes: stored.map((course) => String(course.Major) + String(course.Code)),
+        renderedCode: document.querySelector('.course_code')?.textContent,
+      };
+    });
+    expect(live.oldOccurrence).toBe(false);
+    expect(live.occurrence).toMatchObject({ code: 'QQQ401', grade: 'B+', gradingBasis: 'letter' });
+    expect(live.occurrence.id).toBeTruthy();
+    expect(live.storedCodes).toEqual(['QQQ401']);
+    await expect(page.locator('.course_code', { hasText: 'QQQ401' })).toHaveCount(1);
+
+    await page.reload();
+    await page.waitForFunction(() => window.curriculum && window.curriculum.hasCourse('QQQ401'));
+    const restored = await page.evaluate(() => {
+      const occurrence = window.curriculum.semesters.flatMap((semester) => semester.courses)
+        .find((course) => course.code === 'QQQ401');
+      return {
+        hasOld: window.curriculum.hasCourse('QQQ400'),
+        code: occurrence && occurrence.code,
+        grade: occurrence && occurrence.grade,
+        gradingBasis: occurrence && occurrence.gradingBasis,
+        storedCodes: JSON.parse(window.planStorage.getItem('customCourses_CS') || '[]')
+          .map((course) => String(course.Major) + String(course.Code)),
+      };
+    });
+    expect(restored).toEqual({
+      hasOld: false,
+      code: 'QQQ401',
+      grade: 'B+',
+      gradingBasis: 'letter',
+      storedCodes: ['QQQ401'],
+    });
+  });
+
+  test('singular delete removes the definition and live occurrence before reload', async ({ page }) => {
+    await seedWithCustom(page, [custom('QQQ410', 'core')], ['QQQ410', 'CS201']);
+    const manage = await openManage(page);
+    await manage.locator('.custom_course_manage_item', { hasText: 'QQQ410' })
+      .getByRole('button', { name: /delete/i }).click();
+    const confirm = page.locator('.modal-overlay').filter({ hasText: /Delete custom course/i });
+    await confirm.getByRole('button', { name: 'Delete', exact: true }).click();
+
+    await expect(page.locator('.course_code', { hasText: 'QQQ410' })).toHaveCount(0);
+    expect(await page.evaluate(() => ({
+      hasCourse: window.curriculum.hasCourse('QQQ410'),
+      stored: JSON.parse(window.planStorage.getItem('customCourses_CS') || '[]'),
+      inCatalog: course_data.some((course) => `${course.Major || ''}${course.Code || ''}` === 'QQQ410'),
+    }))).toEqual({ hasCourse: false, stored: [], inCatalog: false });
+
+    await page.reload();
+    await page.waitForFunction(() => window.curriculum && window.curriculum.hasCourse('CS201'));
+    expect(await page.evaluate(() => window.curriculum.hasCourse('QQQ410'))).toBe(false);
+  });
+
+  test('a rejected edit write leaves storage, model, and DOM untouched', async ({ page }) => {
+    await seedWithCustom(page, [custom('QQQ420', 'core', { Course_Name: 'Durable name' })], ['QQQ420']);
+    await page.evaluate(() => {
+      const original = window.planStorage.setItem.bind(window.planStorage);
+      window.planStorage.setItem = (key, value, planId) => (
+        key === 'customCourses_CS' ? false : original(key, value, planId)
+      );
+    });
+
+    const form = await openEdit(page, 'QQQ420');
+    await form.locator('.cc-row').nth(0).locator('input').fill('QQQ421');
+    await form.locator('.cc-row').nth(1).locator('input').fill('Should not stick');
+    await form.getByRole('button', { name: 'Save', exact: true }).click();
+    await dismissAlert(page, 'Could not save custom course');
+    await expect(form).toBeVisible();
+
+    expect(await page.evaluate(() => ({
+      oldOccurrence: window.curriculum.hasCourse('QQQ420'),
+      newOccurrence: window.curriculum.hasCourse('QQQ421'),
+      renderedOld: Array.from(document.querySelectorAll('.course_code')).some((node) => node.textContent === 'QQQ420'),
+      storedCodes: JSON.parse(window.planStorage.getItem('customCourses_CS') || '[]')
+        .map((course) => String(course.Major) + String(course.Code)),
+    }))).toEqual({
+      oldOccurrence: true,
+      newOccurrence: false,
+      renderedOld: true,
+      storedCodes: ['QQQ420'],
+    });
+  });
+
+  test('new custom courses cannot shadow another custom course or the selected catalog', async ({ page }) => {
+    await seedWithCustom(page, [custom('QQQ430', 'core')], ['CS201']);
+    const form = await fillAddForm(page, 'QQQ430');
+    await form.getByRole('button', { name: 'Save', exact: true }).click();
+    await dismissAlert(page, 'Course code already exists');
+    await expect(form).toBeVisible();
+
+    await form.locator('.cc-row').nth(0).locator('input').fill('CS201');
+    await form.getByRole('button', { name: 'Save', exact: true }).click();
+    await dismissAlert(page, 'Course code already exists');
+    await expect(form).toBeVisible();
+
+    expect(await page.evaluate(() => ({
+      stored: JSON.parse(window.planStorage.getItem('customCourses_CS') || '[]')
+        .map((course) => String(course.Major) + String(course.Code)),
+      qqqCount: course_data.filter((course) => `${course.Major || ''}${course.Code || ''}` === 'QQQ430').length,
+      cs201Count: course_data.filter((course) => `${course.Major || ''}${course.Code || ''}` === 'CS201').length,
+    }))).toEqual({ stored: ['QQQ430'], qqqCount: 1, cs201Count: 1 });
+  });
+
+  test('renaming cannot overwrite another custom course or a catalog course', async ({ page }) => {
+    await seedWithCustom(page, [custom('QQQ440', 'core'), custom('QQQ441', 'area')], ['QQQ440']);
+    const form = await openEdit(page, 'QQQ440');
+    await form.locator('.cc-row').nth(0).locator('input').fill('QQQ441');
+    await form.getByRole('button', { name: 'Save', exact: true }).click();
+    await dismissAlert(page, 'Course code already exists');
+
+    await form.locator('.cc-row').nth(0).locator('input').fill('CS201');
+    await form.getByRole('button', { name: 'Save', exact: true }).click();
+    await dismissAlert(page, 'Course code already exists');
+
+    expect(await page.evaluate(() => ({
+      occurrence: window.curriculum.semesters.flatMap((semester) => semester.courses)
+        .find((course) => course.code === 'QQQ440')?.code,
+      stored: JSON.parse(window.planStorage.getItem('customCourses_CS') || '[]')
+        .map((course) => String(course.Major) + String(course.Code)),
+    }))).toEqual({ occurrence: 'QQQ440', stored: ['QQQ440', 'QQQ441'] });
+  });
+
+  test('a rejected bulk-delete storage removal leaves definitions and occurrences untouched', async ({ page }) => {
+    await seedWithCustom(page, [custom('QQQ450', 'core')], ['QQQ450']);
+    await page.evaluate(() => {
+      const original = window.planStorage.removeItem.bind(window.planStorage);
+      window.planStorage.removeItem = (key, planId) => (
+        key === 'customCourses_CS' ? false : original(key, planId)
+      );
+    });
+
+    await page.locator('.deleteCustom').click();
+    const confirm = page.locator('.modal-overlay').filter({ hasText: /Delete custom courses/i });
+    await confirm.getByRole('button', { name: 'Delete', exact: true }).click();
+    await dismissAlert(page, 'Could not delete custom courses');
+
+    expect(await page.evaluate(() => ({
+      occurrence: window.curriculum.hasCourse('QQQ450'),
+      stored: JSON.parse(window.planStorage.getItem('customCourses_CS') || '[]')
+        .map((course) => String(course.Major) + String(course.Code)),
+      rendered: Array.from(document.querySelectorAll('.course_code')).some((node) => node.textContent === 'QQQ450'),
+    }))).toEqual({ occurrence: true, stored: ['QQQ450'], rendered: true });
+  });
+
+  test('bulk deletion removes DM classification overlays without deleting real planner courses', async ({ page }) => {
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: TERM_NAME,
+      doubleMajor: 'DSA',
+      entryTermDM: TERM_NAME,
+      customCourses: { DSA: [custom('CS201', 'core')] },
+      curriculum: [['CS201']],
+      grades: [['A']],
+      dates: [TERM_NAME],
+    });
+
+    const repairNotice = page.locator('.modal-overlay').filter({ hasText: /Repaired double major credits/i });
+    if (await repairNotice.isVisible()) {
+      await repairNotice.getByRole('button', { name: 'OK', exact: true }).click();
+    }
+
+    await page.locator('.deleteCustom').click();
+    const confirm = page.locator('.modal-overlay').filter({ hasText: /Delete custom courses/i });
+    await expect(confirm).toBeVisible();
+    await Promise.all([
+      page.waitForNavigation(),
+      confirm.getByRole('button', { name: 'Delete', exact: true }).click(),
+    ]);
+    await page.waitForFunction(() => window.curriculum && window.curriculum.hasCourse('CS201'));
+
+    expect(await page.evaluate(() => ({
+      hasCourse: window.curriculum.hasCourse('CS201'),
+      dmCustom: window.planStorage.getItem('customCourses_DSA'),
+      rendered: Array.from(document.querySelectorAll('.course_code')).some((node) => node.textContent === 'CS201'),
+    }))).toEqual({ hasCourse: true, dmCustom: null, rendered: true });
+  });
+
+  test('singular delete removes the mirrored DM category without touching DM catalog data', async ({ page }) => {
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: TERM_NAME,
+      doubleMajor: 'DSA',
+      entryTermDM: TERM_NAME,
+      customCourses: {
+        CS: [custom('QQQ460', 'core')],
+        DSA: [custom('QQQ460', 'area')],
+      },
+      curriculum: [['QQQ460']],
+      grades: [['B']],
+      dates: [TERM_NAME],
+    });
+
+    const manage = await openManage(page);
+    await manage.locator('.custom_course_manage_item', { hasText: 'QQQ460' })
+      .getByRole('button', { name: /delete/i }).click();
+    const confirm = page.locator('.modal-overlay').filter({ hasText: /Delete custom course/i });
+    await confirm.getByRole('button', { name: 'Delete', exact: true }).click();
+
+    expect(await page.evaluate(() => ({
+      hasCourse: window.curriculum.hasCourse('QQQ460'),
+      primary: JSON.parse(window.planStorage.getItem('customCourses_CS') || '[]'),
+      dm: JSON.parse(window.planStorage.getItem('customCourses_DSA') || '[]'),
+      runtimeDm: window.curriculum.doubleMajorCourseData
+        .filter((course) => `${course.Major || ''}${course.Code || ''}` === 'QQQ460').length,
+      catalogStillLoaded: window.curriculum.doubleMajorCourseData.length > 0,
+    }))).toEqual({ hasCourse: false, primary: [], dm: [], runtimeDm: 0, catalogStillLoaded: true });
+  });
+
+  test('renaming into a real DM catalog code removes the old overlay without duplicating catalog data', async ({ page }) => {
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: TERM_NAME,
+      doubleMajor: 'DSA',
+      entryTermDM: TERM_NAME,
+      customCourses: {
+        CS: [custom('QQQ470', 'core')],
+        DSA: [custom('QQQ470', 'area')],
+      },
+      curriculum: [['QQQ470']],
+      grades: [['A-']],
+      dates: [TERM_NAME],
+    });
+
+    const form = await openEdit(page, 'QQQ470');
+    await form.locator('.cc-row').nth(0).locator('input').fill('DSA395');
+    await form.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(form).toBeHidden();
+
+    const readState = () => page.evaluate(() => ({
+      hasOld: window.curriculum.hasCourse('QQQ470'),
+      hasNew: window.curriculum.hasCourse('DSA395'),
+      dmStored: JSON.parse(window.planStorage.getItem('customCourses_DSA') || '[]')
+        .map((course) => `${course.Major || ''}${course.Code || ''}`),
+      dmRuntimeNew: window.curriculum.doubleMajorCourseData
+        .filter((course) => `${course.Major || ''}${course.Code || ''}` === 'DSA395').length,
+      dmRuntimeOld: window.curriculum.doubleMajorCourseData
+        .filter((course) => `${course.Major || ''}${course.Code || ''}` === 'QQQ470').length,
+    }));
+    expect(await readState()).toEqual({
+      hasOld: false,
+      hasNew: true,
+      dmStored: [],
+      dmRuntimeNew: 1,
+      dmRuntimeOld: 0,
+    });
+
+    await page.reload();
+    await page.waitForFunction(() => window.curriculum && window.curriculum.hasCourse('DSA395'));
+    expect(await readState()).toEqual({
+      hasOld: false,
+      hasNew: true,
+      dmStored: [],
+      dmRuntimeNew: 1,
+      dmRuntimeOld: 0,
+    });
+  });
 });

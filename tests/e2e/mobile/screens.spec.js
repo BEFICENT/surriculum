@@ -27,6 +27,24 @@ test.describe('mobile screens', () => {
     await expect(page.locator('.container_semester.m-collapsed')).toHaveCount(0);
   });
 
+  test('semester move controls stay out of collapsed headers and do not toggle the card', async ({ page }) => {
+    await seedPlan(page, PLAN);
+
+    const collapsed = page.locator('.container_semester.m-collapsed');
+    await expect(collapsed).toHaveCount(1);
+    await expect(collapsed.locator('.semester-move-controls')).toBeHidden();
+
+    await collapsed.locator('.date').click();
+    await expect(page.locator('.container_semester.m-collapsed')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Move Spring 2024-2025 up' }).click();
+
+    await expect(page.locator('.container_semester.m-collapsed')).toHaveCount(0);
+    await expect(page.locator('.container_semester .date p')).toHaveText([
+      'Spring 2024-2025',
+      'Fall 2024-2025',
+    ]);
+  });
+
   test('planner warnings stay inside the course card and collapse with the semester', async ({ page }) => {
     await seedPlan(page, {
       major: 'EE',

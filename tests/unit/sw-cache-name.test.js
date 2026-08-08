@@ -219,6 +219,17 @@ test('the app shell covers every local page resource and planner image', () => {
     'the removed synthetic requirements file must not make installation fail',
   );
   assert.ok(shellPaths.has('scripts/pdf_transcript_reader.js'));
+  for (const localFontAsset of [
+    'assets/vendor/inter-5.3.0/inter.css',
+    'assets/vendor/inter-5.3.0/files/inter-latin-wght-normal.woff2',
+    'assets/vendor/inter-5.3.0/files/inter-latin-ext-wght-normal.woff2',
+    'assets/vendor/fontawesome-6.4.0/css/fontawesome.min.css',
+    'assets/vendor/fontawesome-6.4.0/css/solid.min.css',
+    'assets/vendor/fontawesome-6.4.0/webfonts/fa-solid-900.woff2',
+    'assets/vendor/fontawesome-6.4.0/webfonts/fa-solid-900.ttf',
+  ]) {
+    assert.ok(shellPaths.has(localFontAsset), `missing offline font asset: ${localFontAsset}`);
+  }
   assert.deepEqual(Array.from(createWorker().exports.PDFJS_PATHS), [
     'assets/vendor/pdfjs-6.2.108/pdf.min.mjs',
     'assets/vendor/pdfjs-6.2.108/pdf.worker.min.mjs',

@@ -1,4 +1,4 @@
-# [SUrriculum v3.0](https://beficent.github.io/surriculum/)
+# [SUrriculum v3.1](https://beficent.github.io/surriculum/)
 
 SUrriculum is a fully client-side curriculum planner for Sabancı University undergraduate programs. It runs entirely in your browser (plain HTML/CSS/JS) and helps you:
 
@@ -13,13 +13,29 @@ Live version: https://beficent.github.io/surriculum/
 
 ## Quick start
 
-1. Clone/download this repository.
-2. Open `index.html` in a modern browser (Chrome / Edge / Firefox).
-3. Pick your program(s) + admit term(s) from the sidebar and start planning.
+1. Clone or download this repository.
+2. From the repository root, start a local HTTP server:
 
-No build step, server, or database is required.
+   ```bash
+   python -m http.server 8000
+   ```
 
-All plans and progress are stored locally in your browser (via `localStorage`). Use the plan **Export/Import** flow to back up or move data between devices.
+3. Open [http://localhost:8000/](http://localhost:8000/) in a modern browser.
+4. Pick your program(s) and admit term(s) from the sidebar and start planning.
+
+There is no build step, application server, or database. A small static HTTP
+server is required because browser modules, data requests, PDF.js workers, and
+offline caching do not work reliably when `index.html` is opened directly over
+`file://`.
+
+The core planner targets current evergreen browsers. PDF transcript import uses
+the locally bundled PDF.js 6.2.108 legacy build, whose practical upstream floor
+is Chrome 125+, Firefox ESR+, and Safari 18+ (mostly). Microsoft Edge follows
+its corresponding Chromium baseline. The full browser suite runs on Chromium,
+with an additional critical-flow gate for Firefox and WebKit.
+
+All plans and progress are stored locally in your browser. Use the plan
+**Export/Import** flow to back up or move data between devices.
 
 ## What you can do (feature overview)
 
@@ -27,8 +43,8 @@ All plans and progress are stored locally in your browser (via `localStorage`). 
 - **Admit terms**:
   - Main major and double major each have an admit term selector.
   - Each minor slot (`Minor 1/2/3`) has its own admit term selector.
-- **Plans**: keep up to **10 saved plans**, reorder via drag-and-drop, rename, export, import, and delete (while keeping at least 1 plan).
-- **Planner board**: add semesters, add/remove courses, drag courses between semesters, and see per-semester totals.
+- **Plans**: keep up to **10 saved plans**, reorder them by dragging in the plan menu, rename, export, import, and delete (while keeping at least 1 plan).
+- **Planner board**: add semesters and courses, reorder semesters with their drag handle (mouse or touch), remove courses, and see per-semester totals. Course cards themselves are not draggable between semesters; move one by removing it and adding it to the destination term.
 - **Course details**: open a details view for planned courses using the course row actions.
 - **Import transcript**: import **Academic Records Summary** (HTML/PDF) or a **YÖK transcript PDF** (not preferred).
 - **Graduation + summaries**: check requirement progress and open detailed summaries for majors and minors.
@@ -55,7 +71,8 @@ Course catalogs and requirement rules are loaded based on these selections.
 
 - Use **“+ New Semester”** to add a term to your plan.
 - Use **“+ Add course”** in a semester to pick a course from the catalog.
-- Drag and drop courses between semesters to reorganize your plan.
+- Use a semester's drag handle to reorder terms with a mouse or touch gesture.
+- To move a course to another semester, remove it and add it to the destination term; course cards are not drag targets.
 - Use per-course buttons (next to delete) to open **details** and other actions.
 
 ### Custom courses
@@ -122,14 +139,23 @@ From the graduation/summary UI you can:
 
 - Check graduation progress for your main major (and double major if selected).
 - Open **detailed summaries** for majors and minors showing:
-  - Which courses are taken (highlighted)
+  - Earned, current-term, future-planned, needs-grade, unsuccessful, and not-taken states
   - Which requirements are satisfied or missing
   - How overflow (upper → lower pool) courses are counted (color-coded)
+- See earned and projected credit separately. Only the earned audit can report
+  **Complete**; planned work can report **Projected complete**.
+- See overall CGPA separately from the PGPA calculated for each selected
+  program. Effective N/A courses remain in letter-grade CGPA but do not enter a
+  program's PGPA.
+- Count a posted successful current-term grade as earned immediately, including
+  the period between grade publication and the application's next-term switch.
+  Grades entered for future terms remain projections and cannot make the earned
+  graduation audit pass.
 
-Minors also enforce a CGPA rule:
-
-- Minimum CGPA **2.72** for most minors
-- Minimum CGPA **2.50** for the **Entrepreneurship** minor
+Main-degree completion requires CGPA and main-program PGPA of at least 2.00.
+Double-major completion requires CGPA, main-program PGPA, and double-major PGPA
+of 3.20 (2.72 for pre-2019 admits). Minor completion requires CGPA and that
+minor's PGPA of 2.72, except Entrepreneurship at 2.50.
 
 ## Scheduler (weekly timetable)
 
@@ -164,6 +190,23 @@ Mobile note:
 
 - The scheduler is usable on mobile, but works best in **landscape**.
 - Some header actions collapse into a **“…”** menu on smaller widths.
+
+## Privacy and local data
+
+- Transcript files are parsed inside your browser. SUrriculum does not upload
+  the selected HTML or PDF, and it has no runtime analytics, telemetry, user
+  account, or server-side plan storage.
+- Plans, grades, custom courses, preferences, and scheduler selections are kept
+  in this site's browser storage. The service worker may also cache the static
+  application and public catalog data for offline use.
+- Data does not automatically sync between browsers or devices. Export each
+  important plan as a backup before clearing site data, resetting SUrriculum, or
+  changing devices.
+- PDF.js, Inter, and Font Awesome are served from this repository. The running
+  application does not depend on a font, icon, or PDF-reader CDN.
+- Public test fixtures in this repository are maintainer-owned or included with
+  the contributor's consent. Choosing your own transcript in the application
+  never adds it to the repository or publishes it.
 
 ## Updating data (for maintainers)
 
@@ -256,15 +299,20 @@ Legacy JSON → JSONL migration (only needed if you still have `.json` files):
 python migrate_to_jsonl.py --delete-json
 ```
 
-## Known limitations (v3.0)
+## Known limitations (v3.1)
 
 - **Graduation logic is complex**: requirements are scraped and normalized, but edge cases exist. Always confirm with official program rules.
+- **Repeated attempts and retakes are not fully modelled**: the planner stores one occurrence per canonical course code. A retained failed or withdrawn attempt can therefore prevent planning the same code again. Import reconciliation keeps the latest chronological record and reports superseded or `Repeated` rows, but it does not preserve a complete attempt history or infer cross-code substitutions. Do not treat the planner as the official record for retake GPA replacement.
+- **Course movement is not drag-and-drop**: semester and saved-plan ordering have drag controls, but moving a course between terms requires removing and re-adding it.
+- **PDFs need readable text**: image-only files, including some Microsoft Print-to-PDF exports, must be re-exported with browser **Save as PDF**, saved as complete HTML, or processed with OCR.
 - **Scheduler scraping reliability**: the university schedule endpoints can occasionally return server errors; re-run later or with delays.
 - **Minor rule parsing**: minor pages vary; some rules are simplified into structured checks and may miss special cases.
+- **Browser verification is still asymmetric**: the full automated browser suite focuses on Chromium; Firefox and WebKit run a smaller critical-flow gate.
 
 ## Roadmap
 
 - More robust schedule scraping and section metadata (and smarter conflict-free suggestions).
+- A first-class course-attempt model for retakes, repeated grades, and explicit substitutions.
 - Richer course detail views (prerequisite parsing, nicer formatting, quick links).
 - More term/year-aware rules for minors and program changes.
 - Additional planner UX polish and small guidance popups.

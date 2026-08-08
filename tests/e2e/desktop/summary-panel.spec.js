@@ -94,6 +94,27 @@ const modelTotals = (page) => page.evaluate(() => {
 });
 
 test.describe('summary panel', () => {
+  test('clicking the Summary icon keeps the newly opened panel visible', async ({ page }) => {
+    await seedGradPlan(page, {});
+    await page.locator('.summary i').click();
+    await expect(page.locator('.summary_modal_overlay')).toBeVisible();
+  });
+
+  test('nested content clicks stay inside Summary and Graduation modal boundaries', async ({ page }) => {
+    await seedGradPlan(page, {});
+    const summary = await openSummary(page);
+    await summary.locator('.summary_metric_head span').first().click();
+    await expect(summary).toBeVisible();
+
+    await summary.click({ position: { x: 2, y: 2 } });
+    await expect(summary).toBeHidden();
+    await page.locator('.check').click();
+    const graduation = page.locator('.graduation_modal_overlay');
+    await expect(graduation).toBeVisible();
+    await graduation.locator('.graduation_card_message').first().click();
+    await expect(graduation).toBeVisible();
+  });
+
   test('every metric shown matches the engine model and the requirement limits', async ({ page }) => {
     await seedGradPlan(page, {});
     await openSummary(page);
@@ -251,8 +272,10 @@ test.describe('summary panel', () => {
       entryTerm: TERM_NAME,
       doubleMajor: 'ME',
       entryTermDM: TERM_NAME,
-      curriculum: [['CS201', 'ME201']],
-      grades: [['A', 'A']],
+      // Use a course catalogued by both programs. An uncatalogued course now
+      // correctly opens the double-major classification prompt before Summary.
+      curriculum: [['CS201']],
+      grades: [['A']],
       dates: [TERM_NAME],
     });
     await openSummary(page);
@@ -286,8 +309,8 @@ test.describe('summary panel', () => {
       entryTerm: TERM_NAME,
       doubleMajor: 'ME',
       entryTermDM: TERM_NAME,
-      curriculum: [['CS201', 'ME201']],
-      grades: [['A', 'A']],
+      curriculum: [['CS201']],
+      grades: [['A']],
       dates: [TERM_NAME],
     });
     const overlay = await openSummary(page);
@@ -511,8 +534,18 @@ test.describe('summary panel', () => {
     await expect(overlay.locator('.summary_metric[data-metric="total"]').first())
       .toHaveAttribute('data-projected', '3');
     await overlay.locator('.summary_detail_btn').first().click();
-    await expect(overlay.locator('.major-summary .ms-course').filter({ hasText: 'MATH102' }).first())
-      .toHaveClass(/is-missing/);
+    const failedRow = overlay.locator('.major-summary .ms-course').filter({ hasText: 'MATH102' }).first();
+    await expect(failedRow).toHaveClass(/is-unsuccessful/);
+    await expect(failedRow).toHaveAttribute('data-course-status', 'unsuccessful');
+    await expect(failedRow.locator('.ms-state-chip')).toHaveText('Unsuccessful');
+    await expect(overlay.locator('.major-summary .ms-untaken-list .ms-course').filter({ hasText: 'MATH102' }))
+      .toHaveCount(0);
+
+    const untakenToggle = overlay.locator('.major-summary .ms-untaken-toggle').first();
+    await untakenToggle.click();
+    const untakenRow = overlay.locator('.major-summary .ms-untaken-list:not(.is-hidden) .ms-course.is-missing').first();
+    await expect(untakenRow).toHaveAttribute('data-course-status', 'not-taken');
+    await expect(untakenRow.locator('.ms-state-chip')).toHaveText('Not taken');
   });
 
   test('a future course that exceeds a cap is shown as over-limit', async ({ page }) => {

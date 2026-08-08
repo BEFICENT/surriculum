@@ -7,10 +7,9 @@ test.describe('scheduler (desktop)', () => {
   test('opens and lists offered courses for the term', async ({ page, browserErrors }) => {
     await page.goto('/');
 
-    // Fire the opener without awaiting its internal async chain (it fetches the
-    // schedule index before inserting the modal, and cold-start timing varies);
-    // wait on the observable modal instead, with a generous timeout.
-    await page.evaluate(() => { window.openSchedulerModal(); });
+    // The launcher is bound without an inline handler so the CSP can keep
+    // script-src free of unsafe-inline.
+    await page.locator('#openSchedulerButton').click();
 
     const modal = page.locator('.scheduler-modal');
     await expect(modal).toBeVisible({ timeout: 15000 });
@@ -60,8 +59,8 @@ test.describe('scheduler (desktop)', () => {
     });
 
     await page.evaluate(() => {
-      localStorage.setItem('schedulerCheckPrereqs', 'true');
-      localStorage.setItem('schedulerShowUnmetPrereqs', 'true');
+      window.preferenceStorage.setItem('schedulerCheckPrereqs', 'true');
+      window.preferenceStorage.setItem('schedulerShowUnmetPrereqs', 'true');
       window.openSchedulerModal();
     });
     const modal = page.locator('.scheduler-modal');

@@ -54,6 +54,22 @@
     return false;
   }
 
+  function preferenceGetItem(key) {
+    const preferences = (typeof window !== 'undefined') ? window.preferenceStorage : null;
+    if (preferences && typeof preferences.getItem === 'function') {
+      try { return preferences.getItem(key); } catch (_) { return null; }
+    }
+    return null;
+  }
+
+  function preferenceSetItem(key, value) {
+    const preferences = (typeof window !== 'undefined') ? window.preferenceStorage : null;
+    if (preferences && typeof preferences.setItem === 'function') {
+      try { return preferences.setItem(key, value); } catch (_) { return false; }
+    }
+    return false;
+  }
+
   function termNameToCodeSafe(name) {
     try {
       if (typeof window !== 'undefined' && typeof window.termNameToCode === 'function') {
@@ -2182,7 +2198,7 @@
     // Scheduler controls mirror the main app's settings (sidebar toggles).
     const readBoolLS = (key, fallback) => {
       try {
-        const v = localStorage.getItem(key);
+        const v = preferenceGetItem(key);
         if (v === null) return fallback;
         return v === 'true';
       } catch (_) {
@@ -2191,7 +2207,7 @@
     };
     const readStrLS = (key, fallback) => {
       try {
-        const v = localStorage.getItem(key);
+        const v = preferenceGetItem(key);
         if (v === null) return fallback;
         return String(v);
       } catch (_) {
@@ -2199,7 +2215,7 @@
       }
     };
     const setGlobalBool = (key, value) => {
-      try { localStorage.setItem(key, value ? 'true' : 'false'); } catch (_) {}
+      preferenceSetItem(key, value ? 'true' : 'false');
       try {
         if (key === 'hideTakenCourses') window.hideTakenCourses = !!value;
         if (key === 'showCourseDetails') window.showCourseDetails = !!value;
@@ -5611,7 +5627,7 @@
     if (hoverPreviewToggle) {
       hoverPreviewToggle.addEventListener('change', () => {
         const enabled = !!hoverPreviewToggle.checked;
-        try { localStorage.setItem('schedulerHoverPreview', enabled ? 'true' : 'false'); } catch (_) {}
+        preferenceSetItem('schedulerHoverPreview', enabled ? 'true' : 'false');
         hoverSelectedCourseId = '';
         hoverResultCourseId = '';
         clearPreviewBlocks();
@@ -5621,14 +5637,14 @@
     if (highlightToggle) {
       highlightToggle.addEventListener('change', () => {
         const enabled = !!highlightToggle.checked;
-        try { localStorage.setItem('schedulerHighlightAvailability', enabled ? 'true' : 'false'); } catch (_) {}
+        preferenceSetItem('schedulerHighlightAvailability', enabled ? 'true' : 'false');
         try { if (scheduleIndex) renderResults(scheduleIndex, lastQuery); } catch (_) {}
       });
     }
     if (showBlockedToggle) {
       showBlockedToggle.addEventListener('change', () => {
         const enabled = !!showBlockedToggle.checked;
-        try { localStorage.setItem('schedulerShowBlockedCourses', enabled ? 'true' : 'false'); } catch (_) {}
+        preferenceSetItem('schedulerShowBlockedCourses', enabled ? 'true' : 'false');
         try { if (scheduleIndex) renderResults(scheduleIndex, lastQuery); } catch (_) {}
       });
     }
@@ -5638,7 +5654,7 @@
     const onMinTypeChange = (key, el) => {
       if (!el) return;
       el.addEventListener('change', () => {
-        try { localStorage.setItem(key, String(el.value || '')); } catch (_) {}
+        preferenceSetItem(key, String(el.value || ''));
         rerenderResultsSafe();
       });
     };
@@ -5650,7 +5666,7 @@
       if (!el) return;
       let t = null;
       const flush = () => {
-        try { localStorage.setItem(key, String(el.value || '')); } catch (_) {}
+        preferenceSetItem(key, String(el.value || ''));
         rerenderResultsSafe();
       };
       el.addEventListener('input', () => {
@@ -5667,7 +5683,7 @@
     if (prereqToggle) {
       prereqToggle.addEventListener('change', () => {
         const enabled = !!prereqToggle.checked;
-        try { localStorage.setItem('schedulerCheckPrereqs', enabled ? 'true' : 'false'); } catch (_) {}
+        preferenceSetItem('schedulerCheckPrereqs', enabled ? 'true' : 'false');
         syncPrereqUi();
         rerenderResultsSafe();
       });
@@ -5675,7 +5691,7 @@
     if (showUnmetPrereqToggle) {
       showUnmetPrereqToggle.addEventListener('change', () => {
         const enabled = !!showUnmetPrereqToggle.checked;
-        try { localStorage.setItem('schedulerShowUnmetPrereqs', enabled ? 'true' : 'false'); } catch (_) {}
+        preferenceSetItem('schedulerShowUnmetPrereqs', enabled ? 'true' : 'false');
         rerenderResultsSafe();
       });
     }
@@ -6109,5 +6125,19 @@
   if (typeof window !== 'undefined') {
     window.loadTermScheduleIndex = loadTermScheduleIndex;
     window.openSchedulerModal = openSchedulerModal;
+  }
+
+  const bindSchedulerLauncher = () => {
+    const button = document.getElementById('openSchedulerButton');
+    if (!button || button.dataset.schedulerLauncherBound === 'true') return;
+    button.dataset.schedulerLauncherBound = 'true';
+    button.addEventListener('click', () => { openSchedulerModal(); });
+  };
+  if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', bindSchedulerLauncher, { once: true });
+    } else {
+      bindSchedulerLauncher();
+    }
   }
 })();

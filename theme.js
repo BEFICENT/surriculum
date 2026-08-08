@@ -3,7 +3,17 @@
 // manual selections across sessions. Works on desktop and mobile browsers.
 
 document.addEventListener('DOMContentLoaded', function () {
-    const storedTheme = localStorage.getItem('theme');
+    const preferences = window.preferenceStorage;
+    const readTheme = () => {
+        try {
+            return preferences && typeof preferences.getItem === 'function'
+                ? preferences.getItem('theme')
+                : null;
+        } catch (_) {
+            return null;
+        }
+    };
+    const storedTheme = readTheme();
     const mediaQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
 
     // Apply the theme to the document and optionally persist it
@@ -16,7 +26,11 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         if (persist) {
-            localStorage.setItem('theme', theme);
+            try {
+                if (preferences && typeof preferences.setItem === 'function') {
+                    preferences.setItem('theme', theme);
+                }
+            } catch (_) {}
         }
 
         window.dispatchEvent(new CustomEvent('themeChanged', {
@@ -35,7 +49,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // user has not chosen a theme yet.
         if (mediaQuery) {
             const updateFromSystem = function (e) {
-                if (!localStorage.getItem('theme')) {
+                if (!readTheme()) {
                     applyTheme(e.matches ? 'dark-theme' : 'light-theme', false);
                 }
             };

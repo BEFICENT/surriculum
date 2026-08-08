@@ -10,8 +10,6 @@ const base = require('@playwright/test');
 
 // Subresource load failures are browser-generated ("Failed to load resource:
 // ...") and aren't app-logic regressions, so they don't fail the suite:
-//  - external CDNs (Google Fonts and Font Awesome) are blocked in
-//    sandboxed/offline runs but load fine in production;
 //  - the scheduler probes several candidate schedule-data paths and one 404s
 //    benignly while another succeeds.
 // Everything else — uncaught pageerrors and console.error calls the app itself
@@ -27,8 +25,7 @@ const IGNORED_CONSOLE = [
 // Uncaught errors that are artifacts of THIS environment rather than the app.
 // Kept as a short, specific list — never a broad pattern — because the whole
 // value of the fixture is that a genuinely missing global looks like a real
-// bug. Each entry names a third-party thing that simply is not there when the
-// sandbox blocks its origin, and that loads fine in production.
+// bug.
 const IGNORED_PAGEERROR = [
   /Failed to register a ServiceWorker/,
 ];

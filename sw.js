@@ -38,6 +38,7 @@ const APP_SHELL_PATHS = [
   'mobile.js',
   'theme.js',
   'scripts/version.js',
+  'scripts/preferences.js',
   'scripts/plan_manager.js',
   'scripts/helper_functions.js',
   'scripts/course_requisites.js',
@@ -70,7 +71,14 @@ const APP_SHELL_PATHS = [
   'assets/editw.png',
   'assets/tickb.png',
   'assets/tickw.png',
-  'assets/open.png'
+  'assets/open.png',
+  'assets/vendor/inter-5.3.0/inter.css',
+  'assets/vendor/inter-5.3.0/files/inter-latin-wght-normal.woff2',
+  'assets/vendor/inter-5.3.0/files/inter-latin-ext-wght-normal.woff2',
+  'assets/vendor/fontawesome-6.4.0/css/fontawesome.min.css',
+  'assets/vendor/fontawesome-6.4.0/css/solid.min.css',
+  'assets/vendor/fontawesome-6.4.0/webfonts/fa-solid-900.woff2',
+  'assets/vendor/fontawesome-6.4.0/webfonts/fa-solid-900.ttf'
 ];
 const PDFJS_PATHS = [
   'assets/vendor/pdfjs-6.2.108/pdf.min.mjs',

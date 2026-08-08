@@ -16,6 +16,7 @@
   const MAX_PLANS = 10;
   const DEFAULT_PLAN_NAME = 'Default Plan';
   const PLAN_EXPORT_VERSION = 3;
+  let modalSequence = 0;
   // Bound once during boot. The shared index's activeId may be changed by a
   // different tab, but code running in this page must keep reading and writing
   // the plan that this page actually rendered.
@@ -31,26 +32,8 @@
   const APP_GLOBAL_STORAGE_KEYS = new Set([
     ...LEGACY_KEYS,
     'schedulerSelectedTerm',
-    'theme',
-    'showCourseDetails',
-    'hideTakenCourses',
-    'offeredThisTermOnly',
-    'sortBasedOnScore',
     'showDoubleMajorControls',
     'showMinorControls',
-    'mobileNoticeDismissed',
-    'schedulerHoverPreview',
-    'schedulerHighlightAvailability',
-    'schedulerShowBlockedCourses',
-    'schedulerMinMajorType',
-    'schedulerMinDmType',
-    'schedulerMinMinorType',
-    'schedulerMinSuCredits',
-    'schedulerMinEcts',
-    'schedulerMinBasicScience',
-    'schedulerMinEngineering',
-    'schedulerCheckPrereqs',
-    'schedulerShowUnmetPrereqs',
     'globalCourseMetadata',
   ]);
   const APP_LEGACY_STORAGE_PATTERNS = [
@@ -61,13 +44,20 @@
 
   function createModal({ title, bodyHtml, input, buttons, onMount }) {
     return new Promise((resolve) => {
+      const previouslyFocused = document.activeElement instanceof HTMLElement
+        ? document.activeElement : null;
+      const modalId = `app-modal-${++modalSequence}`;
       const overlay = document.createElement('div');
       overlay.className = 'modal-overlay';
       overlay.setAttribute('role', 'dialog');
       overlay.setAttribute('aria-modal', 'true');
+      overlay.setAttribute('aria-labelledby', `${modalId}-title`);
+      overlay.setAttribute('aria-describedby', `${modalId}-body`);
 
       const modal = document.createElement('div');
       modal.className = 'modal app-modal';
+      modal.id = modalId;
+      modal.tabIndex = -1;
       modal.addEventListener('click', (e) => e.stopPropagation());
 
       const header = document.createElement('div');
@@ -75,15 +65,28 @@
 
       const h = document.createElement('h3');
       h.className = 'app-modal-title';
+      h.id = `${modalId}-title`;
       h.textContent = title || '';
 
       const close = document.createElement('button');
       close.type = 'button';
       close.className = 'app-modal-close';
       close.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+      close.setAttribute('aria-label', `Close ${title || 'dialog'}`);
+      let onKeyDown = null;
+      let settled = false;
       const cleanupAndResolve = (payload) => {
-        try { document.removeEventListener('keydown', onKeyDown); } catch (_) {}
+        if (settled) return;
+        settled = true;
+        try {
+          if (onKeyDown) document.removeEventListener('keydown', onKeyDown, true);
+        } catch (_) {}
         try { overlay.remove(); } catch (_) {}
+        try {
+          if (previouslyFocused && previouslyFocused.isConnected) {
+            previouslyFocused.focus({ preventScroll: true });
+          }
+        } catch (_) {}
         resolve(payload);
       };
       close.addEventListener('click', () => cleanupAndResolve({ action: 'close', value: null }));
@@ -93,6 +96,7 @@
 
       const body = document.createElement('div');
       body.className = 'app-modal-body';
+      body.id = `${modalId}-body`;
       body.innerHTML = bodyHtml || '';
 
       let inputEl = null;
@@ -102,6 +106,7 @@
         inputEl.type = 'text';
         inputEl.value = input.value || '';
         inputEl.placeholder = input.placeholder || '';
+        inputEl.setAttribute('aria-label', input.ariaLabel || title || 'Dialog input');
         body.appendChild(inputEl);
       }
 
@@ -140,8 +145,10 @@
       modal.appendChild(footer);
       overlay.appendChild(modal);
 
-      overlay.addEventListener('click', () => {
-        cleanupAndResolve({ action: 'cancel', value: null });
+      overlay.addEventListener('click', (event) => {
+        if (event.target === overlay) {
+          cleanupAndResolve({ action: 'cancel', value: null });
+        }
       });
 
       // If the user is currently in browser fullscreen (e.g., the scheduler),
@@ -167,16 +174,45 @@
         } catch (_) {}
       }, 0);
 
-      const onKeyDown = (e) => {
+      const getFocusableElements = () => Array.from(modal.querySelectorAll(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), ' +
+        'textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )).filter((element) => element.getAttribute('aria-hidden') !== 'true');
+
+      onKeyDown = (e) => {
         if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
           cleanupAndResolve({ action: 'cancel', value: null });
+          return;
+        }
+        if (e.key === 'Tab') {
+          const focusable = getFocusableElements();
+          if (!focusable.length) {
+            e.preventDefault();
+            modal.focus({ preventScroll: true });
+            return;
+          }
+          const first = focusable[0];
+          const last = focusable[focusable.length - 1];
+          const active = document.activeElement;
+          if (e.shiftKey && (active === first || !modal.contains(active))) {
+            e.preventDefault();
+            last.focus({ preventScroll: true });
+          } else if (!e.shiftKey && active === last) {
+            e.preventDefault();
+            first.focus({ preventScroll: true });
+          }
         }
         if (e.key === 'Enter' && inputEl) {
           const primary = footer.querySelector('.btn-primary');
-          if (primary) primary.click();
+          if (primary && document.activeElement === inputEl) {
+            e.preventDefault();
+            primary.click();
+          }
         }
       };
-      document.addEventListener('keydown', onKeyDown, { once: false });
+      document.addEventListener('keydown', onKeyDown, true);
     });
   }
 
@@ -1424,8 +1460,18 @@
     const nameSpan = document.getElementById('activePlanName');
     if (!toggle || !dropdown || !nameSpan) return;
 
-    const closeDropdown = () => dropdown.classList.remove('active');
-    const openDropdown = () => dropdown.classList.add('active');
+    const announce = (message) => {
+      const region = document.getElementById('a11yStatus');
+      if (region) region.textContent = String(message || '');
+    };
+    const closeDropdown = () => {
+      dropdown.classList.remove('active');
+      toggle.setAttribute('aria-expanded', 'false');
+    };
+    const openDropdown = () => {
+      dropdown.classList.add('active');
+      toggle.setAttribute('aria-expanded', 'true');
+    };
 
     const setHeaderName = () => {
       const active = getPlanMeta(sessionPlanId);
@@ -1441,20 +1487,71 @@
       if (!list) return;
       list.innerHTML = '';
 
+      const updatePlanMoveButtons = () => {
+        const rows = Array.from(list.querySelectorAll('.plan-item'));
+        rows.forEach((planRow, index) => {
+          const name = String(planRow.querySelector('.plan-select')?.textContent || 'plan').trim();
+          const up = planRow.querySelector('.plan-move-up');
+          const down = planRow.querySelector('.plan-move-down');
+          if (up) {
+            up.disabled = index === 0;
+            up.setAttribute('aria-label', `Move ${name} up`);
+          }
+          if (down) {
+            down.disabled = index === rows.length - 1;
+            down.setAttribute('aria-label', `Move ${name} down`);
+          }
+        });
+      };
+
       idx.plans.forEach((p) => {
         const row = document.createElement('div');
         row.className = 'plan-item' + (p.id === activeId ? ' active' : '');
         row.dataset.id = p.id;
         row.draggable = true;
+        row.setAttribute('role', 'listitem');
 
         const grip = document.createElement('span');
         grip.className = 'plan-grip';
         grip.innerHTML = '<i class="fa-solid fa-grip-vertical"></i>';
+        grip.setAttribute('aria-hidden', 'true');
+
+        const moveControls = document.createElement('span');
+        moveControls.className = 'plan-move-controls';
+        const makeMoveButton = (direction, offset) => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = `btn-icon plan-move plan-move-${direction}`;
+          button.title = `Move ${p.name} ${direction}`;
+          button.setAttribute('aria-label', `Move ${p.name} ${direction}`);
+          button.innerHTML = `<i class="fa-solid fa-arrow-${direction}" aria-hidden="true"></i>`;
+          button.addEventListener('click', (event) => {
+            event.stopPropagation();
+            const rows = Array.from(list.querySelectorAll('.plan-item'));
+            const fromIndex = rows.indexOf(row);
+            const toIndex = fromIndex + offset;
+            if (fromIndex < 0 || toIndex < 0 || toIndex >= rows.length) return;
+            const reference = offset < 0 ? rows[toIndex] : rows[toIndex].nextSibling;
+            const reorderedRows = rows.slice();
+            reorderedRows.splice(fromIndex, 1);
+            reorderedRows.splice(toIndex, 0, row);
+            const ids = reorderedRows.map((element) => element.dataset.id).filter(Boolean);
+            if (!planStorage.reorder(ids)) return;
+            list.insertBefore(row, reference);
+            updatePlanMoveButtons();
+            announce(`Moved ${p.name} ${direction} to position ${toIndex + 1} of ${rows.length}.`);
+            button.focus({ preventScroll: true });
+          });
+          return button;
+        };
+        moveControls.appendChild(makeMoveButton('up', -1));
+        moveControls.appendChild(makeMoveButton('down', 1));
 
         const select = document.createElement('button');
         select.className = 'plan-select';
         select.type = 'button';
         select.textContent = p.name;
+        if (p.id === activeId) select.setAttribute('aria-current', 'true');
         select.addEventListener('click', (e) => {
           e.stopPropagation();
           if (p.id === sessionPlanId) {
@@ -1480,6 +1577,7 @@
           b.type = 'button';
           b.className = 'btn-icon plan-action' + (extraClass ? ' ' + extraClass : '');
           b.title = title;
+          b.setAttribute('aria-label', `${title} ${p.name}`);
           b.innerHTML = iconHtml;
           b.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -1493,6 +1591,7 @@
             uiModal
               .prompt('Rename plan', '<p>Enter a new name for this plan.</p>', { value: p.name, confirmText: 'Rename' })
               .then((val) => {
+                if (val === null) return;
                 const next = normalizePlanName(val);
                 if (!next) {
                   uiModal.alert('Invalid name', '<p>Plan name cannot be empty.</p>');
@@ -1532,10 +1631,12 @@
         );
 
         row.appendChild(grip);
+        row.appendChild(moveControls);
         row.appendChild(select);
         row.appendChild(actions);
         list.appendChild(row);
       });
+      updatePlanMoveButtons();
     }
 
     // Drag and drop ordering
@@ -1593,6 +1694,7 @@
         uiModal
           .prompt('New plan', '<p>Name your new plan.</p>', { value: `Plan ${idx.plans.length + 1}`, confirmText: 'Continue' })
           .then((val) => {
+            if (val === null) return null;
             const baseName = normalizePlanName(val);
             if (!baseName) {
               uiModal.alert('Invalid name', '<p>Plan name cannot be empty.</p>');
@@ -1674,6 +1776,35 @@
     });
 
     render();
+  }
+
+  function initStaticDisclosureA11y() {
+    const observeClass = (element, update) => {
+      if (!element || typeof MutationObserver === 'undefined') return;
+      update();
+      new MutationObserver(update).observe(element, { attributes: true, attributeFilter: ['class'] });
+    };
+
+    const sidebar = document.querySelector('.sidebar');
+    const sidebarToggle = document.querySelector('.sidebar-toggle');
+    if (sidebar && sidebarToggle) {
+      observeClass(sidebar, () => {
+        const expanded = !sidebar.classList.contains('collapsed');
+        sidebarToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        sidebarToggle.setAttribute('aria-label', expanded ? 'Collapse planner controls' : 'Expand planner controls');
+      });
+    }
+
+    const importDropdown = document.getElementById('importDropdown');
+    const importToggle = document.querySelector('.import-toggle');
+    if (importDropdown && importToggle) {
+      observeClass(importDropdown, () => {
+        importToggle.setAttribute(
+          'aria-expanded',
+          importDropdown.classList.contains('active') ? 'true' : 'false'
+        );
+      });
+    }
   }
 
   const planStorage = {
@@ -1919,6 +2050,9 @@
   }
 
   if (typeof document !== 'undefined') {
-    document.addEventListener('DOMContentLoaded', initPlanUi);
+    document.addEventListener('DOMContentLoaded', () => {
+      initPlanUi();
+      initStaticDisclosureA11y();
+    });
   }
 })();

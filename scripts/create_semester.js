@@ -131,10 +131,13 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
 
     let closebtn = document.createElement("button");
     closebtn.classList.add("delete_semester");
+    closebtn.type = "button";
     let drag = document.createElement("div");
     drag.classList.add("semester_drag");
-    let edit = document.createElement("div");
+    drag.setAttribute('aria-hidden', 'true');
+    let edit = document.createElement("button");
     edit.classList.add("semester_date_edit");
+    edit.type = "button";
     let icons = document.createElement("div");
     icons.classList.add("icons");
     icons.appendChild(edit);
@@ -173,9 +176,10 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
     }
 
     // Ghost course placeholder similar to the ghost semester container
-    let addCourse = document.createElement("div");
+    let addCourse = document.createElement("button");
     addCourse.classList.add("addCourse");
-    addCourse.innerHTML = "+ Add course";
+    addCourse.type = "button";
+    addCourse.textContent = "+ Add course";
 
 
     subcontainer.appendChild(semester);
@@ -362,6 +366,9 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
     try {
         const storage = (typeof window !== 'undefined') ? window.planStorage : null;
         if (storage && typeof storage.requestSave === 'function') storage.requestSave();
+    } catch (_) {}
+    try {
+        if (typeof refreshSemesterAccessibility === 'function') refreshSemesterAccessibility();
     } catch (_) {}
     return container;
 }

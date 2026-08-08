@@ -17,8 +17,9 @@ a time and checked off only after the fix and its verification are complete.
 - Broad release-blocker coverage remains deferred. Focused graduation and
   scheduler regressions were added when specifically requested.
 - The `surriculum-3.1` branch is published but has not been merged into `main`.
-  The local branch currently contains 21 additional commits that are being held
-  for the production-ready push, as requested.
+  Additional local commits and the current worktree are being held for the
+  production-ready push, as requested; topology must be re-measured immediately
+  before release instead of copying a stale ahead/behind count into this file.
 - Claude co-author trailers were removed from the rewritten branch history.
 - Preserve the individual 3.1 commits. Do not squash or rebase the branch merely
   to simplify GitHub's ahead/behind display; the intended history edits are only
@@ -26,14 +27,18 @@ a time and checked off only after the fix and its verification are complete.
 
 ## Verified baseline
 
-- [x] JavaScript/static unit gate passes: 207/207 tests.
-- [x] Playwright gate passes all 399 tests.
+- [x] JavaScript/static unit gate passes: 221/221 tests.
+- [x] Chromium Playwright gate passes: 425/425 tests (410 desktop and 15
+  mobile), run in three deterministic desktop shards plus the mobile project
+  with zero retries.
+- [x] Focused cross-browser gate passes: 2/2 critical flows (Firefox and
+  WebKit), also with zero retries.
 - [x] `python tests/scrape_groups_test.py` passes when run directly.
 - [x] `python tests/scrape_coursepages_fallback_test.py` passes: 3/3 tests.
 - [x] Python requirement validation and checked-in manifest integrity checks pass.
-- [x] All 228,375 JSONL rows parse successfully.
+- [x] All 227,341 deterministic runtime JSONL rows parse successfully.
 - [x] Manifest hashes and the content-derived data version match the data tree.
-- [x] Extended 21-term catalog/requirements integrity audit passes.
+- [x] Extended 23-term catalog/requirements integrity audit passes.
 - [x] npm-managed dependencies report no known vulnerabilities.
 - [x] No runtime analytics, telemetry, or transcript upload was found.
 
@@ -65,8 +70,8 @@ a time and checked off only after the fix and its verification are complete.
   `C:\Users\mehme\repos\surriculum-before-ancestry-repair-20260722-223259.bundle`.
 
   As of 2026-08-08, the published feature branch is 110 ahead and 34 behind
-  `origin/main`; the local branch, including these fixes, is 133 ahead and
-  34 behind. To reach 0 behind
+  `origin/main`. The local count is intentionally omitted until the final
+  commits are complete. To reach 0 behind
   while retaining every divergent commit and avoiding a rebase, merge current
   `origin/main` into `surriculum-3.1`; this does not merge or release 3.1 into
   `main`. If no merge commit is wanted in either direction, the truthful Git
@@ -98,8 +103,8 @@ a time and checked off only after the fix and its verification are complete.
   service-worker cache, survive daily app/data cache rotations without another
   download, and work on first use while offline. The supported legacy-build
   floor for this PDF.js major is Firefox ESR+, Chrome 125+, and Safari 18+
-  (mostly); broader Firefox/WebKit application coverage remains a separate
-  test-suite item.
+  (mostly); Firefox/WebKit receive a focused critical-flow gate rather than the
+  full Chromium matrix.
 
   Real-fixture comparison found changed text-item segmentation but the same 38
   parsed courses and import semantics for the normal Academic Records Summary.
@@ -120,10 +125,19 @@ a time and checked off only after the fix and its verification are complete.
   course selectors, datalists, and dual-degree labels now treat imported text as
   text. An ad-hoc malicious-import check passed; add its permanent regression
   coverage during the future coverage pass.
-- [ ] Consider self-hosting runtime third-party assets and adding a restrictive
-  Content Security Policy. The 2026-08-03 full browser gate reproduced the
-  availability risk: a Font Awesome CDN webfont was intermittently blocked by
-  CORS; Playwright's configured retry recovered without an application failure.
+- [x] Self-host runtime third-party assets and add a restrictive Content
+  Security Policy. Completed on 2026-08-08: the exact Inter 5.3.0 variable-font
+  subsets and Font Awesome Free 6.4.0 solid runtime are locally vendored with
+  their licenses and package provenance. Google Fonts and Font Awesome CDN
+  requests are removed from the page and service-worker shell.
+
+  A same-origin meta CSP now restricts scripts, fonts, workers, connections,
+  manifests, images, forms, and objects. The two inline event handlers were
+  replaced with ordinary listeners; the reviewed JSON-LD block is the only
+  inline script and is allowed by its exact hash. Inline style remains allowed
+  because the existing UI uses both style attributes and dynamic style writes.
+  Static tests pin the local assets, licenses, CSP directives, script hash, and
+  absence of known runtime CDN references.
 
 ## Graduation and data correctness
 
@@ -315,16 +329,33 @@ a time and checked off only after the fix and its verification are complete.
   term is created. Transcript-created custom-course placeholders are also made
   visible only after their session-plan storage succeeds; a failed write is
   reported without changing the catalog, planner, or legacy storage.
-- [ ] Give unsuccessful attempts a distinct Summary state instead of placing
-  them in the generic "untaken" bucket.
+- [x] Make transcript-created custom-course review cancellation explicit and
+  transactional. Completed on 2026-08-08: the import-only form labels its
+  choices **Save & Keep** and **Skip & Remove**. Skipping rolls back the exact
+  imported occurrence, custom-course definition, catalog entry, empty semester,
+  DOM, and persisted plan snapshot before the review closes. A rejected rollback
+  leaves the form open with a visible error instead of pretending the course was
+  removed. Ordinary custom-course editing retains its non-destructive Cancel
+  behavior, with browser coverage for both keep and remove paths across reload.
+- [x] Give unsuccessful attempts a distinct Summary state instead of placing
+  them in the generic "untaken" bucket. Completed on 2026-08-08: unsuccessful
+  rows receive their own red state, text label, data attribute, and legend entry;
+  genuinely not-taken rows remain separate and behind the existing pool toggle.
+  This display-only split does not change GPA, earned credit, or allocation.
 - [x] Keep planner and scheduler offered-course data aligned. The planner now
   uses the exact current-term schedule when it is available, schedule scrapes
   reconcile offerings back into the course-page dataset, and the weekly full
   course-page refresh preserves valid schedule-derived offerings.
 - [x] Make the daily refresh regenerate and verify `data/manifest.json` before
   opening its update PR.
-- [ ] Decide whether all runtime JSON inputs, including
-  `courses/schedule_subjects.json`, should be included in the manifest.
+- [x] Make the data manifest cover every checked-in deterministic runtime JSON
+  input. Completed on 2026-08-08: both JSONL and JSON runtime files now rotate
+  `dataVersion`, including `courses/schedule_subjects.json`. Large catalogs,
+  schedules, cumulative course metadata, and lazy history indexes contribute
+  through streaming aggregate hashes without bloating the manifest with
+  hundreds of paths. Scraper-only `basic_science_credits`, saved schedule
+  recovery files, HTML caches, the generated data manifest itself, the PWA
+  manifest, tooling packages, and test fixtures remain intentionally excluded.
 
 ## Scheduler and persistence
 
@@ -367,14 +398,31 @@ a time and checked off only after the fix and its verification are complete.
   temporarily hides the rendered label, and a busy guard rejects double updates.
 - [x] Replace origin-wide `localStorage.clear()` with deletion of only known
   SUrriculum keys. Completed on 2026-07-23: reset now removes namespaced plan
-  data plus the explicit legacy, preference, scheduler, and valid dynamic keys;
+  data plus explicit app legacy, namespaced preference, scheduler, and valid
+  dynamic keys; ambiguous raw preference names that another app may own are
+  excluded;
   it reloads only after a successful reset. A browser check confirmed that an
-  unrelated origin key and a near-match legacy key survive while SUrriculum data
-  is removed and legacy migration does not restore it.
-- [ ] Namespace the still-global SUrriculum preference and scheduler keys, then
-  migrate their existing values. Scoped reset is safe now, but namespacing keys
-  such as `theme` will also prevent ordinary writes from colliding with another
-  app on a shared origin.
+  an unrelated origin key and a near-match legacy key survive while SUrriculum
+  data is removed and legacy migration does not restore it. Exact raw names from
+  the pre-multi-plan schema (`major`, `grades`, `dates`, and similar) remain
+  reserved for backward-compatible cleanup and therefore cannot yet be
+  distinguished from a sibling app using the same generic name.
+- [x] Namespace the still-global SUrriculum preference and scheduler keys, then
+  migrate their existing values. Completed on 2026-08-08: shared theme, planner,
+  mobile-notice, and scheduler preferences now live under
+  `surriculum.preference.*`, remain intentionally shared between plans and tabs,
+  and copy each known legacy key into the namespace on boot/read. A namespaced
+  value wins over a stale generic copy and failed writes never fall back to a
+  generic key. Because another Pages app may own an ambiguous raw key such as
+  `theme`, migration and reset deliberately leave those raw keys untouched.
+  Unit and browser checks cover copy-only migration,
+  storage failure, reload persistence, scheduler mirroring, and multi-tab
+  sharing without crossing plan-scoped state.
+- [ ] Retire the ambiguous pre-multi-plan raw plan keys with explicit migration
+  provenance and a reset tombstone. This must preserve the privacy promise that
+  Reset removes known legacy academic data while avoiding deletion of a sibling
+  Pages app's coincidentally named `major`, `grades`, or `dates` keys; guessing
+  ownership from the key name alone cannot satisfy both requirements.
 - [x] Save on mutations with a short debounce and flush on `pagehide` or hidden
   visibility so quick closes/mobile backgrounding do not lose recent edits.
   Completed on 2026-08-08: planner mutations coalesce into a 250 ms snapshot,
@@ -429,8 +477,16 @@ a time and checked off only after the fix and its verification are complete.
   automatically triggers `pages-build-deployment`; pushing the feature branch
   alone does not deploy. Use a merge commit to preserve every 3.1 commit—do not
   squash or rebase at merge time.
-- [ ] Prefer a GitHub Pages Actions deployment containing an allowlisted
-  production artifact instead of publishing the entire repository root.
+- [x] Prepare an optional GitHub Pages Actions deployment containing an
+  allowlisted production artifact instead of the entire repository root. The
+  local workflow is manual and build-only by default; deployment additionally
+  requires an explicit boolean approval and `main`. The artifact builder checks
+  the data manifest, service-worker shell, local static references, exact
+  allowlist, and a live `/surriculum/` mount while excluding tests, tools,
+  captured pages, PDFs, editor files, and temporary data.
+- [ ] After explicit release approval, decide whether to keep the existing
+  merge-triggered legacy Pages path for 3.1 or switch Pages to the prepared
+  Actions artifact. No Pages setting or deployment has been changed.
 - [x] Align the daily data-refresh workflow with the chosen production branch.
   It runs from the default `main` branch and opens data-update PRs against it;
   merging one of those PRs will trigger the same legacy Pages deployment.
@@ -459,24 +515,49 @@ a time and checked off only after the fix and its verification are complete.
   cross-term retake planning, scheduler prerequisites after a retake, and
   replacement/movement of a planned placeholder when the imported attempt is
   in a different term.
-- [ ] Add Firefox and WebKit coverage for critical flows; current Playwright
-  projects cover desktop Chromium and a Pixel 7 Chromium profile.
-- [ ] Add CI that runs npm tests, the Python parity check, and data/manifest
-  validation; protect the release branch after the gate is stable.
+- [x] Add focused Firefox and WebKit projects for critical planner, requirement,
+  persistence, and graduation flows. The final local gate passed 2/2 with zero
+  retries; CI installs and runs the same browser versions.
+- [x] Add read-only CI for the JavaScript/static, Python/data, full Chromium,
+  and focused Firefox/WebKit gates. Data-only changes are skipped through path
+  filters, but unexpected source changes on the refresh branch still run CI.
+  The refresh PR itself is allowlisted to data paths and runs fast requirement
+  validation plus the manifest check that parses every runtime JSON/JSONL row.
+  Checkout credentials are not persisted through scraper/dependency execution;
+  the token is passed only to the pinned PR action. The workflow is committed
+  locally but has not run on GitHub.
+- [ ] Configure any desired required-check/branch-protection settings after the
+  first successful GitHub CI run; this is an external release-time action.
 
 ## Accessibility, documentation, and release polish
 
-- [ ] Add accessible names to selectors, checkboxes, icon buttons, and delete
-  controls.
-- [ ] Add keyboard equivalents for drag/reorder workflows and proper dialog
-  labelling, focus trapping, and focus restoration.
-- [ ] Correct known color-contrast failures and respect reduced-motion settings.
-- [ ] Fix README quick-start instructions: the application must be served over
-  HTTP; opening `index.html` directly does not reliably load modules/data.
-- [ ] Update remaining v3.0 references to 3.1.
-- [ ] Add concise privacy copy for transcript processing and local persistence.
-- [ ] Add a changelog, release notes, rollback notes, and a `v3.1.0` tag.
-- [ ] Remove or verify the hard-coded structured-data aggregate rating before
-  public release.
-- [ ] Review tracked editor/development artifacts such as `.claude/launch.json`
-  and `.vscode/settings.json`.
+- [x] Add accessible names to primary selectors, checkboxes, icon buttons,
+  semester controls, and delete controls. Edit-mode term selectors retain a
+  valid accessible name instead of referencing a removed label.
+- [x] Add explicit Move up/Move down controls for plan and semester reordering,
+  live announcements, and shared-dialog labelling, initial focus, Tab trapping,
+  Escape handling, and focus restoration. Mobile cards do not collapse when a
+  move control is used.
+- [x] Correct the identified low-contrast UI tokens, add consistent
+  `:focus-visible` treatment, and respect `prefers-reduced-motion`. This is a
+  bounded 3.1 pass, not a claim of full WCAG conformance; feature-specific
+  overlays and a broader automated accessibility audit remain follow-up work.
+- [x] Fix README quick-start instructions: it now serves the static app over
+  HTTP and explains why direct `file://` loading is unreliable.
+- [x] Update user-facing README v3.0 references to 3.1 and correct its planner
+  drag claims: saved plans and semesters can be reordered, but course cards are
+  removed and re-added rather than dragged between terms.
+- [x] Add concise privacy copy for local transcript processing, browser
+  persistence/cache behavior, backups, absent analytics/uploads, consented
+  public fixtures, and locally hosted PDF/font/icon assets.
+- [x] Add `CHANGELOG.md`, 3.1 release notes, and a release/rollback runbook. The
+  runbook keeps history-preserving merge/revert steps distinct from deployment
+  and explicitly records every final action as unperformed.
+- [x] Remove the hard-coded structured-data aggregate rating. The remaining
+  WebApplication JSON-LD contains no unsupported rating or review claim and is
+  pinned by the CSP/static tests.
+- [x] Remove the tracked `.claude/launch.json` and `.vscode/settings.json`
+  editor files and ignore both project-specific directories going forward.
+- [ ] After explicit release approval, merge into `main`, push, verify GitHub
+  Pages, and create/push the immutable `v3.1.0` tag. None of these final actions
+  has been performed.

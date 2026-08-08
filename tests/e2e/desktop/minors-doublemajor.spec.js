@@ -171,6 +171,74 @@ test.describe('minors + double major (desktop)', () => {
     expect(result.membership.MATH101).toBeUndefined();
     expect(result.pgpaCredits).toBe(6);
     expect(result.pgpa).toBe(2);
+
+    await page.locator('.summary').click();
+    await page.locator('.summary_minor_btn').click();
+    const minorPanel = page.locator('.summary_minor_panel');
+    const failedRow = minorPanel.locator('.ms-course').filter({ hasText: 'OPIM390' }).first();
+    await expect(failedRow).toHaveClass(/is-unsuccessful/);
+    await expect(failedRow).toHaveAttribute('data-course-status', 'unsuccessful');
+    await expect(failedRow.locator('.ms-state-chip')).toHaveText('Unsuccessful');
+    await expect(minorPanel.locator('.ms-untaken-list .ms-course').filter({ hasText: 'OPIM390' }))
+      .toHaveCount(0);
+  });
+
+  test('minor detailed summary renders requirement and course metadata as text', async ({ page }) => {
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: 'Fall 2024-2025',
+      minor1: 'ANALY-MINOR',
+      entryTermMinor1: 'Fall 2024-2025',
+      curriculum: [['MATH306']],
+      grades: [['A']],
+      dates: ['Fall 2024-2025'],
+    });
+
+    const literals = await page.evaluate(() => {
+      const literal = (slot) => `Literal <span data-summary-injected="${slot}">${slot}</span>`;
+      const originalLoader = window.loadMinorRequirementsForTerm;
+      window.loadMinorRequirementsForTerm = function wrappedMinorRequirements(termCode) {
+        const requirements = originalLoader(termCode);
+        const record = requirements && requirements['ANALY-MINOR'];
+        if (record) {
+          record.name = literal('title');
+          record.term = literal('term');
+          if (record.categories && record.categories.required) {
+            record.categories.required.equivalents = [[literal('equivalence'), 'MATH306']];
+          }
+        }
+        return requirements;
+      };
+
+      const records = window.curriculum.minorCourseDataByCode['ANALY-MINOR'];
+      const course = records.find((record) => `${record.Major}${record.Code}` === 'MATH306');
+      course.Course_Name = literal('course');
+      course.SU_credit = `3 ${literal('credit')}`;
+
+      return {
+        title: literal('title'),
+        term: literal('term'),
+        equivalence: literal('equivalence'),
+        course: literal('course'),
+        credit: literal('credit'),
+      };
+    });
+
+    await page.locator('.summary').click();
+    await page.locator('.summary_minor_btn').click();
+
+    const minorPanel = page.locator('.summary_minor_panel');
+    await expect(minorPanel.locator('[data-summary-injected]'), 'markup-like data must not create elements')
+      .toHaveCount(0);
+    await expect(minorPanel.locator('.summary_minor_panel_title')).toContainText(literals.title);
+    await expect(minorPanel.locator('.ms-subtitle').filter({ hasText: 'Admit term' }))
+      .toContainText(literals.term);
+    await expect(minorPanel.locator('.ms-rules').filter({ hasText: literals.equivalence }))
+      .toContainText(literals.equivalence);
+
+    const courseRow = minorPanel.locator('.ms-course').filter({ hasText: 'MATH306' }).first();
+    await expect(courseRow.locator('.ms-name')).toContainText(literals.course);
+    await expect(courseRow.locator('.ms-meta')).toContainText(literals.credit);
   });
 
   test('an incomplete double major cannot graduate', async ({ page }) => {

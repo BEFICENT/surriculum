@@ -662,6 +662,18 @@ function displaySummary(curriculum, major_chosen_by_user) {
     // Do not create more than one set of summary modals. If any exist, abort.
     if (document.querySelector('.summary_modal')) return;
 
+    const esc = (value) => {
+        try {
+            if (typeof escapeHtml === 'function') return escapeHtml(value);
+        } catch (_) {}
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    };
+
     // Ensure the shared overlay exists.
     let overlayEl = document.querySelector('.summary_modal_overlay');
     if (!overlayEl) {
@@ -724,6 +736,42 @@ function displaySummary(curriculum, major_chosen_by_user) {
         return taken;
     }
 
+    // Keep attempts separate from requirement allocation. Unsuccessful courses
+    // intentionally do not enter allocation/GPA-credit totals, but the summary
+    // must not make a real attempt look identical to a course never taken.
+    const courseAttemptByCode = (() => {
+        const attempts = new Map();
+        const normalizeAttemptCode = (value) => String(value || '').toUpperCase().replace(/\s+/g, '');
+        try {
+            for (let i = 0; i < curriculum.semesters.length; i++) {
+                const sem = curriculum.semesters[i];
+                for (let j = 0; j < sem.courses.length; j++) {
+                    const course = sem.courses[j];
+                    const code = normalizeAttemptCode(course && course.code);
+                    if (!code) continue;
+                    const state = (typeof curriculum.getCourseProgressState === 'function')
+                        ? curriculum.getCourseProgressState(course, sem) : 'earned';
+                    const candidate = {
+                        state,
+                        grade: String((course && course.grade) || '').trim().toUpperCase(),
+                    };
+                    const previous = attempts.get(code);
+                    // If historical/imported data ever contains multiple
+                    // attempts, a non-failed attempt wins over an older failure.
+                    if (!previous || (previous.state === 'unsuccessful' && state !== 'unsuccessful')) {
+                        attempts.set(code, candidate);
+                    }
+                }
+            }
+        } catch (_) {}
+        return attempts;
+    })();
+    const getUnsuccessfulAttempt = (code) => {
+        const normalized = String(code || '').toUpperCase().replace(/\s+/g, '');
+        const attempt = courseAttemptByCode.get(normalized);
+        return attempt && attempt.state === 'unsuccessful' ? attempt : null;
+    };
+
     // Minor buttons: show a compact, visual guide for each selected minor,
     // and render the minor summary inside the same overlay (hiding majors).
     try {
@@ -780,7 +828,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
                 if (allocRes.error) {
                     const ui = (typeof window !== 'undefined') ? window.uiModal : null;
                     if (ui && typeof ui.alert === 'function') {
-                        ui.alert('Minor summary unavailable', `<p>${allocRes.error}</p>`);
+                        ui.alert('Minor summary unavailable', `<p>${esc(allocRes.error)}</p>`);
                     }
                     return;
                 }
@@ -808,7 +856,9 @@ function displaySummary(curriculum, major_chosen_by_user) {
                 const renderEq = (cfg) => {
                     const eq = cfg && Array.isArray(cfg.equivalents) ? cfg.equivalents : [];
                     if (!eq.length) return '';
-                    const parts = eq.map(g => Array.isArray(g) ? g.join(' / ') : String(g));
+                    const parts = eq.map(g => Array.isArray(g)
+                        ? g.map(item => esc(item)).join(' / ')
+                        : esc(g));
                     return `<div class="ms-rules"><strong>Rule:</strong> Choose 1 of: ${parts.join(' • ')}</div>`;
                 };
                 const minorProgressChip = (state) => {
@@ -820,7 +870,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
                     const arr = Array.isArray(codes) ? codes.slice() : [];
                     const rank = (code) => {
                         const alloc = allocationByCode[code];
-                        if (!alloc) return 2; // not taken
+                        if (!alloc) return getUnsuccessfulAttempt(code) ? 2 : 3;
                         if (alloc.allocatedCat === sectionCat) return 0; // taken + counts here
                         return 1; // taken + counts elsewhere
                     };
@@ -839,28 +889,32 @@ function displaySummary(curriculum, major_chosen_by_user) {
                     const su = rec.SU_credit || '0';
                     const alloc = allocationByCode[code];
                     if (!alloc) {
+                        const unsuccessful = getUnsuccessfulAttempt(code);
+                        const statusClass = unsuccessful ? 'is-unsuccessful' : 'is-missing';
+                        const status = unsuccessful ? 'unsuccessful' : 'not-taken';
+                        const statusLabel = unsuccessful ? 'Unsuccessful' : 'Not taken';
                         return `
-                          <div class="ms-course is-missing">
+                          <div class="ms-course ${statusClass}" data-course-status="${status}">
                             <div class="ms-course-left">
                               <span class="ms-dot"></span>
-                              <span class="ms-code">${code}</span>
-                              <span class="ms-name">${name}</span>
+                              <span class="ms-code">${esc(code)}</span>
+                              <span class="ms-name">${esc(name)}</span>
                             </div>
-                            <div class="ms-meta">${su} SU</div>
+                            <div class="ms-meta"><span class="ms-state-chip ${unsuccessful ? 'is-unsuccessful' : 'is-not-taken'}">${statusLabel}</span>${esc(su)} SU</div>
                           </div>
                         `;
                     }
                     const isHere = alloc.allocatedCat === sectionCat;
                     const statusClass = isHere ? 'is-taken' : 'is-overflow';
-                    const countsAs = isHere ? '' : ` • Counts as ${String(alloc.allocatedCat || '').toUpperCase()}`;
+                    const countsAs = isHere ? '' : ` • Counts as ${esc(String(alloc.allocatedCat || '').toUpperCase())}`;
                     return `
                       <div class="ms-course ${statusClass}">
                         <div class="ms-course-left">
                           <span class="ms-dot"></span>
-                          <span class="ms-code">${code}</span>
-                          <span class="ms-name">${name}</span>
+                          <span class="ms-code">${esc(code)}</span>
+                          <span class="ms-name">${esc(name)}</span>
                         </div>
-                        <div class="ms-meta">${minorProgressChip(alloc.progressState)}${su} SU${countsAs}</div>
+                        <div class="ms-meta">${minorProgressChip(alloc.progressState)}${esc(su)} SU${countsAs}</div>
                       </div>
                     `;
                 };
@@ -871,15 +925,15 @@ function displaySummary(curriculum, major_chosen_by_user) {
                     if (!rec || !alloc) return '';
                     const name = rec.Course_Name || '';
                     const su = rec.SU_credit || '0';
-                    const fromTxt = ` • From ${String(alloc.baseCat || '').toUpperCase()}`;
+                    const fromTxt = ` • From ${esc(String(alloc.baseCat || '').toUpperCase())}`;
                     return `
                       <div class="ms-course is-overflow">
                         <div class="ms-course-left">
                           <span class="ms-dot"></span>
-                          <span class="ms-code">${code}</span>
-                          <span class="ms-name">${name}</span>
+                          <span class="ms-code">${esc(code)}</span>
+                          <span class="ms-name">${esc(name)}</span>
                         </div>
-                        <div class="ms-meta">${minorProgressChip(alloc.progressState)}${su} SU${fromTxt}</div>
+                        <div class="ms-meta">${minorProgressChip(alloc.progressState)}${esc(su)} SU${fromTxt}</div>
                       </div>
                     `;
                 };
@@ -888,10 +942,12 @@ function displaySummary(curriculum, major_chosen_by_user) {
                 const renderPoolWithUntakenToggle = (poolCodes, sectionCat) => {
                     const ordered = orderPoolCodes(poolCodes, sectionCat);
                     const takenCodes = [];
+                    const unsuccessfulCodes = [];
                     const untakenCodes = [];
                     for (let i = 0; i < ordered.length; i++) {
                         const code = ordered[i];
                         if (allocationByCode[code]) takenCodes.push(code);
+                        else if (getUnsuccessfulAttempt(code)) unsuccessfulCodes.push(code);
                         else untakenCodes.push(code);
                     }
 
@@ -900,7 +956,11 @@ function displaySummary(curriculum, major_chosen_by_user) {
                     let html = '';
                     if (takenCodes.length) {
                         html += takenCodes.map(code => renderPoolCourse(code, sectionCat)).join('');
-                    } else if (untakenCodes.length) {
+                    }
+                    if (unsuccessfulCodes.length) {
+                        html += unsuccessfulCodes.map(code => renderPoolCourse(code, sectionCat)).join('');
+                    }
+                    if (!takenCodes.length && !unsuccessfulCodes.length && untakenCodes.length) {
                         html += `<div class="ms-empty">No taken courses in this pool yet.</div>`;
                     }
 
@@ -920,7 +980,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
                 };
 
                 let body = `<div class="minor-summary">`;
-                body += `<div class="ms-subtitle">Admit term: <strong>${termName || 'Unknown'}</strong></div>`;
+                body += `<div class="ms-subtitle">Admit term: <strong>${esc(termName || 'Unknown')}</strong></div>`;
                 try {
                     if (allocRes.gpaResolved === false) {
                         body += `<div class="ms-subtitle" style="color: #DC2626; font-weight: 700;">CGPA unavailable: review the grading basis of the flagged NA course.</div>`;
@@ -957,6 +1017,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
                 body += `<div class="ms-legend">
                     <div class="ms-legend-item"><span class="ms-dot ms-dot-green"></span>Counts in this pool</div>
                     <div class="ms-legend-item"><span class="ms-dot ms-dot-yellow"></span>Counts in a lower pool (overflow)</div>
+                    <div class="ms-legend-item"><span class="ms-dot ms-dot-red"></span>Attempted, unsuccessful</div>
                     <div class="ms-legend-item"><span class="ms-dot ms-dot-gray"></span>Not taken</div>
                   </div>`;
 
@@ -1005,14 +1066,14 @@ function displaySummary(curriculum, major_chosen_by_user) {
                 minorPanelEl.innerHTML = `
                   <div class="summary_minor_panel_header">
                     <button class="btn btn-secondary summary_back_btn" type="button">Back to majors</button>
-                    <div class="summary_minor_panel_title">${title}</div>
+                    <div class="summary_minor_panel_title">${esc(title)}</div>
                   </div>
                   <div class="summary_minor_switch_row">
                     ${minors.map(code => {
                         const rec = getMinorReq(code);
                         const label = rec && rec.name ? rec.name : code;
                         const active = code === minorCode ? 'is-active' : '';
-                        return `<button type="button" class="btn btn-secondary summary_minor_switch_btn ${active}" data-minor-code="${code}">${label}</button>`;
+                        return `<button type="button" class="btn btn-secondary summary_minor_switch_btn ${active}" data-minor-code="${esc(code)}">${esc(label)}</button>`;
                     }).join('')}
                   </div>
                   <div class="summary_minor_panel_body">${body}</div>
@@ -1084,13 +1145,6 @@ function displaySummary(curriculum, major_chosen_by_user) {
         PSIR: 'Political Science and International Relations',
         PSY: 'Psychology',
         VACD: 'Visual Arts and Visual Communications Design'
-    };
-
-    const esc = (v) => {
-        try {
-            if (typeof escapeHtml === 'function') return escapeHtml(v);
-        } catch (_) {}
-        return String(v ?? '');
     };
 
     const normalizeCode = (v) => String(v || '').toUpperCase().replace(/\s+/g, '');
@@ -1242,7 +1296,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
             const arr = Array.isArray(codes) ? codes.slice() : [];
             const rank = (code) => {
                 const alloc = allocationByCode[code];
-                if (!alloc) return 2; // not taken
+                if (!alloc) return getUnsuccessfulAttempt(code) ? 2 : 3;
                 if (alloc.allocatedCat === sectionCat) return 0; // taken + counts here
                 return 1; // taken + counts elsewhere
             };
@@ -1262,14 +1316,18 @@ function displaySummary(curriculum, major_chosen_by_user) {
             const chips = metaChips(rec, su);
             const alloc = allocationByCode[code];
             if (!alloc) {
+                const unsuccessful = getUnsuccessfulAttempt(code);
+                const statusClass = unsuccessful ? 'is-unsuccessful' : 'is-missing';
+                const status = unsuccessful ? 'unsuccessful' : 'not-taken';
+                const statusLabel = unsuccessful ? 'Unsuccessful' : 'Not taken';
                 return `
-                  <div class="ms-course is-missing">
+                  <div class="ms-course ${statusClass}" data-course-status="${status}">
                     <div class="ms-course-left">
                       <span class="ms-dot"></span>
                       <span class="ms-code">${esc(code)}</span>
                       <span class="ms-name">${esc(name)}</span>
                     </div>
-                    <div class="ms-meta">${chips}</div>
+                    <div class="ms-meta"><span class="ms-state-chip ${unsuccessful ? 'is-unsuccessful' : 'is-not-taken'}">${statusLabel}</span>${chips}</div>
                   </div>
                 `;
             }
@@ -1315,10 +1373,12 @@ function displaySummary(curriculum, major_chosen_by_user) {
         const renderPoolWithUntakenToggle = (poolCodes, sectionCat) => {
             const ordered = orderPoolCodes(poolCodes, sectionCat);
             const takenCodes = [];
+            const unsuccessfulCodes = [];
             const untakenCodes = [];
             for (let i = 0; i < ordered.length; i++) {
                 const code = ordered[i];
                 if (allocationByCode[code]) takenCodes.push(code);
+                else if (getUnsuccessfulAttempt(code)) unsuccessfulCodes.push(code);
                 else untakenCodes.push(code);
             }
 
@@ -1327,7 +1387,11 @@ function displaySummary(curriculum, major_chosen_by_user) {
             let html = '';
             if (takenCodes.length) {
                 html += takenCodes.map(code => renderPoolCourse(code, sectionCat)).join('');
-            } else if (untakenCodes.length) {
+            }
+            if (unsuccessfulCodes.length) {
+                html += unsuccessfulCodes.map(code => renderPoolCourse(code, sectionCat)).join('');
+            }
+            if (!takenCodes.length && !unsuccessfulCodes.length && untakenCodes.length) {
                 html += `<div class="ms-empty">No taken courses in this pool yet.</div>`;
             }
 
@@ -1372,6 +1436,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
         body += `<div class="ms-legend">
             <div class="ms-legend-item"><span class="ms-dot ms-dot-green"></span>Counts in this pool</div>
             <div class="ms-legend-item"><span class="ms-dot ms-dot-yellow"></span>Counts in a different/lower pool</div>
+            <div class="ms-legend-item"><span class="ms-dot ms-dot-red"></span>Attempted, unsuccessful</div>
             <div class="ms-legend-item"><span class="ms-dot ms-dot-gray"></span>Not taken</div>
           </div>`;
 

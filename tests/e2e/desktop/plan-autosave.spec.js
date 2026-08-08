@@ -318,6 +318,8 @@ test.describe('plan autosave hardening', () => {
     await seedAutosavePlan(page, { grades: [['A']] });
     const oldPlanId = await page.evaluate(() => {
       localStorage.setItem('autosave-test-sentinel', 'keep me');
+      localStorage.setItem('theme', 'another-app-theme');
+      localStorage.setItem('showCourseDetails', 'another-app-details');
       return window.planStorage.getActivePlanId();
     });
 
@@ -341,10 +343,14 @@ test.describe('plan autosave hardening', () => {
 
     const result = await page.evaluate((oldId) => ({
       sentinel: localStorage.getItem('autosave-test-sentinel'),
+      genericTheme: localStorage.getItem('theme'),
+      genericDetails: localStorage.getItem('showCourseDetails'),
       activeId: window.planStorage.getActivePlanId(),
       oldKeys: Object.keys(localStorage).filter((key) => key.includes(oldId)),
     }), oldPlanId);
     expect(result.sentinel).toBe('keep me');
+    expect(result.genericTheme).toBe('another-app-theme');
+    expect(result.genericDetails).toBe('another-app-details');
     expect(result.activeId).not.toBe(oldPlanId);
     expect(result.oldKeys).toEqual([]);
   });

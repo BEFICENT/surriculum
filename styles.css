@@ -5,7 +5,7 @@
     --primary-hover: #1565C0;
     --primary-active: #0A3D91;
     --secondary: #1976D2;
-    --accent: #4CAF50;
+    --accent: #2E7D32;
 
     --bg-main: #F8FAFC;
     --bg-card: #FFFFFF;
@@ -13,9 +13,10 @@
     --bg-header: linear-gradient(135deg, #0D47A1 0%, #1976D2 100%);
 
     --text-primary: #1E293B;
-    --text-secondary: #64748B;
-    --text-muted: #94A3B8;
+    --text-secondary: #475569;
+    --text-muted: #64748B;
     --text-inverse: #FFFFFF;
+    --focus-ring: #0D47A1;
 
     --border: #E2E8F0;
     --border-hover: #CBD5E1;
@@ -50,6 +51,7 @@
     --text-secondary: #CBD5E1;
     --text-muted: #94A3B8;
     --text-inverse: #0F172A;
+    --focus-ring: #93C5FD;
 
     --border: #334155;
     --border-hover: #475569;
@@ -72,6 +74,18 @@
     display: none !important;
 }
 
+.sr-only {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+}
+
 /* Minor selectors in sidebar */
 .minorSelect {
     flex: 1;
@@ -79,7 +93,7 @@
 
 html, body {
     height: 100%;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     font-size: 14px;
     line-height: 1.5;
     color: var(--text-primary);
@@ -954,6 +968,25 @@ html, body {
     justify-content: center;
 }
 
+.plan-move-controls,
+.semester-move-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.plan-move {
+    min-width: 24px;
+    min-height: 28px;
+    padding: 3px 5px;
+}
+
+.plan-move:disabled,
+.semester_move:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
 .plan-select {
     flex: 1;
     background: transparent;
@@ -1639,6 +1672,17 @@ html, body {
     background: rgba(245, 158, 11, 0.10);
 }
 
+.minor-summary .ms-course.is-unsuccessful,
+.major-summary .ms-course.is-unsuccessful {
+    border-color: rgba(220, 38, 38, 0.55);
+    background: rgba(220, 38, 38, 0.08);
+}
+
+.minor-summary .ms-course.is-unsuccessful .ms-dot,
+.major-summary .ms-course.is-unsuccessful .ms-dot {
+    background: #DC2626;
+}
+
 .minor-summary .ms-legend,
 .major-summary .ms-legend {
     display: flex;
@@ -1659,6 +1703,7 @@ html, body {
 
 .minor-summary .ms-dot.ms-dot-green, .major-summary .ms-dot.ms-dot-green { background: #16A34A; }
 .minor-summary .ms-dot.ms-dot-yellow, .major-summary .ms-dot.ms-dot-yellow { background: #F59E0B; }
+.minor-summary .ms-dot.ms-dot-red, .major-summary .ms-dot.ms-dot-red { background: #DC2626; }
 .minor-summary .ms-dot.ms-dot-gray, .major-summary .ms-dot.ms-dot-gray { background: #9CA3AF; }
 
 .minor-summary .ms-subheader,
@@ -2136,7 +2181,8 @@ html, body {
 
 .subcontainer_semester .semester_drag,
 .subcontainer_semester .semester_date_edit,
-.subcontainer_semester .delete_semester {
+.subcontainer_semester .delete_semester,
+.subcontainer_semester .semester_move {
     width: 20px;
     height: 20px;
     border: none;
@@ -2147,6 +2193,14 @@ html, body {
     background-repeat: no-repeat;
     background-position: center;
     background-size: contain;
+}
+
+.subcontainer_semester .semester_move {
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
 }
 
 /* Default icons for light theme */
@@ -2173,7 +2227,8 @@ html, body {
 
 .subcontainer_semester .semester_drag:hover,
 .subcontainer_semester .semester_date_edit:hover,
-.subcontainer_semester .delete_semester:hover {
+.subcontainer_semester .delete_semester:hover,
+.subcontainer_semester .semester_move:hover:not(:disabled) {
     opacity: 1;
 }
 
@@ -2595,10 +2650,13 @@ html, body {
 .ms-state-chip.is-current { color: #2563EB; background: rgba(37, 99, 235, 0.10); }
 .ms-state-chip.is-future { color: #7C3AED; background: rgba(124, 58, 237, 0.10); }
 .ms-state-chip.is-unverified { color: #B45309; background: rgba(180, 83, 9, 0.10); }
+.ms-state-chip.is-unsuccessful { color: #B91C1C; background: rgba(220, 38, 38, 0.10); }
+.ms-state-chip.is-not-taken { color: var(--text-secondary); background: var(--bg-surface); }
 .dark-theme .ms-state-chip.is-earned { color: #4ADE80; }
 .dark-theme .ms-state-chip.is-current { color: #60A5FA; }
 .dark-theme .ms-state-chip.is-future { color: #C4B5FD; }
 .dark-theme .ms-state-chip.is-unverified { color: #FBBF24; }
+.dark-theme .ms-state-chip.is-unsuccessful { color: #F87171; }
 
 .scheduler-picker-option.is-time-unknown {
     border-left: 4px solid var(--text-secondary);
@@ -4064,6 +4122,9 @@ html, body {
     align-items: center;
     justify-content: center;
     color: var(--text-secondary);
+    background: transparent;
+    width: 100%;
+    font: inherit;
     cursor: pointer;
     transition: background 0.15s ease;
 }
@@ -4354,6 +4415,17 @@ html, body {
     margin-bottom: 15px;
 }
 
+.custom_course_modal .cc-import-note {
+    margin: -6px 0 4px;
+    padding: 9px 10px;
+    border-left: 3px solid #B45309;
+    border-radius: var(--radius-sm);
+    background: rgba(245, 158, 11, 0.10);
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+    line-height: 1.4;
+}
+
 .custom_course_modal label {
     margin-bottom: 3px;
 }
@@ -4598,4 +4670,37 @@ input:focus, select:focus, button:focus {
 .deleteCustom, .resetLocal {
     background-color: red !important;
     color: white !important;
+}
+
+/* Keyboard focus is deliberately stronger than hover state and is only shown
+   for keyboard-style navigation in browsers that support :focus-visible. */
+@supports selector(:focus-visible) {
+    input:focus,
+    select:focus,
+    button:focus,
+    a:focus,
+    [tabindex]:focus {
+        outline: none;
+    }
+
+    :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+        outline: 3px solid var(--focus-ring);
+        outline-offset: 3px;
+    }
+
+    .toggle-switch input:focus-visible + .toggle-slider {
+        box-shadow: 0 0 0 3px var(--bg-card), 0 0 0 6px var(--focus-ring);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        scroll-behavior: auto !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        transition-delay: 0ms !important;
+    }
 }

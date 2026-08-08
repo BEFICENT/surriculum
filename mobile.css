@@ -314,6 +314,7 @@ body.is-mobile[data-mobile-tab="planner"] .container_semester.current-term .tota
 }
 /* Edit/delete icons only while expanded (collapsed row stays clean). */
 body.is-mobile[data-mobile-tab="planner"] .container_semester.m-collapsed .semester_date_edit,
+body.is-mobile[data-mobile-tab="planner"] .container_semester.m-collapsed .semester-move-controls,
 body.is-mobile[data-mobile-tab="planner"] .container_semester.m-collapsed .delete_semester {
     display: none;
 }

@@ -6,8 +6,9 @@
   "scripts": {
     "test": "npm run test:unit && npm run test:python && npm run test:e2e",
     "test:unit": "node tests/static_checks.js && node --test \"tests/unit/**/*.test.js\"",
-    "test:python": "python tests/scrape_groups_test.py && python tests/scrape_coursepages_fallback_test.py && python tests/requirements_validation_test.py && python tests/manifest_integrity_test.py",
+    "test:python": "python tests/scrape_groups_test.py && python tests/scrape_coursepages_fallback_test.py && python tests/requirements_validation_test.py && python tests/manifest_integrity_test.py && python tests/pages_artifact_test.py",
     "test:e2e": "playwright test",
+    "test:e2e:cross-browser": "playwright test --config=playwright.cross-browser.config.js",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:ui": "playwright test --ui"
   },

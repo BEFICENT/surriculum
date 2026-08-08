@@ -115,7 +115,7 @@ test.describe('mobile scheduler', () => {
 
   test('tap preview expands Saturday and late hours even when desktop hover preview is disabled', async ({ page }) => {
     await seedScheduler(page);
-    await page.evaluate(() => localStorage.setItem('schedulerHoverPreview', 'false'));
+    await page.evaluate(() => window.preferenceStorage.setItem('schedulerHoverPreview', 'false'));
     const modal = await openMobileScheduler(page);
 
     // DA519/30192 meets Wednesday 19:00-22:00 and Saturday 13:00-16:00.

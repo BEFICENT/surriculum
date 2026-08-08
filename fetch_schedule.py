@@ -534,7 +534,7 @@ def scrape_term_schedule(
     sess = requests.Session()
     sess.headers.update(
         {
-            "User-Agent": "Mozilla/5.0 (compatible; SUrriculum/3.0; +https://github.com/)",
+            "User-Agent": "Mozilla/5.0 (compatible; SUrriculum/3.1; +https://github.com/)",
         }
     )
 

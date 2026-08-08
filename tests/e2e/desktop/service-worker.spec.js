@@ -9,6 +9,15 @@ const PDFJS_URLS = [
   PAGES_URL + 'assets/vendor/pdfjs-6.2.108/pdf.min.mjs',
   PAGES_URL + 'assets/vendor/pdfjs-6.2.108/pdf.worker.min.mjs',
 ];
+const LOCAL_FONT_URLS = [
+  PAGES_URL + 'assets/vendor/inter-5.3.0/inter.css',
+  PAGES_URL + 'assets/vendor/inter-5.3.0/files/inter-latin-wght-normal.woff2',
+  PAGES_URL + 'assets/vendor/inter-5.3.0/files/inter-latin-ext-wght-normal.woff2',
+  PAGES_URL + 'assets/vendor/fontawesome-6.4.0/css/fontawesome.min.css',
+  PAGES_URL + 'assets/vendor/fontawesome-6.4.0/css/solid.min.css',
+  PAGES_URL + 'assets/vendor/fontawesome-6.4.0/webfonts/fa-solid-900.woff2',
+  PAGES_URL + 'assets/vendor/fontawesome-6.4.0/webfonts/fa-solid-900.ttf',
+];
 
 test('service worker is subpath-safe, preserves storage, and restores a warmed plan offline', async ({
   page,
@@ -95,6 +104,10 @@ test('service worker is subpath-safe, preserves storage, and restores a warmed p
   expect(installed.shellUrls).toContain(PAGES_URL + 'index.html');
   expect(installed.shellUrls).toContain(PAGES_URL + 'scripts/course_requisites.js');
   expect(installed.shellUrls).toContain(PAGES_URL + 'scripts/pdf_transcript_reader.js');
+  expect(installed.shellUrls).toContain(PAGES_URL + 'scripts/preferences.js');
+  for (const asset of LOCAL_FONT_URLS) {
+    expect(installed.shellUrls).toContain(asset);
+  }
   expect(installed.shellUrls.filter(url => PDFJS_URLS.includes(url))).toEqual([]);
   expect(installed.pdfJsUrls).toEqual(PDFJS_URLS);
   expect(installed.names).toContain(PDFJS_CACHE_NAME);
@@ -164,6 +177,8 @@ test('service worker is subpath-safe, preserves storage, and restores a warmed p
     planStorageReady: typeof window.planStorage?.getItem === 'function',
     requirementTotal: window.getRequirementRecord?.('BIO', '202401')?.total,
     sentinel: localStorage.getItem('surriculum.sw-test-sentinel'),
+    interReady: document.fonts.check('16px "Inter Variable"'),
+    iconsReady: document.fonts.check('900 16px "Font Awesome 6 Free"'),
   }))).toEqual({
     appVersion: onlineVersion,
     course: 'BIO301',
@@ -172,6 +187,8 @@ test('service worker is subpath-safe, preserves storage, and restores a warmed p
     planStorageReady: true,
     requirementTotal: 127,
     sentinel: 'keep',
+    interReady: true,
+    iconsReady: true,
   });
   expect(await page.evaluate(async () => {
     const names = await caches.keys();

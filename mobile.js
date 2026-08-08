@@ -4,7 +4,7 @@
  * Adds/removes the `is-mobile` class on <body> based on viewport width.
  * ALL mobile styling and behavior is gated on this class, so when it is
  * absent the app renders exactly like the frozen desktop build
- * (surriculum-3.0). Mobile styles live in mobile.css, scoped under
+ * (SUrriculum 3.1). Mobile styles live in mobile.css, scoped under
  * `body.is-mobile`.
  *
  * The breakpoint lives here as the single source of truth so it can be
@@ -520,8 +520,9 @@
     function onBoardClick(e) {
         if (!document.body.classList.contains('is-mobile')) return;
         if (!e.target.closest) return;
-        // Leave the semester action icons (edit date / delete) to their own handlers.
-        if (e.target.closest('.semester_date_edit, .semester_drag, .delete_semester')) return;
+        // Leave semester actions to their own handlers; none of them should
+        // accidentally toggle the surrounding accordion card.
+        if (e.target.closest('.semester_date_edit, .semester_drag, .semester_move, .delete_semester')) return;
         // The header is the colored credits bar + the name row.
         var header = e.target.closest('.date') || e.target.closest('.total_credit');
         if (!header) return;

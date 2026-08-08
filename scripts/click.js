@@ -972,6 +972,9 @@ function dynamic_click(e, curriculum, course_data)
         date.innerHTML = '';
         let select = document.createElement('select');
         select.classList.add('select-control');
+        select.setAttribute('aria-label', current
+            ? `Semester term for ${current}`
+            : 'Semester term');
         select.innerHTML = terms.map(t => `<option value="${t}">${t}</option>`).join('');
         select.value = current;
         let tick = document.createElement("div");
@@ -979,6 +982,11 @@ function dynamic_click(e, curriculum, course_data)
         tick.style.backgroundImage = "url('./assets/tickw.png')";
         date.appendChild(select);
         date.appendChild(tick);
+        try {
+            if (typeof refreshSemesterAccessibility === 'function') {
+                refreshSemesterAccessibility();
+            }
+        } catch (_) {}
     }
     //CLICKED tick in date
     else if(e.target.classList.contains("tick"))
@@ -1001,6 +1009,12 @@ function dynamic_click(e, curriculum, course_data)
         icons.appendChild(drag);
         icons.appendChild(closebtn);
         date.appendChild(icons)    
+
+        try {
+            if (typeof refreshSemesterAccessibility === 'function') {
+                refreshSemesterAccessibility();
+            }
+        } catch (_) {}
 
         // Update the semester's term index to reflect the new date and
         // recalculate effective categories. The date element sits inside

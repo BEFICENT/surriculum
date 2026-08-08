@@ -9,22 +9,27 @@ is git-ignored and never served to users.
 ```bash
 npm install            # once: installs @playwright/test (dev only)
 pip install -r requirements.txt  # once: installs Python scraper dependencies
-npx playwright install chromium   # once: the browser binary
+npx playwright install chromium  # once: full-suite browser binary
+npx playwright install firefox webkit  # once: focused cross-browser binaries
 
 npm test               # unit + Python checks + e2e
 npm run test:unit      # fast: node --test + the legacy static checks
-npm run test:python    # offline scraper parity/fallback/schema checks
-npm run test:e2e       # Playwright (real browser)
+npm run test:python    # offline scraper/data/Pages-artifact checks
+npm run test:e2e       # full Chromium Playwright suite
+npm run test:e2e:cross-browser  # one critical flow in Firefox + WebKit
 python tests/scrape_groups_test.py
 python tests/scrape_coursepages_fallback_test.py
 python tests/requirements_validation_test.py
 python tests/manifest_integrity_test.py
+python tests/pages_artifact_test.py
 npm run test:e2e:ui    # Playwright interactive UI mode
 ```
 
-The four Python checks are included in `npm test`; their direct commands remain
+The five Python checks are included in `npm test`; their direct commands remain
 available for focused runs. Python dependencies are installed separately from
-the JavaScript dev tooling.
+the JavaScript dev tooling. The cross-browser command is intentionally separate
+from `npm test`: it repeats one release-critical planner flow, not the complete
+Chromium matrix.
 
 ## Layout
 
@@ -36,8 +41,10 @@ tests/
     *.test.js              node:test unit tests for pure helpers
   e2e/
     fixtures.js            shared Playwright fixtures (browserErrors collector)
+    cross-browser/*.spec.js focused Firefox/WebKit release-critical flow
     desktop/*.spec.js      desktop-viewport flows
     mobile/*.spec.js       phone-viewport flows (body.is-mobile layer)
+  pages_artifact_test.py   release allowlist + mounted-subpath smoke
 ```
 
 ## Philosophy
@@ -66,5 +73,12 @@ internal restructuring. Unit tests are a second layer for pure logic only.
   loop) and reuses an already-running server on that port.
 - A small retry budget is configured to absorb cold-start timing noise; a real
   regression fails consistently and is not hidden (retried flakes are reported).
-- CI is intentionally not wired up yet — run locally until coverage is worth
-  gating on.
+- `.github/workflows/ci.yml` runs unit/Python checks, the full Chromium suite,
+  and the focused Firefox/WebKit flow with read-only repository permissions.
+  Data-only refresh pushes and pull requests from `bot/daily-data-refresh` skip
+  that heavier workflow; the refresh job still runs the fast requirements and
+  manifest validators before it opens a pull request.
+- `.github/workflows/pages-release.yml` is manual and build-only by default. A
+  build-only run uploads the allowlisted bundle for review. Deployment requires
+  both the explicit `deploy` input and `refs/heads/main`; ordinary pushes and
+  merges cannot publish it.

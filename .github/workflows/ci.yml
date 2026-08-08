@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  push:
+    branches-ignore:
+      - bot/daily-data-refresh
+    paths-ignore:
+      - courses/**
+      - requirements/**
+      - data/manifest.json
+  pull_request:
+    paths-ignore:
+      - courses/**
+      - requirements/**
+      - data/manifest.json
+  workflow_dispatch: {}
+
+# Tests may read the checkout and create ephemeral Actions artifacts, but they
+# cannot write repository contents, pull requests, or deployments.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  chromium:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install test dependencies
+        run: |
+          npm ci
+          python -m pip install -r requirements.txt
+
+      - name: Run static and unit tests
+        run: npm run test:unit
+
+      - name: Run scraper, data, and artifact tests
+        run: npm run test:python
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Chromium end-to-end suite
+        run: npm run test:e2e
+
+      - name: Upload failed Chromium traces
+        if: failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: chromium-test-results
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  cross-browser-critical:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+
+      - name: Install test tooling and focused browsers
+        run: |
+          npm ci
+          npx playwright install --with-deps firefox webkit
+
+      - name: Run Firefox and WebKit critical flow
+        run: npm run test:e2e:cross-browser
+
+      - name: Upload failed cross-browser traces
+        if: failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: cross-browser-test-results
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7

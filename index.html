@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-FpFfnuFzeGRvsKJPshLnhpnaaCbi5jzcAL6SM170xm4='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="title" content="SUrriculum"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,7 +10,7 @@
     <meta name="keywords" content="curriculum planner, sabanci university, degree planning, graduation requirements, Curriculum, Sabancı Universitesi, Sabanci University, Suchedule, surriculum sabanci, surriculum sabancı, sabancı surriculum, sabanci surriculum, sabancı, sabanci">
     <meta name="author" content="Bilal Mehmet Gebenoğlu"/>
     <meta name="owner" content="Bilal Mehmet Gebenoğlu"/>
-    <meta name="copyright" content="(c) 2025"/>
+    <meta name="copyright" content="(c) 2025-2026"/>
     <meta name="google-site-verification" content="A01mm05EYD3vsvckKc6Yi7wwoQCeAMGOEApAQ7lTmw8" />
     <link rel="canonical" href="https://beficent.github.io/surriculum/">
     <meta property="og:site_name" content="SUrriculum" />
@@ -31,10 +32,9 @@
 
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="assets/vendor/inter-5.3.0/inter.css">
+    <link rel="stylesheet" href="assets/vendor/fontawesome-6.4.0/css/fontawesome.min.css">
+    <link rel="stylesheet" href="assets/vendor/fontawesome-6.4.0/css/solid.min.css">
     
     <script type="application/ld+json">
     {
@@ -50,11 +50,6 @@
         "price": "0",
         "priceCurrency": "USD"
       },
-      "aggregateRating": {
-        "@type": "AggregateRating",
-        "ratingValue": "4.8",
-        "ratingCount": "24"
-      },
       "logo": {
       "@type": "ImageObject",
       "url": "https://beficent.github.io/surriculum/assets/android-chrome-192x192.png"
@@ -64,6 +59,7 @@
     
     <!-- Core scripts -->
     <script src="scripts/version.js"></script>
+    <script src="scripts/preferences.js"></script>
     <script src="scripts/plan_manager.js"></script>
     <script src="scripts/helper_functions.js"></script>
     <script src="scripts/course_requisites.js"></script>
@@ -103,13 +99,14 @@
 
             <div class="header-actions" id="headerActions">
                 <div class="plan-container">
-                    <button id="planToggle" class="btn btn-secondary btn-sm plan-toggle">
+                    <button id="planToggle" class="btn btn-secondary btn-sm plan-toggle" type="button"
+                            aria-haspopup="true" aria-expanded="false" aria-controls="planDropdown">
                         <i class="fa-solid fa-layer-group"></i>&nbsp;<span id="activePlanName">Default Plan</span>
                     </button>
 
-                    <div class="plan-dropdown" id="planDropdown">
+                    <div class="plan-dropdown" id="planDropdown" role="region" aria-label="Plan manager">
                         <h3 class="plan-title">Plans</h3>
-                        <div class="plan-list" aria-label="Plans list"></div>
+                        <div class="plan-list" role="list" aria-label="Plans list"></div>
                         <div class="plan-divider"></div>
                         <div class="plan-footer">
                             <button id="addPlanBtn" class="btn btn-primary btn-sm" type="button">
@@ -123,12 +120,13 @@
                     </div>
                 </div>
 
-                <button id="themeToggle" class="btn btn-secondary btn-sm">
+                <button id="themeToggle" class="btn btn-secondary btn-sm" type="button">
                     <i class="fa-solid fa-moon"></i> Theme
                 </button>
 
                 <div class="import-container">
-                    <button class="btn btn-secondary btn-sm import-toggle">
+                    <button class="btn btn-secondary btn-sm import-toggle" type="button"
+                            aria-haspopup="true" aria-expanded="false" aria-controls="importDropdown">
                         <i class="fa-solid fa-folder-open"></i>&nbsp;Import Records
                     </button>
 
@@ -145,8 +143,9 @@
 
                         </div>
                         <div class="import-controls">
-                            <input type="file" id="academicRecordsInput" class="import-file" accept=".html,.htm,.pdf">
-                            <button id="importAcademicRecords" class="btn btn-primary btn-sm">Import</button>
+                            <input type="file" id="academicRecordsInput" class="import-file" accept=".html,.htm,.pdf"
+                                   aria-label="Academic records file">
+                            <button id="importAcademicRecords" class="btn btn-primary btn-sm" type="button">Import</button>
                         </div>
                         <div id="course-import-box" style="margin-top: 12px; padding: 12px; background: var(--bg-surface); border-radius: var(--radius-sm); font-size: 0.875rem; color: var(--text-primary);">
                             <strong>Choose your major and double major before importing</strong>
@@ -169,10 +168,12 @@
     <!-- Main Content -->
     <div class="main-content">
         <!-- Sidebar -->
-        <aside class="sidebar">
-            <button class="sidebar-toggle"><i class="fa-solid fa-chevron-left"></i></button>
+        <aside class="sidebar" aria-labelledby="sidebarControlsTitle">
+            <button class="sidebar-toggle" type="button" aria-label="Collapse planner controls" aria-expanded="true">
+                <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+            </button>
             <div class="sidebar-header">
-                <h2 class="sidebar-title"><i class="fa-solid fa-book"></i>&nbsp;Controls</h2>
+                <h2 class="sidebar-title" id="sidebarControlsTitle"><i class="fa-solid fa-book" aria-hidden="true"></i>&nbsp;Controls</h2>
             </div>
 
             <div class="sidebar-content">
@@ -182,13 +183,13 @@
                         <div class="control-col-label">Admit Term</div>
                     </div>
                     <div class="control-row">
-                        <select class="select-control change_major"></select>
-                        <select class="select-control entryTerm"></select>
+                        <select class="select-control change_major" aria-label="Major program"></select>
+                        <select class="select-control entryTerm" aria-label="Major admit term"></select>
                     </div>
 
                     <div class="control-row is-hidden" id="doubleMajorControlsRow">
-                        <select class="select-control doubleMajor"></select>
-                        <select class="select-control entryTermDM"></select>
+                        <select class="select-control doubleMajor" aria-label="Double-major program"></select>
+                        <select class="select-control entryTermDM" aria-label="Double-major admit term"></select>
                     </div>
 
                     <div class="control-row" id="doubleMajorButtonRow">
@@ -198,16 +199,16 @@
                     </div>
 
                     <div class="control-row is-hidden" id="minor1Row">
-                        <select class="select-control minorSelect" id="minor1"></select>
-                        <select class="select-control entryTermMinor entryTermMinor1" id="minorTerm1" title="Minor 1 admit term"></select>
+                        <select class="select-control minorSelect" id="minor1" aria-label="Minor 1 program"></select>
+                        <select class="select-control entryTermMinor entryTermMinor1" id="minorTerm1" title="Minor 1 admit term" aria-label="Minor 1 admit term"></select>
                     </div>
                     <div class="control-row is-hidden" id="minor2Row">
-                        <select class="select-control minorSelect" id="minor2"></select>
-                        <select class="select-control entryTermMinor entryTermMinor2" id="minorTerm2" title="Minor 2 admit term"></select>
+                        <select class="select-control minorSelect" id="minor2" aria-label="Minor 2 program"></select>
+                        <select class="select-control entryTermMinor entryTermMinor2" id="minorTerm2" title="Minor 2 admit term" aria-label="Minor 2 admit term"></select>
                     </div>
                     <div class="control-row is-hidden" id="minor3Row">
-                        <select class="select-control minorSelect" id="minor3"></select>
-                        <select class="select-control entryTermMinor entryTermMinor3" id="minorTerm3" title="Minor 3 admit term"></select>
+                        <select class="select-control minorSelect" id="minor3" aria-label="Minor 3 program"></select>
+                        <select class="select-control entryTermMinor entryTermMinor3" id="minorTerm3" title="Minor 3 admit term" aria-label="Minor 3 admit term"></select>
                     </div>
 
                     <div class="control-row" id="addMinorRow">
@@ -232,7 +233,7 @@
                     </div>
 
                     <div class="control-row">
-                        <button class="btn btn-accent" type="button" onclick="openSchedulerModal()" style="width: 100%;">
+                        <button class="btn btn-accent" id="openSchedulerButton" type="button" style="width: 100%;">
                             <i class="fa-solid fa-calendar-days"></i>&nbsp;Scheduler
                         </button>
                     </div>
@@ -240,9 +241,9 @@
 
                 <div class="control-group">
                     <div class="control-row toggle-row">
-                        <span class="toggle-text">Show Course Details</span>
+                        <span class="toggle-text" id="courseDetailsToggleLabel">Show Course Details</span>
                         <label class="toggle-switch">
-                            <input type="checkbox" id="courseDetailsToggle" checked>
+                            <input type="checkbox" id="courseDetailsToggle" aria-labelledby="courseDetailsToggleLabel" checked>
                             <span class="toggle-slider"></span>
                         </label>
                     </div>
@@ -250,9 +251,9 @@
 
                 <div class="control-group">
                     <div class="control-row toggle-row">
-                        <span class="toggle-text">Hide Taken Courses</span>
+                        <span class="toggle-text" id="hideTakenCoursesToggleLabel">Hide Taken Courses</span>
                         <label class="toggle-switch">
-                            <input type="checkbox" id="hideTakenCoursesToggle" checked>
+                            <input type="checkbox" id="hideTakenCoursesToggle" aria-labelledby="hideTakenCoursesToggleLabel" checked>
                             <span class="toggle-slider"></span>
                         </label>
                     </div>
@@ -262,7 +263,7 @@
                     <div class="control-row toggle-row">
                         <span class="toggle-text" id="offeredThisTermLabel">Only show offered courses for this term</span>
                         <label class="toggle-switch">
-                            <input type="checkbox" id="offeredThisTermToggle" checked>
+                            <input type="checkbox" id="offeredThisTermToggle" aria-labelledby="offeredThisTermLabel" checked>
                             <span class="toggle-slider"></span>
                         </label>
                     </div>
@@ -272,7 +273,7 @@
                     <div class="control-row toggle-row">
                         <span class="toggle-text" id="sortByScoreLabel">Smart Sort</span>
                         <label class="toggle-switch">
-                            <input type="checkbox" id="sortByScoreToggle" checked>
+                            <input type="checkbox" id="sortByScoreToggle" aria-labelledby="sortByScoreLabel" checked>
                             <span class="toggle-slider"></span>
                         </label>
                     </div>
@@ -302,13 +303,13 @@
         </aside>
 
         <!-- Board -->
-        <main class="board" id="board">
+        <main class="board" id="board" aria-label="Term planner">
             <!-- Semester containers will be added here dynamically -->
 
             <!-- Semester template -->
             <template id="semester-template">
                 <section class="semester">
-                    <button class="add-course" onclick="openCourseModal()"><i class="fa-solid fa-plus"></i>&nbsp;Add course</button>
+                    <button class="add-course" type="button"><i class="fa-solid fa-plus"></i>&nbsp;Add course</button>
                     <div class="semester-courses"><!-- course cards --></div>
                 </section>
             </template>
@@ -323,5 +324,6 @@
 
 <!-- Overlay for modals -->
 <div class="modal-overlay hidden" id="modalOverlay"></div>
+<div class="sr-only" id="a11yStatus" role="status" aria-live="polite" aria-atomic="true"></div>
 </body>
 </html>

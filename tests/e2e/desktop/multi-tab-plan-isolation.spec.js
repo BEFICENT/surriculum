@@ -77,7 +77,7 @@ test('a tab stays bound to its rendered plan after another tab switches the shar
     await rowA.locator('button[title="Rename"]').click();
     const renameModal = page.locator('.modal-overlay').last();
     await renameModal.locator('input').fill('Plan A renamed');
-    await renameModal.getByRole('button', { name: 'Rename' }).click();
+    await renameModal.getByRole('button', { name: 'Rename', exact: true }).click();
     await expect(page.locator('#activePlanName')).toHaveText('Plan A renamed');
     await expect(page.locator(`.plan-item[data-id="${ids.a}"]`)).toHaveClass(/\bactive\b/);
     await expect(page.locator(`.plan-item[data-id="${ids.b}"]`)).not.toHaveClass(/\bactive\b/);
@@ -160,7 +160,7 @@ test('a tab stays bound to its rendered plan after another tab switches the shar
       return String(element.checked);
     });
     await expect.poll(() => pageB.evaluate(
-      () => localStorage.getItem('schedulerHoverPreview'),
+      () => window.preferenceStorage.getItem('schedulerHoverPreview'),
     )).toBe(expectedGlobalPreference);
 
     const stored = await page.evaluate(({ a, b, term }) => {

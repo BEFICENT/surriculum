@@ -29,6 +29,58 @@ const TRANSCRIPT_HTML = `
 // global fallback is designed to preserve.
 const GLOBAL_ONLY_CODE = 'HIST484';
 
+const importTranscriptCustomCourseForReview = async (page, code) => {
+  const html = `
+    <table class="courseTable">
+      <thead><tr><th><b>Fall 2024-2025</b></th></tr></thead>
+      <tbody><tr><td>${code}</td><td>Transcript-only elective</td><td>1</td><td>A</td><td>3</td><td>6</td><td>Completed</td></tr></tbody>
+    </table>`;
+  await page.locator('#academicRecordsInput').setInputFiles({
+    name: 'synthetic-custom-course.html',
+    mimeType: 'text/html',
+    buffer: Buffer.from(html),
+  });
+  await page.evaluate(() => document.getElementById('importAcademicRecords').click());
+
+  const importModal = page.locator('.modal-overlay').filter({ hasText: /Import complete/i });
+  await expect(importModal).toBeVisible();
+  await expect(importModal).toContainText(code);
+  await importModal.getByRole('button', { name: 'OK', exact: true }).click();
+
+  const reminderModal = page.locator('.modal-overlay').filter({
+    hasText: /Reminder: choose your programs & admit terms/i,
+  });
+  await expect(reminderModal).toBeVisible();
+  await reminderModal.getByRole('button', { name: 'OK', exact: true }).click();
+
+  const review = page.locator('.custom_course_modal');
+  await expect(review).toBeVisible();
+  await expect(review.locator('h3')).toHaveText('Review Imported Course');
+  await expect(review).toContainText(/Save to keep this transcript course/i);
+  await expect(review.locator('.cc-row').first().locator('input')).toHaveValue(code);
+  return review;
+};
+
+const readTranscriptCustomCourseState = (page, code) => page.evaluate((targetCode) => {
+  const normalize = (course) => String((course && course.Major) || '')
+    + String((course && course.Code) || '');
+  const planId = window.planStorage.getSessionPlanId();
+  const customCourses = JSON.parse(
+    window.planStorage.getItem('customCourses_CS', planId) || '[]',
+  );
+  const occurrences = (window.curriculum.semesters || []).flatMap((semester) =>
+    (semester.courses || []).filter((course) => course.code === targetCode)
+      .map((course) => ({ code: course.code, grade: course.grade, term: semester.termName })));
+  return {
+    customCount: customCourses.filter((course) => normalize(course) === targetCode).length,
+    catalogCount: course_data.filter((course) => normalize(course) === targetCode).length,
+    occurrences,
+    renderedCount: Array.from(document.querySelectorAll('.container_semester .course'))
+      .filter((node) => node.textContent.includes(targetCode)).length,
+    semesterCount: window.curriculum.semesters.length,
+  };
+}, code);
+
 const readImportedCourseProgress = (page, code) => page.evaluate((courseCode) => {
   const semester = (window.curriculum.semesters || []).find((row) =>
     (row.courses || []).some((course) => course.code === courseCode));
@@ -75,6 +127,75 @@ const readImportedCourseProgress = (page, code) => page.evaluate((courseCode) =>
 }, code);
 
 test.describe('academic records parsing (desktop)', () => {
+  test('skipping transcript custom-course review rolls back the placeholder and stays removed after reload', async ({ page }) => {
+    const code = 'FEL98765';
+    await seedPlan(page, {
+      major: 'CS', entryTerm: 'Fall 2024-2025', curriculum: [], grades: [], dates: [],
+    });
+    await page.waitForFunction(() => Array.isArray(window.course_data || course_data)
+      && course_data.length > 0 && window.curriculum);
+
+    const review = await importTranscriptCustomCourseForReview(page, code);
+    await expect(review.getByRole('button', { name: 'Skip & Remove', exact: true })).toBeVisible();
+    await review.getByRole('button', { name: 'Skip & Remove', exact: true }).click();
+    await expect(review).toBeHidden();
+
+    expect(await readTranscriptCustomCourseState(page, code)).toEqual({
+      customCount: 0,
+      catalogCount: 0,
+      occurrences: [],
+      renderedCount: 0,
+      semesterCount: 0,
+    });
+
+    await page.evaluate(() => window.planStorage.flushSaves());
+    await page.reload();
+    await page.waitForFunction(() => window.curriculum && Array.isArray(window.curriculum.semesters)
+      && typeof course_data !== 'undefined' && Array.isArray(course_data) && course_data.length > 0);
+    expect(await readTranscriptCustomCourseState(page, code)).toEqual({
+      customCount: 0,
+      catalogCount: 0,
+      occurrences: [],
+      renderedCount: 0,
+      semesterCount: 0,
+    });
+  });
+
+  test('saving transcript custom-course review keeps the definition and occurrence after reload', async ({ page }) => {
+    const code = 'FEL98765';
+    await seedPlan(page, {
+      major: 'CS', entryTerm: 'Fall 2024-2025', curriculum: [], grades: [], dates: [],
+    });
+    await page.waitForFunction(() => typeof course_data !== 'undefined'
+      && Array.isArray(course_data) && course_data.length > 0 && window.curriculum);
+
+    const review = await importTranscriptCustomCourseForReview(page, code);
+    await expect(review.getByRole('button', { name: 'Save & Keep', exact: true })).toBeVisible();
+    await review.getByRole('button', { name: 'Save & Keep', exact: true }).click();
+    await expect(review).toBeHidden();
+
+    expect(await readTranscriptCustomCourseState(page, code)).toMatchObject({
+      customCount: 1,
+      catalogCount: 1,
+      occurrences: [{ code, grade: 'A', term: 'Fall 2024-2025' }],
+      renderedCount: 1,
+      semesterCount: 1,
+    });
+
+    await page.evaluate(() => window.planStorage.flushSaves());
+    await page.reload();
+    await page.waitForFunction((targetCode) => window.curriculum
+      && (window.curriculum.semesters || []).some((semester) =>
+        (semester.courses || []).some((course) => course.code === targetCode)), code);
+    expect(await readTranscriptCustomCourseState(page, code)).toMatchObject({
+      customCount: 1,
+      catalogCount: 1,
+      occurrences: [{ code, grade: 'A', term: 'Fall 2024-2025' }],
+      renderedCount: 1,
+      semesterCount: 1,
+    });
+  });
+
   test('parseAcademicRecords applies the transcript extraction rules', async ({ page }) => {
     await page.goto('/');
 
@@ -898,5 +1019,37 @@ test.describe('academic records parsing (desktop)', () => {
     await expect(overlay).toContainText('PROJ201');
     await expect(overlay).toContainText(/both repeated and substituted courses/i);
     await expect(overlay).toContainText(/marked Excluded/i);
+  });
+
+  test('an oversized HTML transcript is rejected before parsing without changing the plan', async ({ page }) => {
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: 'Fall 2024-2025',
+      curriculum: [['CS201']],
+      grades: [['A']],
+      dates: ['Fall 2024-2025'],
+    });
+    const before = await page.evaluate(() => ({
+      curriculum: serializator(window.curriculum),
+      grades: grades_serializator(window.curriculum),
+      dates: dates_serializator(window.curriculum),
+    }));
+
+    await page.locator('#academicRecordsInput').setInputFiles({
+      name: 'oversized-transcript.html',
+      mimeType: 'text/html',
+      buffer: Buffer.alloc((10 * 1024 * 1024) + 1, 0x20),
+    });
+    await page.evaluate(() => document.getElementById('importAcademicRecords').click());
+
+    const overlay = page.locator('.modal-overlay').filter({ hasText: /Transcript file is too large/i });
+    await expect(overlay).toBeVisible();
+    await expect(overlay).toContainText('10 MB');
+    await expect(page.locator('#academicRecordsInput')).toHaveValue('');
+    expect(await page.evaluate(() => ({
+      curriculum: serializator(window.curriculum),
+      grades: grades_serializator(window.curriculum),
+      dates: dates_serializator(window.curriculum),
+    }))).toEqual(before);
   });
 });
