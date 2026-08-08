@@ -1029,6 +1029,10 @@ function dynamic_click(e, curriculum, course_data)
                 window.updateCurrentTermHighlights();
             }
         } catch (_) {}
+        try {
+            const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+            if (storage && typeof storage.requestSave === 'function') storage.requestSave();
+        } catch (_) {}
     }
     //CLICKED trash in input:
     else if(e.target.classList.contains("delete_add_course"))
@@ -1177,6 +1181,10 @@ function dynamic_click(e, curriculum, course_data)
                 gradeElement.classList.remove('grade-active');
                 removeMenuListeners();
                 recomputeViews();
+                try {
+                    const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+                    if (storage && typeof storage.requestSave === 'function') storage.requestSave();
+                } catch (_) {}
             }
         });
         document.addEventListener('click', closeDropdown, true);

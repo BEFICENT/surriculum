@@ -76,10 +76,12 @@ function drop(e, curriculum, dragged_item, course_data, touchPos)
         targetElement = document.elementFromPoint(touchPos.x, touchPos.y);
     }
     let container = getAncestor(targetElement, "container_semester");
+    let reordered = false;
     if(container)
     {
         let target_id = extractNumericValue(container.id);
         let dragged_id = extractNumericValue(dragged_item.id);
+        reordered = Number.isFinite(target_id) && Number.isFinite(dragged_id) && target_id !== dragged_id;
 
         if(target_id > dragged_id)
         {
@@ -123,5 +125,11 @@ function drop(e, curriculum, dragged_item, course_data, touchPos)
         }
     } catch(err) {
         // ignore
+    }
+    if (reordered) {
+        try {
+            const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+            if (storage && typeof storage.requestSave === 'function') storage.requestSave();
+        } catch (_) {}
     }
 }

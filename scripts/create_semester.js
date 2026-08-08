@@ -354,5 +354,9 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
     } catch (err) {
         // Silent failure if curriculum or recalc is undefined
     }
+    try {
+        const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+        if (storage && typeof storage.requestSave === 'function') storage.requestSave();
+    } catch (_) {}
     return container;
 }

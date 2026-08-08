@@ -25,7 +25,7 @@ a time and checked off only after the fix and its verification are complete.
 ## Verified baseline
 
 - [x] JavaScript/static unit gate passes: 207/207 tests.
-- [x] Playwright gate passes all 377 tests.
+- [x] Playwright gate passes all 386 tests.
 - [x] `python tests/scrape_groups_test.py` passes when run directly.
 - [x] `python tests/scrape_coursepages_fallback_test.py` passes: 3/3 tests.
 - [x] Python requirement validation and checked-in manifest integrity checks pass.
@@ -349,8 +349,23 @@ a time and checked off only after the fix and its verification are complete.
   migrate their existing values. Scoped reset is safe now, but namespacing keys
   such as `theme` will also prevent ordinary writes from colliding with another
   app on a shared origin.
-- [ ] Save on mutations with a short debounce and flush on `pagehide` or hidden
+- [x] Save on mutations with a short debounce and flush on `pagehide` or hidden
   visibility so quick closes/mobile backgrounding do not lose recent edits.
+  Completed on 2026-08-08: planner mutations coalesce into a 250 ms snapshot,
+  while the existing two-second save remains as a fallback. Plan/major/admit
+  term changes and plan imports synchronously flush before reloading; reset and
+  active-plan deletion suspend late lifecycle writes so removed namespaces
+  cannot be recreated. Term labels now serialize from the model rather than a
+  transient open editor. Focused browser checks disable the fallback timer and
+  cover page hiding, mobile-style backgrounding, immediate setting reloads,
+  plan import, deletion, reset, partial-write rollback, and stale-page snapshot
+  suppression.
+- [ ] Complete multi-tab isolation for interactive scheduler and
+  transcript/global-metadata writes. Autosave snapshots and main planner writes
+  are bound to the page's captured plan and cannot recreate a plan deleted in
+  another tab, but older helper wrappers still resolve the globally active plan
+  at write time. This is a pre-existing non-blocking follow-up, not a quick-close
+  data-loss regression.
 
 ## GitHub Pages and offline behavior
 

@@ -286,6 +286,15 @@
     return parsed;
   }
 
+  // Read-only liveness check used by delayed save hooks. It must never call
+  // ensureIndex(): doing so after a reset (or a deletion in another tab) would
+  // recreate a default plan while the old page is trying to flush.
+  function hasPlanWithoutCreating(id) {
+    if (!id) return false;
+    const idx = loadIndex();
+    return !!(idx && idx.plans.some((plan) => plan && plan.id === id));
+  }
+
   function saveIndex(idx) {
     localStorage.setItem(INDEX_KEY, JSON.stringify(idx));
   }
@@ -377,6 +386,9 @@
     if (failedKeys.length) {
       throw new Error(`Could not remove ${failedKeys.length} SUrriculum storage item(s).`);
     }
+    // A visibility/pagehide event may follow the reset. Disable delayed saves
+    // before yielding so they cannot recreate the removed plan namespace.
+    suspendSaves();
     return ownedKeys;
   }
 
@@ -427,7 +439,106 @@
     localStorage.setItem(MIGRATED_KEY, didAnything ? nowIso() : 'noop');
   }
 
+  const SAVE_DEBOUNCE_MS = 250;
   const saveHooks = [];
+  let pendingSaveTimer = null;
+  let savePending = false;
+  let savesSuspended = false;
+
+  function clearPendingSaveTimer() {
+    if (pendingSaveTimer !== null) {
+      clearTimeout(pendingSaveTimer);
+      pendingSaveTimer = null;
+    }
+  }
+
+  function flushSaves(options) {
+    const opts = options || {};
+    clearPendingSaveTimer();
+    if (savesSuspended || saveHooks.length === 0) return true;
+    if (opts.onlyIfPending && !savePending) return true;
+
+    let succeeded = true;
+    saveHooks.forEach((entry) => {
+      // A stale tab must not resurrect a plan deleted/reset elsewhere.
+      if (entry.planId && !hasPlanWithoutCreating(entry.planId)) return;
+      try {
+        if (entry.fn() === false) succeeded = false;
+      } catch (err) {
+        succeeded = false;
+        try { console.error('Failed to save plan changes:', err); } catch (_) {}
+      }
+    });
+    if (succeeded) savePending = false;
+    return succeeded;
+  }
+
+  function requestSave() {
+    if (savesSuspended || saveHooks.length === 0) return false;
+    savePending = true;
+    clearPendingSaveTimer();
+    pendingSaveTimer = setTimeout(() => {
+      pendingSaveTimer = null;
+      flushSaves();
+    }, SAVE_DEBOUNCE_MS);
+    return true;
+  }
+
+  function suspendSaves() {
+    clearPendingSaveTimer();
+    savePending = false;
+    savesSuspended = true;
+  }
+
+  function showSaveFailure() {
+    try {
+      uiModal.alert(
+        'Could not save changes',
+        '<p>Your latest planner changes could not be saved in this browser. The requested switch or export was cancelled.</p>'
+      );
+    } catch (_) {
+      try { console.error('Could not save the latest planner changes.'); } catch (_) {}
+    }
+  }
+
+  const SNAPSHOT_KEYS = ['curriculum', 'grades', 'gradingBases', 'dates'];
+
+  function setPlanSnapshot(snapshot, planId) {
+    const pid = planId || getActivePlanId();
+    if (planId && !hasPlanWithoutCreating(pid)) {
+      throw new Error('The plan is no longer available.');
+    }
+    if (!snapshot || typeof snapshot !== 'object') {
+      throw new Error('Invalid planner snapshot.');
+    }
+
+    const previous = new Map();
+    SNAPSHOT_KEYS.forEach((key) => {
+      previous.set(key, localStorage.getItem(planKey(pid, key)));
+    });
+
+    try {
+      SNAPSHOT_KEYS.forEach((key) => {
+        if (typeof snapshot[key] !== 'string') {
+          throw new Error(`Invalid planner snapshot field: ${key}`);
+        }
+        localStorage.setItem(planKey(pid, key), snapshot[key]);
+      });
+      touchUpdated(pid);
+      return true;
+    } catch (err) {
+      // localStorage has no transaction primitive. Restore the prior parallel
+      // arrays on a partial write so a quota failure cannot leave them skewed.
+      SNAPSHOT_KEYS.forEach((key) => {
+        try {
+          const oldValue = previous.get(key);
+          if (oldValue === null) localStorage.removeItem(planKey(pid, key));
+          else localStorage.setItem(planKey(pid, key), oldValue);
+        } catch (_) {}
+      });
+      throw err;
+    }
+  }
 
   function normalizePlanName(name) {
     const trimmed = String(name || '').trim().replace(/\s+/g, ' ');
@@ -1342,13 +1453,15 @@
             closeDropdown();
             return;
           }
-          try {
-            for (const fn of saveHooks) {
-              try { fn(); } catch (_) {}
-            }
-          } catch (_) {}
+          if (!flushSaves()) {
+            showSaveFailure();
+            return;
+          }
           const ok = planStorage.setActivePlanId(p.id);
-          if (ok) location.reload();
+          if (ok) {
+            suspendSaves();
+            location.reload();
+          }
         });
 
         const actions = document.createElement('div');
@@ -1463,11 +1576,10 @@
         }
         // Flush the current plan before creating/switching. This avoids the
         // autosave loop writing the current plan into the newly active plan.
-        try {
-          for (const fn of saveHooks) {
-            try { fn(); } catch (_) {}
-          }
-        } catch (_) {}
+        if (!flushSaves()) {
+          showSaveFailure();
+          return;
+        }
 
         const currentId = getActivePlanId();
         uiModal
@@ -1487,6 +1599,12 @@
           .then((res) => {
             if (!res) return;
             const { baseName, copySemesters } = res;
+            // The prompt is asynchronous. Flush again immediately before a
+            // duplicate reads storage so the copy includes the latest state.
+            if (!flushSaves()) {
+              showSaveFailure();
+              return;
+            }
             let newId = null;
             if (copySemesters) {
               newId = planStorage.duplicatePlan(currentId, baseName);
@@ -1494,8 +1612,10 @@
               newId = planStorage.createPlan(baseName);
             }
             if (newId) {
-              planStorage.setActivePlanId(newId);
-              location.reload();
+              if (planStorage.setActivePlanId(newId)) {
+                suspendSaves();
+                location.reload();
+              }
             }
           })
           .catch(() => {});
@@ -1511,8 +1631,24 @@
       importInput.addEventListener('change', () => {
         const file = importInput.files && importInput.files[0];
         if (!file) return;
-        planStorage.importPlanFile(file, { activate: true })
-          .then(() => location.reload())
+        if (!flushSaves()) {
+          showSaveFailure();
+          return;
+        }
+        planStorage.importPlanFile(file, { activate: false })
+          .then((importedId) => {
+            // FileReader is asynchronous; capture any edits made while it was
+            // reading before switching away from the current plan.
+            if (!flushSaves()) {
+              planStorage.deletePlan(importedId);
+              showSaveFailure();
+              return;
+            }
+            if (planStorage.setActivePlanId(importedId)) {
+              suspendSaves();
+              location.reload();
+            }
+          })
           .catch((err) => uiModal.alert('Import failed', `<p>${escapeHtml(err && err.message ? err.message : 'Failed to import plan.')}</p>`));
       });
     }
@@ -1550,8 +1686,17 @@
       saveIndex(idx);
       return true;
     },
-    registerSaveHook(fn) {
-      if (typeof fn === 'function') saveHooks.push(fn);
+    registerSaveHook(fn, options) {
+      if (typeof fn !== 'function') return false;
+      const opts = options || {};
+      saveHooks.push({ fn, planId: opts.planId || null });
+      return true;
+    },
+    requestSave,
+    flushSaves,
+    suspendSaves,
+    hasPlan(id) {
+      return hasPlanWithoutCreating(id);
     },
     clearAllAppData,
     getItem(key, planId) {
@@ -1575,8 +1720,12 @@
         return '[]';
       }
     },
+    setSnapshot: setPlanSnapshot,
     setItem(key, value, planId) {
       const pid = planId || getActivePlanId();
+      if (planId && !hasPlanWithoutCreating(pid)) {
+        throw new Error('The plan is no longer available.');
+      }
       let storedValue = value;
       if (String(key || '').startsWith('customCourses_')) {
         const program = String(key).slice('customCourses_'.length);
@@ -1591,11 +1740,16 @@
       }
       localStorage.setItem(planKey(pid, key), storedValue);
       touchUpdated(pid);
+      return true;
     },
     removeItem(key, planId) {
       const pid = planId || getActivePlanId();
+      if (planId && !hasPlanWithoutCreating(pid)) {
+        throw new Error('The plan is no longer available.');
+      }
       localStorage.removeItem(planKey(pid, key));
       touchUpdated(pid);
+      return true;
     },
     createPlan(name) {
       const n = normalizePlanName(name) || 'New Plan';
@@ -1649,11 +1803,7 @@
       // session loaded. Flush it before removing that namespace; running the
       // hook afterwards would recreate orphaned keys for the deleted plan.
       if (idx.activeId === id) {
-        try {
-          for (const fn of saveHooks) {
-            try { fn(); } catch (_) {}
-          }
-        } catch (_) {}
+        flushSaves();
       }
 
       // Remove all plan-scoped keys for this plan id
@@ -1668,6 +1818,7 @@
       if (idx.activeId === id) {
         idx.activeId = idx.plans[0].id;
         saveIndex(idx);
+        suspendSaves();
         location.reload();
         reloaded = true;
       } else {
@@ -1693,8 +1844,9 @@
     exportPlan(id) {
       const pid = id || getActivePlanId();
       if (pid === getActivePlanId()) {
-        for (const fn of saveHooks) {
-          try { fn(); } catch (_) {}
+        if (!flushSaves()) {
+          showSaveFailure();
+          return false;
         }
       }
       const obj = buildExportObject(pid);
@@ -1737,6 +1889,17 @@
   initStorageSchemaVersion();
   window.planStorage = planStorage;
   window.uiModal = window.uiModal || uiModal;
+
+  // Flush synchronously when a tab is backgrounded or leaves the page. These
+  // events do not force a reload and remain safe with the back/forward cache.
+  if (typeof window !== 'undefined') {
+    window.addEventListener('pagehide', () => flushSaves({ onlyIfPending: true }));
+  }
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flushSaves({ onlyIfPending: true });
+    });
+  }
 
   if (typeof document !== 'undefined') {
     document.addEventListener('DOMContentLoaded', initPlanUi);

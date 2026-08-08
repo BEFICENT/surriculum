@@ -1598,12 +1598,19 @@ function grading_bases_serializator(curriculum)
             })));
 }
 
-function dates_serializator()
+function dates_serializator(curriculum)
 {
-    const dates = Array.from(document.querySelectorAll('.date')).map((date) => {
-        const label = date.querySelector('p');
-        return label ? String(label.textContent || '') : '...';
-    });
+    // The model is authoritative. While a term is being edited, the UI
+    // temporarily replaces its <p> with a <select>; reading that transient DOM
+    // used to persist "..." if the tab was backgrounded at that moment.
+    const semesters = curriculum && Array.isArray(curriculum.semesters)
+        ? curriculum.semesters : null;
+    const dates = semesters
+        ? semesters.map((semester) => String((semester && semester.termName) || ''))
+        : Array.from(document.querySelectorAll('.date')).map((date) => {
+            const label = date.querySelector('p');
+            return label ? String(label.textContent || '') : '';
+        });
     return JSON.stringify(dates);
 }
 

@@ -12,6 +12,7 @@ let initial_major_chosen = 'CS'
 let saveInterval;
 let _serviceWorkerRegistration = null;
 let _serviceWorkerWarmTimer = null;
+let _planWriteFailed = false;
 
 const _planIdForSession = (() => {
     try {
@@ -40,25 +41,72 @@ function planSetItem(key, value) {
         try {
             window.planStorage.setItem(key, value, _planIdForSession || undefined);
             queueServiceWorkerPlanWarmup(key);
+            return true;
         } catch (err) {
+            _planWriteFailed = true;
             try { console.error('Failed to save plan data:', err); } catch (_) {}
+            return false;
         }
-        return;
     }
     try {
         localStorage.setItem(key, value);
         queueServiceWorkerPlanWarmup(key);
-    } catch (_) {}
+        return true;
+    } catch (_) {
+        _planWriteFailed = true;
+        return false;
+    }
 }
 
 function planRemoveItem(key) {
     try {
         if (typeof window !== 'undefined' && window.planStorage && typeof window.planStorage.removeItem === 'function') {
             window.planStorage.removeItem(key, _planIdForSession || undefined);
-            return;
+            return true;
         }
+    } catch (_) {
+        _planWriteFailed = true;
+        return false;
+    }
+    try {
+        localStorage.removeItem(key);
+        return true;
+    } catch (_) {
+        _planWriteFailed = true;
+        return false;
+    }
+}
+
+function requestPlanSave() {
+    try {
+        const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+        return !!(storage && typeof storage.requestSave === 'function' && storage.requestSave());
     } catch (_) {}
-    try { localStorage.removeItem(key); } catch (_) {}
+    return false;
+}
+
+function flushPlanSaves() {
+    try {
+        const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+        if (!storage || typeof storage.flushSaves !== 'function') return true;
+        return storage.flushSaves() !== false;
+    } catch (_) {
+        return false;
+    }
+}
+
+function reloadAfterPlanFlush() {
+    if (_planWriteFailed || !flushPlanSaves()) {
+        try {
+            uiAlert(
+                'Could not save changes',
+                '<p>Your latest planner changes could not be saved in this browser. The requested change was cancelled.</p>'
+            );
+        } catch (_) {}
+        return false;
+    }
+    location.reload();
+    return true;
 }
 
 function termCodeForServiceWorker(value) {
@@ -542,7 +590,7 @@ function SUrriculum(major_chosen_by_user) {
             change_major_element.value = major_chosen_by_user;
             change_major_element.addEventListener('change', function(e) {
                 planSetItem('major', e.target.value);
-                location.reload();
+                reloadAfterPlanFlush();
             });
         }
         if (etElem && etElem.tagName === 'SELECT') {
@@ -550,7 +598,7 @@ function SUrriculum(major_chosen_by_user) {
             etElem.value = entryTermName;
             etElem.addEventListener('change', function(e) {
                 planSetItem('entryTerm', e.target.value);
-                location.reload();
+                reloadAfterPlanFlush();
             });
         }
         if (dmElem && dmElem.tagName === 'SELECT') {
@@ -567,7 +615,7 @@ function SUrriculum(major_chosen_by_user) {
                     // Collapse the DM controls after the user explicitly sets it to None.
                     planSetItem('showDoubleMajorControls', 'false');
                 }
-                location.reload();
+                reloadAfterPlanFlush();
             });
         }
         if (etDmElem && etDmElem.tagName === 'SELECT') {
@@ -575,7 +623,7 @@ function SUrriculum(major_chosen_by_user) {
             etDmElem.value = entryTermDMName;
             etDmElem.addEventListener('change', function(e) {
                 planSetItem('entryTermDM', e.target.value);
-                location.reload();
+                reloadAfterPlanFlush();
             });
         }
         const bindMinorTermSelect = (elem, key, value) => {
@@ -586,7 +634,7 @@ function SUrriculum(major_chosen_by_user) {
                 planSetItem(key, e.target.value);
                 // Keep legacy key aligned to the first minor term.
                 if (key === 'entryTermMinor1') planSetItem('entryTermMinor', e.target.value);
-                location.reload();
+                reloadAfterPlanFlush();
             });
         };
         bindMinorTermSelect(etMinor1Elem, 'entryTermMinor1', entryTermMinor1Name);
@@ -771,7 +819,7 @@ function SUrriculum(major_chosen_by_user) {
                     else setMinor('minor3', v);
                     planSetItem('showMinorControls', 'true');
                 }
-                location.reload();
+                reloadAfterPlanFlush();
             };
 
             if (minor1Select) {
@@ -1497,13 +1545,8 @@ function SUrriculum(major_chosen_by_user) {
                 }
             } catch (_) {}
 
-            try {
-                if (typeof serializator === 'function') {
-                    planSetItem('curriculum', serializator(curriculum));
-                }
-            } catch (_) {}
-
             refreshCourseDatalistsAndTypes();
+            requestPlanSave();
             return true;
         }
 
@@ -2030,12 +2073,8 @@ function SUrriculum(major_chosen_by_user) {
                     }
                 }
                 // Update any open dropdowns so the new or updated course appears as an option
-                try {
-                    if (typeof serializator === 'function') {
-                        planSetItem('curriculum', serializator(curriculum));
-                    }
-                } catch (_) {}
                 refreshCourseDatalistsAndTypes();
+                requestPlanSave();
                 // Remove modal
                 overlay.remove();
                 // If a double major is selected, check if this course exists
@@ -2262,25 +2301,52 @@ function SUrriculum(major_chosen_by_user) {
     }
     // Ensure the ghost semester container is appended after reloading existing semesters
     ensureGhostSemester();
-    //Save:
-    saveInterval = setInterval(function() {
-        planSetItem("curriculum", serializator(curriculum));
-        planSetItem("grades", grades_serializator(curriculum));
-        planSetItem("gradingBases", grading_bases_serializator(curriculum));
-        planSetItem("dates", dates_serializator());
-    }, 2000);
+    // Capture every parallel array before the first write, then save the whole
+    // planner snapshot through one hook. This keeps debounce, lifecycle, plan
+    // switching, and the 2-second fallback on the same persistence path.
+    const savePlanSnapshot = function() {
+        let snapshot;
+        try {
+            snapshot = {
+                curriculum: serializator(curriculum),
+                grades: grades_serializator(curriculum),
+                gradingBases: grading_bases_serializator(curriculum),
+                dates: dates_serializator(curriculum),
+            };
+        } catch (err) {
+            try { console.error('Failed to serialize planner state:', err); } catch (_) {}
+            return false;
+        }
+        try {
+            const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+            if (storage && typeof storage.setSnapshot === 'function') {
+                return storage.setSnapshot(snapshot, _planIdForSession || undefined) !== false;
+            }
+        } catch (err) {
+            try { console.error('Failed to save planner snapshot:', err); } catch (_) {}
+            return false;
+        }
+        return [
+            planSetItem('curriculum', snapshot.curriculum),
+            planSetItem('grades', snapshot.grades),
+            planSetItem('gradingBases', snapshot.gradingBases),
+            planSetItem('dates', snapshot.dates),
+        ].every(Boolean);
+    };
 
-    // Allow the plan manager to force-flush state before switching/exporting.
     try {
         if (typeof window !== 'undefined' && window.planStorage && typeof window.planStorage.registerSaveHook === 'function') {
-            window.planStorage.registerSaveHook(function() {
-                planSetItem("curriculum", serializator(curriculum));
-                planSetItem("grades", grades_serializator(curriculum));
-                planSetItem("gradingBases", grading_bases_serializator(curriculum));
-                planSetItem("dates", dates_serializator());
-            });
+            window.planStorage.registerSaveHook(savePlanSnapshot, { planId: _planIdForSession });
         }
     } catch (_) {}
+
+    // Retain the existing polling save as a conservative fallback for any
+    // mutation path that has not yet requested a debounced save explicitly.
+    saveInterval = setInterval(function() {
+        const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+        if (storage && typeof storage.flushSaves === 'function') storage.flushSaves();
+        else savePlanSnapshot();
+    }, 2000);
 
     //createSemeter(false, ["MATH101","MATH102","MATH201","MATH203","IF100","TLL101"], curriculum, course_data)
     //createSemeter(false, ["NS101","SPS101","SPS102","AL102","TLL102","HIST192","PROJ201", "NS102", "HIST191", "CIP101N", "CS210", "MATH306", "CS201", "CS204", "MATH204"], curriculum, course_data)
@@ -2754,14 +2820,6 @@ function SUrriculum(major_chosen_by_user) {
 
             try { planRemoveItem(keyMain); } catch (_) {}
             if (keyDM) { try { planRemoveItem(keyDM); } catch (_) {} }
-            // Persist the updated curriculum to localStorage
-            try {
-                if (typeof serializator === 'function') {
-                    planSetItem('curriculum', serializator(curriculum));
-                }
-            } catch (ex) {
-                // ignore
-            }
             // Recalculate effective types and update datalist
             try {
                 if (typeof curriculum.recalcEffectiveTypes === 'function') {
@@ -2780,7 +2838,7 @@ function SUrriculum(major_chosen_by_user) {
                 // ignore
             }
             // Reload the page to ensure UI reflects removed courses
-            location.reload();
+            reloadAfterPlanFlush();
         }
 
         // Get from transcript:

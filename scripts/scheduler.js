@@ -5217,6 +5217,11 @@
 
         refreshPlannerTotalsForContainer(loc.container, loc.semesterObj);
 
+        try {
+          const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+          if (storage && typeof storage.requestSave === 'function') storage.requestSave();
+        } catch (_) {}
+
         // Refresh scheduler planner-semester pills.
         try {
           const nextCourses = (loc.semesterObj && Array.isArray(loc.semesterObj.courses))

@@ -1387,6 +1387,13 @@ function importParsedCourses(parsedCourses, courseData, curriculum) {
     stats.skippedCourseCount = stats.skippedCourses.length;
     stats.changedCourses = stats.importedCourses + stats.updatedCourseCount;
 
+    // Imports may update only grades/bases or remove an empty temporary term,
+    // so semester/course creation hooks alone do not cover every mutation.
+    try {
+        const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+        if (storage && typeof storage.requestSave === 'function') storage.requestSave();
+    } catch (_) {}
+
     // Finally, return both the import statistics and any pending custom
     // courses.  Do not return prematurely inside loops; returning here
     // ensures we process all semesters and recalc credits before

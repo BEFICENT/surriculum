@@ -2019,12 +2019,21 @@ function s_curriculum()
     };
     this.deleteSemester = function(id)
     {
+        let removed = false;
         for(let i = 0; i < this.semesters.length; i++)
         {
             if(this.semesters[i].id == id)
             {
-                this.semesters.splice(i,1)
+                this.semesters.splice(i,1);
+                removed = true;
+                break;
             }
+        }
+        if (removed) {
+            try {
+                const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+                if (storage && typeof storage.requestSave === 'function') storage.requestSave();
+            } catch (_) {}
         }
     }
     this.print = function()

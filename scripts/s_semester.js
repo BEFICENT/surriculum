@@ -47,6 +47,10 @@ function s_semester(id, course_data)
             }
         }
         this.courses.push(course);
+        try {
+            const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+            if (storage && typeof storage.requestSave === 'function') storage.requestSave();
+        } catch (_) {}
     }
     this.deleteCourse = function(id_c)
     {
@@ -104,6 +108,10 @@ function s_semester(id, course_data)
                 this.totalECTS -= ects;
                 this.totalCredit -= credit;
                 this.courses.splice(a,1);
+                try {
+                    const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+                    if (storage && typeof storage.requestSave === 'function') storage.requestSave();
+                } catch (_) {}
                 return;
             }
         }
