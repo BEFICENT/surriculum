@@ -28,15 +28,16 @@ a time and checked off only after the fix and its verification are complete.
 ## Verified baseline
 
 - [x] JavaScript/static unit gate passes: 235/235 tests.
-- [ ] The current Chromium Playwright inventory is 454 tests (436 desktop and
+- [ ] The current Chromium Playwright inventory is 464 tests (446 desktop and
   18 mobile). On 2026-08-08, the then-current 451-test local run plus a
   failed-case rerun cleared 448 scenarios; the three remaining cases are the
   mounted GitHub-Pages/offline service-worker checks, which were blocked by
   repeated Windows localhost `ERR_NETWORK_ACCESS_DENIED`/`WinError 10053`
   failures before their app assertions could run. The three new narrow-mobile
   layout regressions pass at 320, 360, and default mobile widths. Rerun the full
-  454-test gate in a stable environment before release. The new language-course
-  focused browser suites pass 31/31.
+  464-test gate in a stable environment before release. The new language-course
+  focused browser suites pass 31/31, and the program-scoped custom-category
+  suite passes 9/9.
 - [x] Focused cross-browser gate passes: 2/2 critical flows (Firefox and
   WebKit), also with zero retries.
 - [x] `python tests/scrape_groups_test.py` passes when run directly.
@@ -392,6 +393,14 @@ a time and checked off only after the fix and its verification are complete.
   leaves the form open with a visible error instead of pretending the course was
   removed. Ordinary custom-course editing retains its non-destructive Cancel
   behavior, with browser coverage for both keep and remove paths across reload.
+- [x] Scope custom-course categories to explicit program codes, including
+  minors. Completed on 2026-08-09: selectors are labelled `<CODE> Category` for
+  every distinct selected main, double-major, and minor program. Existing
+  `customCourses_<PROGRAM>` storage remains export-compatible, categories
+  follow their program when roles change, official catalog rows remain
+  authoritative, and fractional minor credits are preserved. A simulated
+  later-key write rejection verifies best-effort restoration of earlier
+  selected-program writes without changing the planner occurrence.
 - [x] Give unsuccessful attempts a distinct Summary state instead of placing
   them in the generic "untaken" bucket. Completed on 2026-08-08: unsuccessful
   rows receive their own red state, text label, data attribute, and legend entry;

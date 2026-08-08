@@ -214,9 +214,9 @@ test.describe('academic records parsing (desktop)', () => {
     const level = review.locator('.cc-language-level');
     await expect(level, 'an exchange LANG course is explicitly reviewable').toBeVisible();
     await expect(level, 'a number/title guess must not silently classify it').toHaveValue('');
-    await expect(review.locator('.cc-row').filter({ hasText: 'Category (EL_Type)' }).locator('select'))
+    await expect(review.getByRole('combobox', { name: /^MAN Category:?$/ }))
       .toHaveValue('free');
-    await expect(review.locator('.cc-row').filter({ hasText: 'Double Major Category (CS)' }).locator('select'))
+    await expect(review.getByRole('combobox', { name: /^CS Category:?$/ }))
       .toHaveValue('unknown');
 
     await review.getByRole('button', { name: 'Save & Keep', exact: true }).click();
@@ -240,6 +240,93 @@ test.describe('academic records parsing (desktop)', () => {
     expect(result.main).toMatchObject({ EL_Type: 'free', Language_Level: 'other' });
     expect(result.dm).toMatchObject({ EL_Type: 'unknown', Language_Level: 'other' });
     expect(result.grade, 'the transcript grade is never replaced with T').toBe('B+');
+  });
+
+  test('Save & Keep on LANG re-import preserves each program classification and refreshes transcript fields', async ({ page }) => {
+    const code = 'LANG240';
+    const priorByProgram = {
+      MAN: {
+        Major: 'LANG', Code: '240', Course_Name: 'Prior MAN title',
+        ECTS: '4', Engineering: 0.5, Basic_Science: 0.25, SU_credit: '2',
+        Faculty: 'SBS', Faculty_Course: 'No', EL_Type: 'area', Language_Level: 'other',
+      },
+      CS: {
+        Major: 'LANG', Code: '240', Course_Name: 'Prior CS title',
+        ECTS: '5', Engineering: 1.5, Basic_Science: 0.75, SU_credit: '2.5',
+        Faculty: 'FENS', Faculty_Course: 'No', EL_Type: 'core', Language_Level: 'other',
+      },
+      'FIN-MINOR': {
+        Major: 'LANG', Code: '240', Course_Name: 'Prior FIN title',
+        ECTS: '3', Engineering: 0.25, Basic_Science: 0.5, SU_credit: '1.5',
+        Faculty: 'FASS', Faculty_Course: 'No', EL_Type: 'required', Language_Level: 'other',
+      },
+    };
+    await seedPlan(page, {
+      major: 'MAN', entryTerm: 'Fall 2024-2025',
+      doubleMajor: 'CS', entryTermDM: 'Fall 2024-2025',
+      minor1: 'FIN-MINOR', entryTermMinor1: 'Fall 2024-2025',
+      customCourses: {
+        MAN: [priorByProgram.MAN],
+        CS: [priorByProgram.CS],
+        'FIN-MINOR': [priorByProgram['FIN-MINOR']],
+      },
+      curriculum: [], grades: [], dates: [],
+    });
+    await page.waitForFunction(() => typeof course_data !== 'undefined'
+      && Array.isArray(course_data)
+      && course_data.some((course) => `${course.Major}${course.Code}` === 'LANG240')
+      && window.curriculum
+      && Array.isArray(window.curriculum.minors)
+      && window.curriculum.minors.includes('FIN-MINOR'));
+
+    const refreshedTitle = 'Advanced Swedish Abroad';
+    const review = await importTranscriptCustomCourseForReview(page, code, {
+      title: refreshedTitle, grade: 'A-',
+    });
+    await expect(review.getByRole('combobox', { name: /^MAN Category:?$/ })).toHaveValue('area');
+    await expect(review.getByRole('combobox', { name: /^CS Category:?$/ })).toHaveValue('core');
+    await expect(review.getByRole('combobox', { name: /^FIN-MINOR Category:?$/ }))
+      .toHaveValue('required');
+    await expect(review.getByRole('combobox', { name: 'Language level:' })).toHaveValue('other');
+
+    await review.getByRole('button', { name: 'Save & Keep', exact: true }).click();
+    await expect(review).toBeHidden();
+
+    const saved = await page.evaluate((target) => {
+      const read = (program) => JSON.parse(
+        window.planStorage.getItem(`customCourses_${program}`) || '[]',
+      ).find((course) => `${course.Major}${course.Code}` === target);
+      const occurrence = (window.curriculum.semesters || [])
+        .flatMap((semester) => semester.courses || [])
+        .find((course) => course.code === target);
+      return {
+        main: read('MAN'),
+        dm: read('CS'),
+        minor: read('FIN-MINOR'),
+        occurrence: occurrence && {
+          grade: occurrence.grade,
+          suCredits: Number(occurrence.SU_credit),
+          ects: Number(occurrence.ECTS),
+        },
+      };
+    }, code);
+
+    expect(saved.main).toMatchObject({
+      Course_Name: refreshedTitle, SU_credit: '3', ECTS: '6',
+      EL_Type: 'area', Engineering: 0.5, Basic_Science: 0.25,
+      Faculty: 'SBS', Language_Level: 'other',
+    });
+    expect(saved.dm).toMatchObject({
+      Course_Name: refreshedTitle, SU_credit: '3', ECTS: '6',
+      EL_Type: 'core', Engineering: 1.5, Basic_Science: 0.75,
+      Faculty: 'FENS', Language_Level: 'other',
+    });
+    expect(saved.minor).toMatchObject({
+      Course_Name: refreshedTitle, SU_credit: '3', ECTS: '6',
+      EL_Type: 'required', Engineering: 0.25, Basic_Science: 0.5,
+      Faculty: 'FASS', Language_Level: 'other',
+    });
+    expect(saved.occurrence).toEqual({ grade: 'A-', suCredits: 3, ects: 6 });
   });
 
   test('skipping LANG review rolls back every contextual definition without touching catalog rows', async ({ page }) => {

@@ -182,7 +182,11 @@ function suggestedTranscriptLanguageLevel(rawTitle) {
 function transcriptSelectedDegreePrograms(curriculum) {
     const programs = [];
     const seen = new Set();
-    [curriculum && curriculum.major, curriculum && curriculum.doubleMajor].forEach((rawProgram) => {
+    const selected = [curriculum && curriculum.major, curriculum && curriculum.doubleMajor];
+    if (curriculum && Array.isArray(curriculum.minors)) {
+        curriculum.minors.forEach((minorCode) => selected.push(minorCode));
+    }
+    selected.forEach((rawProgram) => {
         const program = String(rawProgram || '').trim().toUpperCase();
         if (!program || seen.has(program)) return;
         seen.add(program);
@@ -192,7 +196,11 @@ function transcriptSelectedDegreePrograms(curriculum) {
 }
 
 function transcriptLanguageTypeForProgram(program) {
-    return TRANSCRIPT_FENS_PROGRAMS.has(String(program || '').trim().toUpperCase())
+    const code = String(program || '').trim().toUpperCase();
+    // A minor classification must be explicit in the review form; minor
+    // requirements are too program-specific to infer a free-elective role.
+    if (/-MINOR$/.test(code)) return 'unknown';
+    return TRANSCRIPT_FENS_PROGRAMS.has(code)
         ? 'unknown' : 'free';
 }
 
@@ -1487,16 +1495,22 @@ function importParsedCourses(parsedCourses, courseData, curriculum) {
                         ? transcriptSu : (Number.isFinite(existingSu) ? existingSu : 0);
                     const ects = Number.isFinite(transcriptEcts) && transcriptEcts > 0
                         ? transcriptEcts : (Number.isFinite(existingEcts) ? existingEcts : 0);
+                    // Re-import refreshes transcript-authoritative identity/name/
+                    // credit fields, but an existing program definition owns its
+                    // classification. In particular, do not turn MAN Area, CS
+                    // Core, or a minor Required choice back into an inferred
+                    // default just because the same transcript was imported
+                    // again.
                     const definition = storage.normalizeCustomCourse({
                         Major: identity[1],
                         Code: identity[2],
                         Course_Name: String(course.title || (existing && existing.Course_Name) || normalizedCode),
                         ECTS: String(ects),
-                        Engineering: 0,
-                        Basic_Science: 0,
+                        Engineering: existing ? existing.Engineering : 0,
+                        Basic_Science: existing ? existing.Basic_Science : 0,
                         SU_credit: String(su),
-                        Faculty: '',
-                        EL_Type: transcriptLanguageTypeForProgram(program),
+                        Faculty: existing ? existing.Faculty : '',
+                        EL_Type: existing ? existing.EL_Type : transcriptLanguageTypeForProgram(program),
                         Faculty_Course: 'No',
                         // A title suggestion is only a review-form prefill. It
                         // must not become durable until the user explicitly

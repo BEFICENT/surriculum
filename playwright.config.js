@@ -7,7 +7,10 @@
 const { defineConfig, devices } = require('@playwright/test');
 
 const PORT = 8000;
-const BASE_URL = `http://localhost:${PORT}`;
+// Use the explicit loopback address. On Windows, `localhost` intermittently
+// resolves through a browser/network policy path that rejects otherwise valid
+// local requests with ERR_NETWORK_ACCESS_DENIED.
+const BASE_URL = `http://127.0.0.1:${PORT}`;
 const PAGES_PORT = 8001;
 const PAGES_BASE_URL = `http://127.0.0.1:${PAGES_PORT}/surriculum/`;
 

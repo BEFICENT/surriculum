@@ -26,6 +26,9 @@ unreleased until the branch is merged, published, and tagged.
   undergraduate 34/64/94-credit thresholds.
 - Program-aware Erasmus/exchange `LANG` imports with an explicit reviewed
   beginning/basic versus higher-level classification.
+- Program-code-labelled custom-course categories for the main degree, double
+  major, and every selected minor, with independent classifications retained
+  when program roles change.
 
 ### Changed
 

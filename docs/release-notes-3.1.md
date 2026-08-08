@@ -38,6 +38,14 @@ When an import needs a custom-course definition, its review form now offers
 occurrence and stored custom definition together. Image-only PDFs still require
 a browser **Save as PDF** export, complete HTML, or OCR.
 
+Custom-course categories are now tied to program codes rather than to the
+temporary main/double-major role. The form labels them explicitly, such as
+**CS Category**, **IE Category**, and **FIN-MINOR Category**, and supports every
+distinct selected minor. For an unchanged course code, these choices survive
+role and minor selection changes; when a course is officially listed for the
+active admit term, the catalog's category remains authoritative and the stored
+custom choice stays dormant.
+
 Erasmus/exchange `LANG` rows are now imported for every major without inventing
 a transfer grade: the grade, title, SU credits, and ECTS recorded on the
 transcript are preserved. The review asks whether the course is beginning/basic

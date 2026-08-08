@@ -37,7 +37,7 @@
     'globalCourseMetadata',
   ]);
   const APP_LEGACY_STORAGE_PATTERNS = [
-    /^customCourses_[A-Z][A-Z0-9-]{0,19}$/,
+    /^customCourses_(?=[A-Z0-9-]{1,48}$)[A-Z0-9]+(?:-[A-Z0-9]+)*$/,
     /^schedulerState_\d{6}$/,
     /^dmCustomCoursesCreditsRepairShown_[A-Z][A-Z0-9-]{0,19}$/,
   ];
@@ -680,6 +680,14 @@
     return normalized;
   }
 
+  // Custom-course definitions are scoped by the selected program code. That
+  // namespace includes both ordinary major codes (CS, IE, …) and hyphenated
+  // minor codes (ANALY-MINOR, FIN-MINOR, …), so it cannot use the stricter
+  // major-only validator.
+  function normalizeCustomCourseProgramCode(value, path) {
+    return normalizeMinorCode(value, path);
+  }
+
   function normalizeCourseCode(value, path) {
     if (typeof value !== 'string') importError(path, 'expected a course code');
     const normalized = value.toUpperCase().replace(/\s+/g, '');
@@ -991,7 +999,7 @@
     let totalCourses = 0;
     const out = {};
     programs.forEach((programKey) => {
-      const program = normalizeProgramCode(programKey, `${path}.${String(programKey).slice(0, 80)}`);
+      const program = normalizeCustomCourseProgramCode(programKey, `${path}.${String(programKey).slice(0, 80)}`);
       if (hasOwn(out, program)) importError(path, 'contains duplicate normalized program codes');
       const list = map[programKey];
       if (!Array.isArray(list)) importError(`${path}.${program}`, 'expected an array of custom courses');
@@ -1345,7 +1353,7 @@
             state.customCourses[program] = validateCustomCourses(
               { [program]: parsed },
               `stored custom courses.${program}`
-            )[normalizeProgramCode(program, 'stored custom-course program')];
+            )[normalizeCustomCourseProgramCode(program, 'stored custom-course program')];
           } catch (err) {
             try { console.warn('Ignoring invalid stored custom courses during export:', err); } catch (_) {}
           }
@@ -1873,7 +1881,7 @@
         const program = String(key).slice('customCourses_'.length);
         const parsed = JSON.parse(raw);
         const normalized = validateCustomCourses({ [program]: parsed }, `stored custom courses.${program}`);
-        return JSON.stringify(normalized[normalizeProgramCode(program, 'stored custom-course program')]);
+        return JSON.stringify(normalized[normalizeCustomCourseProgramCode(program, 'stored custom-course program')]);
       } catch (err) {
         try { console.warn('Ignoring invalid stored custom courses:', err); } catch (_) {}
         return '[]';
@@ -1890,7 +1898,7 @@
         const program = String(key).slice('customCourses_'.length);
         const parsed = JSON.parse(String(value || ''));
         const normalized = validateCustomCourses({ [program]: parsed }, `custom courses.${program}`);
-        storedValue = JSON.stringify(normalized[normalizeProgramCode(program, 'custom-course program')]);
+        storedValue = JSON.stringify(normalized[normalizeCustomCourseProgramCode(program, 'custom-course program')]);
       } else if (String(key || '') === 'globalCourseMetadata') {
         storedValue = JSON.stringify(validateGlobalCourseMetadata(
           JSON.parse(String(value || '')),
@@ -2043,7 +2051,7 @@
       return validateCustomCourse(course, 'custom course');
     },
     normalizeCustomCourseList(program, list) {
-      const programCode = normalizeProgramCode(program, 'custom course program');
+      const programCode = normalizeCustomCourseProgramCode(program, 'custom course program');
       const normalized = validateCustomCourses({ [programCode]: list }, 'custom courses');
       return normalized[programCode];
     },

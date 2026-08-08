@@ -107,10 +107,21 @@ function computeMinorAllocation(curriculum, minorCode, options) {
     const req = reqMap ? reqMap[minorCode] : null;
     const dataByCode = curriculum && curriculum.minorCourseDataByCode ? curriculum.minorCourseDataByCode : {};
     const courseData = dataByCode ? dataByCode[minorCode] : null;
+    const catalogCodesByMinor = curriculum && curriculum.minorCatalogCodeSetsByCode
+        ? curriculum.minorCatalogCodeSetsByCode : {};
+    const officialCatalogCodes = catalogCodesByMinor && catalogCodesByMinor[minorCode] instanceof Set
+        ? catalogCodesByMinor[minorCode] : null;
 
     const parseInt0 = (v) => {
         const n = parseInt(v || '0', 10);
         return isNaN(n) ? 0 : n;
+    };
+    const parseCredit0 = (v) => {
+        try {
+            if (typeof parseCreditValue === 'function') return parseCreditValue(v);
+        } catch (_) {}
+        const n = Number.parseFloat(v || '0');
+        return Number.isFinite(n) ? n : 0;
     };
     const normalizeCode = (v) => String(v || '').toUpperCase().replace(/\s+/g, '');
 
@@ -215,8 +226,12 @@ function computeMinorAllocation(curriculum, minorCode, options) {
     for (const code of taken) {
         const rec = courseByCode.get(code);
         if (!rec) continue;
-        const baseCat = fullOrder.includes(rec.__baseCat) ? rec.__baseCat : 'free';
-        const credit = parseInt0(rec.SU_credit);
+        // A stored overlay may deliberately classify a course as N/A (none or
+        // unknown). Do not silently turn that fail-closed choice into minor free
+        // credit. Minor requirements currently allocate only these four pools.
+        if (!fullOrder.includes(rec.__baseCat)) continue;
+        const baseCat = rec.__baseCat;
+        const credit = parseCredit0(rec.SU_credit);
         takenMinorCourses.push({ code, baseCat, credit,
             progressState: progressStateByCode.get(code) || 'earned' });
     }
@@ -273,7 +288,14 @@ function computeMinorAllocation(curriculum, minorCode, options) {
         if (catKey === 'required' && cfg.allListedRequired) {
             const eq = Array.isArray(cfg.equivalents) ? cfg.equivalents : [];
             const eqFlat = new Set(eq.flat().map(x => normalizeCode(x)));
-            const poolCodes = pools.required || [];
+            // `allListedRequired` names the university's official required
+            // list. A user-added Required overlay may satisfy generic count/SU
+            // minima, but it must not make itself a newly mandatory named
+            // course. Older injected/test data without an official-code set
+            // retains the historical behavior.
+            const poolCodes = (pools.required || []).filter((code) =>
+                !officialCatalogCodes || officialCatalogCodes.has(code)
+            );
             for (let i = 0; i < poolCodes.length; i++) {
                 const code = poolCodes[i];
                 if (eqFlat.has(code)) continue;

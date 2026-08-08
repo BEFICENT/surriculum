@@ -783,6 +783,23 @@ function SUrriculum(major_chosen_by_user) {
             ensureSelect(minor1Select, saved1);
             ensureSelect(minor2Select, saved2);
             ensureSelect(minor3Select, saved3);
+            const updateMinorOptionAvailability = () => {
+                const selects = [minor1Select, minor2Select, minor3Select].filter(Boolean);
+                selects.forEach((select) => {
+                    const selectedElsewhere = new Set(selects
+                        .filter((other) => other !== select)
+                        .map((other) => String(other.value || ''))
+                        .filter(Boolean));
+                    Array.from(select.options).forEach((option) => {
+                        // Preserve an already-selected duplicate from an older
+                        // plan, but prevent users from creating a new duplicate.
+                        option.disabled = !!option.value
+                            && option.value !== select.value
+                            && selectedElsewhere.has(option.value);
+                    });
+                });
+            };
+            updateMinorOptionAvailability();
 
             // Visibility: if no minors selected, obey preference; otherwise show
             // the rows needed to display the selected minors.
@@ -901,7 +918,10 @@ function SUrriculum(major_chosen_by_user) {
         if (stored) {
             const parsed = JSON.parse(stored);
             if (Array.isArray(parsed)) {
-                primaryCustomCourseRecords = normalizeCustomCourseListForStorage(major_chosen_by_user, parsed);
+                primaryCustomCourseRecords = normalizeCustomCourseListForStorage(major_chosen_by_user, parsed)
+                    .filter(function(record) {
+                        return !primaryCatalogCodeSet.has(getCombinedCodeFromCourseObj(record));
+                    });
                 course_data = course_data.concat(primaryCustomCourseRecords);
             }
         }
@@ -933,7 +953,10 @@ function SUrriculum(major_chosen_by_user) {
             if (storedDM) {
                 const parsedDM = JSON.parse(storedDM);
                 if (Array.isArray(parsedDM)) {
-                    doubleMajorCustomCourseRecords = normalizeCustomCourseListForStorage(savedDMPref, parsedDM);
+                    doubleMajorCustomCourseRecords = normalizeCustomCourseListForStorage(savedDMPref, parsedDM)
+                        .filter(function(record) {
+                            return !doubleMajorCatalogCodeSet.has(getCombinedCodeFromCourseObj(record));
+                        });
                     doubleMajorCourseData = doubleMajorCourseData.concat(doubleMajorCustomCourseRecords);
                 }
             }
@@ -998,14 +1021,30 @@ function SUrriculum(major_chosen_by_user) {
     } catch (_) {}
     const minorPrograms = Array.from(minorProgramsSet);
     const minorCourseDataByCode = {};
+    const minorCatalogCodeSetsByCode = {};
+    const minorCustomCourseRecordsByCode = {};
     try {
         for (const mp of minorPrograms) {
             const data = fetchMinorCourseData(mp, minorTermsByCode[mp] || entryTermMinor1Code);
-            if (Array.isArray(data) && data.length) {
-                minorCourseDataByCode[mp] = data.slice();
-            } else {
-                minorCourseDataByCode[mp] = [];
-            }
+            const catalog = Array.isArray(data) ? data.slice() : [];
+            const catalogCodes = new Set(catalog.map(function(record) {
+                return String((record && record.Major) || '') + String((record && record.Code) || '');
+            }).map(function(code) {
+                return code.toUpperCase().replace(/\s+/g, '');
+            }).filter(Boolean));
+            minorCatalogCodeSetsByCode[mp] = catalogCodes;
+
+            // The same durable program-scoped records used for main and double
+            // majors also hold a selected minor's custom classification. Never
+            // append an overlay that collides with an official catalog row: the
+            // university's classification remains authoritative.
+            const storedCustom = loadCustomCoursesForMajor(mp);
+            const runtimeCustom = storedCustom.filter(function(record) {
+                const code = String((record && record.Major) || '') + String((record && record.Code) || '');
+                return !catalogCodes.has(code.toUpperCase().replace(/\s+/g, ''));
+            });
+            minorCustomCourseRecordsByCode[mp] = runtimeCustom;
+            minorCourseDataByCode[mp] = catalog.concat(runtimeCustom);
         }
     } catch (_) {}
     let curriculum = new s_curriculum();
@@ -1022,10 +1061,12 @@ function SUrriculum(major_chosen_by_user) {
     if (minorPrograms.length) {
         curriculum.minors = minorPrograms.slice();
         curriculum.minorCourseDataByCode = { ...minorCourseDataByCode };
+        curriculum.minorCatalogCodeSetsByCode = { ...minorCatalogCodeSetsByCode };
         curriculum.minorTermsByCode = { ...minorTermsByCode };
     } else {
         curriculum.minors = [];
         curriculum.minorCourseDataByCode = {};
+        curriculum.minorCatalogCodeSetsByCode = {};
         curriculum.minorTermsByCode = {};
     }
 
@@ -1567,7 +1608,10 @@ function SUrriculum(major_chosen_by_user) {
 
         function customCourseIdentityConflict(list, combinedCode, excludedIndex) {
             const target = normalizeCombinedCourseCode(combinedCode);
-            if (primaryCatalogCodeSet.has(target)) return 'catalog';
+            const editingSameDormantOverlay = Number.isInteger(excludedIndex)
+                && excludedIndex >= 0 && excludedIndex < list.length
+                && getCombinedCodeFromCourseObj(list[excludedIndex]) === target;
+            if (primaryCatalogCodeSet.has(target) && !editingSameDormantOverlay) return 'catalog';
             for (let i = 0; i < list.length; i++) {
                 if (i === excludedIndex) continue;
                 if (getCombinedCodeFromCourseObj(list[i]) === target) return 'custom';
@@ -1721,6 +1765,86 @@ function SUrriculum(major_chosen_by_user) {
             else doubleMajorCourseData.push(record);
         }
 
+        function getActiveContextProgramCodes() {
+            const primary = String((curriculum && curriculum.major) || major_chosen_by_user || '').toUpperCase();
+            const candidates = [];
+            try { candidates.push(curriculum && curriculum.doubleMajor); } catch (_) {}
+            try {
+                if (curriculum && Array.isArray(curriculum.minors)) {
+                    curriculum.minors.forEach(function(code) { candidates.push(code); });
+                }
+            } catch (_) {}
+            const seen = new Set(primary ? [primary] : []);
+            const programs = [];
+            candidates.forEach(function(rawCode) {
+                const code = String(rawCode || '').trim().toUpperCase();
+                if (!code || seen.has(code)) return;
+                seen.add(code);
+                programs.push(code);
+            });
+            return programs;
+        }
+
+        function getContextCatalogCodeSet(programCode) {
+            const program = String(programCode || '').toUpperCase();
+            if (program && program === String((curriculum && curriculum.doubleMajor) || '').toUpperCase()) {
+                return doubleMajorCatalogCodeSet;
+            }
+            return minorCatalogCodeSetsByCode[program] || new Set();
+        }
+
+        function getContextCourseData(programCode) {
+            const program = String(programCode || '').toUpperCase();
+            if (program && program === String((curriculum && curriculum.doubleMajor) || '').toUpperCase()) {
+                return doubleMajorCourseData;
+            }
+            return minorCourseDataByCode[program] || [];
+        }
+
+        function findOfficialContextCourse(programCode, combinedCode) {
+            const target = normalizeCombinedCourseCode(combinedCode);
+            if (!target || !getContextCatalogCodeSet(programCode).has(target)) return null;
+            const data = getContextCourseData(programCode);
+            for (let i = 0; i < data.length; i++) {
+                if (getCombinedCodeFromCourseObj(data[i]) === target) return data[i];
+            }
+            return null;
+        }
+
+        function replaceContextRuntimeCustomCourses(programCode, storedList) {
+            const program = String(programCode || '').toUpperCase();
+            const catalogCodes = getContextCatalogCodeSet(program);
+            const normalized = normalizeCustomCourseListForStorage(program, Array.isArray(storedList) ? storedList : []);
+            // A stale imported overlay may collide with an official row. Keep it
+            // durable until the user edits that course, but never activate it.
+            const runtimeList = normalized.filter(function(record) {
+                return !catalogCodes.has(getCombinedCodeFromCourseObj(record));
+            });
+
+            if (program && program === String((curriculum && curriculum.doubleMajor) || '').toUpperCase()) {
+                const previous = new Set(doubleMajorCustomCourseRecords);
+                for (let i = doubleMajorCourseData.length - 1; i >= 0; i--) {
+                    if (previous.has(doubleMajorCourseData[i])) doubleMajorCourseData.splice(i, 1);
+                }
+                doubleMajorCustomCourseRecords = runtimeList;
+                runtimeList.forEach(function(record) { doubleMajorCourseData.push(record); });
+                curriculum.doubleMajorCourseData = doubleMajorCourseData;
+                return;
+            }
+
+            const data = minorCourseDataByCode[program];
+            if (!Array.isArray(data)) return;
+            const previous = new Set(minorCustomCourseRecordsByCode[program] || []);
+            for (let i = data.length - 1; i >= 0; i--) {
+                if (previous.has(data[i])) data.splice(i, 1);
+            }
+            minorCustomCourseRecordsByCode[program] = runtimeList;
+            runtimeList.forEach(function(record) { data.push(record); });
+            if (curriculum && curriculum.minorCourseDataByCode) {
+                curriculum.minorCourseDataByCode[program] = data;
+            }
+        }
+
         function restoreStoredValue(key, rawValue) {
             return rawValue === null ? planRemoveItem(key) : planSetItem(key, rawValue);
         }
@@ -1735,88 +1859,6 @@ function SUrriculum(major_chosen_by_user) {
             } catch (_) {
                 return [];
             }
-        }
-
-        function saveCustomCoursesForMajor(majorCode, list) {
-            try {
-                const key = 'customCourses_' + String(majorCode || '').toUpperCase();
-                const normalized = normalizeCustomCourseListForStorage(majorCode, Array.isArray(list) ? list : []);
-                return planSetItem(key, JSON.stringify(normalized)) !== false;
-            } catch (_) {
-                return false;
-            }
-        }
-
-        function persistLinkedProgramLanguageLevel(programCourses, primaryProgram, fallbackCode, languageLevel) {
-            const noopTransaction = { ok: true, rollback: function() { return true; } };
-            if (!Array.isArray(programCourses) || !programCourses.length) return noopTransaction;
-            const primary = String(primaryProgram || '').toUpperCase();
-            const completed = [];
-            const objectBackups = [];
-            const seen = new Set();
-
-            const restoreCompleted = function() {
-                let restored = true;
-                for (let i = completed.length - 1; i >= 0; i--) {
-                    if (restoreStoredValue(completed[i].key, completed[i].previousRaw) === false) {
-                        restored = false;
-                    }
-                }
-                objectBackups.forEach(function(backup) {
-                    if (backup.hadLanguageLevel) backup.course.Language_Level = backup.languageLevel;
-                    else delete backup.course.Language_Level;
-                });
-                return restored;
-            };
-
-            for (let i = 0; i < programCourses.length; i++) {
-                const link = programCourses[i] || {};
-                const program = String(link.program || '').toUpperCase();
-                if (!program || program === primary || seen.has(program)) continue;
-                seen.add(program);
-
-                const target = getCombinedCodeFromCourseObj(link.course) || fallbackCode;
-                const key = 'customCourses_' + program;
-                const previousRaw = planGetItem(key);
-                const stored = loadCustomCoursesForMajor(program);
-                let index = -1;
-                for (let j = stored.length - 1; j >= 0; j--) {
-                    if (getCombinedCodeFromCourseObj(stored[j]) === target) {
-                        index = j;
-                        break;
-                    }
-                }
-                if (index < 0) {
-                    restoreCompleted();
-                    return { ok: false, rollback: function() { return true; } };
-                }
-
-                const updated = Object.assign({}, stored[index]);
-                if (languageLevel) updated.Language_Level = languageLevel;
-                else delete updated.Language_Level;
-                const next = stored.slice();
-                next[index] = updated;
-                completed.push({ key, previousRaw });
-                if (!saveCustomCoursesForMajor(program, next)) {
-                    restoreCompleted();
-                    return { ok: false, rollback: function() { return true; } };
-                }
-            }
-
-            // The importer also keeps these definitions in the live primary/
-            // double-major catalogs. Mutate only the shared language metadata;
-            // each program's independently selected EL_Type remains untouched.
-            programCourses.forEach(function(link) {
-                if (!link || !link.course || typeof link.course !== 'object') return;
-                objectBackups.push({
-                    course: link.course,
-                    hadLanguageLevel: Object.prototype.hasOwnProperty.call(link.course, 'Language_Level'),
-                    languageLevel: link.course.Language_Level,
-                });
-                if (languageLevel) link.course.Language_Level = languageLevel;
-                else delete link.course.Language_Level;
-            });
-            return { ok: true, rollback: restoreCompleted };
         }
 
         function refreshCourseDatalistsAndTypes() {
@@ -1857,37 +1899,69 @@ function SUrriculum(major_chosen_by_user) {
             const previousRaw = planGetItem(key);
             const next = existing.slice();
             next.splice(storageIndex, 1);
-            const dmMajor = String((curriculum && curriculum.doubleMajor) || '').toUpperCase();
-            const keyDM = dmMajor ? 'customCourses_' + dmMajor : null;
-            const previousDmRaw = keyDM ? planGetItem(keyDM) : null;
-            const existingDM = keyDM ? loadCustomCoursesForMajor(dmMajor) : [];
-            const dmIndexes = [];
-            existingDM.forEach(function(course, index) {
-                if (getCombinedCodeFromCourseObj(course) === target) dmIndexes.push(index);
+            const contextPlans = [];
+            getActiveContextProgramCodes().forEach(function(programCode) {
+                const contextKey = 'customCourses_' + programCode;
+                const contextExisting = loadCustomCoursesForMajor(programCode);
+                const contextNext = contextExisting.filter(function(course) {
+                    return getCombinedCodeFromCourseObj(course) !== target;
+                });
+                if (contextNext.length !== contextExisting.length) {
+                    contextPlans.push({
+                        programCode,
+                        key: contextKey,
+                        previousRaw: planGetItem(contextKey),
+                        previousList: contextExisting,
+                        nextList: contextNext,
+                    });
+                }
             });
-            const nextDM = existingDM.filter(function(_, index) { return !dmIndexes.includes(index); });
-            if (!saveCustomCoursesForMajor(majorKey, next)) {
-                await uiAlert('Could not delete custom course', `<p><strong>${escapeHtml(target)}</strong> was not changed because browser storage rejected the update.</p>`);
-                return false;
+            const storagePlans = [{ key, previousRaw, previousList: existing, nextList: next }]
+                .concat(contextPlans);
+            const completedWrites = [];
+            let writeFailed = false;
+            for (let i = 0; i < storagePlans.length; i++) {
+                const plan = storagePlans[i];
+                try {
+                    if (planSetItem(plan.key, JSON.stringify(plan.nextList)) === false) {
+                        writeFailed = true;
+                        break;
+                    }
+                    completedWrites.push(plan);
+                } catch (_) {
+                    writeFailed = true;
+                    break;
+                }
             }
-            if (keyDM && dmIndexes.length && !saveCustomCoursesForMajor(dmMajor, nextDM)) {
-                restoreStoredValue(key, previousRaw);
-                await uiAlert('Could not delete custom course', `<p><strong>${escapeHtml(target)}</strong> was not changed because its double-major category could not be removed.</p>`);
+            if (writeFailed) {
+                for (let i = completedWrites.length - 1; i >= 0; i--) {
+                    restoreStoredValue(completedWrites[i].key, completedWrites[i].previousRaw);
+                }
+                await uiAlert('Could not delete custom course', `<p><strong>${escapeHtml(target)}</strong> was not changed because browser storage rejected a program update.</p>`);
                 return false;
             }
 
-            const record = primaryCustomCourseRecords[storageIndex] || null;
-            if (!next.some(function(course) { return getCombinedCodeFromCourseObj(course) === target; })) {
+            const record = primaryCustomCourseRecords.find(function(course) {
+                return getCombinedCodeFromCourseObj(course) === target;
+            }) || null;
+            if (!primaryCatalogCodeSet.has(target)
+                && !next.some(function(course) { return getCombinedCodeFromCourseObj(course) === target; })) {
                 removeSemesterOccurrencesByCode(target);
             }
-            primaryCustomCourseRecords.splice(storageIndex, 1);
-            removeCourseDataRecord(record, target);
-            removeDoubleMajorCustomRecordsAt(dmIndexes);
+            if (record && !primaryCatalogCodeSet.has(target)) {
+                const runtimeIndex = primaryCustomCourseRecords.indexOf(record);
+                if (runtimeIndex >= 0) primaryCustomCourseRecords.splice(runtimeIndex, 1);
+                removeCourseDataRecord(record, target);
+            }
+            contextPlans.forEach(function(plan) {
+                replaceContextRuntimeCustomCourses(plan.programCode, plan.nextList);
+            });
             refreshCourseDatalistsAndTypes();
             const saveRequested = requestPlanSave();
             if (!saveRequested || !flushPlanSaves()) {
-                restoreStoredValue(key, previousRaw);
-                if (keyDM && dmIndexes.length) restoreStoredValue(keyDM, previousDmRaw);
+                for (let i = completedWrites.length - 1; i >= 0; i--) {
+                    restoreStoredValue(completedWrites[i].key, completedWrites[i].previousRaw);
+                }
                 await uiAlert('Could not delete custom course', `<p>The planner snapshot could not be saved. <strong>${escapeHtml(target)}</strong> will be restored now.</p>`);
                 location.reload();
                 return false;
@@ -2018,6 +2092,8 @@ function SUrriculum(major_chosen_by_user) {
             // Prevent multiple modals
             if (document.querySelector('.custom_course_modal')) return;
 
+        const primaryProgramCode = String(major_chosen_by_user || '').trim().toUpperCase();
+
         // Append overlay to body so it covers the full viewport
         const boardDom = document.body;
 
@@ -2100,9 +2176,12 @@ function SUrriculum(major_chosen_by_user) {
             const typeRow = document.createElement('div');
             typeRow.classList.add('cc-row');
             const typeLabel = document.createElement('label');
-            typeLabel.innerText = 'Category (EL_Type):';
+            typeLabel.innerText = `${primaryProgramCode} Category:`;
+            typeLabel.htmlFor = 'cc-primary-program-category';
             typeRow.appendChild(typeLabel);
             const typeSelect = document.createElement('select');
+            typeSelect.id = 'cc-primary-program-category';
+            typeSelect.className = 'cc-program-category cc-primary-program-category';
             ['core', 'area', 'university', 'free', 'required', 'none', 'unknown'].forEach(function(opt) {
                 const option = document.createElement('option');
                 option.value = opt;
@@ -2112,6 +2191,67 @@ function SUrriculum(major_chosen_by_user) {
                 typeSelect.appendChild(option);
             });
             typeRow.appendChild(typeSelect);
+
+            // A stored custom definition can become dormant when the selected
+            // admit term gains an official row with the same code. Show the
+            // catalog category in that case, but retain the dormant custom
+            // category underneath so switching back to another term restores
+            // the user's program-scoped classification.
+            const primaryOfficialNote = document.createElement('small');
+            primaryOfficialNote.className = 'cc-program-category-note cc-language-note is-hidden';
+            primaryOfficialNote.textContent = 'The official catalog category applies to this course.';
+            typeRow.appendChild(primaryOfficialNote);
+            const primaryDefaultType = typeSelect.value;
+            let primaryEditableType = typeSelect.value;
+            let primaryCategoryTouched = false;
+            let primaryLastSyncedCode = null;
+            const findPrimaryCustomType = function(combinedCode) {
+                const target = normalizeCombinedCourseCode(combinedCode);
+                if (!target) return '';
+                const stored = loadCustomCoursesForMajor(primaryProgramCode);
+                const match = stored.find(function(record) {
+                    return getCombinedCodeFromCourseObj(record) === target;
+                });
+                return match ? String(match.EL_Type || '').toLowerCase() : '';
+            };
+            const findOfficialPrimaryCourse = function(combinedCode) {
+                const target = normalizeCombinedCourseCode(combinedCode);
+                if (!target || !primaryCatalogCodeSet.has(target)) return null;
+                return primaryProgramCatalogData.find(function(record) {
+                    return getCombinedCodeFromCourseObj(record) === target;
+                }) || null;
+            };
+            const normalizePrimaryType = function(value) {
+                const type = String(value || '').toLowerCase();
+                return Array.from(typeSelect.options).some(function(option) {
+                    return option.value === type;
+                }) ? type : 'unknown';
+            };
+            const syncPrimaryOfficialCategory = function() {
+                const currentCode = normalizeCombinedCourseCode(codeInput.value);
+                if (!primaryCategoryTouched && currentCode !== primaryLastSyncedCode) {
+                    const storedType = findPrimaryCustomType(currentCode);
+                    if (storedType) primaryEditableType = normalizePrimaryType(storedType);
+                    else if (!courseObj) primaryEditableType = primaryDefaultType;
+                }
+                primaryLastSyncedCode = currentCode;
+                const official = findOfficialPrimaryCourse(currentCode);
+                if (official) {
+                    typeSelect.value = normalizePrimaryType(official.EL_Type);
+                    typeSelect.disabled = true;
+                    primaryOfficialNote.classList.remove('is-hidden');
+                } else {
+                    typeSelect.disabled = false;
+                    typeSelect.value = primaryEditableType;
+                    primaryOfficialNote.classList.add('is-hidden');
+                }
+            };
+            typeSelect.addEventListener('change', function() {
+                if (!typeSelect.disabled) {
+                    primaryEditableType = typeSelect.value;
+                    primaryCategoryTouched = true;
+                }
+            });
             modal.appendChild(typeRow);
 
             // Faculty (optional). Several graduation rules count courses by the
@@ -2243,16 +2383,19 @@ function SUrriculum(major_chosen_by_user) {
             nameInput.addEventListener('input', updateLanguageLevelRow);
             facultySelect.addEventListener('change', updateLanguageLevelRow);
 
-            // Optional DM category control (only when a DM is selected).
-            let dmTypeSelect = null;
-            const dmProgramCode = (() => {
-                try {
-                    const dm = String((curriculum && curriculum.doubleMajor) || '').trim();
-                    return dm ? dm.toUpperCase() : '';
-                } catch (_) {
-                    return '';
-                }
-            })();
+            // Every selected program gets its own category. Definitions remain
+            // scoped by program code, so changing a main/double-major/minor
+            // selection cannot reuse an unrelated program's classification.
+            const contextCategoryControls = new Map();
+            const transcriptLinksByProgram = new Map();
+            if (isTranscriptReview && Array.isArray(linkedProgramCourses)) {
+                linkedProgramCourses.forEach(function(link) {
+                    const program = String((link && link.program) || '').trim().toUpperCase();
+                    if (program && !transcriptLinksByProgram.has(program)) {
+                        transcriptLinksByProgram.set(program, link);
+                    }
+                });
+            }
             const initialCombinedCode = (() => {
                 try {
                     if (courseObj && courseObj.Major && courseObj.Code) return String(courseObj.Major + courseObj.Code).toUpperCase();
@@ -2260,15 +2403,13 @@ function SUrriculum(major_chosen_by_user) {
                 } catch (_) {}
                 return '';
             })();
-            const findDmCustomType = (combinedCode) => {
+            const findContextCustomType = (programCode, combinedCode) => {
                 try {
-                    if (!dmProgramCode || !combinedCode) return '';
-                    const keyDM = 'customCourses_' + dmProgramCode;
-                    const existingDM = JSON.parse(planGetItem(keyDM) || '[]');
-                    if (!Array.isArray(existingDM)) return '';
+                    if (!programCode || !combinedCode) return '';
+                    const existing = loadCustomCoursesForMajor(programCode);
                     const target = String(combinedCode).toUpperCase();
-                    for (let i = 0; i < existingDM.length; i++) {
-                        const rec = existingDM[i];
+                    for (let i = 0; i < existing.length; i++) {
+                        const rec = existing[i];
                         if (!rec) continue;
                         const code = getCombinedCodeFromCourseObj(rec);
                         if (code === target) return String(rec.EL_Type || '').toLowerCase();
@@ -2276,31 +2417,99 @@ function SUrriculum(major_chosen_by_user) {
                 } catch (_) {}
                 return '';
             };
-            const initialDmType = findDmCustomType(initialCombinedCode);
-            if (dmProgramCode) {
-                const dmTypeRow = document.createElement('div');
-                dmTypeRow.classList.add('cc-row');
-                const dmTypeLabel = document.createElement('label');
-                dmTypeLabel.innerText = `Double Major Category (${dmProgramCode}):`;
-                dmTypeRow.appendChild(dmTypeLabel);
+            getActiveContextProgramCodes().forEach(function(programCode, index) {
+                const contextTypeRow = document.createElement('div');
+                contextTypeRow.classList.add('cc-row', 'cc-program-category-row');
+                contextTypeRow.dataset.program = programCode;
+                const contextTypeLabel = document.createElement('label');
+                const selectId = `cc-program-category-${index}`;
+                contextTypeLabel.innerText = `${programCode} Category:`;
+                contextTypeLabel.htmlFor = selectId;
+                contextTypeRow.appendChild(contextTypeLabel);
 
-                dmTypeSelect = document.createElement('select');
-                const keepOpt = document.createElement('option');
-                keepOpt.value = '';
-                keepOpt.innerText = initialDmType ? 'Keep current DM category' : 'No DM category change';
-                dmTypeSelect.appendChild(keepOpt);
-                ['core', 'area', 'university', 'free', 'required', 'none', 'unknown'].forEach(function(opt) {
+                const contextTypeSelect = document.createElement('select');
+                contextTypeSelect.id = selectId;
+                contextTypeSelect.className = 'cc-program-category';
+                const isDoubleMajorContext = programCode === String((curriculum && curriculum.doubleMajor) || '').toUpperCase();
+                const contextOptions = isDoubleMajorContext
+                    ? ['core', 'area', 'university', 'free', 'required', 'none', 'unknown']
+                    : ['required', 'core', 'area', 'free', 'unknown'];
+                contextOptions.forEach(function(opt) {
                     const option = document.createElement('option');
                     option.value = opt;
                     option.innerText = opt === 'unknown'
                         ? 'N/A (not allocated)'
                         : opt.charAt(0).toUpperCase() + opt.slice(1);
-                    dmTypeSelect.appendChild(option);
+                    contextTypeSelect.appendChild(option);
                 });
-                if (initialDmType) dmTypeSelect.value = initialDmType;
-                dmTypeRow.appendChild(dmTypeSelect);
-                modal.appendChild(dmTypeRow);
-            }
+                const normalizeContextType = function(value) {
+                    const type = String(value || '').toLowerCase();
+                    return contextOptions.includes(type) ? type : 'unknown';
+                };
+                let editableValue = normalizeContextType(
+                    findContextCustomType(programCode, initialCombinedCode)
+                );
+                let categoryTouched = false;
+                let lastSyncedCode = null;
+                contextTypeSelect.value = editableValue;
+                contextTypeSelect.addEventListener('change', function() {
+                    if (!contextTypeSelect.disabled) {
+                        editableValue = contextTypeSelect.value;
+                        categoryTouched = true;
+                    }
+                });
+                contextTypeRow.appendChild(contextTypeSelect);
+
+                const officialNote = document.createElement('small');
+                officialNote.className = 'cc-program-category-note cc-language-note is-hidden';
+                officialNote.textContent = 'The official catalog category applies to this course.';
+                contextTypeRow.appendChild(officialNote);
+
+                const syncOfficialCategory = function() {
+                    const currentCode = normalizeCombinedCourseCode(codeInput.value);
+                    if (!categoryTouched && currentCode !== lastSyncedCode) {
+                        const storedType = findContextCustomType(programCode, currentCode);
+                        if (storedType) {
+                            // A pre-existing target definition owns its category.
+                            editableValue = normalizeContextType(storedType);
+                        } else if (!courseObj) {
+                            // A fresh Add form has no source definition whose
+                            // category should follow the newly typed code.
+                            editableValue = 'unknown';
+                        }
+                        // On edit/rename, an absent target inherits the source
+                        // program's current category. This is still untouched
+                        // UI state; an explicit selection below always wins.
+                    }
+                    lastSyncedCode = currentCode;
+                    const official = findOfficialContextCourse(programCode, currentCode);
+                    if (official) {
+                        const officialType = String(official.EL_Type || '').toLowerCase();
+                        contextTypeSelect.value = Array.from(contextTypeSelect.options).some(function(option) {
+                            return option.value === officialType;
+                        }) ? officialType : 'unknown';
+                        contextTypeSelect.disabled = true;
+                        officialNote.classList.remove('is-hidden');
+                    } else {
+                        contextTypeSelect.disabled = false;
+                        contextTypeSelect.value = editableValue;
+                        officialNote.classList.add('is-hidden');
+                    }
+                };
+                contextCategoryControls.set(programCode, {
+                    select: contextTypeSelect,
+                    syncOfficialCategory,
+                    getEditableValue: function() { return editableValue; },
+                });
+                modal.appendChild(contextTypeRow);
+                syncOfficialCategory();
+            });
+            codeInput.addEventListener('input', function() {
+                syncPrimaryOfficialCategory();
+                contextCategoryControls.forEach(function(control) {
+                    control.syncOfficialCategory();
+                });
+            });
 
             // If prefill data or an existing course object is provided,
             // populate the inputs and select accordingly.
@@ -2345,6 +2554,7 @@ function SUrriculum(major_chosen_by_user) {
                 } else if (prefill.elType) {
                     typeSelect.value = prefill.elType;
                 }
+                primaryEditableType = normalizePrimaryType(typeSelect.value);
                 // Set faculty dropdown ('' is a real, meaningful choice here,
                 // so check for presence rather than truthiness.)
                 if (courseObj && courseObj.Faculty !== undefined && courseObj.Faculty !== null) {
@@ -2353,6 +2563,11 @@ function SUrriculum(major_chosen_by_user) {
                     facultySelect.value = String(prefill.faculty);
                 }
             }
+
+            contextCategoryControls.forEach(function(control) {
+                control.syncOfficialCategory();
+            });
+            syncPrimaryOfficialCategory();
 
             updateLanguageLevelRow();
 
@@ -2398,7 +2613,15 @@ function SUrriculum(major_chosen_by_user) {
                 const parsedCode = parsedIdentity.code;
                 const originalCombinedCode = courseObj ? getCombinedCodeFromCourseObj(courseObj) : '';
                 const combinedCodeNow = parsedIdentity.combined;
-                const dmTypeSelected = dmTypeSelect ? String(dmTypeSelect.value || '').toLowerCase() : '';
+                const editingDormantPrimaryOverlay = !!originalCombinedCode
+                    && primaryCatalogCodeSet.has(originalCombinedCode);
+                if (editingDormantPrimaryOverlay && originalCombinedCode !== combinedCodeNow) {
+                    await uiAlert(
+                        'Official catalog course code',
+                        '<p>This saved classification is dormant because the current catalog already contains that course code. Its code cannot be renamed here.</p>'
+                    );
+                    return;
+                }
                 const languageLevel = languageLevelRow.hidden
                     ? '' : String(languageLevelSelect.value || '').toLowerCase();
                 if (!languageLevelRow.hidden && languageLevel !== 'basic' && languageLevel !== 'other') {
@@ -2420,7 +2643,7 @@ function SUrriculum(major_chosen_by_user) {
                         Basic_Science: bsInput.value.toString() || '0',
                         SU_credit: suInput.value.toString() || '0',
                         Faculty: facultySelect.value,
-                        EL_Type: typeSelect.value,
+                        EL_Type: typeSelect.disabled ? primaryEditableType : typeSelect.value,
                         Faculty_Course: 'No'
                     };
                     if (languageLevel) candidateInput.Language_Level = languageLevel;
@@ -2457,32 +2680,169 @@ function SUrriculum(major_chosen_by_user) {
                 const next = existing.slice();
                 if (courseObj) next[storageIndex] = candidate;
                 else next.push(candidate);
-                if (!saveCustomCoursesForMajor(majorKey, next)) {
-                    await uiAlert('Could not save custom course', `<p><strong>${escapeHtml(combinedCodeNow)}</strong> was not changed because browser storage rejected the update.</p>`);
+
+                // Prepare every active secondary-program definition before the
+                // first write. Each program keeps a full course record with its
+                // own EL_Type while course identity, credits, faculty and
+                // language metadata stay synchronized with the primary record.
+                const contextPlans = [];
+                let contextPreparationError = '';
+                try {
+                    getActiveContextProgramCodes().forEach(function(programCode) {
+                        if (contextPreparationError) return;
+                        const contextKey = 'customCourses_' + programCode;
+                        const contextPreviousRaw = planGetItem(contextKey);
+                        const contextExisting = loadCustomCoursesForMajor(programCode);
+                        const originalMatches = [];
+                        const targetMatches = [];
+                        contextExisting.forEach(function(record, index) {
+                            const recordCode = getCombinedCodeFromCourseObj(record);
+                            if (originalCombinedCode && recordCode === originalCombinedCode) originalMatches.push(index);
+                            if (recordCode === combinedCodeNow) targetMatches.push(index);
+                        });
+                        if (originalMatches.length > 1 || targetMatches.length > 1) {
+                            contextPreparationError = `${programCode} has duplicate saved definitions for this course.`;
+                            return;
+                        }
+                        const originalIndex = originalMatches.length ? originalMatches[0] : -1;
+                        const targetIndex = targetMatches.length ? targetMatches[0] : -1;
+                        const officialCourse = findOfficialContextCourse(programCode, combinedCodeNow);
+                        // Renaming into an official code retires only the old
+                        // contextual overlay. The target catalog row is
+                        // authoritative, and no new dormant overlay is created.
+                        if (officialCourse && originalCombinedCode
+                            && originalCombinedCode !== combinedCodeNow) {
+                            if (originalIndex >= 0) {
+                                const contextNext = contextExisting.slice();
+                                contextNext.splice(originalIndex, 1);
+                                contextPlans.push({
+                                    programCode,
+                                    key: contextKey,
+                                    previousRaw: contextPreviousRaw,
+                                    previousList: contextExisting,
+                                    nextList: contextNext,
+                                });
+                            }
+                            return;
+                        }
+
+                        // When a rename targets a definition that this program
+                        // already knows, merge into that target and retire the
+                        // old-code overlay. The target's stored category remains
+                        // the untouched default exposed by the control above.
+                        const existingIndex = targetIndex >= 0 ? targetIndex : originalIndex;
+                        // If the course is official in this admit term and has no
+                        // overlay, the catalog is sufficient. A same-code dormant
+                        // overlay is retained so switching terms can restore that
+                        // program-scoped classification.
+                        if (officialCourse && existingIndex < 0) return;
+
+                        const control = contextCategoryControls.get(programCode);
+                        const existingType = existingIndex >= 0
+                            ? String(contextExisting[existingIndex].EL_Type || '').toLowerCase() : '';
+                        const selectedType = control && typeof control.getEditableValue === 'function'
+                            ? String(control.getEditableValue() || '').toLowerCase() : '';
+                        const finalType = selectedType || existingType || 'unknown';
+                        const contextInput = Object.assign({}, candidate, { EL_Type: finalType });
+                        const transcriptLink = transcriptLinksByProgram.get(programCode);
+                        if (existingIndex >= 0 && transcriptLink
+                            && transcriptLink.previousCourse
+                            && typeof transcriptLink.previousCourse === 'object') {
+                            const existingContext = contextExisting[existingIndex];
+                            // Save & Keep refreshes the transcript fields shared
+                            // through `candidate`, but retains each program's
+                            // non-transcript classification metadata. Language
+                            // level intentionally remains candidate-owned so one
+                            // reviewed choice is shared across every program.
+                            contextInput.Engineering = existingContext.Engineering;
+                            contextInput.Basic_Science = existingContext.Basic_Science;
+                            contextInput.Faculty = existingContext.Faculty;
+                            contextInput.Faculty_Course = 'No';
+                        }
+                        const contextCandidate = normalizeCustomCourseForStorage(contextInput);
+                        const contextNext = contextExisting.slice();
+                        let nextIndex = existingIndex;
+                        if (originalCombinedCode && originalCombinedCode !== combinedCodeNow
+                            && originalIndex >= 0 && originalIndex !== existingIndex) {
+                            contextNext.splice(originalIndex, 1);
+                            if (nextIndex > originalIndex) nextIndex -= 1;
+                        }
+                        if (nextIndex >= 0) contextNext[nextIndex] = contextCandidate;
+                        else contextNext.push(contextCandidate);
+                        contextPlans.push({
+                            programCode,
+                            key: contextKey,
+                            previousRaw: contextPreviousRaw,
+                            previousList: contextExisting,
+                            nextList: contextNext,
+                        });
+                    });
+                } catch (contextError) {
+                    contextPreparationError = contextError && contextError.message
+                        ? contextError.message : 'A selected program category is invalid.';
+                }
+                if (contextPreparationError) {
+                    await uiAlert(
+                        'Could not prepare program categories',
+                        `<p>${escapeHtml(contextPreparationError)} No changes were made.</p>`
+                    );
                     return;
                 }
-                const linkedLanguageTransaction = persistLinkedProgramLanguageLevel(
-                    linkedProgramCourses,
-                    majorKey,
-                    originalCombinedCode || combinedCodeNow,
-                    languageLevel
-                );
-                if (!linkedLanguageTransaction.ok) {
-                    restoreStoredValue(key, previousRaw);
+
+                const storagePlans = [{
+                    programCode: majorKey,
+                    key,
+                    previousRaw,
+                    previousList: existing,
+                    nextList: next,
+                    primary: true,
+                }].concat(contextPlans);
+                const completedWrites = [];
+                const rollbackStoragePlans = function() {
+                    let restored = true;
+                    for (let i = completedWrites.length - 1; i >= 0; i--) {
+                        if (restoreStoredValue(completedWrites[i].key, completedWrites[i].previousRaw) === false) {
+                            restored = false;
+                        }
+                    }
+                    return restored;
+                };
+                let storageWriteFailed = false;
+                for (let i = 0; i < storagePlans.length; i++) {
+                    const plan = storagePlans[i];
+                    try {
+                        if (planSetItem(plan.key, JSON.stringify(plan.nextList)) === false) {
+                            storageWriteFailed = true;
+                            break;
+                        }
+                        completedWrites.push(plan);
+                    } catch (_) {
+                        storageWriteFailed = true;
+                        break;
+                    }
+                }
+                if (storageWriteFailed) {
+                    const restored = rollbackStoragePlans();
                     await uiAlert(
-                        'Could not save language classification',
-                        `<p><strong>${escapeHtml(combinedCodeNow)}</strong> was not changed because its language level could not be saved consistently for every selected program.</p>`
+                        'Could not save custom course',
+                        `<p><strong>${escapeHtml(combinedCodeNow)}</strong> was not changed because browser storage rejected a program category.${restored ? '' : ' Some saved data could not be restored; reload before continuing.'}</p>`
                     );
                     return;
                 }
 
                 let previousRecord = null;
                 let previousCourseDataIndex = -1;
-                if (courseObj) {
-                    previousRecord = primaryCustomCourseRecords[storageIndex] || courseObj;
+                if (editingDormantPrimaryOverlay) {
+                    previousRecord = courseObj;
+                } else if (courseObj) {
+                    previousRecord = primaryCustomCourseRecords.find(function(record) {
+                        return getCombinedCodeFromCourseObj(record) === originalCombinedCode;
+                    }) || courseObj;
                     previousCourseDataIndex = course_data.indexOf(previousRecord);
                     if (previousCourseDataIndex < 0) previousCourseDataIndex = course_data.indexOf(courseObj);
-                    primaryCustomCourseRecords.splice(storageIndex, 1, candidate);
+                    const primaryRuntimeIndex = primaryCustomCourseRecords.indexOf(previousRecord);
+                    if (primaryRuntimeIndex >= 0) primaryCustomCourseRecords.splice(primaryRuntimeIndex, 1, candidate);
+                    else primaryCustomCourseRecords.push(candidate);
                     if (previousCourseDataIndex >= 0) course_data[previousCourseDataIndex] = candidate;
                     else course_data.push(candidate);
                 } else {
@@ -2491,164 +2851,34 @@ function SUrriculum(major_chosen_by_user) {
                 }
 
                 const codeChanged = !!courseObj && originalCombinedCode !== combinedCodeNow;
-                if (codeChanged) renameSemesterOccurrences(originalCombinedCode, combinedCodeNow, candidate);
-                else refreshSemesterOccurrenceDom(combinedCodeNow, candidate);
+                if (!editingDormantPrimaryOverlay) {
+                    if (codeChanged) renameSemesterOccurrences(originalCombinedCode, combinedCodeNow, candidate);
+                    else refreshSemesterOccurrenceDom(combinedCodeNow, candidate);
+                }
 
-                const sourceForDM = candidate;
+                contextPlans.forEach(function(plan) {
+                    replaceContextRuntimeCustomCourses(plan.programCode, plan.nextList);
+                });
                 // Update any open dropdowns so the new or updated course appears as an option
                 refreshCourseDatalistsAndTypes();
                 const saveRequested = requestPlanSave();
                 if (codeChanged && (!saveRequested || !flushPlanSaves())) {
-                    restoreStoredValue(key, previousRaw);
-                    linkedLanguageTransaction.rollback();
-                    if (previousRecord) primaryCustomCourseRecords.splice(storageIndex, 1, previousRecord);
+                    const restored = rollbackStoragePlans();
+                    contextPlans.forEach(function(plan) {
+                        replaceContextRuntimeCustomCourses(plan.programCode, plan.previousList);
+                    });
+                    const candidateRuntimeIndex = primaryCustomCourseRecords.indexOf(candidate);
+                    if (candidateRuntimeIndex >= 0 && previousRecord) {
+                        primaryCustomCourseRecords.splice(candidateRuntimeIndex, 1, previousRecord);
+                    }
                     if (previousCourseDataIndex >= 0 && previousRecord) course_data[previousCourseDataIndex] = previousRecord;
                     renameSemesterOccurrences(combinedCodeNow, originalCombinedCode, previousRecord || courseObj);
                     refreshCourseDatalistsAndTypes();
-                    await uiAlert('Could not rename custom course', `<p>The planner snapshot could not be saved. <strong>${escapeHtml(originalCombinedCode)}</strong> was restored.</p>`);
+                    await uiAlert('Could not rename custom course', `<p>The planner snapshot could not be saved. <strong>${escapeHtml(originalCombinedCode)}</strong> was ${restored ? 'restored' : 'not fully restored; reload before continuing'}.</p>`);
                     return;
                 }
                 // Remove modal
                 overlay.remove();
-                // If a double major is selected, check if this course exists
-                // in the double major course data.  If not, prompt the
-                // user to assign a category for the double major.
-                try {
-                    if (curriculum.doubleMajor) {
-                        const combo = combinedCodeNow;
-                        const dmProgram = String(curriculum.doubleMajor || '').toUpperCase();
-                        const keyDM = 'customCourses_' + dmProgram;
-                        let existingDM = [];
-                        try {
-                            const parsedDM = JSON.parse(planGetItem(keyDM) || '[]');
-                            existingDM = Array.isArray(parsedDM) ? parsedDM : [];
-                        } catch (_) { existingDM = []; }
-
-                        const lookupCodes = [combo];
-                        if (originalCombinedCode && originalCombinedCode !== combo) lookupCodes.push(originalCombinedCode);
-                        const findDmIndex = () => {
-                            for (let i = 0; i < existingDM.length; i++) {
-                                const rec = existingDM[i];
-                                const recCode = getCombinedCodeFromCourseObj(rec);
-                                if (lookupCodes.includes(recCode)) return i;
-                            }
-                            return -1;
-                        };
-                        const dmIdx = findDmIndex();
-
-                        // Build a set of DM codes
-                        const dmSet = new Set(doubleMajorCourseData.map(getCombinedCodeFromCourseObj));
-                        const canCreateDmCustom = !dmSet.has(combo);
-                        const shouldUpsertExistingDmCustom = dmIdx >= 0;
-                        const shouldCreateDmCustom = canCreateDmCustom && !!dmTypeSelected;
-                        const renameIntoDmCatalog = shouldUpsertExistingDmCustom
-                            && originalCombinedCode !== combo
-                            && doubleMajorCatalogCodeSet.has(combo);
-
-                        const buildDmCourse = (selectedType) => {
-                            const identityDM = splitCombinedCourseCode(combo);
-                            const mDM = identityDM ? identityDM.major : '';
-                            const nDM = identityDM ? identityDM.code : '';
-                            const dmCourse = {
-                                Major: mDM,
-                                Code: nDM,
-                                Course_Name: sourceForDM.Course_Name || combo,
-                                ECTS: sourceForDM ? String(sourceForDM.ECTS || '0') : '0',
-                                Engineering: sourceForDM ? parseFloat(sourceForDM.Engineering || '0') : 0,
-                                Basic_Science: sourceForDM ? parseFloat(sourceForDM.Basic_Science || '0') : 0,
-                                SU_credit: sourceForDM ? String(sourceForDM.SU_credit || '0') : '0',
-                                Faculty: '',
-                                EL_Type: selectedType || 'none',
-                                Faculty_Course: 'No'
-                            };
-                            if (sourceForDM && sourceForDM.Language_Level) {
-                                dmCourse.Language_Level = sourceForDM.Language_Level;
-                            }
-                            return dmCourse;
-                        };
-
-                        if (renameIntoDmCatalog) {
-                            const nextDM = existingDM.slice();
-                            nextDM.splice(dmIdx, 1);
-                            if (!planSetItem(keyDM, JSON.stringify(nextDM))) {
-                                await uiAlert('Could not save double major category', `<p>The primary custom course was saved, but its old <strong>${escapeHtml(dmProgram)}</strong> category could not be removed.</p>`);
-                            } else {
-                                removeDoubleMajorCustomRecordAt(dmIdx);
-                                curriculum.doubleMajorCourseData = doubleMajorCourseData;
-                                try {
-                                    if (typeof curriculum.recalcEffectiveTypesDouble === 'function') {
-                                        curriculum.recalcEffectiveTypesDouble(doubleMajorCourseData);
-                                    }
-                                } catch (_) {}
-                                refreshCourseDatalistsAndTypes();
-                            }
-                        } else if (shouldUpsertExistingDmCustom || shouldCreateDmCustom) {
-                            const prevType = shouldUpsertExistingDmCustom ? String(existingDM[dmIdx].EL_Type || '').toLowerCase() : '';
-                            const finalType = dmTypeSelected || prevType || 'none';
-                            const dmCourse = buildDmCourse(finalType);
-                            const nextDM = existingDM.slice();
-                            if (shouldUpsertExistingDmCustom) nextDM[dmIdx] = dmCourse;
-                            else nextDM.push(dmCourse);
-                            if (!planSetItem(keyDM, JSON.stringify(nextDM))) {
-                                await uiAlert('Could not save double major category', `<p>The primary custom course was saved, but its <strong>${escapeHtml(dmProgram)}</strong> category could not be saved. The planner will ask again after reload.</p>`);
-                            } else {
-                                if (shouldUpsertExistingDmCustom) replaceDoubleMajorCustomRecordAt(dmIdx, dmCourse);
-                                else replaceDoubleMajorCustomRecordAt(-1, dmCourse);
-                                curriculum.doubleMajorCourseData = doubleMajorCourseData;
-
-                                try {
-                                    if (typeof curriculum.recalcEffectiveTypesDouble === 'function') {
-                                        curriculum.recalcEffectiveTypesDouble(doubleMajorCourseData);
-                                    }
-                                } catch (_) {}
-                                refreshCourseDatalistsAndTypes();
-                            }
-                        } else if (!dmSet.has(combo)) {
-                            // Determine course name for prompt
-                            const nameForPrompt = sourceForDM.Course_Name || combo;
-                            showCourseTypeFormDM(combo, nameForPrompt, async function(selectedType) {
-                                if (selectedType) {
-                                    // Create new DM course object using the same credit
-                                    // values as the main custom course so that DM totals
-                                    // count these credits correctly.
-                                    const identityDM = splitCombinedCourseCode(combo);
-                                    const mDM = identityDM ? identityDM.major : '';
-                                    const nDM = identityDM ? identityDM.code : '';
-                                    const newCourseDM = {
-                                        Major: mDM,
-                                        Code: nDM,
-                                        Course_Name: nameForPrompt,
-                                        ECTS: sourceForDM ? String(sourceForDM.ECTS || '0') : '0',
-                                        Engineering: sourceForDM ? parseFloat(sourceForDM.Engineering || '0') : 0,
-                                        Basic_Science: sourceForDM ? parseFloat(sourceForDM.Basic_Science || '0') : 0,
-                                        SU_credit: sourceForDM ? String(sourceForDM.SU_credit || '0') : '0',
-                                        Faculty: '',
-                                        EL_Type: selectedType,
-                                        Faculty_Course: 'No'
-                                    };
-                                    if (sourceForDM && sourceForDM.Language_Level) {
-                                        newCourseDM.Language_Level = sourceForDM.Language_Level;
-                                    }
-                                    const keyDM = 'customCourses_' + curriculum.doubleMajor;
-                                    const existingDM = JSON.parse(planGetItem(keyDM) || '[]');
-                                    existingDM.push(newCourseDM);
-                                    if (!planSetItem(keyDM, JSON.stringify(existingDM))) {
-                                        await uiAlert('Could not save double major category', `<p>The category for <strong>${escapeHtml(combo)}</strong> was not applied because browser storage rejected the update.</p>`);
-                                        return;
-                                    }
-                                    doubleMajorCourseData.push(newCourseDM);
-                                    doubleMajorCustomCourseRecords.push(newCourseDM);
-                                    // Recalculate effective types for DM
-                                    try {
-                                        curriculum.recalcEffectiveTypesDouble(doubleMajorCourseData);
-                                    } catch (_) {}
-                                }
-                            });
-                        }
-                    }
-                } catch (ex) {
-                    // ignore classification errors
-                }
                 // Invoke callback to process next pending custom course
                 if (typeof onSaveCallback === 'function') {
                     onSaveCallback();
@@ -2979,23 +3209,9 @@ function SUrriculum(major_chosen_by_user) {
                     return;
                 }
 
-                const dmProgram = String((curriculum && curriculum.doubleMajor) || '').toUpperCase();
-                if (!dmProgram || program !== dmProgram) return;
-                let dmIndex = doubleMajorCustomCourseRecords.indexOf(link.course);
-                if (dmIndex < 0) {
-                    dmIndex = doubleMajorCustomCourseRecords.findIndex(function(record) {
-                        return getCombinedCodeFromCourseObj(record) === linkedCode;
-                    });
-                }
-                if (previousCourse) {
-                    replaceDoubleMajorCustomRecordAt(dmIndex, previousCourse);
-                } else if (dmIndex >= 0 && doubleMajorCustomCourseRecords[dmIndex] === link.course) {
-                    removeDoubleMajorCustomRecordAt(dmIndex);
-                }
+                if (!getActiveContextProgramCodes().includes(program)) return;
+                replaceContextRuntimeCustomCourses(program, loadCustomCoursesForMajor(program));
             });
-            if (curriculum && curriculum.doubleMajor) {
-                curriculum.doubleMajorCourseData = doubleMajorCourseData;
-            }
 
             refreshCourseDatalistsAndTypes();
             requestPlanSave();
@@ -3196,7 +3412,8 @@ function SUrriculum(major_chosen_by_user) {
                         persisted = planSetItem(keyDM, JSON.stringify(existingDM));
                     } catch (_) {}
                     if (!persisted) {
-                        await uiAlert('Could not save double major category', `<p>The category for <strong>${escapeHtml(item.code)}</strong> was not applied because browser storage rejected the update.</p>`);
+                        const dmCode = String((curriculum && curriculum.doubleMajor) || 'double major').toUpperCase();
+                        await uiAlert(`Could not save ${escapeHtml(dmCode)} category`, `<p>The category for <strong>${escapeHtml(item.code)}</strong> was not applied because browser storage rejected the update.</p>`);
                         processPendingDoubleMajor(list);
                         return;
                     }
@@ -3221,24 +3438,32 @@ function SUrriculum(major_chosen_by_user) {
         function showCourseTypeFormDM(code, title, callback) {
             // Avoid multiple modals
             if (document.querySelector('.double_major_modal')) return;
+            const dmCode = String((curriculum && curriculum.doubleMajor) || 'Double Major').toUpperCase();
             const overlay = document.createElement('div');
             overlay.classList.add('double_major_overlay');
             const modal = document.createElement('div');
             modal.classList.add('double_major_modal');
             // Title
             const h = document.createElement('h3');
-            h.innerText = 'Set Category for Double Major';
+            h.innerText = `Set ${dmCode} Category`;
             modal.appendChild(h);
             // Info text
             const info = document.createElement('p');
             info.innerText = code + ' - ' + title;
             modal.appendChild(info);
             // Select
+            const selectLabel = document.createElement('label');
+            selectLabel.htmlFor = 'dm-program-category';
+            selectLabel.innerText = `${dmCode} Category:`;
+            modal.appendChild(selectLabel);
             const select = document.createElement('select');
-            ['core','area','required','university','free','none'].forEach(function(opt) {
+            select.id = 'dm-program-category';
+            ['core','area','required','university','free','none','unknown'].forEach(function(opt) {
                 const o = document.createElement('option');
                 o.value = opt;
-                o.innerText = opt.charAt(0).toUpperCase() + opt.slice(1);
+                o.innerText = opt === 'unknown'
+                    ? 'N/A (not allocated)'
+                    : opt.charAt(0).toUpperCase() + opt.slice(1);
                 select.appendChild(o);
             });
             modal.appendChild(select);
@@ -3298,14 +3523,14 @@ function SUrriculum(major_chosen_by_user) {
                 // recalcEffectiveTypes() can trigger DM recalculation.
                 curriculum.doubleMajorCourseData = doubleMajorCourseData;
                 // Load custom courses for second major
-                let dmCustomCourses = [];
+                let dmStoredCustomCourses = [];
                 try {
                     const keyDM = 'customCourses_' + dm;
                     const storedDM = planGetItem(keyDM);
                     if (storedDM) {
                         const parsedDM = JSON.parse(storedDM);
                         if (Array.isArray(parsedDM)) {
-                            dmCustomCourses = normalizeCustomCourseListForStorage(dm, parsedDM);
+                            dmStoredCustomCourses = normalizeCustomCourseListForStorage(dm, parsedDM);
                         }
                     }
                 } catch (ex) {}
@@ -3313,7 +3538,7 @@ function SUrriculum(major_chosen_by_user) {
                 // Repair legacy DM custom courses that were saved with missing
                 // credits (ECTS / SU / ENG / BS) by copying credits from the
                 // main course definition when available.
-                const repaired = _repairDmCustomCoursesCredits(dm, dmCustomCourses, doubleMajorCourseData);
+                const repaired = _repairDmCustomCoursesCredits(dm, dmStoredCustomCourses, doubleMajorCourseData);
                 if (repaired > 0) {
                     try {
                         const shownKey = 'dmCustomCoursesCreditsRepairShown_' + dm;
@@ -3326,6 +3551,9 @@ function SUrriculum(major_chosen_by_user) {
                         }
                     } catch (_) {}
                 }
+                const dmCustomCourses = dmStoredCustomCourses.filter(function(record) {
+                    return !doubleMajorCatalogCodeSet.has(getCombinedCodeFromCourseObj(record));
+                });
                 if (dmCustomCourses && dmCustomCourses.length) {
                     doubleMajorCustomCourseRecords = dmCustomCourses;
                     for (let i = 0; i < dmCustomCourses.length; i++) {
@@ -3451,61 +3679,86 @@ function SUrriculum(major_chosen_by_user) {
          * against accidental deletion.
          */
         async function handleDeleteCustomCourses() {
-            const keyMain = 'customCourses_' + major_chosen_by_user;
-            const keyDM = curriculum.doubleMajor ? 'customCourses_' + curriculum.doubleMajor : null;
-
-            let customMain = [];
-            let customDM = [];
-            try {
-                customMain = JSON.parse(planGetItem(keyMain) || '[]');
-            } catch (_) { customMain = []; }
-            if (keyDM) {
-                try {
-                    customDM = JSON.parse(planGetItem(keyDM) || '[]');
-                } catch (_) { customDM = []; }
-            }
-
-            if ((!customMain || customMain.length === 0) && (!customDM || customDM.length === 0)) {
-                await uiAlert('No custom courses', '<p>There are no custom courses to delete for this plan.</p>');
+            const primaryProgram = String(major_chosen_by_user || '').toUpperCase();
+            const primaryKey = 'customCourses_' + primaryProgram;
+            const primaryList = loadCustomCoursesForMajor(primaryProgram);
+            if (!primaryList.length) {
+                await uiAlert('No custom courses', '<p>There are no primary-program custom courses to delete for this plan.</p>');
                 return;
             }
+            const deletedCodes = new Set(primaryList.map(getCombinedCodeFromCourseObj).filter(Boolean));
+            const primaryPlan = {
+                programCode: primaryProgram,
+                key: primaryKey,
+                previousRaw: planGetItem(primaryKey),
+                previousList: primaryList,
+                nextList: [],
+            };
+            const contextPlans = getActiveContextProgramCodes().map(function(programCode) {
+                const key = 'customCourses_' + programCode;
+                const previousList = loadCustomCoursesForMajor(programCode);
+                const nextList = previousList.filter(function(record) {
+                    return !deletedCodes.has(getCombinedCodeFromCourseObj(record));
+                });
+                return {
+                    programCode,
+                    key,
+                    previousRaw: planGetItem(key),
+                    previousList,
+                    nextList,
+                };
+            }).filter(function(plan) {
+                return plan.nextList.length !== plan.previousList.length;
+            });
+            const plans = [primaryPlan].concat(contextPlans);
 
-            let confirmMsg = 'Are you sure you want to delete all custom courses for ' + major_chosen_by_user;
-            if (curriculum.doubleMajor) confirmMsg += ' and ' + curriculum.doubleMajor;
-            confirmMsg += '?';
+            const confirmMsg = `Are you sure you want to delete all ${primaryProgram} custom courses and their selected-program categories?`;
             if (!(await uiConfirm('Delete custom courses?', `<p>${escapeHtml(confirmMsg)}</p><p>This cannot be undone.</p>`, { confirmText: 'Delete', danger: true }))) {
                 return;
             }
 
-            const codeSetMain = new Set(customMain.map(getCombinedCodeFromCourseObj).filter(Boolean));
-            const previousMainRaw = planGetItem(keyMain);
-            const previousDmRaw = keyDM ? planGetItem(keyDM) : null;
-
-            // Definitions are durable state. Remove them before mutating the live
-            // planner, and roll the first key back if the second write fails.
-            if (!planRemoveItem(keyMain)) {
-                await uiAlert('Could not delete custom courses', '<p>No changes were made because browser storage rejected the update.</p>');
-                return;
+            const completed = [];
+            let removalFailed = false;
+            for (let i = 0; i < plans.length; i++) {
+                try {
+                    const plan = plans[i];
+                    const persisted = plan.nextList.length
+                        ? planSetItem(plan.key, JSON.stringify(plan.nextList))
+                        : planRemoveItem(plan.key);
+                    if (persisted === false) {
+                        removalFailed = true;
+                        break;
+                    }
+                    completed.push(plans[i]);
+                } catch (_) {
+                    removalFailed = true;
+                    break;
+                }
             }
-            if (keyDM && !planRemoveItem(keyDM)) {
-                restoreStoredValue(keyMain, previousMainRaw);
-                await uiAlert('Could not delete custom courses', '<p>No planner courses were changed because the double-major definitions could not be removed.</p>');
+            if (removalFailed) {
+                for (let i = completed.length - 1; i >= 0; i--) {
+                    restoreStoredValue(completed[i].key, completed[i].previousRaw);
+                }
+                await uiAlert('Could not delete custom courses', '<p>No planner courses were changed because browser storage rejected a program update.</p>');
                 return;
             }
 
             // Only primary-program custom definitions own planner occurrences.
-            // DM custom rows are classification overlays for the same real
-            // courses and must never delete those courses from the semester plan.
-            codeSetMain.forEach(removeSemesterOccurrencesByCode);
+            // Secondary rows are classification overlays for the same real
+            // courses and must never delete planner occurrences. A dormant main
+            // overlay that collides with the official catalog does not own the
+            // official course occurrence either.
+            primaryPlan.previousList.map(getCombinedCodeFromCourseObj).filter(function(code) {
+                return code && !primaryCatalogCodeSet.has(code);
+            }).forEach(removeSemesterOccurrencesByCode);
             primaryCustomCourseRecords.forEach(function(record) {
                 removeCourseDataRecord(record, getCombinedCodeFromCourseObj(record));
             });
             primaryCustomCourseRecords = [];
 
-            if (curriculum.doubleMajor) {
-                removeDoubleMajorCustomRecordsAt(doubleMajorCustomCourseRecords.map(function(_, index) { return index; }));
-                curriculum.doubleMajorCourseData = doubleMajorCourseData;
-            }
+            contextPlans.forEach(function(plan) {
+                replaceContextRuntimeCustomCourses(plan.programCode, plan.nextList);
+            });
             // Recalculate effective types and update datalist
             try {
                 if (typeof curriculum.recalcEffectiveTypes === 'function') {
@@ -3525,8 +3778,9 @@ function SUrriculum(major_chosen_by_user) {
             }
             const saveRequested = requestPlanSave();
             if (!saveRequested || !flushPlanSaves()) {
-                restoreStoredValue(keyMain, previousMainRaw);
-                if (keyDM) restoreStoredValue(keyDM, previousDmRaw);
+                for (let i = completed.length - 1; i >= 0; i--) {
+                    restoreStoredValue(completed[i].key, completed[i].previousRaw);
+                }
                 await uiAlert('Could not delete custom courses', '<p>The planner snapshot could not be saved. Your custom courses will be restored now.</p>');
                 location.reload();
                 return;
