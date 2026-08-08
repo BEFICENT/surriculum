@@ -340,7 +340,7 @@ test('MAN: all six distinct core prefixes are required, not merely six core cour
 });
 
 test('MAN: all five distinct area prefixes are required', () => {
-  const codes = ['ACC401', 'FIN402', 'MKTG401', 'OPIM390', 'ORG401'];
+  const codes = ['ACC405', 'FIN402', 'MKTG401', 'OPIM390', 'ORG401'];
   const courses = codes.map((code) => courseFrom('202501', 'MAN', code, { effective: 'area' }));
   assert.equal(evaluateGroup('202501', 'MAN', 'area_areas', courses.slice(0, 4)), 36);
   assert.equal(evaluateGroup('202501', 'MAN', 'area_areas', courses), 0);
