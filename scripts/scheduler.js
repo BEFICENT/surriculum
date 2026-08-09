@@ -5052,14 +5052,18 @@
       try {
         const span = container ? container.querySelector('.total_credit_text span') : null;
         if (!span) return;
-        const tc = semesterObj ? (semesterObj.totalCredit || 0) : 0;
+        const computedLoad = semesterObj && semesterObj.totalLoadCredit;
+        const load = computedLoad !== null && computedLoad !== undefined
+          ? computedLoad : (semesterObj ? (semesterObj.totalCredit || 0) : 0);
         if (typeof window !== 'undefined' && typeof window.updateSemesterCreditIndicator === 'function') {
-          window.updateSemesterCreditIndicator(span, semesterObj, tc);
+          // The indicator reads the independently recomputed workload fields.
+          // Passing the degree-oriented totalCredit here used to bypass them.
+          window.updateSemesterCreditIndicator(span, semesterObj);
         } else {
           const totalText = (typeof window !== 'undefined' && typeof window.formatCreditValue === 'function')
-            ? window.formatCreditValue(tc)
-            : (Number(tc).toFixed(1));
-          span.textContent = 'Total: ' + totalText + ' credits';
+            ? window.formatCreditValue(load)
+            : (Number(load).toFixed(1));
+          span.textContent = totalText + ' SU';
         }
       } catch (_) {}
     };
@@ -5205,6 +5209,13 @@
         element,
         className: element.className,
         html: element.matches('.course_type, .total_credit_text span') ? element.innerHTML : null,
+        // The semester-credit indicator now carries its workload split,
+        // threshold, and accessible explanation in attributes. A failed
+        // transactional replacement must restore those alongside its text and
+        // class instead of leaving metadata from the rolled-back schedule.
+        attributes: element.matches('.total_credit_text span')
+          ? Array.from(element.attributes).map((attribute) => [attribute.name, attribute.value])
+          : null,
       }));
 
       return () => {
@@ -5215,8 +5226,15 @@
         semesterDomStates.forEach(({ element, children }) => element.replaceChildren(...children));
         subcontainerDomStates.forEach(({ element, children }) => element.replaceChildren(...children));
         if (board) board.replaceChildren(...boardChildren);
-        visualStates.forEach(({ element, className, html }) => {
-          element.className = className;
+        visualStates.forEach(({ element, className, html, attributes }) => {
+          if (attributes) {
+            Array.from(element.attributes).forEach((attribute) => {
+              element.removeAttribute(attribute.name);
+            });
+            attributes.forEach(([name, value]) => element.setAttribute(name, value));
+          } else {
+            element.className = className;
+          }
           if (html !== null) element.innerHTML = html;
         });
       };

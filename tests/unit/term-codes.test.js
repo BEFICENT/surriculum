@@ -11,6 +11,25 @@ const { loadScriptGlobals } = require('./helpers/load-script');
 
 const h = loadScriptGlobals('scripts/helper_functions.js');
 
+const indicatorStub = () => {
+  const classes = new Set();
+  const attributes = {};
+  return {
+    classList: {
+      contains: (name) => classes.has(name),
+      toggle: (name, force) => {
+        if (force) classes.add(name);
+        else classes.delete(name);
+      },
+    },
+    dataset: {},
+    setAttribute: (name, value) => { attributes[name] = String(value); },
+    getAttribute: (name) => attributes[name] ?? null,
+    textContent: '',
+    title: '',
+  };
+};
+
 test('termNameToCode maps season + year to a 6-digit code', () => {
   assert.equal(h.termNameToCode('Fall 2024-2025'), '202401');
   assert.equal(h.termNameToCode('Spring 2024-2025'), '202402');
@@ -61,4 +80,80 @@ test('semester credit limits are advisory and Summer-specific', () => {
   assert.equal(h.isSemesterCreditOverLimit({ termCode: '202403', totalCredit: 8.01 }), true);
   assert.equal(h.isSemesterCreditOverLimit({ termCode: '202401', totalCredit: 20 }), false);
   assert.equal(h.isSemesterCreditOverLimit({ termCode: '202401', totalCredit: 20.01 }), true);
+});
+
+test('semester overload prefers raw workload, then explicit and legacy totals', () => {
+  assert.equal(h.isSemesterCreditOverLimit({
+    termCode: '202403', totalLoadCredit: 9, totalCredit: 0,
+  }, 1), true, 'stored workload wins over both explicit and legacy totals');
+  assert.equal(h.isSemesterCreditOverLimit({
+    termCode: '202403', totalLoadCredit: 8, totalCredit: 99,
+  }, 9), false, 'a finite stored workload also wins at the exact Summer boundary');
+
+  assert.equal(h.isSemesterCreditOverLimit({ termCode: '202403', totalCredit: 99 }, 8), false);
+  assert.equal(h.isSemesterCreditOverLimit({ termCode: '202403', totalCredit: 0 }, 8.01), true);
+
+  assert.equal(h.isSemesterCreditOverLimit({ termCode: '202403', totalCredit: 8 }), false);
+  assert.equal(h.isSemesterCreditOverLimit({ termCode: '202403', totalCredit: 8.01 }), true);
+  assert.equal(h.isSemesterCreditOverLimit({ termCode: '202401', totalLoadCredit: 20.01 }), true);
+});
+
+test('semester indicator formats fractional N/A load and exposes its full meaning', () => {
+  const span = indicatorStub();
+  const result = h.updateSemesterCreditIndicator(span, {
+    termCode: '202401',
+    primaryProgramCode: 'CS',
+    totalLoadCredit: 15.5,
+    primaryAllocatedCredit: 13,
+    primaryUnallocatedCredit: 2.5,
+    totalCredit: 13,
+  });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), {
+    load: 15.5, allocated: 13, unallocated: 2.5, limit: 20, overLimit: false,
+  });
+  assert.equal(span.textContent, '15.5 SU (2.5 N/A)');
+  assert.deepEqual(span.dataset, {
+    suLoad: '15.5',
+    primaryAllocatedSu: '13',
+    primaryUnallocatedSu: '2.5',
+    creditLimit: '20',
+    overloadAdvisory: 'false',
+  });
+  assert.equal(span.classList.contains('is-overlimit'), false);
+  assert.equal(
+    span.title,
+    '15.5 SU semester load: 13 SU are allocated to CS degree categories; '
+      + '2.5 SU are not allocated to a CS degree category (N/A). '
+      + 'Grade, PGPA, and other-program treatment are separate. '
+      + 'Standard regular-semester load threshold: 20 SU.',
+  );
+  assert.equal(span.getAttribute('aria-label'), span.title);
+});
+
+test('semester indicator omits zero N/A and explains a raw-load Summer overload', () => {
+  const normal = indicatorStub();
+  h.updateSemesterCreditIndicator(normal, {
+    termCode: '202401', primaryProgramCode: 'CS',
+    totalLoadCredit: 3, primaryAllocatedCredit: 3, primaryUnallocatedCredit: 0,
+  });
+  assert.equal(normal.textContent, '3 SU');
+
+  const overloaded = indicatorStub();
+  const result = h.updateSemesterCreditIndicator(overloaded, {
+    termCode: '202403', primaryProgramCode: 'MAN',
+    totalLoadCredit: 9, primaryAllocatedCredit: 6, primaryUnallocatedCredit: 3,
+    totalCredit: 6,
+  });
+  assert.equal(result.overLimit, true);
+  assert.equal(overloaded.textContent, '9 SU (3 N/A)');
+  assert.equal(overloaded.classList.contains('is-overlimit'), true);
+  assert.equal(
+    overloaded.title,
+    '9 SU semester load: 6 SU are allocated to MAN degree categories; '
+      + '3 SU are not allocated to a MAN degree category (N/A). '
+      + 'Grade, PGPA, and other-program treatment are separate. '
+      + 'Above the standard 8-SU Summer load; an overload may be possible with approval.',
+  );
+  assert.equal(overloaded.getAttribute('aria-label'), overloaded.title);
 });

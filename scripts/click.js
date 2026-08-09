@@ -562,7 +562,7 @@ function dynamic_click(e, curriculum, course_data)
                 const totalText = (typeof formatCreditValue === 'function')
                     ? formatCreditValue(sem.totalCredit)
                     : (Number(sem.totalCredit || 0).toFixed(1));
-                dom_tc.textContent = 'Total: ' + totalText + ' credits';
+                dom_tc.textContent = totalText + ' SU';
             }
             // Remove input container after adding course
             e.target.parentNode.remove();
@@ -942,7 +942,7 @@ function dynamic_click(e, curriculum, course_data)
             const totalText = (typeof formatCreditValue === 'function')
                 ? formatCreditValue(semObj.totalCredit)
                 : (Number(semObj.totalCredit || 0).toFixed(1));
-            if (dom_tc) dom_tc.textContent = 'Total: ' + totalText + ' credits';
+            if (dom_tc) dom_tc.textContent = totalText + ' SU';
         }
 
         const gradeOutcome = (typeof evaluateGradeForLegacyTotals === 'function')

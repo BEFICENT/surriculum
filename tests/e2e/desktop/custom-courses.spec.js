@@ -224,8 +224,41 @@ test.describe('custom course form', () => {
 
     const help = modal.locator('.cc-help-text');
     const btn = modal.locator('.cc-help');
+    const categoryBtn = modal.getByRole('button', {
+      name: 'Explain CS course categories', exact: true,
+    });
     await expect(help, 'the explanation starts collapsed').toBeHidden();
     await expect(btn, 'the ? control is visible without the icon font').toBeVisible();
+    await expect(categoryBtn, 'the program-category ? control is visible').toBeVisible();
+
+    const helpGeometry = await modal.evaluate((form) => {
+      const metrics = (button) => {
+        const box = button.getBoundingClientRect();
+        const glyph = getComputedStyle(button, '::before');
+        return {
+          targetWidth: box.width,
+          targetHeight: box.height,
+          glyphWidth: parseFloat(glyph.width),
+          glyphHeight: parseFloat(glyph.height),
+        };
+      };
+      return {
+        faculty: metrics(form.querySelector('.cc-help')),
+        category: metrics(form.querySelector('.program-category-help')),
+      };
+    });
+    expect(helpGeometry.faculty.targetWidth, 'Faculty help target width').toBeGreaterThanOrEqual(24);
+    expect(helpGeometry.faculty.targetHeight, 'Faculty help target height').toBeGreaterThanOrEqual(24);
+    expect(helpGeometry.category.targetWidth, 'category help target width').toBeGreaterThanOrEqual(24);
+    expect(helpGeometry.category.targetHeight, 'category help target height').toBeGreaterThanOrEqual(24);
+    expect(helpGeometry.faculty.glyphWidth, 'Faculty visible glyph width').toBe(16);
+    expect(helpGeometry.faculty.glyphHeight, 'Faculty visible glyph height').toBe(16);
+    expect(helpGeometry.category.glyphWidth, 'category visible glyph width').toBe(16);
+    expect(helpGeometry.category.glyphHeight, 'category visible glyph height').toBe(16);
+    expect(helpGeometry.category).toMatchObject({
+      glyphWidth: helpGeometry.faculty.glyphWidth,
+      glyphHeight: helpGeometry.faculty.glyphHeight,
+    });
 
     await btn.click();
     await expect(help).toBeVisible();
@@ -338,6 +371,64 @@ test.describe('custom course identity and destructive changes', () => {
     await expect(alert).toBeVisible();
     await alert.getByRole('button', { name: 'OK', exact: true }).click();
   };
+
+  test('editing planned N/A SU refreshes workload and crosses the Summer advisory threshold', async ({ page }) => {
+    const code = 'QQQ450';
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: TERM_NAME,
+      customCourses: {
+        CS: [custom(code, 'unknown', { SU_credit: '2', ECTS: '4' })],
+      },
+      curriculum: [['IF100', 'MATH101', code]],
+      grades: [['A', 'A', 'A']],
+      dates: ['Summer 2024-2025'],
+    });
+
+    const indicator = page.locator('.container_semester .total_credit_text span').first();
+    await expect(indicator).toHaveText('8 SU (2 N/A)');
+    await expect(indicator).toHaveAttribute('data-su-load', '8');
+    await expect(indicator).toHaveAttribute('data-primary-unallocated-su', '2');
+    await expect(indicator).toHaveAttribute('data-overload-advisory', 'false');
+    await expect(indicator).not.toHaveClass(/is-overlimit/);
+
+    const form = await openEdit(page, code);
+    await form.locator('.cc-row').nth(2).locator('input').fill('3');
+    await form.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(form).toBeHidden();
+
+    await expect(indicator).toHaveText('9 SU (3 N/A)');
+    await expect(indicator).toHaveAttribute('data-su-load', '9');
+    await expect(indicator).toHaveAttribute('data-primary-allocated-su', '6');
+    await expect(indicator).toHaveAttribute('data-primary-unallocated-su', '3');
+    await expect(indicator).toHaveAttribute('data-credit-limit', '8');
+    await expect(indicator).toHaveAttribute('data-overload-advisory', 'true');
+    await expect(indicator).toHaveClass(/is-overlimit/);
+    await expect(indicator).toHaveAttribute('title', /Above the standard 8-SU Summer load/);
+
+    const saved = await page.evaluate((courseCode) => {
+      const semester = window.curriculum.semesters[0];
+      const occurrence = semester.courses.find((course) => course.code === courseCode);
+      const record = JSON.parse(window.planStorage.getItem('customCourses_CS') || '[]')
+        .find((course) => `${course.Major}${course.Code}` === courseCode);
+      return {
+        occurrenceSu: Number(occurrence && occurrence.SU_credit),
+        storedSu: Number(record && record.SU_credit),
+        degreeTotal: semester.totalCredit,
+        load: semester.totalLoadCredit,
+        allocated: semester.primaryAllocatedCredit,
+        unallocated: semester.primaryUnallocatedCredit,
+      };
+    }, code);
+    expect(saved).toEqual({
+      occurrenceSu: 3,
+      storedSu: 3,
+      degreeTotal: 6,
+      load: 9,
+      allocated: 6,
+      unallocated: 3,
+    });
+  });
 
   test('renaming an in-use custom course preserves its attempt and stays coherent after reload', async ({ page }) => {
     await seedPlan(page, {

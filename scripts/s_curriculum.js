@@ -1419,11 +1419,111 @@ function graduationRulesFor(major, req) {
     return shared.concat(PROGRAM_RULES[major] || []);
 }
 
+const PRIMARY_ALLOCATED_CREDIT_TYPES = new Set([
+    'required', 'core', 'area', 'free', 'university',
+]);
+
+function currentWorkloadCourseDefinition(curriculum, course) {
+    const normalizeCode = (value) => String(value || '').trim().toUpperCase()
+        .replace(/\s+/g, '');
+    const code = normalizeCode(course && course.code);
+    if (!code) return null;
+
+    // The active primary list already contains the authoritative catalog plus
+    // non-colliding custom definitions. Search it first so a secondary-program
+    // record cannot change the primary occurrence metadata.
+    const primaryData = curriculum && Array.isArray(curriculum.primaryCourseData)
+        ? curriculum.primaryCourseData : [];
+    let globalFallback = null;
+    for (let i = 0; i < primaryData.length; i++) {
+        const record = primaryData[i];
+        const recordCode = normalizeCode(String((record && record.Major) || '')
+            + String((record && record.Code) || ''));
+        if (recordCode !== code) continue;
+        if (record && record.__globalCourseDefinition) {
+            if (!globalFallback) globalFallback = record;
+            continue;
+        }
+        return record;
+    }
+
+    // The shared resolver applies the same non-global precedence to active
+    // double-major and minor catalogs, then falls back to remembered external
+    // metadata. This supplies credits for courses absent from the main catalog
+    // without making them eligible for the main degree.
+    const getInfoFn = (typeof getInfo === 'function') ? getInfo
+        : ((typeof window !== 'undefined' && typeof window.getInfo === 'function')
+            ? window.getInfo : null);
+    if (getInfoFn) {
+        try {
+            const resolved = getInfoFn(code, primaryData);
+            if (resolved) return resolved;
+        } catch (_) {}
+    }
+    return globalFallback;
+}
+
+// Keep the semester workload separate from the primary degree total. Workload
+// includes every positive-SU course card (failed, projected, N/A, or allocated),
+// while the split reflects the completed primary-program allocation pass.
+function recomputeSemesterPrimaryCreditSplit(curriculum) {
+    const semesters = curriculum && Array.isArray(curriculum.semesters)
+        ? curriculum.semesters : [];
+    const creditNumber = (value) => {
+        let credit = 0;
+        try {
+            credit = (typeof parseCreditValue === 'function')
+                ? parseCreditValue(value) : Number.parseFloat(value || 0);
+        } catch (_) {
+            credit = Number.parseFloat(value || 0);
+        }
+        return Number.isFinite(credit) && credit > 0 ? credit : 0;
+    };
+    const tidy = (value) => Math.round((Number(value) || 0) * 1000) / 1000;
+    const primaryProgramCode = String((curriculum && curriculum.major) || '')
+        .trim().toUpperCase();
+
+    semesters.forEach((semester) => {
+        let load = 0;
+        let allocated = 0;
+        let unallocated = 0;
+        const courses = semester && Array.isArray(semester.courses)
+            ? semester.courses : [];
+        courses.forEach((course) => {
+            const definition = currentWorkloadCourseDefinition(curriculum, course);
+            let definitionCredit = null;
+            if (definition && Object.prototype.hasOwnProperty.call(definition, 'SU_credit')) {
+                const raw = String(definition.SU_credit == null ? '' : definition.SU_credit)
+                    .trim().replace(',', '.');
+                const parsed = raw ? Number.parseFloat(raw) : NaN;
+                if (Number.isFinite(parsed) && parsed >= 0) definitionCredit = parsed;
+            }
+            // Refresh the occurrence even when allocation exited early (failed,
+            // explicit N/A, alternative exclusion, or language-level review).
+            // A real zero is meaningful and must replace stale positive credit.
+            if (definitionCredit !== null && course) course.SU_credit = definitionCredit;
+            const credit = creditNumber(definitionCredit !== null
+                ? definitionCredit : (course && course.SU_credit));
+            if (!(credit > 0)) return;
+            load += credit;
+            const effectiveType = String((course && course.effective_type) || '')
+                .trim().toLowerCase();
+            if (PRIMARY_ALLOCATED_CREDIT_TYPES.has(effectiveType)) allocated += credit;
+            else unallocated += credit;
+        });
+        semester.totalLoadCredit = tidy(load);
+        semester.primaryAllocatedCredit = tidy(allocated);
+        semester.primaryUnallocatedCredit = tidy(unallocated);
+        semester.primaryProgramCode = primaryProgramCode;
+    });
+}
+
 // Render the allocation result to the DOM: each course's `.course_type` label
 // (single, or dual MAIN/DM parts for a double major) and each semester's
-// total-credit text. Reads ONLY the model the allocation sets (effective_type /
-// category / totalCredit), so it runs as a separate pass AFTER allocation rather
-// than being interleaved into it — the domain/UI split for the engine. No-ops
+// workload/category-split indicator. Reads ONLY the model the allocation sets
+// (effective types, workload split, and categories), so it runs as a separate
+// pass AFTER allocation rather than being interleaved into it — the domain/UI
+// split for the engine. No-ops
 // safely outside a browser. Pinned by allocation-render.spec.js.
 function renderAllocationLabels(curriculum) {
     if (typeof document === 'undefined') return;
@@ -1494,7 +1594,7 @@ function renderAllocationLabels(curriculum) {
                 } catch (_) {}
             }
         }
-        // Per-semester total-credit text.
+        // Per-semester workload/category-split indicator.
         try {
             const semElem = document.getElementById(sem.id);
             let containerElem = semElem && semElem.closest ? semElem.closest('.container_semester') : null;
@@ -1510,7 +1610,10 @@ function renderAllocationLabels(curriculum) {
                 if (typeof updateSemesterCreditIndicator === 'function') {
                     updateSemesterCreditIndicator(span, sem);
                 } else {
-                    span.textContent = 'Total: ' + sem.totalCredit + ' credits';
+                    const fallbackLoad = sem.totalLoadCredit !== null
+                        && sem.totalLoadCredit !== undefined
+                        ? sem.totalLoadCredit : sem.totalCredit;
+                    span.textContent = fallbackLoad + ' SU';
                 }
             }
         } catch (_) {}
@@ -2775,6 +2878,11 @@ function s_curriculum()
 
         }
 
+        // The main effective types are now final. Derive the independent
+        // workload and primary allocated/N/A split without changing the
+        // graduation-oriented `sem.totalCredit` values above.
+        recomputeSemesterPrimaryCreditSplit(this);
+
         // Recalculate the double major's effective types too, if active, so its
         // categories stay in sync whenever the primary allocation runs. That pass
         // renders the (dual) labels itself; a single major renders here. Rendering
@@ -3063,7 +3171,11 @@ function s_curriculum()
         // BEFORE the allocation cascade above (see the pre-cascade block), exactly
         // like the main-major pass. The old post-cascade block that lived here
         // stranded non-pool core courses in a pool-first order (bug #21); removed.
-        // Render the (dual main/DM) labels + total credits from the model.
+        // The DM pass may hydrate occurrence credit from its own catalog. Restore
+        // the primary-authoritative occurrence credit and workload split before
+        // rendering, including when callers invoke the DM pass directly.
+        recomputeSemesterPrimaryCreditSplit(this);
+        // Render the dual main/DM labels and primary-authoritative workload.
         renderAllocationLabels(this);
     };
 

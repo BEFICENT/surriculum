@@ -264,6 +264,10 @@ body.is-mobile[data-mobile-tab="planner"] .container_semester.m-collapsed .addCo
  * bold bar. --- */
 body.is-mobile[data-mobile-tab="planner"] .container_semester {
     position: relative;
+    /* Long split labels such as `5.5 SU (2.5 N/A)` need more room than the
+       former total-only pill. Keep one shared reserve for every collapsed
+       header instead of relying on the label's old approximate width. */
+    --m-semester-credit-reserve: 132px;
 }
 body.is-mobile[data-mobile-tab="planner"] .container_semester .total_credit_line {
     display: none;
@@ -329,7 +333,7 @@ body.is-mobile[data-mobile-tab="planner"] .container_semester:not(.m-collapsed) 
 
 /* Reserve room on the name row for the pill (and the icons when expanded). */
 body.is-mobile[data-mobile-tab="planner"] .subcontainer_semester .date {
-    padding-right: 108px;
+    padding-right: var(--m-semester-credit-reserve);
 }
 
 /* The current term is signalled by its green credits pill + green card border
@@ -359,6 +363,20 @@ body.is-mobile[data-mobile-tab="planner"] .date .tick {
    actions to a dedicated row instead of squeezing the term into a few
    characters. Date-edit mode retains its single-row select treatment above. */
 @media (max-width: 380px) {
+    /* Give the wider workload/N/A pill its own compact row while expanded.
+       It remains absolutely positioned in collapsed cards, where the shared
+       reserve above keeps the one-line header clear. This is content-width
+       based, so fractional and multi-digit loads cannot collide with the term
+       or action controls. */
+    body.is-mobile[data-mobile-tab="planner"]
+        .container_semester:not(.m-collapsed) .total_credit {
+        position: static;
+        width: max-content;
+        max-width: calc(100% - 24px);
+        margin: 10px 12px 0 auto;
+        transform: none;
+    }
+
     body.is-mobile[data-mobile-tab="planner"]
         .container_semester:not(.m-collapsed)
         .subcontainer_semester
@@ -372,8 +390,8 @@ body.is-mobile[data-mobile-tab="planner"] .date .tick {
     body.is-mobile[data-mobile-tab="planner"]
         .container_semester:not(.m-collapsed)
         .date:not(:has(.select-control)) > p {
-        flex: 0 0 calc(100% - 92px);
-        max-width: calc(100% - 92px);
+        flex: 1 1 100%;
+        max-width: 100%;
         min-width: 0;
         box-sizing: border-box;
         overflow-wrap: anywhere;

@@ -109,3 +109,86 @@ test('earned SU credits are grade/term based and independent of program allocati
 
   assert.equal(g.calculateEarnedSuCredits(semesters, '202502'), 8);
 });
+
+test('semester workload split uses positive raw SU and only primary effective pools', () => {
+  const curriculum = {
+    semesters: [
+      {
+        totalLoadCredit: 999,
+        primaryAllocatedCredit: 999,
+        primaryUnallocatedCredit: 999,
+        courses: [
+          { code: 'CORE300', SU_credit: '3', effective_type: 'core' },
+          {
+            code: 'FAILED250', grade: 'F', SU_credit: '2.5',
+            effective_type: 'none', effective_type_dm: 'required',
+          },
+          { code: 'UNIV125', SU_credit: '1.25', effective_type: 'university' },
+          { code: 'PENDING400', SU_credit: '4', effective_type: '' },
+          { code: 'INVALID300', SU_credit: '3', effective_type: 'unexpected' },
+          { code: 'NEGATIVE', SU_credit: '-2', effective_type: 'required' },
+          { code: 'MISSING', SU_credit: 'not-a-number', effective_type: 'required' },
+        ],
+      },
+      {
+        totalLoadCredit: 7,
+        primaryAllocatedCredit: 4,
+        primaryUnallocatedCredit: 3,
+        courses: [],
+      },
+    ],
+  };
+
+  g.recomputeSemesterPrimaryCreditSplit(curriculum);
+
+  assert.deepEqual(
+    {
+      load: curriculum.semesters[0].totalLoadCredit,
+      allocated: curriculum.semesters[0].primaryAllocatedCredit,
+      unallocated: curriculum.semesters[0].primaryUnallocatedCredit,
+    },
+    { load: 13.75, allocated: 4.25, unallocated: 9.5 },
+  );
+  assert.deepEqual(
+    {
+      load: curriculum.semesters[1].totalLoadCredit,
+      allocated: curriculum.semesters[1].primaryAllocatedCredit,
+      unallocated: curriculum.semesters[1].primaryUnallocatedCredit,
+    },
+    { load: 0, allocated: 0, unallocated: 0 },
+    'an empty semester clears stale split values',
+  );
+});
+
+test('primary catalog SU restores an occurrence hydrated with a different DM credit', () => {
+  const occurrence = {
+    code: 'SHARED300',
+    SU_credit: 4,
+    effective_type: 'core',
+    effective_type_dm: 'required',
+  };
+  const curriculum = {
+    major: 'CS',
+    primaryCourseData: [{
+      Major: 'SHARED', Code: '300', SU_credit: '3', EL_Type: 'core',
+    }],
+    doubleMajorCourseData: [{
+      Major: 'SHARED', Code: '300', SU_credit: '4', EL_Type: 'required',
+    }],
+    semesters: [{ courses: [occurrence] }],
+  };
+
+  g.recomputeSemesterPrimaryCreditSplit(curriculum);
+
+  assert.equal(occurrence.SU_credit, 3, 'secondary-program hydration must be restored');
+  assert.deepEqual(
+    {
+      load: curriculum.semesters[0].totalLoadCredit,
+      allocated: curriculum.semesters[0].primaryAllocatedCredit,
+      unallocated: curriculum.semesters[0].primaryUnallocatedCredit,
+      program: curriculum.semesters[0].primaryProgramCode,
+    },
+    { load: 3, allocated: 3, unallocated: 0, program: 'CS' },
+    'one planned occurrence contributes its primary SU exactly once',
+  );
+});

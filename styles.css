@@ -4459,20 +4459,34 @@ html, body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 16px;
-    height: 16px;
+    width: 24px;
+    height: 24px;
     margin-left: 6px;
     padding: 0;
-    border: 1px solid currentColor;
+    border: 0;
     border-radius: 50%;
     background: transparent;
     color: inherit;
     opacity: 0.65;
-    font-size: 11px;
-    font-weight: 700;
+    font-size: 0;
     line-height: 1;
     cursor: pointer;
     vertical-align: middle;
+}
+
+.custom_course_modal .cc-help::before,
+.program-category-help::before {
+    content: '?';
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
 }
 
 .custom_course_modal .cc-help:hover,
@@ -4515,10 +4529,7 @@ html, body {
 
 .program-category-label-line .program-category-help {
     flex: 0 0 auto;
-    width: 24px;
-    height: 24px;
     margin-left: 0;
-    font-size: 12px;
 }
 
 .program-category-help-text {

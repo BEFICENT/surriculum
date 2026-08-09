@@ -64,9 +64,12 @@ The planner gives yellow, non-blocking prerequisite warnings and checks only
 genuinely separate corequisite codes. These warnings support planning and do not
 change graduation eligibility, so special approvals remain possible.
 
-Semester credit totals turn red above the standard load of 8 SU in Summer or
-20 SU in Fall/Spring. This is an advisory warning only: the planner retains the
-courses, and an overload remains possible with approval.
+Semester headers show the full positive-SU course load represented in that
+term. Credit not allocated to a primary-program category is called out in the
+same compact indicator, for example **15 SU (3 N/A)**. The full load turns red
+above the standard 8-SU Summer or 20-SU Fall/Spring threshold. This remains an
+advisory warning only: the planner retains the courses, an overload remains
+possible with approval, and graduation-credit totals are calculated separately.
 
 The scheduler now accounts for date-specific meetings and detects conflicts even
 when weekend or late-hour rows are not visible. Saturday, Sunday, and extended

@@ -11,6 +11,19 @@ const PLAN = {
   dates: ['Fall 2024-2025', 'Spring 2024-2025'],
 };
 
+const unallocatedCustomCourse = {
+  Major: 'ZZZ',
+  Code: '925',
+  Course_Name: 'Fractional Unallocated Course',
+  ECTS: '5',
+  Engineering: 0,
+  Basic_Science: 0,
+  SU_credit: '2.5',
+  Faculty: '',
+  Faculty_Course: 'No',
+  EL_Type: 'unknown',
+};
+
 const progressSection = (page, title) => page.locator(
   `#mProgress .m-prog-detail .ms-section:has(> .ms-header .ms-title:text-is("${title}"))`,
 );
@@ -89,8 +102,9 @@ test.describe('mobile screens', () => {
     await seedPlan(page, {
       major: 'CS',
       entryTerm: 'Fall 2024-2025',
-      curriculum: [['MATH101']],
-      grades: [['A']],
+      customCourses: { CS: [unallocatedCustomCourse] },
+      curriculum: [['MATH101', 'ZZZ925']],
+      grades: [['A', 'A']],
       dates: ['Spring 2024-2025'],
     });
 
@@ -102,7 +116,7 @@ test.describe('mobile screens', () => {
     await expect(semester).not.toHaveClass(/m-collapsed/);
     await expect(semester.locator('.date p')).toHaveText('Spring 2024-2025');
     await expect(semester.locator('.semester-move-controls')).toBeVisible();
-    await expect(semester.locator('.total_credit_text')).toContainText('Total: 3 credits');
+    await expect(semester.locator('.total_credit_text')).toContainText('5.5 SU (2.5 N/A)');
 
     await testInfo.attach('expanded-semester-header-320', {
       body: await semester.screenshot({ animations: 'disabled' }),
@@ -179,6 +193,55 @@ test.describe('mobile screens', () => {
     expect(layout.cardOverflow).toBeLessThanOrEqual(1);
     expect(layout.dateOverflow).toBeLessThanOrEqual(1);
     expect(layout.boardOverflow).toBeLessThanOrEqual(1);
+
+    await semester.locator('.date').click();
+    await expect(semester).toHaveClass(/m-collapsed/);
+    await expect(semester.locator('.total_credit_text')).toContainText('5.5 SU (2.5 N/A)');
+    await semester.locator('.m-sem-chevron').evaluate(async (element) => {
+      await Promise.all(element.getAnimations().map((animation) => animation.finished));
+    });
+    const collapsedLayout = await semester.evaluate((card) => {
+      const rect = (element) => {
+        const box = element.getBoundingClientRect();
+        return { left: box.left, right: box.right, top: box.top, bottom: box.bottom };
+      };
+      const inside = (child, parent, tolerance = 1) => child.left >= parent.left - tolerance
+        && child.right <= parent.right + tolerance
+        && child.top >= parent.top - tolerance
+        && child.bottom <= parent.bottom + tolerance;
+      const overlapArea = (first, second) => Math.max(
+        0, Math.min(first.right, second.right) - Math.max(first.left, second.left),
+      ) * Math.max(
+        0, Math.min(first.bottom, second.bottom) - Math.max(first.top, second.top),
+      );
+      const cardBox = rect(card);
+      const date = card.querySelector('.date');
+      const dateBox = rect(date);
+      const labelBox = rect(date.querySelector('p'));
+      const chevronBox = rect(date.querySelector('.m-sem-chevron'));
+      const creditBox = rect(card.querySelector('.total_credit'));
+      const board = card.closest('.board');
+      return {
+        creditInCard: inside(creditBox, cardBox),
+        labelInDate: inside(labelBox, dateBox),
+        chevronInDate: inside(chevronBox, dateBox),
+        labelCreditOverlap: overlapArea(labelBox, creditBox),
+        chevronCreditOverlap: overlapArea(chevronBox, creditBox),
+        cardOverflow: card.scrollWidth - card.clientWidth,
+        dateOverflow: date.scrollWidth - date.clientWidth,
+        boardOverflow: board.scrollWidth - board.clientWidth,
+      };
+    });
+    expect(collapsedLayout).toMatchObject({
+      creditInCard: true,
+      labelInDate: true,
+      chevronInDate: true,
+    });
+    expect(collapsedLayout.labelCreditOverlap).toBeLessThanOrEqual(0.5);
+    expect(collapsedLayout.chevronCreditOverlap).toBeLessThanOrEqual(0.5);
+    expect(collapsedLayout.cardOverflow).toBeLessThanOrEqual(1);
+    expect(collapsedLayout.dateOverflow).toBeLessThanOrEqual(1);
+    expect(collapsedLayout.boardOverflow).toBeLessThanOrEqual(1);
   });
 
   test('progress screen renders a program card with a completion bar', async ({ page }) => {

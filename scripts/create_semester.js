@@ -27,7 +27,7 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
     total_credit_line_r.classList.add("total_credit_line");
     let total_credit_text = document.createElement("div");
     total_credit_text.classList.add("total_credit_text");
-    total_credit_text.innerHTML = "<span> Total: 0 credits </span>"
+    total_credit_text.innerHTML = "<span>0 SU</span>"
     total_credit.appendChild(total_credit_line_l);
     total_credit.appendChild(total_credit_text);
     total_credit.appendChild(total_credit_line_r);
@@ -346,7 +346,7 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
                 const totalText = (typeof formatCreditValue === 'function')
                     ? formatCreditValue(semesterObj.totalCredit)
                     : (Number(semesterObj.totalCredit || 0).toFixed(1));
-                dom_tc.textContent = 'Total: ' + totalText + ' credits';
+                dom_tc.textContent = totalText + ' SU';
             }
         }
     }

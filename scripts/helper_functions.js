@@ -165,38 +165,72 @@ function semesterCreditLimit(termOrSemester) {
 }
 
 function isSemesterCreditOverLimit(termOrSemester, explicitTotal) {
-    const rawTotal = explicitTotal !== undefined
-        ? explicitTotal
-        : (termOrSemester && typeof termOrSemester === 'object'
-            ? termOrSemester.totalCredit : 0);
+    const storedLoadValue = termOrSemester && typeof termOrSemester === 'object'
+        ? termOrSemester.totalLoadCredit : null;
+    const storedLoad = storedLoadValue !== null && storedLoadValue !== undefined
+        ? Number(storedLoadValue) : NaN;
+    const rawTotal = Number.isFinite(storedLoad) && storedLoad >= 0
+        ? storedLoad
+        : (explicitTotal !== undefined
+            ? explicitTotal
+            : (termOrSemester && typeof termOrSemester === 'object'
+                ? termOrSemester.totalCredit : 0));
     const total = Number(rawTotal);
     return Number.isFinite(total) && total > semesterCreditLimit(termOrSemester);
 }
 
-function updateSemesterCreditIndicator(span, semester, explicitTotal) {
+function updateSemesterCreditIndicator(span, semester, explicitLoad) {
     if (!span) return null;
-    const rawTotal = explicitTotal !== undefined
-        ? explicitTotal
-        : (semester && semester.totalCredit !== undefined ? semester.totalCredit : 0);
-    const total = Number(rawTotal) || 0;
-    const totalText = String(total);
+    const storedLoadValue = semester && semester.totalLoadCredit;
+    const storedLoad = storedLoadValue !== null && storedLoadValue !== undefined
+        ? Number(storedLoadValue) : NaN;
+    const rawLoad = Number.isFinite(storedLoad) && storedLoad >= 0
+        ? storedLoad
+        : (explicitLoad !== undefined
+            ? explicitLoad
+            : (semester && semester.totalCredit !== undefined ? semester.totalCredit : 0));
+    const load = Math.max(0, Number(rawLoad) || 0);
+    const storedAllocatedValue = semester && semester.primaryAllocatedCredit;
+    const storedAllocated = storedAllocatedValue !== null && storedAllocatedValue !== undefined
+        ? Number(storedAllocatedValue) : NaN;
+    const allocated = Number.isFinite(storedAllocated) && storedAllocated >= 0
+        ? Math.min(load, storedAllocated) : load;
+    const storedUnallocatedValue = semester && semester.primaryUnallocatedCredit;
+    const storedUnallocated = storedUnallocatedValue !== null && storedUnallocatedValue !== undefined
+        ? Number(storedUnallocatedValue) : NaN;
+    const unallocated = Number.isFinite(storedUnallocated) && storedUnallocated >= 0
+        ? Math.min(load, storedUnallocated) : Math.max(0, load - allocated);
+    const compactCredit = (value) => String(
+        Math.round((Number(value) || 0) * 1000) / 1000
+    );
+    const loadText = compactCredit(load);
+    const allocatedText = compactCredit(allocated);
+    const unallocatedText = compactCredit(unallocated);
     const limit = semesterCreditLimit(semester);
-    const overLimit = isSemesterCreditOverLimit(semester, total);
-    const seasonLabel = isSummerTerm(semester) ? 'Summer' : 'regular semester';
+    const overLimit = isSemesterCreditOverLimit(semester, load);
+    const summer = isSummerTerm(semester);
+    const seasonLabel = summer ? 'Summer' : 'regular semester';
 
-    span.textContent = 'Total: ' + totalText + ' credits';
+    span.textContent = loadText + ' SU' + (unallocated > 0
+        ? ' (' + unallocatedText + ' N/A)' : '');
     span.classList.toggle('is-overlimit', overLimit);
+    span.dataset.suLoad = loadText;
+    span.dataset.primaryAllocatedSu = allocatedText;
+    span.dataset.primaryUnallocatedSu = unallocatedText;
     span.dataset.creditLimit = String(limit);
     span.dataset.overloadAdvisory = overLimit ? 'true' : 'false';
-    if (overLimit) {
-        const message = `Total ${totalText} credits. Above the standard ${limit}-credit ${seasonLabel} load; an overload may be possible with approval.`;
-        span.title = message;
-        span.setAttribute('aria-label', message);
-    } else {
-        span.removeAttribute('title');
-        span.setAttribute('aria-label', `Total ${totalText} credits. Standard ${seasonLabel} load threshold: ${limit} credits.`);
-    }
-    return { total, limit, overLimit };
+    const program = String((semester && semester.primaryProgramCode) || '').trim().toUpperCase();
+    const allocatedDestination = program
+        ? `${program} degree categories` : "the primary program's degree categories";
+    const unallocatedDestination = program
+        ? `a ${program} degree category` : 'a primary-program degree category';
+    const thresholdText = overLimit
+        ? `Above the standard ${limit}-SU ${seasonLabel} load; an overload may be possible with approval.`
+        : `Standard ${summer ? 'Summer' : 'regular-semester'} load threshold: ${limit} SU.`;
+    const message = `${loadText} SU semester load: ${allocatedText} SU are allocated to ${allocatedDestination}; ${unallocatedText} SU are not allocated to ${unallocatedDestination} (N/A). Grade, PGPA, and other-program treatment are separate. ${thresholdText}`;
+    span.title = message;
+    span.setAttribute('aria-label', message);
+    return { load, allocated, unallocated, limit, overLimit };
 }
 
 if (typeof window !== 'undefined') {

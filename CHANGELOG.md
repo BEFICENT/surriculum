@@ -50,8 +50,11 @@ unreleased until the branch is merged, published, and tagged.
   FENS retains them as effective N/A without changing their CGPA treatment.
 - Planner autosave now flushes shortly after mutations and on page hiding while
   preserving plan deletion/reset boundaries and multi-tab isolation.
-- Semester totals now show a non-blocking overload advisory above 8 SU in
-  Summer or 20 SU in Fall/Spring; approved overloads remain fully editable.
+- Semester headers now show the full positive-SU course load, with credit not
+  allocated to a primary-program category called out separately (for example,
+  **15 SU (3 N/A)**). The full load drives the non-blocking advisory above 8 SU
+  in Summer or 20 SU in Fall/Spring; approved overloads remain fully editable,
+  and graduation-credit totals are unchanged.
 - Shared preferences use SUrriculum-owned storage keys and copy legacy values
   without changing their plan-independent behavior. Ambiguous generic keys are
   deliberately left untouched for other same-origin applications.

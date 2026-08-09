@@ -27,15 +27,15 @@ a time and checked off only after the fix and its verification are complete.
 
 ## Verified baseline
 
-- [x] JavaScript/static unit gate passes: 235/235 tests.
-- [ ] The current Chromium Playwright inventory is 467 tests (449 desktop and
+- [x] JavaScript/static unit gate passes: 240/240 tests.
+- [ ] The current Chromium Playwright inventory is 471 tests (453 desktop and
   18 mobile). On 2026-08-08, the then-current 451-test local run plus a
   failed-case rerun cleared 448 scenarios; the three remaining cases are the
   mounted GitHub-Pages/offline service-worker checks, which were blocked by
   repeated Windows localhost `ERR_NETWORK_ACCESS_DENIED`/`WinError 10053`
   failures before their app assertions could run. The three new narrow-mobile
   layout regressions pass at 320, 360, and default mobile widths. Rerun the full
-  467-test gate in a stable environment before release. The new language-course
+  471-test gate in a stable environment before release. The new language-course
   focused browser suites pass 31/31, and the program-scoped custom-category
   behavioral baseline passes 9/9. Its three new category-help regressions pass
   3/3, including the 320 px layout and legacy double-major prompt.
@@ -243,8 +243,12 @@ a time and checked off only after the fix and its verification are complete.
   transcript courses can satisfy later prerequisites but do not receive planning
   warnings themselves. Warnings remain completely outside graduation and
   allocation logic.
-- [x] Apply term-specific advisory semester loads. Completed on 2026-08-08:
-  semester totals turn red only above 8 SU in Summer or 20 SU in Fall/Spring.
+- [x] Apply term-specific advisory semester loads. Completed on 2026-08-08 and
+  refined on 2026-08-09: semester headers sum every positive-SU course card,
+  including courses which are N/A for the primary program, and show that
+  unallocated portion separately (for example, **15 SU (3 N/A)**). The full
+  workload turns red only above 8 SU in Summer or 20 SU in Fall/Spring, while
+  graduation-oriented credit totals remain unchanged.
   The threshold follows stable model term identity and updates immediately after
   term edits, reloads, imports, manual changes, and scheduler replacement. It is
   display-only: overload courses remain in the plan, and the accessible warning

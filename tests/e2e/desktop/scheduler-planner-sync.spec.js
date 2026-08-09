@@ -70,16 +70,29 @@ async function plannerState(page) {
         category: course.category,
       })),
     })),
-    dom: Array.from(document.querySelectorAll('.container_semester')).map((container) => ({
-      label: container.querySelector('.date p')?.textContent || '',
-      total: container.querySelector('.total_credit_text span')?.textContent || '',
-      courses: Array.from(container.querySelectorAll('.course')).map((course) => ({
-        id: course.id,
-        code: course.querySelector('.course_code')?.textContent || '',
-        grade: course.querySelector('.grade')?.textContent || '',
-        type: course.querySelector('.course_type')?.textContent || '',
-      })),
-    })),
+    dom: Array.from(document.querySelectorAll('.container_semester')).map((container) => {
+      const indicator = container.querySelector('.total_credit_text span');
+      return {
+        label: container.querySelector('.date p')?.textContent || '',
+        creditIndicator: indicator ? {
+          text: indicator.textContent || '',
+          className: indicator.className || '',
+          title: indicator.getAttribute('title'),
+          ariaLabel: indicator.getAttribute('aria-label'),
+          suLoad: indicator.dataset.suLoad,
+          primaryAllocatedSu: indicator.dataset.primaryAllocatedSu,
+          primaryUnallocatedSu: indicator.dataset.primaryUnallocatedSu,
+          creditLimit: indicator.dataset.creditLimit,
+          overloadAdvisory: indicator.dataset.overloadAdvisory,
+        } : null,
+        courses: Array.from(container.querySelectorAll('.course')).map((course) => ({
+          id: course.id,
+          code: course.querySelector('.course_code')?.textContent || '',
+          grade: course.querySelector('.grade')?.textContent || '',
+          type: course.querySelector('.course_type')?.textContent || '',
+        })),
+      };
+    }),
     stored: {
       curriculum: JSON.parse(window.planStorage.getItem('curriculum')),
       grades: JSON.parse(window.planStorage.getItem('grades')),

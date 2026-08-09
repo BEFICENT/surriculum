@@ -3,6 +3,14 @@ function s_semester(id, course_data)
 {
     this.courses = [];
     this.id = id;
+    // Workload is independent of degree allocation: every positive-SU course
+    // card contributes even when its grade or category makes it N/A for the
+    // primary program. `totalCredit` below retains its historical graduation-
+    // total meaning.
+    this.totalLoadCredit = null;
+    this.primaryAllocatedCredit = null;
+    this.primaryUnallocatedCredit = null;
+    this.primaryProgramCode = '';
     this.totalCredit = 0;
     this.totalArea = 0;
     this.totalCore = 0;
