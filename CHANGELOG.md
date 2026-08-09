@@ -42,6 +42,9 @@ unreleased until the branch is merged, published, and tagged.
 - Transcript-created custom courses use an explicit **Save & Keep** or
   **Skip & Remove** review step; removal rolls back the imported occurrence and
   saved definition together.
+- Custom-course program-category selectors now include accessible **?**
+  disclosures explaining starting pools, overflow, official-catalog priority,
+  and the distinct effects of **None** and **N/A**.
 - `LANG` imports preserve the transcript's actual grade and credits. They count
   as free electives only where the selected program permits language electives;
   FENS retains them as effective N/A without changing their CGPA treatment.

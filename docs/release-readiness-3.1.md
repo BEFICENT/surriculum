@@ -28,16 +28,17 @@ a time and checked off only after the fix and its verification are complete.
 ## Verified baseline
 
 - [x] JavaScript/static unit gate passes: 235/235 tests.
-- [ ] The current Chromium Playwright inventory is 464 tests (446 desktop and
+- [ ] The current Chromium Playwright inventory is 467 tests (449 desktop and
   18 mobile). On 2026-08-08, the then-current 451-test local run plus a
   failed-case rerun cleared 448 scenarios; the three remaining cases are the
   mounted GitHub-Pages/offline service-worker checks, which were blocked by
   repeated Windows localhost `ERR_NETWORK_ACCESS_DENIED`/`WinError 10053`
   failures before their app assertions could run. The three new narrow-mobile
   layout regressions pass at 320, 360, and default mobile widths. Rerun the full
-  464-test gate in a stable environment before release. The new language-course
+  467-test gate in a stable environment before release. The new language-course
   focused browser suites pass 31/31, and the program-scoped custom-category
-  suite passes 9/9.
+  behavioral baseline passes 9/9. Its three new category-help regressions pass
+  3/3, including the 320 px layout and legacy double-major prompt.
 - [x] Focused cross-browser gate passes: 2/2 critical flows (Firefox and
   WebKit), also with zero retries.
 - [x] `python tests/scrape_groups_test.py` passes when run directly.
@@ -401,6 +402,11 @@ a time and checked off only after the fix and its verification are complete.
   authoritative, and fractional minor credits are preserved. A simulated
   later-key write rejection verifies best-effort restoration of earlier
   selected-program writes without changing the planner occurrence.
+- [x] Explain custom-course program categories in place. Completed on
+  2026-08-09: every main, double-major, and minor category selector has an
+  accessible **?** disclosure covering its available starting pools, allocation
+  caveats, official-catalog priority, and the distinct **None**/**N/A** behavior.
+  The disclosure is option-specific and remains contained at a 320 px viewport.
 - [x] Give unsuccessful attempts a distinct Summary state instead of placing
   them in the generic "untaken" bucket. Completed on 2026-08-08: unsuccessful
   rows receive their own red state, text label, data attribute, and legend entry;

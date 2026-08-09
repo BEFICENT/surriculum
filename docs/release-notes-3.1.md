@@ -44,7 +44,9 @@ temporary main/double-major role. The form labels them explicitly, such as
 distinct selected minor. For an unchanged course code, these choices survive
 role and minor selection changes; when a course is officially listed for the
 active admit term, the catalog's category remains authoritative and the stored
-custom choice stays dormant.
+custom choice stays dormant. An accessible **?** beside each selector explains
+its available categories, downstream allocation, and the difference between
+**None** and **N/A**.
 
 Erasmus/exchange `LANG` rows are now imported for every major without inventing
 a transfer grade: the grade, title, SU credits, and ECTS recorded on the

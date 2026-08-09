@@ -2088,6 +2088,90 @@ function SUrriculum(major_chosen_by_user) {
             boardDom.appendChild(overlay);
         }
 
+        let programCategoryHelpSequence = 0;
+        const programCategoryHelpDescriptions = {
+            required: ['Required', 'Starts in the required pool. A custom choice does not create a named or equivalent requirement, approve a substitution, or grant university approval.'],
+            core: ['Core', 'Starts in the program\'s core-elective pool.'],
+            area: ['Area', 'Starts in an area, concentration, or specialization pool.'],
+            university: ['University', 'Stays in the university-course pool, but does not replace a specifically named university requirement.'],
+            free: ['Free', 'Stays in the free-elective pool.'],
+            none: ['None', 'Uses no category pool or program GPA (PGPA), although main-plan SU/ECTS may still count toward the overall degree total.'],
+            unknown: ['N/A', 'Contributes nothing through this program. CGPA and treatment by other selected programs remain separate.'],
+        };
+
+        function createProgramCategoryHelp(programCode, availableTypes) {
+            const code = String(programCode || 'program').trim().toUpperCase() || 'PROGRAM';
+            const types = Array.isArray(availableTypes) ? availableTypes : [];
+            const isMinor = !types.includes('university') && !types.includes('none');
+            const panelId = `program-category-help-${++programCategoryHelpSequence}`;
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'program-category-help';
+            button.textContent = '?';
+            button.setAttribute('aria-label', `Explain ${code} course categories`);
+            button.setAttribute('aria-controls', panelId);
+            button.setAttribute('aria-expanded', 'false');
+
+            const panel = document.createElement('div');
+            panel.id = panelId;
+            panel.className = 'program-category-help-text is-hidden';
+            panel.setAttribute('role', 'note');
+
+            const intro = document.createElement('p');
+            intro.textContent = isMinor
+                ? `For ${code}, this is the course's starting minor category. Each selected program is classified separately; the minor's requirements and equivalence rules decide where it actually counts. Check Summary for the result.`
+                : `For ${code}, this is the course's starting program category. Each selected program is classified separately. As requirements fill, eligible credit may move down Required → Core → Area → Free; program-specific rules can also reassign or exclude it. Check Summary for where it actually counts.`;
+            panel.appendChild(intro);
+
+            const list = document.createElement('ul');
+            types.forEach(function(type) {
+                let definition = programCategoryHelpDescriptions[type];
+                if (!definition) return;
+                if (isMinor && type === 'required') {
+                    definition = ['Required', 'Starts in the minor required pool. It does not replace a named or equivalent required course or grant approval for a substitution.'];
+                } else if (isMinor && type === 'unknown') {
+                    definition = ['N/A', 'Enters neither the minor total nor the minor program GPA. CGPA and treatment by other selected programs remain separate.'];
+                }
+                const item = document.createElement('li');
+                item.dataset.category = type;
+                const name = document.createElement('strong');
+                name.textContent = definition[0] + ': ';
+                item.appendChild(name);
+                item.appendChild(document.createTextNode(definition[1]));
+                list.appendChild(item);
+            });
+            panel.appendChild(list);
+
+            const footer = document.createElement('p');
+            footer.textContent = isMinor
+                ? 'Main- and other-program treatment and CGPA remain separate. A disabled selector means the official catalog category for this minor and admit term applies. Custom classifications are planning assumptions, not university approval.'
+                : 'Category never changes grade or CGPA treatment. A disabled selector means the official catalog category for this program and admit term applies; any saved custom choice is dormant. Custom classifications are planning assumptions, not university approval.';
+            panel.appendChild(footer);
+
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                event.stopPropagation();
+                const willShow = panel.classList.contains('is-hidden');
+                if (willShow) {
+                    const container = panel.closest('.custom_course_modal, .double_major_modal');
+                    if (container) {
+                        container.querySelectorAll('.program-category-help-text:not(.is-hidden)')
+                            .forEach(function(otherPanel) {
+                                if (otherPanel === panel) return;
+                                otherPanel.classList.add('is-hidden');
+                                const otherButton = container.querySelector(
+                                    `.program-category-help[aria-controls="${otherPanel.id}"]`
+                                );
+                                if (otherButton) otherButton.setAttribute('aria-expanded', 'false');
+                            });
+                    }
+                }
+                panel.classList.toggle('is-hidden', !willShow);
+                button.setAttribute('aria-expanded', willShow ? 'true' : 'false');
+            });
+            return { button, panel };
+        }
+
         function showCustomCourseForm(prefill = null, courseObj = null, onSaveCallback = null, onCancelCallback = null, courseStorageIndex = null, linkedProgramCourses = null) {
             // Prevent multiple modals
             if (document.querySelector('.custom_course_modal')) return;
@@ -2178,11 +2262,20 @@ function SUrriculum(major_chosen_by_user) {
             const typeLabel = document.createElement('label');
             typeLabel.innerText = `${primaryProgramCode} Category:`;
             typeLabel.htmlFor = 'cc-primary-program-category';
-            typeRow.appendChild(typeLabel);
+            const primaryCategoryOptions = ['core', 'area', 'university', 'free', 'required', 'none', 'unknown'];
+            const primaryCategoryHelp = createProgramCategoryHelp(
+                primaryProgramCode,
+                primaryCategoryOptions
+            );
+            const typeLabelLine = document.createElement('div');
+            typeLabelLine.className = 'program-category-label-line';
+            typeLabelLine.appendChild(typeLabel);
+            typeLabelLine.appendChild(primaryCategoryHelp.button);
+            typeRow.appendChild(typeLabelLine);
             const typeSelect = document.createElement('select');
             typeSelect.id = 'cc-primary-program-category';
             typeSelect.className = 'cc-program-category cc-primary-program-category';
-            ['core', 'area', 'university', 'free', 'required', 'none', 'unknown'].forEach(function(opt) {
+            primaryCategoryOptions.forEach(function(opt) {
                 const option = document.createElement('option');
                 option.value = opt;
                 option.innerText = opt === 'unknown'
@@ -2191,6 +2284,7 @@ function SUrriculum(major_chosen_by_user) {
                 typeSelect.appendChild(option);
             });
             typeRow.appendChild(typeSelect);
+            typeRow.appendChild(primaryCategoryHelp.panel);
 
             // A stored custom definition can become dormant when the selected
             // admit term gains an official row with the same code. Show the
@@ -2198,6 +2292,7 @@ function SUrriculum(major_chosen_by_user) {
             // category underneath so switching back to another term restores
             // the user's program-scoped classification.
             const primaryOfficialNote = document.createElement('small');
+            primaryOfficialNote.id = 'cc-primary-program-category-official-note';
             primaryOfficialNote.className = 'cc-program-category-note cc-language-note is-hidden';
             primaryOfficialNote.textContent = 'The official catalog category applies to this course.';
             typeRow.appendChild(primaryOfficialNote);
@@ -2239,9 +2334,11 @@ function SUrriculum(major_chosen_by_user) {
                 if (official) {
                     typeSelect.value = normalizePrimaryType(official.EL_Type);
                     typeSelect.disabled = true;
+                    typeSelect.setAttribute('aria-describedby', primaryOfficialNote.id);
                     primaryOfficialNote.classList.remove('is-hidden');
                 } else {
                     typeSelect.disabled = false;
+                    typeSelect.removeAttribute('aria-describedby');
                     typeSelect.value = primaryEditableType;
                     primaryOfficialNote.classList.add('is-hidden');
                 }
@@ -2421,19 +2518,24 @@ function SUrriculum(major_chosen_by_user) {
                 const contextTypeRow = document.createElement('div');
                 contextTypeRow.classList.add('cc-row', 'cc-program-category-row');
                 contextTypeRow.dataset.program = programCode;
-                const contextTypeLabel = document.createElement('label');
-                const selectId = `cc-program-category-${index}`;
-                contextTypeLabel.innerText = `${programCode} Category:`;
-                contextTypeLabel.htmlFor = selectId;
-                contextTypeRow.appendChild(contextTypeLabel);
-
-                const contextTypeSelect = document.createElement('select');
-                contextTypeSelect.id = selectId;
-                contextTypeSelect.className = 'cc-program-category';
                 const isDoubleMajorContext = programCode === String((curriculum && curriculum.doubleMajor) || '').toUpperCase();
                 const contextOptions = isDoubleMajorContext
                     ? ['core', 'area', 'university', 'free', 'required', 'none', 'unknown']
                     : ['required', 'core', 'area', 'free', 'unknown'];
+                const contextTypeLabel = document.createElement('label');
+                const selectId = `cc-program-category-${index}`;
+                contextTypeLabel.innerText = `${programCode} Category:`;
+                contextTypeLabel.htmlFor = selectId;
+                const contextCategoryHelp = createProgramCategoryHelp(programCode, contextOptions);
+                const contextLabelLine = document.createElement('div');
+                contextLabelLine.className = 'program-category-label-line';
+                contextLabelLine.appendChild(contextTypeLabel);
+                contextLabelLine.appendChild(contextCategoryHelp.button);
+                contextTypeRow.appendChild(contextLabelLine);
+
+                const contextTypeSelect = document.createElement('select');
+                contextTypeSelect.id = selectId;
+                contextTypeSelect.className = 'cc-program-category';
                 contextOptions.forEach(function(opt) {
                     const option = document.createElement('option');
                     option.value = opt;
@@ -2459,8 +2561,10 @@ function SUrriculum(major_chosen_by_user) {
                     }
                 });
                 contextTypeRow.appendChild(contextTypeSelect);
+                contextTypeRow.appendChild(contextCategoryHelp.panel);
 
                 const officialNote = document.createElement('small');
+                officialNote.id = `${selectId}-official-note`;
                 officialNote.className = 'cc-program-category-note cc-language-note is-hidden';
                 officialNote.textContent = 'The official catalog category applies to this course.';
                 contextTypeRow.appendChild(officialNote);
@@ -2489,9 +2593,11 @@ function SUrriculum(major_chosen_by_user) {
                             return option.value === officialType;
                         }) ? officialType : 'unknown';
                         contextTypeSelect.disabled = true;
+                        contextTypeSelect.setAttribute('aria-describedby', officialNote.id);
                         officialNote.classList.remove('is-hidden');
                     } else {
                         contextTypeSelect.disabled = false;
+                        contextTypeSelect.removeAttribute('aria-describedby');
                         contextTypeSelect.value = editableValue;
                         officialNote.classList.add('is-hidden');
                     }
@@ -3455,10 +3561,16 @@ function SUrriculum(major_chosen_by_user) {
             const selectLabel = document.createElement('label');
             selectLabel.htmlFor = 'dm-program-category';
             selectLabel.innerText = `${dmCode} Category:`;
-            modal.appendChild(selectLabel);
+            const dmCategoryOptions = ['core', 'area', 'required', 'university', 'free', 'none', 'unknown'];
+            const dmCategoryHelp = createProgramCategoryHelp(dmCode, dmCategoryOptions);
+            const dmLabelLine = document.createElement('div');
+            dmLabelLine.className = 'program-category-label-line';
+            dmLabelLine.appendChild(selectLabel);
+            dmLabelLine.appendChild(dmCategoryHelp.button);
+            modal.appendChild(dmLabelLine);
             const select = document.createElement('select');
             select.id = 'dm-program-category';
-            ['core','area','required','university','free','none','unknown'].forEach(function(opt) {
+            dmCategoryOptions.forEach(function(opt) {
                 const o = document.createElement('option');
                 o.value = opt;
                 o.innerText = opt === 'unknown'
@@ -3467,6 +3579,7 @@ function SUrriculum(major_chosen_by_user) {
                 select.appendChild(o);
             });
             modal.appendChild(select);
+            modal.appendChild(dmCategoryHelp.panel);
             // Buttons
             const buttons = document.createElement('div');
             buttons.classList.add('dm-buttons');

@@ -4453,9 +4453,9 @@ html, body {
 }
 
 /* Inline "?" affordance next to a field label. Deliberately a text glyph rather
-   than a Font Awesome icon: the icon font is a third-party CDN, and a help
-   control that silently disappears when that fails to load is worse than none. */
-.custom_course_modal .cc-help {
+   than a font icon, so the help control remains independent of icon-font loading. */
+.custom_course_modal .cc-help,
+.program-category-help {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -4476,11 +4476,14 @@ html, body {
 }
 
 .custom_course_modal .cc-help:hover,
-.custom_course_modal .cc-help:focus-visible {
+.custom_course_modal .cc-help:focus-visible,
+.program-category-help:hover,
+.program-category-help:focus-visible {
     opacity: 1;
 }
 
-.custom_course_modal .cc-help-text {
+.custom_course_modal .cc-help-text,
+.program-category-help-text {
     margin: 6px 0 0;
     padding: 8px 10px;
     border-left: 2px solid currentColor;
@@ -4492,8 +4495,50 @@ html, body {
     opacity: 0.9;
 }
 
-.custom_course_modal .cc-help-text.is-hidden {
+.custom_course_modal .cc-help-text.is-hidden,
+.program-category-help-text.is-hidden {
     display: none;
+}
+
+.program-category-label-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.program-category-label-line label {
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.program-category-label-line .program-category-help {
+    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
+    margin-left: 0;
+    font-size: 12px;
+}
+
+.program-category-help-text {
+    box-sizing: border-box;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+
+.program-category-help-text p {
+    margin: 0;
+}
+
+.program-category-help-text ul {
+    margin: 7px 0;
+    padding-left: 20px;
+}
+
+.program-category-help-text li + li {
+    margin-top: 3px;
 }
 
 .custom_course_modal .cc-language-note {
@@ -4619,6 +4664,8 @@ html, body {
     padding: 20px;
     min-width: 250px;
     max-width: 400px;
+    max-height: 82vh;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 10px;

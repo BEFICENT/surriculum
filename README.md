@@ -77,7 +77,7 @@ Course catalogs and requirement rules are loaded based on these selections.
 
 ### Custom courses
 
-If a course is missing from the catalog (or you want placeholders), you can add a **custom course** and set its credits (including `.5`). Its category is saved separately for every selected program: for example, the form shows **CS Category**, **IE Category**, and one category selector for each selected minor. Changing which program is the main or double major does not move those classifications between programs. An official catalog classification always takes priority when that course is listed by the selected program and admit term.
+If a course is missing from the catalog (or you want placeholders), you can add a **custom course** and set its credits (including `.5`). Its category is saved separately for every selected program: for example, the form shows **CS Category**, **IE Category**, and one category selector for each selected minor. Changing which program is the main or double major does not move those classifications between programs. Use the **?** beside a selector to see how its available categories are allocated, including the difference between **None** and **N/A**. An official catalog classification always takes priority when that course is listed by the selected program and admit term.
 
 ## Sidebar options (course dropdown behavior)
 

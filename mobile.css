@@ -732,6 +732,22 @@ body.is-mobile .custom_course_modal {
     box-sizing: border-box;
 }
 
+body.is-mobile .double_major_overlay {
+    box-sizing: border-box;
+    padding: 12px;
+}
+
+body.is-mobile .double_major_modal {
+    width: 100%;
+    min-width: 0;
+    max-width: 400px;
+    box-sizing: border-box;
+}
+
+body.is-mobile .program-category-help-text {
+    width: 100%;
+}
+
 /* ============================================================
  * HEADER MENU — plans / import records / theme presented as a full-width,
  * scrollable top sheet instead of a cramped floating dropdown. (Overrides
