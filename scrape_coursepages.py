@@ -1,6 +1,7 @@
 import argparse
 import datetime as _dt
 import json
+import math
 import os
 import re
 import time
@@ -8,11 +9,14 @@ import concurrent.futures
 import threading
 import random
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 from urllib.parse import urlencode
 
 import requests
 from bs4 import BeautifulSoup
+
+from sync_coursepage_offerings import available_current_future_terms, reconcile_coursepage_offerings
 
 
 BASE = "https://suis.sabanciuniv.edu/prod/"
@@ -23,6 +27,26 @@ DEFAULT_COURSES_DIR = "courses"
 DEFAULT_OUT_BASIC_SCIENCE = os.path.join(DEFAULT_COURSES_DIR, "basic_science_credits.jsonl")
 DEFAULT_OUT_ALL_INFO = os.path.join(DEFAULT_COURSES_DIR, "all_coursepage_info.jsonl")
 DEFAULT_CACHE_DIR = os.path.join(DEFAULT_COURSES_DIR, "coursepage_html_cache")
+
+GENERAL_REQUIREMENT_FIELDS = (
+    "general_requirements",
+    "minimum_earned_su_credits",
+    "general_requirement_prerequisites",
+)
+
+
+# Program catalogs contain both intrinsic course metadata and contextual degree
+# metadata.  Only the former belongs in the course-page index: EL_Type and
+# Faculty_Course can differ by program and must continue to be resolved from the
+# selected program's catalog at runtime.
+CATALOG_FALLBACK_FIELDS = {
+    "title": "Course_Name",
+    "su_credits": "SU_credit",
+    "ects": "ECTS",
+    "engineering": "Engineering",
+    "basic_science": "Basic_Science",
+    "faculty": "Faculty",
+}
 
 
 @dataclass(frozen=True)
@@ -96,6 +120,117 @@ def _first_text(el) -> str:
     return el.get_text(" ", strip=True)
 
 
+def parse_minimum_earned_su_credits(value: Any) -> Optional[float]:
+    """Extract Banner's cumulative earned-credit prerequisite, when present.
+
+    SUIS renders this as part of the free-form ``General Requirements`` block,
+    for example ``58.000 credits 000 to 9999 ...``.  Keep the complete source
+    text separately and expose this narrow structured value for consumers that
+    need to compare it with a student's earned SU credits.
+    """
+    normalized = " ".join(str(value or "").split())
+    match = re.search(r"\b(\d+(?:[.,]\d+)?)\s+credits?\b", normalized, flags=re.IGNORECASE)
+    return _to_float(match.group(1)) if match else None
+
+
+def normalize_general_requirements(value: Any) -> Optional[str]:
+    """Normalize a meaningful Banner General Requirements block.
+
+    Banner emits an empty-range boilerplate for some courses.  It carries no
+    usable registration rule by itself, so do not persist it and flood course
+    details with a misleading requirement.
+    """
+    normalized = " ".join(str(value or "").split()).strip()
+    if not normalized or normalized in {"__", "-", "N/A"}:
+        return None
+    if re.fullmatch(
+        r"000\s+to\s+9999\s+Minimum\s+Grade\s+of\s+D\s+"
+        r"May\s+not\s+be\s+taken\s+concurrently\.?",
+        normalized,
+        flags=re.IGNORECASE,
+    ):
+        return None
+    return normalized
+
+
+def parse_general_requirement_prerequisites(value: Any, *, course_id: str = "") -> Optional[str]:
+    """Convert explicit non-self ``Course or Test`` clauses for the evaluator.
+
+    The Banner block is flat prose rather than a stable machine format.  Only
+    explicit course clauses are promoted.  Self-referential rules such as
+    TLL001's repeat/withdrawal constraint remain visible in the raw field but
+    are not presented as an ordinary course prerequisite.
+    """
+    text = " ".join(str(value or "").split()).strip()
+    matches = list(re.finditer(
+        r"\bCourse\s+or\s+Test\s*:\s*([A-Z]{2,5})\s*([0-9]{3,5}[A-Z]?)\b",
+        text,
+        flags=re.IGNORECASE,
+    ))
+    if not matches:
+        return None
+
+    target = re.sub(r"[^A-Z0-9]", "", str(course_id or "").upper())
+    clauses: List[Dict[str, Any]] = []
+    for index, match in enumerate(matches):
+        next_start = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        qualifier = text[match.end() : next_start]
+        connector_match = re.search(r"\b(and|or)\s*$", qualifier, flags=re.IGNORECASE)
+        connector = connector_match.group(1).lower() if connector_match else ""
+        if connector_match:
+            qualifier = qualifier[: connector_match.start()]
+        subject = match.group(1).upper()
+        number = match.group(2).upper()
+        normalized_id = f"{subject}{number}"
+        grade_match = re.search(
+            r"Minimum\s+Grade\s+of\s+([A-Z][+-]?)",
+            qualifier,
+            flags=re.IGNORECASE,
+        )
+        min_grade = grade_match.group(1).upper() if grade_match else ""
+        concurrent = bool(re.search(
+            r"\bMay\s+be\s+taken\s+concurrently\b",
+            qualifier,
+            flags=re.IGNORECASE,
+        ))
+        label = f"{subject} {number}"
+        if min_grade:
+            label += f" - Undergraduate - Min Grade {min_grade}"
+        if concurrent:
+            label += " (can be taken concurrently)"
+        clauses.append({
+            "course_id": normalized_id,
+            "label": label,
+            "connector": connector,
+        })
+
+    if target and any(clause["course_id"] == target for clause in clauses):
+        # Removing a self-clause from an OR expression could make the remaining
+        # branch look mandatory.  Only drop self-clauses from a pure AND chain.
+        if any(clause["connector"] == "or" for clause in clauses):
+            return None
+        clauses = [clause for clause in clauses if clause["course_id"] != target]
+    if not clauses:
+        return None
+
+    parts = [clauses[0]["label"]]
+    for index in range(1, len(clauses)):
+        connector = clauses[index - 1]["connector"] or "and"
+        parts.extend([connector, clauses[index]["label"]])
+    return " ".join(parts)
+
+
+def ensure_general_requirement_fields(record: Dict[str, Any], *, course_id: str = "") -> None:
+    """Normalize/backfill the additive fields on cumulative legacy records."""
+    raw = normalize_general_requirements(record.get("general_requirements"))
+    record["general_requirements"] = raw
+    record["minimum_earned_su_credits"] = parse_minimum_earned_su_credits(raw)
+    record["general_requirement_prerequisites"] = parse_general_requirement_prerequisites(
+        raw,
+        course_id=course_id or str(record.get("course_id") or ""),
+    )
+
+
 def parse_coursepage_html(html: str, *, source_url: str) -> Dict[str, Any]:
     soup = BeautifulSoup(html, "lxml")
 
@@ -127,6 +262,7 @@ def parse_coursepage_html(html: str, *, source_url: str) -> Dict[str, Any]:
     basic_science = None
     prerequisites: List[str] = []
     corequisites: List[str] = []
+    general_requirements: List[str] = []
     last_offered: List[Dict[str, Any]] = []
 
     # Description: first non-empty td after header that isn't a nested table and
@@ -185,7 +321,7 @@ def parse_coursepage_html(html: str, *, source_url: str) -> Dict[str, Any]:
             break
 
     # Prerequisite/corequisite blocks: scan rows in the outer table.
-    collecting: Optional[str] = None  # "pre" | "co"
+    collecting: Optional[str] = None  # "pre" | "co" | "general"
     if outer_table:
         for tr in outer_table.find_all("tr"):
             td = tr.find("td")
@@ -208,12 +344,22 @@ def parse_coursepage_html(html: str, *, source_url: str) -> Dict[str, Any]:
                     if rest:
                         corequisites.append(rest)
                     continue
+                if "general requirements" in label:
+                    collecting = "general"
+                    if rest:
+                        general_requirements.append(rest)
+                    continue
                 collecting = None
             else:
                 if collecting == "pre":
                     prerequisites.append(text)
                 elif collecting == "co":
                     corequisites.append(text)
+                elif collecting == "general":
+                    general_requirements.append(text)
+
+    general_requirements_text = normalize_general_requirements(" ".join(general_requirements))
+    parsed_course_id = f"{parsed_subj or ''}{parsed_numb or ''}"
 
     result: Dict[str, Any] = {
         "parsed_subj_code": parsed_subj,
@@ -227,6 +373,12 @@ def parse_coursepage_html(html: str, *, source_url: str) -> Dict[str, Any]:
         "description": description,
         "prerequisites": " ".join(prerequisites).strip() or None,
         "corequisites": " ".join(corequisites).strip() or None,
+        "general_requirements": general_requirements_text,
+        "minimum_earned_su_credits": parse_minimum_earned_su_credits(general_requirements_text),
+        "general_requirement_prerequisites": parse_general_requirement_prerequisites(
+            general_requirements_text,
+            course_id=parsed_course_id,
+        ),
         "last_offered_terms": last_offered,
         "source_url": source_url,
         "scraped_at": _now_iso(),
@@ -246,6 +398,90 @@ def iter_course_json_paths(courses_dir: str) -> Iterable[str]:
             if fname in {"terms.json", "terms.jsonl", "all_coursepage_info.jsonl", "basic_science_credits.jsonl"}:
                 continue
             yield os.path.join(root, fname)
+
+
+def _catalog_path_sort_key(path: str, courses_dir: str) -> Tuple[int, str]:
+    """Prefer newer term snapshots, then a stable relative-path ordering."""
+    try:
+        relative = os.path.relpath(path, courses_dir).replace("\\", "/")
+    except ValueError:
+        relative = os.path.abspath(path).replace("\\", "/")
+    term_codes = [int(part) for part in relative.split("/") if re.fullmatch(r"\d{6}", part)]
+    newest_term = max(term_codes) if term_codes else -1
+    return (-newest_term, relative.casefold())
+
+
+def _catalog_text(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None
+
+
+def _catalog_number(value: Any) -> Optional[float]:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        normalized = float(value)
+    else:
+        normalized = _to_float(str(value))
+    return normalized if normalized is not None and math.isfinite(normalized) else None
+
+
+def collect_catalog_courses(
+    courses_dir: str,
+) -> Tuple[Dict[str, CourseKey], set[str], Dict[str, Dict[str, Any]]]:
+    """Collect course identities, breakdown expectations, and fallback metadata.
+
+    Catalog snapshots repeat the same course across programs and admit terms.
+    For each intrinsic field, the first non-null value from the newest snapshot
+    wins; ties use the normalized relative path.  This makes the result stable
+    even when ``os.walk`` returns directories in a different order, while still
+    allowing an older snapshot to supply a field omitted by the newest one.
+    """
+    unique: Dict[str, CourseKey] = {}
+    expected_breakdown: set[str] = set()
+    fallback_by_course_id: Dict[str, Dict[str, Any]] = {}
+
+    paths = sorted(
+        iter_course_json_paths(courses_dir),
+        key=lambda path: _catalog_path_sort_key(path, courses_dir),
+    )
+    for path in paths:
+        data = read_course_list(path)
+        if not data:
+            continue
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            subj = str(item.get("Major") or "").strip()
+            numb = str(item.get("Code") or "").strip()
+            if not subj or not numb:
+                continue
+            key = CourseKey(subj_code=subj, crse_numb=numb)
+            course_id = key.course_id
+            unique.setdefault(course_id, key)
+
+            fallback = fallback_by_course_id.setdefault(course_id, {})
+            for output_field, catalog_field in CATALOG_FALLBACK_FIELDS.items():
+                if output_field in fallback:
+                    continue
+                raw_value = item.get(catalog_field)
+                value = (
+                    _catalog_text(raw_value)
+                    if output_field in {"title", "faculty"}
+                    else _catalog_number(raw_value)
+                )
+                if value is not None:
+                    fallback[output_field] = value
+
+            bs_val = _catalog_number(item.get("Basic_Science")) or 0.0
+            eng_val = _catalog_number(item.get("Engineering")) or 0.0
+            if bs_val > 0.0 or eng_val > 0.0:
+                expected_breakdown.add(course_id)
+
+    return unique, expected_breakdown, fallback_by_course_id
+
 
 def read_course_list(path: str) -> List[Dict[str, Any]]:
     if path.endswith(".jsonl"):
@@ -288,37 +524,75 @@ def read_course_list(path: str) -> List[Dict[str, Any]]:
 
 
 def collect_unique_courses(courses_dir: str) -> Tuple[Dict[str, CourseKey], set[str]]:
-    unique: Dict[str, CourseKey] = {}
-    expected_breakdown: set[str] = set()
-    for path in iter_course_json_paths(courses_dir):
-        data = read_course_list(path)
-        if not data:
-            continue
-        for item in data:
-            if not isinstance(item, dict):
-                continue
-            subj = str(item.get("Major") or "").strip()
-            numb = str(item.get("Code") or "").strip()
-            if not subj or not numb:
-                continue
-            key = CourseKey(subj_code=subj, crse_numb=numb)
-            course_id = key.course_id
-            unique.setdefault(course_id, key)
-
-            bs = item.get("Basic_Science")
-            eng = item.get("Engineering")
-            try:
-                bs_val = float(bs) if bs is not None else 0.0
-            except (TypeError, ValueError):
-                bs_val = 0.0
-            try:
-                eng_val = float(eng) if eng is not None else 0.0
-            except (TypeError, ValueError):
-                eng_val = 0.0
-            if bs_val > 0.0 or eng_val > 0.0:
-                expected_breakdown.add(course_id)
-
+    # Keep the original two-value helper contract for external/debug callers.
+    unique, expected_breakdown, _ = collect_catalog_courses(courses_dir)
     return unique, expected_breakdown
+
+
+def apply_catalog_fallbacks(
+    coursepage_info: Dict[str, Dict[str, Any]],
+    unique_courses: Dict[str, CourseKey],
+    fallback_by_course_id: Dict[str, Dict[str, Any]],
+) -> Tuple[int, int]:
+    """Merge intrinsic catalog values into cumulative course-page records.
+
+    A verified non-null scrape is authoritative.  Failed/unverified records use
+    catalog values even if their parsed response happened to contain data (an
+    invalid response may belong to a different course).  Successful records are
+    filled only where a field is null or absent.  Contextual catalog fields are
+    never considered by this function.
+
+    Returns ``(records_created, fields_filled)`` for diagnostics/tests.
+    """
+    records_created = 0
+    fields_filled = 0
+    for course_id in sorted(unique_courses):
+        course = unique_courses[course_id]
+        record = coursepage_info.get(course_id)
+        if not isinstance(record, dict):
+            record = {
+                "course_id": course_id,
+                "subj_code": course.subj_code,
+                "crse_numb": course.crse_numb,
+                "scrape_ok": False,
+                "scrape_error": "coursepage_data_unavailable",
+                "parsed_subj_code": None,
+                "parsed_crse_numb": None,
+                "header_text": None,
+                "description": None,
+                "prerequisites": None,
+                "corequisites": None,
+                "general_requirements": None,
+                "minimum_earned_su_credits": None,
+                "general_requirement_prerequisites": None,
+                "last_offered_terms": [],
+                "source_url": build_coursepage_url(course.subj_code, course.crse_numb),
+                "scraped_at": None,
+            }
+            coursepage_info[course_id] = record
+            records_created += 1
+
+        ensure_general_requirement_fields(record, course_id=course_id)
+
+        successful_scrape = record.get("scrape_ok") is True
+        fallback = fallback_by_course_id.get(course_id) or {}
+        for field in CATALOG_FALLBACK_FIELDS:
+            value = fallback.get(field)
+            if not successful_scrape and value is None:
+                # A failed response may describe a different course entirely.
+                # Do not preserve any parsed intrinsic value unless a catalog
+                # snapshot can verify it.
+                record[field] = None
+                continue
+            if value is None:
+                continue
+            if successful_scrape and record.get(field) is not None:
+                continue
+            if record.get(field) != value:
+                record[field] = value
+                fields_filled += 1
+
+    return records_created, fields_filled
 
 
 def read_jsonl_by_course_id(path: str) -> Dict[str, Dict[str, Any]]:
@@ -340,6 +614,39 @@ def read_jsonl_by_course_id(path: str) -> Dict[str, Dict[str, Any]]:
     return out
 
 
+def hydrate_general_requirement_fields_from_cache(
+    coursepage_info: Dict[str, Dict[str, Any]],
+    cache_dir: str,
+) -> int:
+    """Reparse cached pages for additive fields without altering old metadata."""
+    hydrated = 0
+    for course_id, record in coursepage_info.items():
+        if all(field in record for field in GENERAL_REQUIREMENT_FIELDS):
+            continue
+        subject = str(record.get("subj_code") or "").strip()
+        number = str(record.get("crse_numb") or "").strip()
+        if not subject or not number:
+            continue
+        course = CourseKey(subject, number)
+        cache_path = os.path.join(cache_dir, f"{course_id}.html")
+        if not os.path.exists(cache_path):
+            continue
+        try:
+            with open(cache_path, "r", encoding="utf-8") as handle:
+                parsed = parse_coursepage_html(
+                    handle.read(),
+                    source_url=str(record.get("source_url") or build_coursepage_url(subject, number)),
+                )
+        except Exception:
+            continue
+        if not _is_valid_scrape(parsed, course):
+            continue
+        for field in GENERAL_REQUIREMENT_FIELDS:
+            record[field] = parsed.get(field)
+        hydrated += 1
+    return hydrated
+
+
 def write_jsonl(path: str, records: List[Dict[str, Any]]) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
@@ -356,11 +663,13 @@ def fetch_coursepage_html(
     retries: int = 3,
     backoff_s: float = 0.5,
     net_semaphore: Optional[threading.Semaphore] = None,
+    read_cache: bool = True,
+    write_cache: bool = True,
 ) -> Tuple[str, str]:
     url = build_coursepage_url(course.subj_code, course.crse_numb)
     cache_path = os.path.join(cache_dir, f"{course.course_id}.html") if cache_dir else None
 
-    if cache_path and os.path.exists(cache_path):
+    if read_cache and cache_path and os.path.exists(cache_path):
         with open(cache_path, "r", encoding="utf-8") as f:
             return f.read(), url
 
@@ -385,7 +694,7 @@ def fetch_coursepage_html(
     else:
         raise last_err if last_err else RuntimeError("failed to fetch course page")
 
-    if cache_path:
+    if write_cache and cache_path:
         os.makedirs(os.path.dirname(cache_path), exist_ok=True)
         with open(cache_path, "w", encoding="utf-8") as f:
             f.write(html)
@@ -443,7 +752,11 @@ def main() -> int:
     parser.add_argument("--out-all-info", default=DEFAULT_OUT_ALL_INFO)
     parser.add_argument("--cache-dir", default=DEFAULT_CACHE_DIR)
     parser.add_argument("--no-cache", action="store_true")
-    parser.add_argument("--refresh", action="store_true", help="Re-scrape even if a course_id exists in the output files.")
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Re-fetch every course even if it exists in the output files (bypasses the HTML cache).",
+    )
     parser.add_argument("--timeout", type=float, default=30.0)
     parser.add_argument("--workers", type=int, default=6, help="Number of parallel workers for scraping course pages.")
     parser.add_argument(
@@ -474,11 +787,25 @@ def main() -> int:
 
     existing_info = read_jsonl_by_course_id(args.out_all_info)
     existing_credits = read_jsonl_by_course_id(args.out_basic_science)
+    cache_dir = None if args.no_cache else args.cache_dir
+    if cache_dir and not args.refresh:
+        hydrated = hydrate_general_requirement_fields_from_cache(existing_info, cache_dir)
+        if hydrated:
+            print(f"Hydrated General Requirements fields from {hydrated} cached course pages.")
 
-    unique_courses, expected_breakdown = collect_unique_courses(courses_dir)
+    unique_courses, expected_breakdown, catalog_fallbacks = collect_catalog_courses(courses_dir)
     needed: List[CourseKey] = []
     for course_id in sorted(unique_courses.keys()):
-        if args.refresh or (course_id not in existing_info) or (course_id not in existing_credits):
+        existing_record = existing_info.get(course_id) or {}
+        missing_general_requirement_fields = any(
+            field not in existing_record for field in GENERAL_REQUIREMENT_FIELDS
+        )
+        if (
+            args.refresh
+            or (course_id not in existing_info)
+            or (course_id not in existing_credits)
+            or missing_general_requirement_fields
+        ):
             needed.append(unique_courses[course_id])
             continue
 
@@ -494,6 +821,12 @@ def main() -> int:
     if args.max_courses and args.max_courses > 0:
         needed = needed[: args.max_courses]
 
+    known_valid_attempts = {
+        course.course_id
+        for course in needed
+        if (existing_info.get(course.course_id) or {}).get("scrape_ok") is True
+    }
+
     tls = threading.local()
 
     def get_session() -> requests.Session:
@@ -508,10 +841,28 @@ def main() -> int:
             tls.session = sess
         return sess
 
-    cache_dir = None if args.no_cache else args.cache_dir
     net_semaphore = threading.Semaphore(max(1, int(args.max_inflight)))
 
-    newly_scraped = 0
+    accepted_scrapes = 0
+    successful_scrapes = 0
+    successful_course_ids: set[str] = set()
+
+    def store_scrape_result(
+        course_id: str,
+        info_record: Dict[str, Any],
+        credit_record: Dict[str, Any],
+    ) -> bool:
+        previous_info = existing_info.get(course_id)
+        previous_credits = existing_credits.get(course_id)
+        if info_record.get("scrape_ok") is False and (
+            (previous_info and previous_info.get("scrape_ok") is not False)
+            or (previous_credits and previous_credits.get("scrape_ok") is not False)
+        ):
+            print(f"[warn] retaining last known-good course-page data for {course_id}")
+            return False
+        existing_info[course_id] = info_record
+        existing_credits[course_id] = credit_record
+        return True
 
     def scrape_one(course: CourseKey) -> Tuple[str, Dict[str, Any], Dict[str, Any]]:
         attempts = max(0, int(args.retries)) + 1
@@ -528,14 +879,21 @@ def main() -> int:
                     timeout_s=args.timeout,
                     retries=0,
                     net_semaphore=net_semaphore,
+                    read_cache=not args.refresh,
+                    write_cache=not args.refresh,
                 )
                 parsed = parse_coursepage_html(html, source_url=url)
                 if _is_valid_scrape(parsed, course):
+                    if args.refresh and cache_dir:
+                        cache_path = os.path.join(cache_dir, f"{course.course_id}.html")
+                        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+                        with open(cache_path, "w", encoding="utf-8") as f:
+                            f.write(html)
                     valid_parsed = parsed
                     break
                 last_parsed = parsed
                 last_err = ValueError("invalid coursepage response (code mismatch or missing header)")
-                if cache_dir:
+                if cache_dir and not args.refresh:
                     cache_path = os.path.join(cache_dir, f"{course.course_id}.html")
                     try:
                         if os.path.exists(cache_path):
@@ -549,7 +907,7 @@ def main() -> int:
                 continue
             except Exception as e:
                 last_err = e
-                if cache_dir:
+                if cache_dir and not args.refresh:
                     cache_path = os.path.join(cache_dir, f"{course.course_id}.html")
                     try:
                         if os.path.exists(cache_path):
@@ -616,9 +974,11 @@ def main() -> int:
                 except Exception as e:
                     print(f"[warn] failed to scrape {course.course_id}: {e}")
                     continue
-                existing_info[course_id] = info_record
-                existing_credits[course_id] = credit_record
-                newly_scraped += 1
+                if store_scrape_result(course_id, info_record, credit_record):
+                    accepted_scrapes += 1
+                if info_record.get("scrape_ok") is True:
+                    successful_scrapes += 1
+                    successful_course_ids.add(course_id)
         else:
             with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
                 futures = {executor.submit(scrape_one, course): course for course in needed}
@@ -630,16 +990,49 @@ def main() -> int:
                     except Exception as e:
                         print(f"[warn] failed to scrape {course.course_id}: {e}")
                         continue
-                    existing_info[course_id] = info_record
-                    existing_credits[course_id] = credit_record
-                    newly_scraped += 1
+                    if store_scrape_result(course_id, info_record, credit_record):
+                        accepted_scrapes += 1
+                    if info_record.get("scrape_ok") is True:
+                        successful_scrapes += 1
+                        successful_course_ids.add(course_id)
                     completed += 1
                     if completed % 200 == 0:
                         print(f"... scraped {completed}/{len(needed)}")
 
+    if args.refresh and known_valid_attempts:
+        known_valid_successes = len(successful_course_ids.intersection(known_valid_attempts))
+        success_rate = known_valid_successes / len(known_valid_attempts)
+        if success_rate < 0.8:
+            print(
+                f"[error] full course-page refresh recovered only "
+                f"{known_valid_successes}/{len(known_valid_attempts)} previously valid pages "
+                f"({success_rate:.1%}); preserving the existing output files"
+            )
+            return 1
+
+    # Every catalog course must have useful intrinsic metadata even when its
+    # course page could not be fetched or omitted an individual field.
+    apply_catalog_fallbacks(existing_info, unique_courses, catalog_fallbacks)
+    for course_id, record in existing_info.items():
+        ensure_general_requirement_fields(record, course_id=course_id)
+
     # Write cumulative outputs (deterministic ordering).
     write_jsonl(args.out_all_info, [existing_info[k] for k in sorted(existing_info.keys())])
     write_jsonl(args.out_basic_science, [existing_credits[k] for k in sorted(existing_credits.keys())])
+
+    schedule_dir = Path(courses_dir) / "schedule"
+    schedule_terms = available_current_future_terms(schedule_dir)
+    if schedule_terms:
+        stats = reconcile_coursepage_offerings(
+            coursepage_info_path=Path(args.out_all_info),
+            schedule_dir=schedule_dir,
+            terms=schedule_terms,
+            remove_absent=False,
+        )
+        print(
+            "Restored schedule-proven course-page offerings: "
+            f"terms={','.join(stats.terms)} changed_records={stats.changed_records}"
+        )
 
     credits_by_course_id: Dict[str, Dict[str, float]] = {}
     for course_id, rec in existing_credits.items():
@@ -663,7 +1056,8 @@ def main() -> int:
         update_course_json_files(courses_dir, credits_by_course_id)
 
     print(
-        f"Scraped {newly_scraped} course pages. "
+        f"Accepted {accepted_scrapes} course-page updates "
+        f"({successful_scrapes} valid responses). "
         f"Wrote {len(existing_info)} records to {args.out_all_info} and "
         f"{len(existing_credits)} records to {args.out_basic_science}."
     )

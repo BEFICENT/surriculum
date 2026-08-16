@@ -12,24 +12,19 @@ export function buildFlagMessages(major) {
   const allReq = (typeof globalThis !== 'undefined' && globalThis.requirements)
     ? globalThis.requirements
     : {};
-  let req = allReq[major];
-  if (!req) {
-    // When requirements are organized by term code, determine the correct
-    // term using the global curriculum object.
-    const curr = (typeof globalThis !== 'undefined' && globalThis.curriculum)
-      ? globalThis.curriculum
-      : {};
-    let term = '';
-    if (curr.major === major) term = curr.entryTerm;
-    else if (curr.doubleMajor === major) term = curr.entryTermDM;
-    if (term && allReq[term] && allReq[term][major]) {
-      req = allReq[term][major];
-    } else {
-      // Fallback: search all term groups
-      for (const t of Object.keys(allReq)) {
-        if (allReq[t] && allReq[t][major]) { req = allReq[t][major]; break; }
-      }
-    }
+  const curr = (typeof globalThis !== 'undefined' && globalThis.curriculum)
+    ? globalThis.curriculum
+    : {};
+  let term = '';
+  if (curr.major === major) term = curr.entryTerm;
+  else if (curr.doubleMajor === major) term = curr.entryTermDM;
+  let req = null;
+  if (typeof globalThis !== 'undefined' && typeof globalThis.getRequirementRecord === 'function') {
+    req = globalThis.getRequirementRecord(major, term);
+  } else if (term && allReq[term] && allReq[term][major]) {
+    req = allReq[term][major];
+  } else if (allReq[major]) {
+    req = allReq[major];
   }
   req = req || {};
 
@@ -44,7 +39,8 @@ export function buildFlagMessages(major) {
       8: () => `Your Basic Science SU credit is less than ${req.science}.`,
       9: () => `Your Engineering SU credit is less than ${req.engineering}.`,
       10: () => `Your ECTS is less than sufficient.`,
-      38: () => `You don't have enough GPA!`,
+      38: () => `Your Cumulative GPA (CGPA) does not meet the required minimum.`,
+      41: () => `Your Program GPA (PGPA) does not meet the required minimum.`,
 
       //Major-specific messages
 
@@ -62,8 +58,8 @@ export function buildFlagMessages(major) {
       22: () => `You need at least 1 SBS faculty course!`,
       23: () => `You need at least 9 credits from 400-level EE courses!`,
       24: () => `You need at least one course from CS300, CS401, CS412, ME303, PHYS302, PHYS303, or EE48XXX special topics!`,
-      25: () => `You need to complete your Mathematics requirement (MATH201, MATH202, or MATH204)!`,
-      26: () => `You need to complete your Physics requirement (PHYS201, PHYS202, or PHYS204)!`,
+      25: () => `You need to complete your Mathematics requirement (MATH201, MATH202, MATH204, or MATH212)!`,
+      26: () => `You need to complete your Philosophy requirement (PHIL300 or PHIL301)!`,
       27: () => `You need at least 3 FENS courses in your core electives!`,
       28: () => `You need at least 3 FASS courses in your core electives!`,
       29: () => `You need at least 3 SBS courses in your core electives!`,
@@ -75,6 +71,10 @@ export function buildFlagMessages(major) {
       35: () => `Your Core courses must span at least 6 different areas!`,
       36: () => `Your Area courses must span at least 5 different areas!`,
       37: () => `You need at least 9 credits from FASS & FENS courses in your Free electives!`,
+      39: () => `You need at least 2 PSY 4XX-level courses among your Area electives!`,
+      40: () => `At most 2 Beginning/Basic level language courses can count towards your Free electives!`,
+      99: () => `Graduation requirements are unavailable for this program and admit term. No completion result was calculated.`,
+      77: () => `You need at least 7 Core Elective courses!`,
 
   };
 }

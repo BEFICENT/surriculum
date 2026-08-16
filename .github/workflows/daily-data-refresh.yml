@@ -20,16 +20,18 @@ jobs:
     timeout-minutes: 120
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.13"
           cache: "pip"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: python -m pip install -r requirements.txt
 
       - name: Refresh course catalogs (and minors)
         run: |
@@ -41,7 +43,14 @@ jobs:
 
       - name: Refresh course page info (credits + offered-term history)
         run: |
-          python scrape_coursepages.py --workers 1 --max-inflight 1
+          args=(--workers 1 --max-inflight 1)
+          if [ "$(date -u +%u)" = "1" ]; then
+            args+=(--refresh)
+            echo "Course page mode: full"
+          else
+            echo "Course page mode: incremental"
+          fi
+          python scrape_coursepages.py "${args[@]}"
 
       - name: Refresh schedule data (best-effort)
         run: |
@@ -78,9 +87,32 @@ jobs:
           normalize_terms_jsonl(Path("courses/terms.jsonl"))
           PY
 
+      - name: Rebuild the data cache manifest when data changed
+        run: |
+          if [ -n "$(git status --porcelain -- courses requirements)" ]; then
+            python build_manifest.py
+          else
+            echo "Data files unchanged; keeping the existing manifest."
+          fi
+
+      # Auto-refreshes intentionally do not trigger the full Node/browser CI.
+      # Keep fast, data-specific gates here so malformed scraper output can
+      # never be proposed for merging merely because the heavy suite was skipped.
+      - name: Validate refreshed course rules, requirements, and data manifest
+        run: |
+          python tests/coursepage_requirements_data_test.py
+          python tests/requirements_validation_test.py
+          python tests/scraper_term_identity_test.py
+          python tests/manifest_integrity_test.py
+
       - name: Create pull request if anything changed
-        uses: peter-evans/create-pull-request@v8
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          add-paths: |
+            courses/**
+            requirements/**
+            data/manifest.json
           branch: bot/daily-data-refresh
           delete-branch: true
           commit-message: "chore(data): daily refresh"

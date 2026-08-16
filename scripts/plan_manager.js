@@ -5,28 +5,59 @@
   const INDEX_KEY = 'surriculum.plans.v1';
   const MIGRATED_KEY = 'surriculum.plans.migrated.v1';
   const PLAN_PREFIX = 'surriculum.plan.';
-  const APP_DATA_VERSION = 1;
-  const APP_DATA_VERSION_KEY = 'surriculum.appDataVersion';
+  // Storage-schema version: bumped when the SHAPE of what we persist to
+  // localStorage changes, to drive plan-storage migrations. Distinct from the
+  // DATA version (data/manifest.json — the scrape bundle) and the APP version
+  // (version.js — code/UI). Was misleadingly named APP_DATA_VERSION. The
+  // persisted key STRING is kept as-is so existing installs aren't mistaken for
+  // a fresh run.
+  const STORAGE_SCHEMA_VERSION = 4;
+  const STORAGE_SCHEMA_KEY = 'surriculum.appDataVersion';
   const MAX_PLANS = 10;
   const DEFAULT_PLAN_NAME = 'Default Plan';
+  const PLAN_EXPORT_VERSION = 4;
+  let modalSequence = 0;
+  // Bound once during boot. The shared index's activeId may be changed by a
+  // different tab, but code running in this page must keep reading and writing
+  // the plan that this page actually rendered.
+  let sessionPlanId = null;
   const LEGACY_KEYS = [
     'major', 'doubleMajor',
     'entryTerm', 'entryTermDM',
     // Minor terms: `entryTermMinor` is legacy (single term); keep for migration.
     'entryTermMinor', 'entryTermMinor1', 'entryTermMinor2', 'entryTermMinor3',
     'minor1', 'minor2', 'minor3',
-    'curriculum', 'grades', 'dates'
+    'curriculum', 'grades', 'gradingBases', 'dates', 'termCodes'
+  ];
+  const APP_GLOBAL_STORAGE_KEYS = new Set([
+    ...LEGACY_KEYS,
+    'schedulerSelectedTerm',
+    'showDoubleMajorControls',
+    'showMinorControls',
+    'globalCourseMetadata',
+  ]);
+  const APP_LEGACY_STORAGE_PATTERNS = [
+    /^customCourses_(?=[A-Z0-9-]{1,48}$)[A-Z0-9]+(?:-[A-Z0-9]+)*$/,
+    /^schedulerState_\d{6}$/,
+    /^dmCustomCoursesCreditsRepairShown_[A-Z][A-Z0-9-]{0,19}$/,
   ];
 
   function createModal({ title, bodyHtml, input, buttons, onMount }) {
     return new Promise((resolve) => {
+      const previouslyFocused = document.activeElement instanceof HTMLElement
+        ? document.activeElement : null;
+      const modalId = `app-modal-${++modalSequence}`;
       const overlay = document.createElement('div');
       overlay.className = 'modal-overlay';
       overlay.setAttribute('role', 'dialog');
       overlay.setAttribute('aria-modal', 'true');
+      overlay.setAttribute('aria-labelledby', `${modalId}-title`);
+      overlay.setAttribute('aria-describedby', `${modalId}-body`);
 
       const modal = document.createElement('div');
       modal.className = 'modal app-modal';
+      modal.id = modalId;
+      modal.tabIndex = -1;
       modal.addEventListener('click', (e) => e.stopPropagation());
 
       const header = document.createElement('div');
@@ -34,15 +65,28 @@
 
       const h = document.createElement('h3');
       h.className = 'app-modal-title';
+      h.id = `${modalId}-title`;
       h.textContent = title || '';
 
       const close = document.createElement('button');
       close.type = 'button';
       close.className = 'app-modal-close';
       close.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+      close.setAttribute('aria-label', `Close ${title || 'dialog'}`);
+      let onKeyDown = null;
+      let settled = false;
       const cleanupAndResolve = (payload) => {
-        try { document.removeEventListener('keydown', onKeyDown); } catch (_) {}
+        if (settled) return;
+        settled = true;
+        try {
+          if (onKeyDown) document.removeEventListener('keydown', onKeyDown, true);
+        } catch (_) {}
         try { overlay.remove(); } catch (_) {}
+        try {
+          if (previouslyFocused && previouslyFocused.isConnected) {
+            previouslyFocused.focus({ preventScroll: true });
+          }
+        } catch (_) {}
         resolve(payload);
       };
       close.addEventListener('click', () => cleanupAndResolve({ action: 'close', value: null }));
@@ -52,6 +96,7 @@
 
       const body = document.createElement('div');
       body.className = 'app-modal-body';
+      body.id = `${modalId}-body`;
       body.innerHTML = bodyHtml || '';
 
       let inputEl = null;
@@ -61,6 +106,7 @@
         inputEl.type = 'text';
         inputEl.value = input.value || '';
         inputEl.placeholder = input.placeholder || '';
+        inputEl.setAttribute('aria-label', input.ariaLabel || title || 'Dialog input');
         body.appendChild(inputEl);
       }
 
@@ -77,7 +123,7 @@
         const variant = b.variant || (b.action === 'cancel' ? 'secondary' : 'primary');
         btn.className = `btn btn-${variant} btn-sm`;
         btn.textContent = b.label || b.action;
-        if (b.danger) btn.style.backgroundColor = '#DC2626';
+        if (b.danger) btn.classList.add('btn-danger');
         btn.addEventListener('click', () => {
           try {
             if (typeof b.onClick === 'function') b.onClick({ overlay, modal, body, button: btn });
@@ -99,8 +145,10 @@
       modal.appendChild(footer);
       overlay.appendChild(modal);
 
-      overlay.addEventListener('click', () => {
-        cleanupAndResolve({ action: 'cancel', value: null });
+      overlay.addEventListener('click', (event) => {
+        if (event.target === overlay) {
+          cleanupAndResolve({ action: 'cancel', value: null });
+        }
       });
 
       // If the user is currently in browser fullscreen (e.g., the scheduler),
@@ -126,16 +174,45 @@
         } catch (_) {}
       }, 0);
 
-      const onKeyDown = (e) => {
+      const getFocusableElements = () => Array.from(modal.querySelectorAll(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), ' +
+        'textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )).filter((element) => element.getAttribute('aria-hidden') !== 'true');
+
+      onKeyDown = (e) => {
         if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
           cleanupAndResolve({ action: 'cancel', value: null });
+          return;
+        }
+        if (e.key === 'Tab') {
+          const focusable = getFocusableElements();
+          if (!focusable.length) {
+            e.preventDefault();
+            modal.focus({ preventScroll: true });
+            return;
+          }
+          const first = focusable[0];
+          const last = focusable[focusable.length - 1];
+          const active = document.activeElement;
+          if (e.shiftKey && (active === first || !modal.contains(active))) {
+            e.preventDefault();
+            last.focus({ preventScroll: true });
+          } else if (!e.shiftKey && active === last) {
+            e.preventDefault();
+            first.focus({ preventScroll: true });
+          }
         }
         if (e.key === 'Enter' && inputEl) {
           const primary = footer.querySelector('.btn-primary');
-          if (primary) primary.click();
+          if (primary && document.activeElement === inputEl) {
+            e.preventDefault();
+            primary.click();
+          }
         }
       };
-      document.addEventListener('keydown', onKeyDown, { once: false });
+      document.addEventListener('keydown', onKeyDown, true);
     });
   }
 
@@ -191,53 +268,53 @@
     }
   }
 
-  function initAppDataVersion() {
+  function initStorageSchemaVersion() {
     let storedBefore = 0;
     try {
-      const raw = localStorage.getItem(APP_DATA_VERSION_KEY);
+      const raw = localStorage.getItem(STORAGE_SCHEMA_KEY);
       const parsed = parseInt(String(raw || '0'), 10);
       storedBefore = Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
     } catch (_) {}
 
     try {
-      localStorage.setItem(APP_DATA_VERSION_KEY, String(APP_DATA_VERSION));
+      localStorage.setItem(STORAGE_SCHEMA_KEY, String(STORAGE_SCHEMA_VERSION));
     } catch (_) {}
 
     const info = {
-      current: APP_DATA_VERSION,
+      current: STORAGE_SCHEMA_VERSION,
       storedBefore,
-      firstRunAfterUpgrade: storedBefore > 0 && storedBefore < APP_DATA_VERSION,
+      firstRunAfterUpgrade: storedBefore > 0 && storedBefore < STORAGE_SCHEMA_VERSION,
       firstRunEver: storedBefore <= 0,
     };
 
     const api = {
-      getCurrentAppDataVersion() {
-        return APP_DATA_VERSION;
+      getCurrentSchemaVersion() {
+        return STORAGE_SCHEMA_VERSION;
       },
-      getStoredAppDataVersion() {
+      getStoredSchemaVersion() {
         try {
-          const raw = localStorage.getItem(APP_DATA_VERSION_KEY);
+          const raw = localStorage.getItem(STORAGE_SCHEMA_KEY);
           const parsed = parseInt(String(raw || '0'), 10);
           return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
         } catch (_) {
           return 0;
         }
       },
-      getPreviousAppDataVersion() {
+      getPreviousSchemaVersion() {
         return storedBefore;
       },
       isFirstRunAfterUpgrade() {
         return info.firstRunAfterUpgrade;
       },
-      markCurrentAppDataVersionSeen() {
-        try { localStorage.setItem(APP_DATA_VERSION_KEY, String(APP_DATA_VERSION)); } catch (_) {}
+      markCurrentSchemaVersionSeen() {
+        try { localStorage.setItem(STORAGE_SCHEMA_KEY, String(STORAGE_SCHEMA_VERSION)); } catch (_) {}
       },
     };
 
     try {
-      window.APP_DATA_VERSION = APP_DATA_VERSION;
-      window.appDataVersionInfo = info;
-      window.appDataVersion = api;
+      window.STORAGE_SCHEMA_VERSION = STORAGE_SCHEMA_VERSION;
+      window.storageSchemaInfo = info;
+      window.storageSchema = api;
     } catch (_) {}
   }
 
@@ -247,6 +324,15 @@
     if (!parsed || typeof parsed !== 'object') return null;
     if (!Array.isArray(parsed.plans)) return null;
     return parsed;
+  }
+
+  // Read-only liveness check used by delayed save hooks. It must never call
+  // ensureIndex(): doing so after a reset (or a deletion in another tab) would
+  // recreate a default plan while the old page is trying to flush.
+  function hasPlanWithoutCreating(id) {
+    if (!id) return false;
+    const idx = loadIndex();
+    return !!(idx && idx.plans.some((plan) => plan && plan.id === id));
   }
 
   function saveIndex(idx) {
@@ -303,6 +389,10 @@
     return ensureIndex().activeId;
   }
 
+  function getSessionPlanId() {
+    return sessionPlanId;
+  }
+
   function getPlanMeta(id) {
     const idx = ensureIndex();
     return idx.plans.find(p => p.id === id) || null;
@@ -317,6 +407,33 @@
       }
     } catch (_) {}
     return keys;
+  }
+
+  function isAppOwnedStorageKey(key) {
+    const value = String(key || '');
+    if (!value) return false;
+    if (value.startsWith('surriculum.')) return true;
+    if (APP_GLOBAL_STORAGE_KEYS.has(value)) return true;
+    return APP_LEGACY_STORAGE_PATTERNS.some((pattern) => pattern.test(value));
+  }
+
+  function clearAllAppData() {
+    const ownedKeys = listLocalStorageKeys().filter(isAppOwnedStorageKey);
+    const failedKeys = [];
+    ownedKeys.forEach((key) => {
+      try {
+        localStorage.removeItem(key);
+      } catch (_) {
+        failedKeys.push(key);
+      }
+    });
+    if (failedKeys.length) {
+      throw new Error(`Could not remove ${failedKeys.length} SUrriculum storage item(s).`);
+    }
+    // A visibility/pagehide event may follow the reset. Disable delayed saves
+    // before yielding so they cannot recreate the removed plan namespace.
+    suspendSaves();
+    return ownedKeys;
   }
 
   function migrateLegacyIfNeeded() {
@@ -366,7 +483,168 @@
     localStorage.setItem(MIGRATED_KEY, didAnything ? nowIso() : 'noop');
   }
 
+  const SAVE_DEBOUNCE_MS = 250;
   const saveHooks = [];
+  let pendingSaveTimer = null;
+  let savePending = false;
+  let savesSuspended = false;
+
+  function clearPendingSaveTimer() {
+    if (pendingSaveTimer !== null) {
+      clearTimeout(pendingSaveTimer);
+      pendingSaveTimer = null;
+    }
+  }
+
+  function flushSaves(options) {
+    const opts = options || {};
+    clearPendingSaveTimer();
+    if (savesSuspended || saveHooks.length === 0) return true;
+    if (opts.onlyIfPending && !savePending) return true;
+
+    let succeeded = true;
+    saveHooks.forEach((entry) => {
+      // A stale tab must not resurrect a plan deleted/reset elsewhere.
+      if (entry.planId && !hasPlanWithoutCreating(entry.planId)) return;
+      try {
+        if (entry.fn() === false) succeeded = false;
+      } catch (err) {
+        succeeded = false;
+        try { console.error('Failed to save plan changes:', err); } catch (_) {}
+      }
+    });
+    if (succeeded) savePending = false;
+    return succeeded;
+  }
+
+  function requestSave() {
+    if (savesSuspended || saveHooks.length === 0) return false;
+    savePending = true;
+    clearPendingSaveTimer();
+    pendingSaveTimer = setTimeout(() => {
+      pendingSaveTimer = null;
+      flushSaves();
+    }, SAVE_DEBOUNCE_MS);
+    return true;
+  }
+
+  function suspendSaves() {
+    clearPendingSaveTimer();
+    savePending = false;
+    savesSuspended = true;
+  }
+
+  function showSaveFailure() {
+    try {
+      uiModal.alert(
+        'Could not save changes',
+        '<p>Your latest planner changes could not be saved in this browser. The requested switch or export was cancelled.</p>'
+      );
+    } catch (_) {
+      try { console.error('Could not save the latest planner changes.'); } catch (_) {}
+    }
+  }
+
+  const SNAPSHOT_KEYS = ['curriculum', 'grades', 'gradingBases', 'dates', 'termCodes'];
+
+  function canonicalTermCodeFromLabel(value) {
+    const match = String(value || '').trim().match(/^(Fall|Spring|Summer)\s+(\d{4})-(\d{4})$/);
+    if (!match || Number(match[3]) !== Number(match[2]) + 1) return '';
+    const suffix = { Fall: '01', Spring: '02', Summer: '03' }[match[1]];
+    return match[2] + suffix;
+  }
+
+  function setPlanSnapshot(snapshot, planId) {
+    const pid = planId || getActivePlanId();
+    if (planId && !hasPlanWithoutCreating(pid)) {
+      throw new Error('The plan is no longer available.');
+    }
+    if (!snapshot || typeof snapshot !== 'object') {
+      throw new Error('Invalid planner snapshot.');
+    }
+
+    const normalizedSnapshot = Object.assign({}, snapshot);
+    if (typeof normalizedSnapshot.termCodes !== 'string') {
+      // Backward-compatible bridge for a page/save hook loaded before schema
+      // v4. New snapshots always gain the stable parallel identity array.
+      let labels = [];
+      try {
+        const parsed = JSON.parse(String(normalizedSnapshot.dates || '[]'));
+        if (Array.isArray(parsed)) labels = parsed;
+      } catch (_) {}
+      normalizedSnapshot.termCodes = JSON.stringify(labels.map(canonicalTermCodeFromLabel));
+    }
+
+    const previous = new Map();
+    SNAPSHOT_KEYS.forEach((key) => {
+      previous.set(key, localStorage.getItem(planKey(pid, key)));
+    });
+
+    try {
+      SNAPSHOT_KEYS.forEach((key) => {
+        if (typeof normalizedSnapshot[key] !== 'string') {
+          throw new Error(`Invalid planner snapshot field: ${key}`);
+        }
+        localStorage.setItem(planKey(pid, key), normalizedSnapshot[key]);
+      });
+      touchUpdated(pid);
+      return true;
+    } catch (err) {
+      // localStorage has no transaction primitive. Restore the prior parallel
+      // arrays on a partial write so a quota failure cannot leave them skewed.
+      SNAPSHOT_KEYS.forEach((key) => {
+        try {
+          const oldValue = previous.get(key);
+          if (oldValue === null) localStorage.removeItem(planKey(pid, key));
+          else localStorage.setItem(planKey(pid, key), oldValue);
+        } catch (_) {}
+      });
+      throw err;
+    }
+  }
+
+  function capturePlanCheckpoint(planId) {
+    const pid = planId || sessionPlanId || getActivePlanId();
+    if (!hasPlanWithoutCreating(pid)) throw new Error('The plan is no longer available.');
+    const prefix = planKey(pid, '');
+    const values = {};
+    listLocalStorageKeys().forEach((key) => {
+      if (!key.startsWith(prefix)) return;
+      const value = localStorage.getItem(key);
+      if (value != null) values[key.slice(prefix.length)] = value;
+    });
+    return { planId: pid, values };
+  }
+
+  function restorePlanCheckpoint(checkpoint) {
+    if (!checkpoint || typeof checkpoint !== 'object'
+        || typeof checkpoint.planId !== 'string'
+        || !checkpoint.values || typeof checkpoint.values !== 'object'
+        || Array.isArray(checkpoint.values)) {
+      throw new Error('Invalid plan checkpoint.');
+    }
+    const pid = checkpoint.planId;
+    if (!hasPlanWithoutCreating(pid)) throw new Error('The plan is no longer available.');
+    const prefix = planKey(pid, '');
+    const values = checkpoint.values;
+    const suffixes = Object.keys(values);
+    if (suffixes.some((suffix) => !suffix || typeof values[suffix] !== 'string')) {
+      throw new Error('Invalid plan checkpoint.');
+    }
+
+    // Remove newly-created entries first. This releases quota before restoring
+    // any prior value and makes transcript-import rollback reliable even when
+    // the failed save was caused by a full storage area.
+    listLocalStorageKeys().forEach((key) => {
+      if (!key.startsWith(prefix)) return;
+      const suffix = key.slice(prefix.length);
+      if (!Object.prototype.hasOwnProperty.call(values, suffix)) {
+        localStorage.removeItem(key);
+      }
+    });
+    suffixes.forEach((suffix) => localStorage.setItem(prefix + suffix, values[suffix]));
+    return true;
+  }
 
   function normalizePlanName(name) {
     const trimmed = String(name || '').trim().replace(/\s+/g, ' ');
@@ -381,6 +659,726 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
+  }
+
+  const IMPORT_MAX_FILE_BYTES = 2 * 1024 * 1024;
+  const IMPORT_MAX_SEMESTERS = 80;
+  const IMPORT_MAX_COURSES_PER_SEMESTER = 100;
+  const IMPORT_MAX_CUSTOM_COURSES = 2000;
+  const IMPORT_MAX_SCHEDULER_TERMS = 40;
+  const IMPORT_MAX_SELECTED_SECTIONS = 200;
+  const IMPORT_MAX_BLOCKED_RANGES = 100;
+  const IMPORT_MAX_SCHEDULES_PER_TERM = 10;
+  const IMPORT_MAX_SCHEDULE_NAME_LENGTH = 200;
+  const IMPORT_MAX_SNAPSHOT_TEXT_LENGTH = 4000;
+  const IMPORT_MAX_GLOBAL_COURSE_METADATA = 2000;
+  const IMPORT_COURSE_TYPES = new Set([
+    'core', 'area', 'university', 'free', 'required', 'none', 'unknown',
+  ]);
+  const IMPORT_LANGUAGE_LEVELS = new Set(['', 'basic', 'other']);
+  const IMPORT_FACULTIES = new Set(['', 'FENS', 'FASS', 'SBS', 'SL']);
+  const IMPORT_GRADES = new Set(['', 'S', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'F', 'T', 'P', 'I', 'U', 'W', 'NA']);
+  const IMPORT_GRADING_BASES = new Set(['unknown', 'letter', 'satisfactory']);
+  const IMPORT_STATE_FIELDS = new Set([
+    'major', 'doubleMajor',
+    'entryTerm', 'entryTermDM',
+    'entryTermMinor', 'entryTermMinor1', 'entryTermMinor2', 'entryTermMinor3',
+    'minor1', 'minor2', 'minor3',
+    'schedulerSelectedTerm',
+    'curriculum', 'grades', 'gradingBases', 'dates', 'termCodes', 'customCourses', 'schedulerStates',
+    'globalCourseMetadata',
+  ]);
+
+  function importError(path, message) {
+    throw new Error(`Invalid plan data at ${path}: ${message}.`);
+  }
+
+  function isPlainObject(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    const proto = Object.getPrototypeOf(value);
+    return proto === Object.prototype || proto === null;
+  }
+
+  function requirePlainObject(value, path) {
+    if (!isPlainObject(value)) importError(path, 'expected an object');
+    return value;
+  }
+
+  function requireKnownFields(value, allowed, path) {
+    Object.keys(value).forEach((key) => {
+      if (!allowed.has(key)) importError(path, `unknown field "${String(key).slice(0, 80)}"`);
+    });
+  }
+
+  function hasOwn(value, key) {
+    return Object.prototype.hasOwnProperty.call(value, key);
+  }
+
+  function normalizeImportedText(value, path, options) {
+    const opts = options || {};
+    if (typeof value !== 'string') importError(path, 'expected text');
+    if (/\u0000|[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(value)) {
+      importError(path, 'contains unsupported control characters');
+    }
+    let normalized = opts.collapseWhitespace ? value.trim().replace(/\s+/g, ' ') : value.trim();
+    const maxLength = Number.isInteger(opts.maxLength) ? opts.maxLength : 120;
+    if (!opts.allowEmpty && !normalized) importError(path, 'must not be empty');
+    if (normalized.length > maxLength) {
+      if (opts.truncate) normalized = normalized.slice(0, maxLength);
+      else importError(path, `must be at most ${maxLength} characters`);
+    }
+    return normalized;
+  }
+
+  function normalizeProgramCode(value, path) {
+    const normalized = normalizeImportedText(value, path, { maxLength: 16 }).toUpperCase();
+    if (!/^[A-Z][A-Z0-9]{1,15}$/.test(normalized)) importError(path, 'has an invalid program code');
+    return normalized;
+  }
+
+  function normalizeMinorCode(value, path) {
+    const normalized = normalizeImportedText(value, path, { maxLength: 48 }).toUpperCase();
+    if (!/^[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(normalized)) importError(path, 'has an invalid minor code');
+    return normalized;
+  }
+
+  // Custom-course definitions are scoped by the selected program code. That
+  // namespace includes both ordinary major codes (CS, IE, …) and hyphenated
+  // minor codes (ANALY-MINOR, FIN-MINOR, …), so it cannot use the stricter
+  // major-only validator.
+  function normalizeCustomCourseProgramCode(value, path) {
+    return normalizeMinorCode(value, path);
+  }
+
+  function normalizeCourseCode(value, path) {
+    if (typeof value !== 'string') importError(path, 'expected a course code');
+    const normalized = value.toUpperCase().replace(/\s+/g, '');
+    if (!/^[A-Z]{1,12}\d{1,6}[A-Z0-9]{0,3}$/.test(normalized)) importError(path, 'has an invalid course code');
+    return normalized;
+  }
+
+  function normalizeTermName(value, path) {
+    const normalized = normalizeImportedText(value, path, { maxLength: 32, collapseWhitespace: true });
+    if (!/^(Fall|Spring|Summer) \d{4}-\d{4}$/.test(normalized)) importError(path, 'has an invalid academic term');
+    return normalized;
+  }
+
+  function normalizeTermCode(value, path) {
+    const normalized = normalizeImportedText(value, path, { maxLength: 6 });
+    if (!/^\d{4}(01|02|03)$/.test(normalized)) importError(path, 'has an invalid term code');
+    return normalized;
+  }
+
+  function normalizeFiniteNumber(value, path, maxValue) {
+    let raw = value;
+    if (typeof raw === 'string') {
+      raw = raw.trim().replace(',', '.');
+      if (!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(raw)) importError(path, 'expected a non-negative number');
+    } else if (typeof raw !== 'number') {
+      importError(path, 'expected a non-negative number');
+    }
+    const number = Number(raw);
+    if (!Number.isFinite(number) || number < 0 || number > maxValue) {
+      importError(path, `must be between 0 and ${maxValue}`);
+    }
+    return Object.is(number, -0) ? 0 : number;
+  }
+
+  function normalizeIsoTimestamp(value, path) {
+    if (value === null) return null;
+    const normalized = normalizeImportedText(value, path, { maxLength: 40 });
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(normalized)
+        || !Number.isFinite(Date.parse(normalized))) {
+      importError(path, 'has an invalid timestamp');
+    }
+    return normalized;
+  }
+
+  function validateCurriculum(value, path) {
+    if (value === null) return null;
+    if (!Array.isArray(value)) importError(path, 'expected an array of semesters');
+    if (value.length > IMPORT_MAX_SEMESTERS) importError(path, `supports at most ${IMPORT_MAX_SEMESTERS} semesters`);
+    let totalCourses = 0;
+    return value.map((semester, semesterIndex) => {
+      const semesterPath = `${path}[${semesterIndex}]`;
+      if (!Array.isArray(semester)) importError(semesterPath, 'expected an array of course codes');
+      if (semester.length > IMPORT_MAX_COURSES_PER_SEMESTER) {
+        importError(semesterPath, `supports at most ${IMPORT_MAX_COURSES_PER_SEMESTER} courses`);
+      }
+      totalCourses += semester.length;
+      if (totalCourses > IMPORT_MAX_CUSTOM_COURSES) importError(path, 'contains too many courses');
+      return semester.map((courseCode, courseIndex) => normalizeCourseCode(courseCode, `${semesterPath}[${courseIndex}]`));
+    });
+  }
+
+  function validateGrades(value, curriculum, path) {
+    if (value === null) return null;
+    if (!Array.isArray(value)) importError(path, 'expected an array of semesters');
+    if (!Array.isArray(curriculum)) {
+      if (value.length === 0) return [];
+      importError(path, 'requires curriculum data');
+    }
+    if (value.length !== curriculum.length) importError(path, 'must have one entry per curriculum semester');
+    return value.map((semester, semesterIndex) => {
+      const semesterPath = `${path}[${semesterIndex}]`;
+      if (!Array.isArray(semester)) importError(semesterPath, 'expected an array of grades');
+      if (semester.length !== curriculum[semesterIndex].length) {
+        importError(semesterPath, 'must have one grade per course');
+      }
+      return semester.map((grade, gradeIndex) => {
+        if (typeof grade !== 'string') importError(`${semesterPath}[${gradeIndex}]`, 'expected a grade');
+        const policy = (typeof window !== 'undefined' && window.gradePolicy) ? window.gradePolicy : null;
+        let normalized = policy && typeof policy.normalizeGrade === 'function'
+          ? policy.normalizeGrade(grade)
+          : grade.trim().toUpperCase();
+        if (!policy && normalized === 'REGISTERED') normalized = '';
+        if (normalized === null || !IMPORT_GRADES.has(normalized)) {
+          importError(`${semesterPath}[${gradeIndex}]`, 'has an unsupported grade');
+        }
+        return normalized;
+      });
+    });
+  }
+
+  function validateGradingBases(value, curriculum, path) {
+    if (value === null) return null;
+    if (!Array.isArray(value)) importError(path, 'expected an array of semesters');
+    if (!Array.isArray(curriculum)) {
+      if (value.length === 0) return [];
+      importError(path, 'requires curriculum data');
+    }
+    if (value.length !== curriculum.length) importError(path, 'must have one entry per curriculum semester');
+    return value.map((semester, semesterIndex) => {
+      const semesterPath = `${path}[${semesterIndex}]`;
+      if (!Array.isArray(semester)) importError(semesterPath, 'expected an array of grading bases');
+      if (semester.length !== curriculum[semesterIndex].length) {
+        importError(semesterPath, 'must have one grading basis per course');
+      }
+      return semester.map((basis, basisIndex) => {
+        if (typeof basis !== 'string') importError(`${semesterPath}[${basisIndex}]`, 'expected a grading basis');
+        const raw = basis.trim().toLowerCase() || 'unknown';
+        if (!IMPORT_GRADING_BASES.has(raw)) {
+          importError(`${semesterPath}[${basisIndex}]`, 'has an unsupported grading basis');
+        }
+        const policy = (typeof window !== 'undefined' && window.gradePolicy) ? window.gradePolicy : null;
+        const normalized = policy && typeof policy.normalizeGradingBasis === 'function'
+          ? policy.normalizeGradingBasis(raw)
+          : raw;
+        return normalized;
+      });
+    });
+  }
+
+  function inferImportedGradingBasis(grade, explicitBasis) {
+    const policy = (typeof window !== 'undefined' && window.gradePolicy) ? window.gradePolicy : null;
+    if (policy && typeof policy.inferGradingBasis === 'function') {
+      return policy.inferGradingBasis(grade, explicitBasis);
+    }
+    const normalized = String(grade || '').trim().toUpperCase();
+    if (/^(?:A|A-|B\+|B|B-|C\+|C|C-|D\+|D|F)$/.test(normalized)) return 'letter';
+    if (normalized === 'S' || normalized === 'U') return 'satisfactory';
+    const basis = String(explicitBasis || '').trim().toLowerCase();
+    if (basis === 'letter' || basis === 'satisfactory') return basis;
+    return 'unknown';
+  }
+
+  function canonicalizeGradingBases(curriculum, grades, gradingBases) {
+    if (!Array.isArray(curriculum)) return null;
+    return curriculum.map((semester, semesterIndex) =>
+      semester.map((_, courseIndex) => {
+        const grade = Array.isArray(grades) && Array.isArray(grades[semesterIndex])
+          ? grades[semesterIndex][courseIndex] : '';
+        const explicitBasis = Array.isArray(gradingBases)
+          && Array.isArray(gradingBases[semesterIndex])
+          ? gradingBases[semesterIndex][courseIndex] : 'unknown';
+        return inferImportedGradingBasis(grade, explicitBasis);
+      }));
+  }
+
+  function synthesizeGradingBases(curriculum, grades) {
+    return canonicalizeGradingBases(curriculum, grades, null);
+  }
+
+  function validateDates(value, curriculum, path) {
+    if (value === null) return null;
+    if (!Array.isArray(value)) importError(path, 'expected an array of semester labels');
+    if (!Array.isArray(curriculum)) {
+      if (value.length === 0) return [];
+      importError(path, 'requires curriculum data');
+    }
+    if (value.length !== curriculum.length) importError(path, 'must have one label per curriculum semester');
+    return value.map((label, index) => normalizeImportedText(label, `${path}[${index}]`, {
+      maxLength: 80,
+      collapseWhitespace: true,
+    }));
+  }
+
+  function validateTermCodes(value, curriculum, path) {
+    if (value === null) return null;
+    if (!Array.isArray(value)) importError(path, 'expected an array of semester term codes');
+    if (!Array.isArray(curriculum)) {
+      if (value.length === 0) return [];
+      importError(path, 'requires curriculum data');
+    }
+    if (value.length !== curriculum.length) importError(path, 'must have one code per curriculum semester');
+    return value.map((code, index) => {
+      if (typeof code !== 'string') importError(`${path}[${index}]`, 'expected a term code');
+      const normalized = code.trim();
+      if (!normalized) return '';
+      return normalizeTermCode(normalized, `${path}[${index}]`);
+    });
+  }
+
+  function validateGlobalCourseMetadataItem(raw, itemPath) {
+    const item = requirePlainObject(raw, itemPath);
+    requireKnownFields(item, new Set(['code', 'title', 'suCredits', 'ects']), itemPath);
+    ['code', 'title', 'suCredits', 'ects'].forEach((field) => {
+      if (!hasOwn(item, field)) importError(`${itemPath}.${field}`, 'is required');
+    });
+    return {
+      code: normalizeCourseCode(item.code, `${itemPath}.code`),
+      title: normalizeImportedText(item.title, `${itemPath}.title`, {
+        maxLength: 200,
+        collapseWhitespace: true,
+        truncate: true,
+      }),
+      suCredits: normalizeFiniteNumber(item.suCredits, `${itemPath}.suCredits`, 100),
+      ects: normalizeFiniteNumber(item.ects, `${itemPath}.ects`, 100),
+    };
+  }
+
+  function validateGlobalCourseMetadata(value, path) {
+    if (value === null) return [];
+    if (!Array.isArray(value)) importError(path, 'expected an array');
+    if (value.length > IMPORT_MAX_GLOBAL_COURSE_METADATA) {
+      importError(path, `supports at most ${IMPORT_MAX_GLOBAL_COURSE_METADATA} courses`);
+    }
+    const seen = new Set();
+    return value.map((raw, index) => {
+      const itemPath = `${path}[${index}]`;
+      const item = validateGlobalCourseMetadataItem(raw, itemPath);
+      if (seen.has(item.code)) importError(itemPath, 'contains a duplicate course code');
+      seen.add(item.code);
+      return item;
+    });
+  }
+
+  // Stored state can be damaged by an interrupted/manual localStorage edit.
+  // Imports remain atomic and strict, but reads salvage independent valid rows
+  // so one bad snapshot cannot erase every unrelated global transcript course.
+  function salvageStoredGlobalCourseMetadata(value, path) {
+    if (!Array.isArray(value)) return [];
+    const out = [];
+    const seen = new Set();
+    let ignored = Math.max(0, value.length - IMPORT_MAX_GLOBAL_COURSE_METADATA);
+    value.slice(0, IMPORT_MAX_GLOBAL_COURSE_METADATA).forEach((raw, index) => {
+      try {
+        const item = validateGlobalCourseMetadataItem(raw, `${path}[${index}]`);
+        if (seen.has(item.code)) {
+          ignored++;
+          return;
+        }
+        seen.add(item.code);
+        out.push(item);
+      } catch (_) {
+        ignored++;
+      }
+    });
+    if (ignored) {
+      try { console.warn(`Ignored ${ignored} invalid stored global course metadata row(s).`); } catch (_) {}
+    }
+    return out;
+  }
+
+  function validateCustomCourse(value, path) {
+    const course = requirePlainObject(value, path);
+    requireKnownFields(course, new Set([
+      'Major', 'Code', 'Course_Name', 'ECTS', 'Engineering', 'Basic_Science',
+      'SU_credit', 'Faculty', 'Faculty_Course', 'EL_Type', 'Language_Level',
+    ]), path);
+
+    if (!hasOwn(course, 'Major')) importError(`${path}.Major`, 'is required');
+    if (!hasOwn(course, 'Code')) importError(`${path}.Code`, 'is required');
+    const major = normalizeImportedText(course.Major, `${path}.Major`, { maxLength: 12 }).toUpperCase();
+    const code = normalizeImportedText(course.Code, `${path}.Code`, { maxLength: 9 }).toUpperCase();
+    const combined = normalizeCourseCode(major + code, path);
+    const majorMatch = combined.match(/^([A-Z]{1,12})(\d[A-Z0-9]*)$/);
+    if (!majorMatch || majorMatch[1] !== major || majorMatch[2] !== code) importError(path, 'has inconsistent course-code fields');
+
+    const name = hasOwn(course, 'Course_Name')
+      ? normalizeImportedText(course.Course_Name, `${path}.Course_Name`, {
+          maxLength: 200,
+          collapseWhitespace: true,
+          truncate: true,
+        })
+      : combined;
+    const ects = hasOwn(course, 'ECTS') ? normalizeFiniteNumber(course.ECTS, `${path}.ECTS`, 100) : 0;
+    const engineering = hasOwn(course, 'Engineering') ? normalizeFiniteNumber(course.Engineering, `${path}.Engineering`, 100) : 0;
+    const basicScience = hasOwn(course, 'Basic_Science') ? normalizeFiniteNumber(course.Basic_Science, `${path}.Basic_Science`, 100) : 0;
+    const suCredit = hasOwn(course, 'SU_credit') ? normalizeFiniteNumber(course.SU_credit, `${path}.SU_credit`, 100) : 0;
+
+    let faculty = '';
+    if (hasOwn(course, 'Faculty')) {
+      if (typeof course.Faculty !== 'string') importError(`${path}.Faculty`, 'expected text');
+      const candidate = course.Faculty.trim().toUpperCase();
+      faculty = IMPORT_FACULTIES.has(candidate) ? candidate : '';
+    }
+
+    let courseType = 'none';
+    if (hasOwn(course, 'EL_Type')) {
+      if (typeof course.EL_Type !== 'string') importError(`${path}.EL_Type`, 'expected text');
+      const candidate = course.EL_Type.trim().toLowerCase();
+      // Old exports could contain a free-form category. Keep the course but
+      // fail closed by assigning it to no graduation bucket.
+      courseType = IMPORT_COURSE_TYPES.has(candidate) ? candidate : 'none';
+    }
+
+    if (hasOwn(course, 'Faculty_Course') && typeof course.Faculty_Course !== 'string') {
+      importError(`${path}.Faculty_Course`, 'expected text');
+    }
+
+    let languageLevel = '';
+    if (hasOwn(course, 'Language_Level')) {
+      if (typeof course.Language_Level !== 'string') {
+        importError(`${path}.Language_Level`, 'expected text');
+      }
+      languageLevel = course.Language_Level.trim().toLowerCase();
+      if (!IMPORT_LANGUAGE_LEVELS.has(languageLevel)) {
+        importError(`${path}.Language_Level`, 'expected "basic", "other", or an empty value');
+      }
+    }
+
+    const normalized = {
+      Major: major,
+      Code: code,
+      Course_Name: name,
+      ECTS: String(ects),
+      Engineering: engineering,
+      Basic_Science: basicScience,
+      SU_credit: String(suCredit),
+      Faculty: faculty,
+      // User-defined courses cannot claim membership in the catalog's faculty
+      // course pool, even if an imported file says otherwise.
+      Faculty_Course: 'No',
+      EL_Type: courseType,
+    };
+    // Absence and an empty string both mean "not reviewed yet". Omitting that
+    // state keeps legacy/non-language custom-course exports unchanged while a
+    // reviewed language course carries an explicit, validated classification.
+    if (languageLevel) normalized.Language_Level = languageLevel;
+    return normalized;
+  }
+
+  function validateCustomCourses(value, path) {
+    if (value === null) return {};
+    const map = requirePlainObject(value, path);
+    const programs = Object.keys(map);
+    if (programs.length > 40) importError(path, 'contains too many program groups');
+    let totalCourses = 0;
+    const out = {};
+    programs.forEach((programKey) => {
+      const program = normalizeCustomCourseProgramCode(programKey, `${path}.${String(programKey).slice(0, 80)}`);
+      if (hasOwn(out, program)) importError(path, 'contains duplicate normalized program codes');
+      const list = map[programKey];
+      if (!Array.isArray(list)) importError(`${path}.${program}`, 'expected an array of custom courses');
+      totalCourses += list.length;
+      if (totalCourses > IMPORT_MAX_CUSTOM_COURSES) importError(path, `supports at most ${IMPORT_MAX_CUSTOM_COURSES} custom courses`);
+      out[program] = list.map((course, index) => validateCustomCourse(course, `${path}.${program}[${index}]`));
+    });
+    return out;
+  }
+
+  function validateSelectedSections(value, path) {
+    if (value === undefined || value === null) return {};
+    const selected = requirePlainObject(value, path);
+    const keys = Object.keys(selected);
+    if (keys.length > IMPORT_MAX_SELECTED_SECTIONS) importError(path, 'contains too many selected sections');
+    const out = {};
+    keys.forEach((key) => {
+      const courseCode = normalizeCourseCode(key, `${path}.${String(key).slice(0, 80)}`);
+      if (hasOwn(out, courseCode)) importError(path, 'contains duplicate normalized course codes');
+      const entryPath = `${path}.${courseCode}`;
+      const entry = requirePlainObject(selected[key], entryPath);
+      requireKnownFields(entry, new Set(['course_id', 'crn']), entryPath);
+      const entryCode = normalizeCourseCode(entry.course_id, `${entryPath}.course_id`);
+      if (entryCode !== courseCode) importError(`${entryPath}.course_id`, 'must match its selected-course key');
+      const crn = normalizeImportedText(entry.crn, `${entryPath}.crn`, { maxLength: 12 });
+      if (!/^\d{1,12}$/.test(crn)) importError(`${entryPath}.crn`, 'has an invalid CRN');
+      out[courseCode] = { course_id: courseCode, crn };
+    });
+    return out;
+  }
+
+  function validateBlockedRanges(value, path) {
+    if (value === undefined || value === null) return [];
+    if (!Array.isArray(value)) importError(path, 'expected an array of blocked ranges');
+    if (value.length > IMPORT_MAX_BLOCKED_RANGES) importError(path, 'contains too many blocked ranges');
+    return value.map((item, index) => {
+      const itemPath = `${path}[${index}]`;
+      const block = requirePlainObject(item, itemPath);
+      requireKnownFields(block, new Set(['id', 'dayKey', 'start', 'end']), itemPath);
+      const id = normalizeImportedText(block.id, `${itemPath}.id`, { maxLength: 100 });
+      if (!/^[A-Za-z0-9._-]+$/.test(id)) importError(`${itemPath}.id`, 'has invalid characters');
+      const dayKey = normalizeImportedText(block.dayKey, `${itemPath}.dayKey`, { maxLength: 1 }).toUpperCase();
+      if (!/^[MTWRFSU]$/.test(dayKey)) importError(`${itemPath}.dayKey`, 'has an invalid day');
+      const start = normalizeFiniteNumber(block.start, `${itemPath}.start`, 1440);
+      const end = normalizeFiniteNumber(block.end, `${itemPath}.end`, 1440);
+      if (!Number.isInteger(start) || !Number.isInteger(end) || end <= start) {
+        importError(itemPath, 'must contain increasing whole-minute bounds');
+      }
+      return { id, dayKey, start, end };
+    });
+  }
+
+  function validateSchedulerUi(value, path) {
+    if (value === undefined || value === null) return {};
+    const ui = requirePlainObject(value, path);
+    const allowed = new Set(['planCollapsed', 'selectedCollapsed', 'blockedCollapsed', 'sidebarCollapsed']);
+    requireKnownFields(ui, allowed, path);
+    const out = {};
+    Object.keys(ui).forEach((key) => {
+      if (typeof ui[key] !== 'boolean') importError(`${path}.${key}`, 'expected true or false');
+      out[key] = ui[key];
+    });
+    return out;
+  }
+
+  function normalizeScheduleId(value, path) {
+    const id = normalizeImportedText(value, path, { maxLength: 100 });
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id)
+        || ['__proto__', 'prototype', 'constructor'].includes(id.toLowerCase())) {
+      importError(path, 'has invalid characters');
+    }
+    return id;
+  }
+
+  function validateScheduleEntry(value, expectedId, path) {
+    const entry = requirePlainObject(value, path);
+    requireKnownFields(entry, new Set(['id', 'name', 'selected', 'blocked', 'ui']), path);
+    const id = normalizeScheduleId(entry.id, `${path}.id`);
+    if (id !== expectedId) importError(`${path}.id`, 'must match its schedule key');
+    return {
+      id,
+      name: normalizeImportedText(entry.name, `${path}.name`, {
+        maxLength: IMPORT_MAX_SCHEDULE_NAME_LENGTH,
+        collapseWhitespace: true,
+        truncate: true,
+      }),
+      selected: validateSelectedSections(entry.selected, `${path}.selected`),
+      blocked: validateBlockedRanges(entry.blocked, `${path}.blocked`),
+      ui: validateSchedulerUi(entry.ui, `${path}.ui`),
+    };
+  }
+
+  function validateSchedules(value, path) {
+    const schedules = requirePlainObject(value, path);
+    requireKnownFields(schedules, new Set(['activeId', 'order', 'items']), path);
+    if (!Array.isArray(schedules.order) || schedules.order.length < 1
+        || schedules.order.length > IMPORT_MAX_SCHEDULES_PER_TERM) {
+      importError(`${path}.order`, `must contain 1-${IMPORT_MAX_SCHEDULES_PER_TERM} schedule IDs`);
+    }
+    const order = schedules.order.map((id, index) => normalizeScheduleId(id, `${path}.order[${index}]`));
+    if (new Set(order).size !== order.length) importError(`${path}.order`, 'contains duplicate schedule IDs');
+    const activeId = normalizeScheduleId(schedules.activeId, `${path}.activeId`);
+    if (!order.includes(activeId)) importError(`${path}.activeId`, 'must identify an ordered schedule');
+    const items = requirePlainObject(schedules.items, `${path}.items`);
+    const itemKeys = Object.keys(items);
+    if (itemKeys.length !== order.length || itemKeys.some((id) => !order.includes(id))) {
+      importError(`${path}.items`, 'must exactly match the ordered schedules');
+    }
+    const normalizedItems = {};
+    order.forEach((id) => {
+      normalizedItems[id] = validateScheduleEntry(items[id], id, `${path}.items.${id}`);
+    });
+    return { activeId, order, items: normalizedItems };
+  }
+
+  function validateScheduleSnapshots(value, path) {
+    if (value === undefined || value === null) return {};
+    const snapshots = requirePlainObject(value, path);
+    const scheduleIds = Object.keys(snapshots);
+    if (scheduleIds.length > IMPORT_MAX_SCHEDULES_PER_TERM) {
+      importError(path, `supports at most ${IMPORT_MAX_SCHEDULES_PER_TERM} schedules`);
+    }
+    const out = {};
+    scheduleIds.forEach((rawScheduleId) => {
+      const scheduleId = normalizeScheduleId(rawScheduleId, `${path}.${String(rawScheduleId).slice(0, 80)}`);
+      if (hasOwn(out, scheduleId)) importError(path, 'contains duplicate normalized schedule IDs');
+      const schedulePath = `${path}.${scheduleId}`;
+      const courseSnapshots = requirePlainObject(snapshots[rawScheduleId], schedulePath);
+      const courseCodes = Object.keys(courseSnapshots);
+      if (courseCodes.length > IMPORT_MAX_SELECTED_SECTIONS) {
+        importError(schedulePath, 'contains too many section snapshots');
+      }
+      const normalizedCourseSnapshots = {};
+      courseCodes.forEach((rawCourseCode) => {
+        const courseCode = normalizeCourseCode(rawCourseCode, `${schedulePath}.${String(rawCourseCode).slice(0, 80)}`);
+        if (hasOwn(normalizedCourseSnapshots, courseCode)) {
+          importError(schedulePath, 'contains duplicate normalized course codes');
+        }
+        const snapshotPath = `${schedulePath}.${courseCode}`;
+        const snapshot = requirePlainObject(courseSnapshots[rawCourseCode], snapshotPath);
+        requireKnownFields(snapshot, new Set([
+          'crn', 'meetingKey', 'instrKey', 'meetingSummary', 'instrSummary',
+        ]), snapshotPath);
+        if (!hasOwn(snapshot, 'crn')) importError(`${snapshotPath}.crn`, 'is required');
+        const crn = normalizeImportedText(snapshot.crn, `${snapshotPath}.crn`, { maxLength: 12 });
+        if (!/^\d{1,12}$/.test(crn)) importError(`${snapshotPath}.crn`, 'has an invalid CRN');
+        const textField = (key) => hasOwn(snapshot, key)
+          ? normalizeImportedText(snapshot[key], `${snapshotPath}.${key}`, {
+              allowEmpty: true,
+              maxLength: IMPORT_MAX_SNAPSHOT_TEXT_LENGTH,
+            })
+          : '';
+        normalizedCourseSnapshots[courseCode] = {
+          crn,
+          meetingKey: textField('meetingKey'),
+          instrKey: textField('instrKey'),
+          meetingSummary: textField('meetingSummary'),
+          instrSummary: textField('instrSummary'),
+        };
+      });
+      out[scheduleId] = normalizedCourseSnapshots;
+    });
+    return out;
+  }
+
+  function validateSchedulerState(value, path) {
+    const state = requirePlainObject(value, path);
+    requireKnownFields(state, new Set([
+      'selected', 'blocked', 'ui', 'schedules', 'lastSeenScheduleSnapshots',
+    ]), path);
+    const legacySelected = validateSelectedSections(state.selected, `${path}.selected`);
+    const legacyBlocked = validateBlockedRanges(state.blocked, `${path}.blocked`);
+    const legacyUi = validateSchedulerUi(state.ui, `${path}.ui`);
+    const snapshots = hasOwn(state, 'lastSeenScheduleSnapshots')
+      ? validateScheduleSnapshots(state.lastSeenScheduleSnapshots, `${path}.lastSeenScheduleSnapshots`)
+      : undefined;
+    if (!hasOwn(state, 'schedules') || state.schedules === null) {
+      const legacy = { selected: legacySelected, blocked: legacyBlocked, ui: legacyUi };
+      if (snapshots !== undefined) legacy.lastSeenScheduleSnapshots = snapshots;
+      return legacy;
+    }
+    const schedules = validateSchedules(state.schedules, `${path}.schedules`);
+    const active = schedules.items[schedules.activeId];
+    const normalized = {
+      schedules,
+      // Canonicalize the legacy mirror to the validated active schedule.
+      selected: active.selected,
+      blocked: active.blocked,
+      ui: active.ui,
+    };
+    if (snapshots !== undefined) normalized.lastSeenScheduleSnapshots = snapshots;
+    return normalized;
+  }
+
+  function validateSchedulerStates(value, path) {
+    if (value === null) return {};
+    const states = requirePlainObject(value, path);
+    const terms = Object.keys(states);
+    if (terms.length > IMPORT_MAX_SCHEDULER_TERMS) importError(path, 'contains too many scheduler terms');
+    const out = {};
+    terms.forEach((termKey) => {
+      const term = normalizeTermCode(termKey, `${path}.${String(termKey).slice(0, 80)}`);
+      if (hasOwn(out, term)) importError(path, 'contains duplicate normalized term codes');
+      out[term] = validateSchedulerState(states[termKey], `${path}.${term}`);
+    });
+    return out;
+  }
+
+  function validatePlanState(value, path, fileVersion) {
+    if (value === undefined || value === null) return {};
+    const state = requirePlainObject(value, path);
+    const allowedFields = new Set(Array.from(IMPORT_STATE_FIELDS).filter((field) => {
+      if (field === 'gradingBases') return fileVersion >= 2;
+      if (field === 'globalCourseMetadata') return fileVersion >= 3;
+      if (field === 'termCodes') return fileVersion >= 4;
+      return true;
+    }));
+    requireKnownFields(state, allowedFields, path);
+    const out = {};
+
+    const programFields = ['major', 'doubleMajor'];
+    programFields.forEach((key) => {
+      if (hasOwn(state, key) && state[key] !== null && state[key] !== '') {
+        out[key] = normalizeProgramCode(state[key], `${path}.${key}`);
+      }
+    });
+    const termFields = ['entryTerm', 'entryTermDM', 'entryTermMinor', 'entryTermMinor1', 'entryTermMinor2', 'entryTermMinor3'];
+    termFields.forEach((key) => {
+      if (hasOwn(state, key) && state[key] !== null && state[key] !== '') {
+        out[key] = normalizeTermName(state[key], `${path}.${key}`);
+      }
+    });
+    ['minor1', 'minor2', 'minor3'].forEach((key) => {
+      if (hasOwn(state, key) && state[key] !== null && state[key] !== '') {
+        out[key] = normalizeMinorCode(state[key], `${path}.${key}`);
+      }
+    });
+    if (hasOwn(state, 'schedulerSelectedTerm') && state.schedulerSelectedTerm !== null && state.schedulerSelectedTerm !== '') {
+      out.schedulerSelectedTerm = normalizeTermCode(state.schedulerSelectedTerm, `${path}.schedulerSelectedTerm`);
+    }
+
+    const curriculum = hasOwn(state, 'curriculum') ? validateCurriculum(state.curriculum, `${path}.curriculum`) : undefined;
+    if (curriculum !== undefined) out.curriculum = curriculum;
+    if (hasOwn(state, 'grades')) out.grades = validateGrades(state.grades, curriculum, `${path}.grades`);
+    if (fileVersion >= 2 && hasOwn(state, 'gradingBases') && state.gradingBases !== null) {
+      const suppliedBases = validateGradingBases(state.gradingBases, curriculum, `${path}.gradingBases`);
+      // A decisive A–F or S/U grade is the source of truth if stale metadata
+      // disagrees with it. Ambiguous grades such as NA retain the supplied basis.
+      out.gradingBases = canonicalizeGradingBases(curriculum, out.grades, suppliedBases);
+    } else if (Array.isArray(curriculum)) {
+      out.gradingBases = synthesizeGradingBases(curriculum, out.grades);
+    }
+    if (hasOwn(state, 'dates')) out.dates = validateDates(state.dates, curriculum, `${path}.dates`);
+    if (fileVersion >= 4 && hasOwn(state, 'termCodes')) {
+      out.termCodes = validateTermCodes(state.termCodes, curriculum, `${path}.termCodes`);
+      if (Array.isArray(out.dates)) {
+        out.termCodes.forEach((code, index) => {
+          const derived = canonicalTermCodeFromLabel(out.dates[index]);
+          if (code && derived && code !== derived) {
+            importError(`${path}.termCodes[${index}]`, 'conflicts with the semester label');
+          }
+        });
+      }
+    } else if (Array.isArray(curriculum) && Array.isArray(out.dates)) {
+      out.termCodes = out.dates.map(canonicalTermCodeFromLabel);
+    }
+    if (hasOwn(state, 'customCourses')) out.customCourses = validateCustomCourses(state.customCourses, `${path}.customCourses`);
+    if (hasOwn(state, 'schedulerStates')) out.schedulerStates = validateSchedulerStates(state.schedulerStates, `${path}.schedulerStates`);
+    if (fileVersion >= 3 && hasOwn(state, 'globalCourseMetadata')) {
+      out.globalCourseMetadata = validateGlobalCourseMetadata(
+        state.globalCourseMetadata,
+        `${path}.globalCourseMetadata`,
+      );
+    }
+    return out;
+  }
+
+  function validateImportObject(obj) {
+    const root = requirePlainObject(obj, 'file');
+    requireKnownFields(root, new Set(['type', 'version', 'exportedAt', 'plan']), 'file');
+    if (root.type !== 'surriculum_plan' || ![1, 2, 3, PLAN_EXPORT_VERSION].includes(root.version)) {
+      throw new Error('Unsupported file');
+    }
+    if (hasOwn(root, 'exportedAt') && root.exportedAt !== null) normalizeIsoTimestamp(root.exportedAt, 'file.exportedAt');
+
+    const plan = requirePlainObject(root.plan, 'file.plan');
+    requireKnownFields(plan, new Set(['id', 'name', 'order', 'createdAt', 'updatedAt', 'state']), 'file.plan');
+    if (hasOwn(plan, 'id') && plan.id !== null) normalizeScheduleId(plan.id, 'file.plan.id');
+    if (hasOwn(plan, 'order') && plan.order !== null
+        && (!Number.isInteger(plan.order) || plan.order < 0 || plan.order >= MAX_PLANS)) {
+      importError('file.plan.order', `must be an integer from 0 to ${MAX_PLANS - 1}`);
+    }
+    if (hasOwn(plan, 'createdAt')) normalizeIsoTimestamp(plan.createdAt, 'file.plan.createdAt');
+    if (hasOwn(plan, 'updatedAt')) normalizeIsoTimestamp(plan.updatedAt, 'file.plan.updatedAt');
+
+    let name = 'Imported Plan';
+    if (hasOwn(plan, 'name') && plan.name !== null) {
+      const rawName = normalizeImportedText(plan.name, 'file.plan.name', { maxLength: 500, collapseWhitespace: true });
+      name = normalizePlanName(rawName) || 'Imported Plan';
+    }
+    return { name, state: validatePlanState(plan.state, 'file.plan.state', root.version) };
   }
 
   function downloadJson(filename, obj) {
@@ -421,10 +1419,18 @@
       schedulerSelectedTerm: get('schedulerSelectedTerm') || null,
       curriculum: safeJsonParse(get('curriculum') || 'null', null),
       grades: safeJsonParse(get('grades') || 'null', null),
+      gradingBases: safeJsonParse(get('gradingBases') || 'null', null),
       dates: safeJsonParse(get('dates') || 'null', null),
+      termCodes: safeJsonParse(get('termCodes') || 'null', null),
+      globalCourseMetadata: safeJsonParse(get('globalCourseMetadata') || '[]', []),
       customCourses: {},
       schedulerStates: {},
     };
+
+    state.globalCourseMetadata = salvageStoredGlobalCourseMetadata(
+      state.globalCourseMetadata,
+      'stored global course metadata',
+    );
 
     const prefix = planKey(planId, 'customCourses_');
     const schedulerPrefix = planKey(planId, 'schedulerState_');
@@ -435,7 +1441,15 @@
         const raw = localStorage.getItem(k);
         const parsed = safeJsonParse(raw || 'null', null);
         if (Array.isArray(parsed)) {
-          state.customCourses[majorKey.replace(/^customCourses_/, '')] = parsed;
+          const program = majorKey.replace(/^customCourses_/, '');
+          try {
+            state.customCourses[program] = validateCustomCourses(
+              { [program]: parsed },
+              `stored custom courses.${program}`
+            )[normalizeCustomCourseProgramCode(program, 'stored custom-course program')];
+          } catch (err) {
+            try { console.warn('Ignoring invalid stored custom courses during export:', err); } catch (_) {}
+          }
         }
         continue;
       }
@@ -449,11 +1463,35 @@
       }
     }
 
+    if (Array.isArray(state.curriculum)) {
+      // Autosave writes parallel arrays sequentially. Recover a stale or
+      // partially written basis array before exporting so our own v2 export is
+      // always re-importable, and canonicalize conflicts from older storage.
+      state.gradingBases = canonicalizeGradingBases(
+        state.curriculum,
+        state.grades,
+        state.gradingBases,
+      );
+      if (!Array.isArray(state.termCodes) || state.termCodes.length !== state.curriculum.length) {
+        state.termCodes = Array.isArray(state.dates)
+          ? state.dates.map(canonicalTermCodeFromLabel)
+          : state.curriculum.map(() => '');
+      }
+      state.termCodes = state.termCodes.map((code, index) => {
+        const stored = String(code || '').trim();
+        const fromDate = Array.isArray(state.dates)
+          ? canonicalTermCodeFromLabel(state.dates[index]) : '';
+        return /^\d{4}(01|02|03)$/.test(stored) && (!fromDate || fromDate === stored)
+          ? stored : fromDate;
+      });
+    }
+
     return state;
   }
 
-  function writePlanState(planId, state) {
+  function writePlanState(planId, state, options) {
     if (!state || typeof state !== 'object') return;
+    const writeOptions = options || {};
     const setRaw = (k, v) => localStorage.setItem(planKey(planId, k), v);
     const setJson = (k, v) => setRaw(k, JSON.stringify(v));
 
@@ -472,7 +1510,15 @@
 
     if (state.curriculum != null) setJson('curriculum', state.curriculum);
     if (state.grades != null) setJson('grades', state.grades);
+    if (state.gradingBases != null) setJson('gradingBases', state.gradingBases);
     if (state.dates != null) setJson('dates', state.dates);
+    if (state.termCodes != null) setJson('termCodes', state.termCodes);
+    if (state.globalCourseMetadata != null) {
+      setJson('globalCourseMetadata', validateGlobalCourseMetadata(
+        state.globalCourseMetadata,
+        'plan.globalCourseMetadata',
+      ));
+    }
 
     if (state.customCourses && typeof state.customCourses === 'object') {
       for (const maj of Object.keys(state.customCourses)) {
@@ -490,7 +1536,7 @@
       }
     }
 
-    touchUpdated(planId);
+    if (!writeOptions.skipTouch) touchUpdated(planId);
   }
 
   function buildExportObject(planId) {
@@ -500,7 +1546,7 @@
     const state = readPlanState(planId);
     return {
       type: 'surriculum_plan',
-      version: 1,
+      version: PLAN_EXPORT_VERSION,
       exportedAt: nowIso(),
       plan: {
         id: meta?.id || planId,
@@ -515,19 +1561,29 @@
 
   function importExportObject(obj, opts) {
     const options = opts || {};
-    if (!obj || typeof obj !== 'object') throw new Error('Invalid file');
-    if (obj.type !== 'surriculum_plan' || obj.version !== 1 || !obj.plan) throw new Error('Unsupported file');
-
-    const name = normalizePlanName(obj.plan.name) || 'Imported Plan';
+    const validated = validateImportObject(obj);
     const idx = ensureIndex();
     if (idx.plans.length >= MAX_PLANS) throw new Error(`Plan limit reached (${MAX_PLANS}).`);
 
     const id = createId();
-    idx.plans.push({ id, name, createdAt: nowIso(), updatedAt: nowIso() });
-    if (options.activate) idx.activeId = id;
-    saveIndex(idx);
-
-    writePlanState(id, obj.plan.state || {});
+    const createdAt = nowIso();
+    const prefix = planKey(id, '');
+    try {
+      // Persist the already-normalized state first. The plan is not added to
+      // the visible index until every state write succeeds, so malformed data
+      // or a storage-quota failure cannot leave a partial active plan behind.
+      writePlanState(id, validated.state, { skipTouch: true });
+      idx.plans.push({ id, name: validated.name, createdAt, updatedAt: createdAt });
+      if (options.activate) idx.activeId = id;
+      saveIndex(idx);
+    } catch (err) {
+      try {
+        listLocalStorageKeys().forEach((key) => {
+          if (key.startsWith(prefix)) localStorage.removeItem(key);
+        });
+      } catch (_) {}
+      throw err;
+    }
     return id;
   }
 
@@ -537,50 +1593,113 @@
     const nameSpan = document.getElementById('activePlanName');
     if (!toggle || !dropdown || !nameSpan) return;
 
-    const closeDropdown = () => dropdown.classList.remove('active');
-    const openDropdown = () => dropdown.classList.add('active');
+    const announce = (message) => {
+      const region = document.getElementById('a11yStatus');
+      if (region) region.textContent = String(message || '');
+    };
+    const closeDropdown = () => {
+      dropdown.classList.remove('active');
+      toggle.setAttribute('aria-expanded', 'false');
+    };
+    const openDropdown = () => {
+      dropdown.classList.add('active');
+      toggle.setAttribute('aria-expanded', 'true');
+    };
 
     const setHeaderName = () => {
-      const active = getPlanMeta(getActivePlanId());
+      const active = getPlanMeta(sessionPlanId);
       nameSpan.textContent = active?.name || DEFAULT_PLAN_NAME;
     };
 
     function render() {
       const idx = ensureIndex();
-      const activeId = idx.activeId;
+      const activeId = sessionPlanId;
       setHeaderName();
 
       const list = dropdown.querySelector('.plan-list');
       if (!list) return;
       list.innerHTML = '';
 
+      const updatePlanMoveButtons = () => {
+        const rows = Array.from(list.querySelectorAll('.plan-item'));
+        rows.forEach((planRow, index) => {
+          const name = String(planRow.querySelector('.plan-select')?.textContent || 'plan').trim();
+          const up = planRow.querySelector('.plan-move-up');
+          const down = planRow.querySelector('.plan-move-down');
+          if (up) {
+            up.disabled = index === 0;
+            up.setAttribute('aria-label', `Move ${name} up`);
+          }
+          if (down) {
+            down.disabled = index === rows.length - 1;
+            down.setAttribute('aria-label', `Move ${name} down`);
+          }
+        });
+      };
+
       idx.plans.forEach((p) => {
         const row = document.createElement('div');
         row.className = 'plan-item' + (p.id === activeId ? ' active' : '');
         row.dataset.id = p.id;
         row.draggable = true;
+        row.setAttribute('role', 'listitem');
 
         const grip = document.createElement('span');
         grip.className = 'plan-grip';
         grip.innerHTML = '<i class="fa-solid fa-grip-vertical"></i>';
+        grip.setAttribute('aria-hidden', 'true');
+
+        const moveControls = document.createElement('span');
+        moveControls.className = 'plan-move-controls';
+        const makeMoveButton = (direction, offset) => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = `btn-icon plan-move plan-move-${direction}`;
+          button.title = `Move ${p.name} ${direction}`;
+          button.setAttribute('aria-label', `Move ${p.name} ${direction}`);
+          button.innerHTML = `<i class="fa-solid fa-arrow-${direction}" aria-hidden="true"></i>`;
+          button.addEventListener('click', (event) => {
+            event.stopPropagation();
+            const rows = Array.from(list.querySelectorAll('.plan-item'));
+            const fromIndex = rows.indexOf(row);
+            const toIndex = fromIndex + offset;
+            if (fromIndex < 0 || toIndex < 0 || toIndex >= rows.length) return;
+            const reference = offset < 0 ? rows[toIndex] : rows[toIndex].nextSibling;
+            const reorderedRows = rows.slice();
+            reorderedRows.splice(fromIndex, 1);
+            reorderedRows.splice(toIndex, 0, row);
+            const ids = reorderedRows.map((element) => element.dataset.id).filter(Boolean);
+            if (!planStorage.reorder(ids)) return;
+            list.insertBefore(row, reference);
+            updatePlanMoveButtons();
+            announce(`Moved ${p.name} ${direction} to position ${toIndex + 1} of ${rows.length}.`);
+            button.focus({ preventScroll: true });
+          });
+          return button;
+        };
+        moveControls.appendChild(makeMoveButton('up', -1));
+        moveControls.appendChild(makeMoveButton('down', 1));
 
         const select = document.createElement('button');
         select.className = 'plan-select';
         select.type = 'button';
         select.textContent = p.name;
+        if (p.id === activeId) select.setAttribute('aria-current', 'true');
         select.addEventListener('click', (e) => {
           e.stopPropagation();
-          if (p.id === getActivePlanId()) {
+          if (p.id === sessionPlanId) {
             closeDropdown();
             return;
           }
-          try {
-            for (const fn of saveHooks) {
-              try { fn(); } catch (_) {}
-            }
-          } catch (_) {}
+          if (!flushSaves()) {
+            showSaveFailure();
+            return;
+          }
           const ok = planStorage.setActivePlanId(p.id);
-          if (ok) location.reload();
+          if (ok) {
+            suspendSaves();
+            location.reload();
+          }
         });
 
         const actions = document.createElement('div');
@@ -591,6 +1710,7 @@
           b.type = 'button';
           b.className = 'btn-icon plan-action' + (extraClass ? ' ' + extraClass : '');
           b.title = title;
+          b.setAttribute('aria-label', `${title} ${p.name}`);
           b.innerHTML = iconHtml;
           b.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -604,6 +1724,7 @@
             uiModal
               .prompt('Rename plan', '<p>Enter a new name for this plan.</p>', { value: p.name, confirmText: 'Rename' })
               .then((val) => {
+                if (val === null) return;
                 const next = normalizePlanName(val);
                 if (!next) {
                   uiModal.alert('Invalid name', '<p>Plan name cannot be empty.</p>');
@@ -643,10 +1764,12 @@
         );
 
         row.appendChild(grip);
+        row.appendChild(moveControls);
         row.appendChild(select);
         row.appendChild(actions);
         list.appendChild(row);
       });
+      updatePlanMoveButtons();
     }
 
     // Drag and drop ordering
@@ -695,16 +1818,16 @@
         }
         // Flush the current plan before creating/switching. This avoids the
         // autosave loop writing the current plan into the newly active plan.
-        try {
-          for (const fn of saveHooks) {
-            try { fn(); } catch (_) {}
-          }
-        } catch (_) {}
+        if (!flushSaves()) {
+          showSaveFailure();
+          return;
+        }
 
-        const currentId = getActivePlanId();
+        const currentId = sessionPlanId;
         uiModal
           .prompt('New plan', '<p>Name your new plan.</p>', { value: `Plan ${idx.plans.length + 1}`, confirmText: 'Continue' })
           .then((val) => {
+            if (val === null) return null;
             const baseName = normalizePlanName(val);
             if (!baseName) {
               uiModal.alert('Invalid name', '<p>Plan name cannot be empty.</p>');
@@ -719,6 +1842,12 @@
           .then((res) => {
             if (!res) return;
             const { baseName, copySemesters } = res;
+            // The prompt is asynchronous. Flush again immediately before a
+            // duplicate reads storage so the copy includes the latest state.
+            if (!flushSaves()) {
+              showSaveFailure();
+              return;
+            }
             let newId = null;
             if (copySemesters) {
               newId = planStorage.duplicatePlan(currentId, baseName);
@@ -726,11 +1855,16 @@
               newId = planStorage.createPlan(baseName);
             }
             if (newId) {
-              planStorage.setActivePlanId(newId);
-              location.reload();
+              if (planStorage.setActivePlanId(newId)) {
+                suspendSaves();
+                location.reload();
+              }
             }
           })
-          .catch(() => {});
+          .catch((err) => uiModal.alert(
+            'Could not create plan',
+            `<p>${escapeHtml(err && err.message ? err.message : 'The new plan could not be created.')}</p>`
+          ));
       });
     }
 
@@ -743,8 +1877,24 @@
       importInput.addEventListener('change', () => {
         const file = importInput.files && importInput.files[0];
         if (!file) return;
-        planStorage.importPlanFile(file, { activate: true })
-          .then(() => location.reload())
+        if (!flushSaves()) {
+          showSaveFailure();
+          return;
+        }
+        planStorage.importPlanFile(file, { activate: false })
+          .then((importedId) => {
+            // FileReader is asynchronous; capture any edits made while it was
+            // reading before switching away from the current plan.
+            if (!flushSaves()) {
+              planStorage.deletePlan(importedId);
+              showSaveFailure();
+              return;
+            }
+            if (planStorage.setActivePlanId(importedId)) {
+              suspendSaves();
+              location.reload();
+            }
+          })
           .catch((err) => uiModal.alert('Import failed', `<p>${escapeHtml(err && err.message ? err.message : 'Failed to import plan.')}</p>`));
       });
     }
@@ -760,14 +1910,50 @@
       if (dropdown.contains(e.target) || toggle.contains(e.target)) return;
       closeDropdown();
     });
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !dropdown.classList.contains('active')) return;
+      e.preventDefault();
+      closeDropdown();
+      try { toggle.focus({ preventScroll: true }); } catch (_) {}
+    });
 
     render();
+  }
+
+  function initStaticDisclosureA11y() {
+    const observeClass = (element, update) => {
+      if (!element || typeof MutationObserver === 'undefined') return;
+      update();
+      new MutationObserver(update).observe(element, { attributes: true, attributeFilter: ['class'] });
+    };
+
+    const sidebar = document.querySelector('.sidebar');
+    const sidebarToggle = document.querySelector('.sidebar-toggle');
+    if (sidebar && sidebarToggle) {
+      observeClass(sidebar, () => {
+        const expanded = !sidebar.classList.contains('collapsed');
+        sidebarToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        sidebarToggle.setAttribute('aria-label', expanded ? 'Collapse planner controls' : 'Expand planner controls');
+      });
+    }
+
+    const importDropdown = document.getElementById('importDropdown');
+    const importToggle = document.querySelector('.import-toggle');
+    if (importDropdown && importToggle) {
+      observeClass(importDropdown, () => {
+        importToggle.setAttribute(
+          'aria-expanded',
+          importDropdown.classList.contains('active') ? 'true' : 'false'
+        );
+      });
+    }
   }
 
   const planStorage = {
     maxPlans: MAX_PLANS,
     ensureIndex,
     getActivePlanId,
+    getSessionPlanId,
     getPlans() {
       return ensureIndex().plans.slice();
     },
@@ -782,22 +1968,72 @@
       saveIndex(idx);
       return true;
     },
-    registerSaveHook(fn) {
-      if (typeof fn === 'function') saveHooks.push(fn);
+    registerSaveHook(fn, options) {
+      if (typeof fn !== 'function') return false;
+      const opts = options || {};
+      saveHooks.push({ fn, planId: opts.planId || null });
+      return true;
     },
+    requestSave,
+    flushSaves,
+    suspendSaves,
+    captureCheckpoint: capturePlanCheckpoint,
+    restoreCheckpoint: restorePlanCheckpoint,
+    hasPlan(id) {
+      return hasPlanWithoutCreating(id);
+    },
+    clearAllAppData,
     getItem(key, planId) {
       const pid = planId || getActivePlanId();
-      return localStorage.getItem(planKey(pid, key));
+      const raw = localStorage.getItem(planKey(pid, key));
+      if (raw == null) return raw;
+      if (String(key || '') === 'globalCourseMetadata') {
+        return JSON.stringify(salvageStoredGlobalCourseMetadata(
+          safeJsonParse(raw, []),
+          'stored global course metadata',
+        ));
+      }
+      if (!String(key || '').startsWith('customCourses_')) return raw;
+      try {
+        const program = String(key).slice('customCourses_'.length);
+        const parsed = JSON.parse(raw);
+        const normalized = validateCustomCourses({ [program]: parsed }, `stored custom courses.${program}`);
+        return JSON.stringify(normalized[normalizeCustomCourseProgramCode(program, 'stored custom-course program')]);
+      } catch (err) {
+        try { console.warn('Ignoring invalid stored custom courses:', err); } catch (_) {}
+        return '[]';
+      }
     },
+    setSnapshot: setPlanSnapshot,
     setItem(key, value, planId) {
       const pid = planId || getActivePlanId();
-      localStorage.setItem(planKey(pid, key), value);
+      if (planId && !hasPlanWithoutCreating(pid)) {
+        throw new Error('The plan is no longer available.');
+      }
+      let storedValue = value;
+      if (String(key || '').startsWith('customCourses_')) {
+        const program = String(key).slice('customCourses_'.length);
+        const parsed = JSON.parse(String(value || ''));
+        const normalized = validateCustomCourses({ [program]: parsed }, `custom courses.${program}`);
+        storedValue = JSON.stringify(normalized[normalizeCustomCourseProgramCode(program, 'custom-course program')]);
+      } else if (String(key || '') === 'globalCourseMetadata') {
+        storedValue = JSON.stringify(validateGlobalCourseMetadata(
+          JSON.parse(String(value || '')),
+          'global course metadata',
+        ));
+      }
+      localStorage.setItem(planKey(pid, key), storedValue);
       touchUpdated(pid);
+      return true;
     },
     removeItem(key, planId) {
       const pid = planId || getActivePlanId();
+      if (planId && !hasPlanWithoutCreating(pid)) {
+        throw new Error('The plan is no longer available.');
+      }
       localStorage.removeItem(planKey(pid, key));
       touchUpdated(pid);
+      return true;
     },
     createPlan(name) {
       const n = normalizePlanName(name) || 'New Plan';
@@ -814,18 +2050,33 @@
       const src = sourceId || idx.activeId;
       const n = normalizePlanName(name) || 'Copy of Plan';
       const id = createId();
-      idx.plans.push({ id, name: n, createdAt: nowIso(), updatedAt: nowIso() });
-      saveIndex(idx);
       const srcPrefix = planKey(src, '');
       const dstPrefix = planKey(id, '');
       const keys = listLocalStorageKeys();
-      for (const k of keys) {
-        if (!k.startsWith(srcPrefix)) continue;
-        const rest = k.slice(srcPrefix.length);
-        const val = localStorage.getItem(k);
-        if (val != null) localStorage.setItem(dstPrefix + rest, val);
+      const createdAt = nowIso();
+      try {
+        // Copy the complete namespace before publishing the new plan in the
+        // shared index. localStorage has no transaction primitive, so keeping
+        // the destination unindexed until the final write is the only way to
+        // prevent a quota failure from exposing a partial plan.
+        for (const k of keys) {
+          if (!k.startsWith(srcPrefix)) continue;
+          const rest = k.slice(srcPrefix.length);
+          const val = localStorage.getItem(k);
+          if (val != null) localStorage.setItem(dstPrefix + rest, val);
+        }
+        idx.plans.push({ id, name: n, createdAt, updatedAt: createdAt });
+        saveIndex(idx);
+      } catch (err) {
+        // Best-effort rollback covers both a failed data copy and a failed
+        // index write. The pre-existing source namespace is never touched.
+        try {
+          listLocalStorageKeys().forEach((key) => {
+            if (key.startsWith(dstPrefix)) localStorage.removeItem(key);
+          });
+        } catch (_) {}
+        throw err;
       }
-      touchUpdated(id);
       return id;
     },
     renamePlan(id, name) {
@@ -847,6 +2098,16 @@
       const exists = idx.plans.some(p => p.id === id);
       if (!exists) return { ok: false, message: 'Plan not found.' };
 
+      // The page save hook is bound to the plan that was active when this
+      // session loaded. Flush it before removing that namespace; running the
+      // hook afterwards would recreate orphaned keys for the deleted plan.
+      const deletingSessionPlan = sessionPlanId === id;
+      const deletingSharedActivePlan = idx.activeId === id;
+      const reloadsThisPage = deletingSessionPlan || deletingSharedActivePlan;
+      if (reloadsThisPage && !flushSaves()) {
+        return { ok: false, message: 'The visible plan could not be saved, so nothing was deleted.' };
+      }
+
       // Remove all plan-scoped keys for this plan id
       const prefix = planKey(id, '');
       const keys = listLocalStorageKeys();
@@ -856,18 +2117,18 @@
 
       idx.plans = idx.plans.filter(p => p.id !== id);
       let reloaded = false;
-      if (idx.activeId === id) {
-        idx.activeId = idx.plans[0].id;
-        saveIndex(idx);
-        try {
-          for (const fn of saveHooks) {
-            try { fn(); } catch (_) {}
-          }
-        } catch (_) {}
+      if (deletingSharedActivePlan) {
+        // Another tab may have made the deleted plan globally active. Keep
+        // this page on the plan it actually rendered whenever that plan still
+        // exists, instead of jumping to an unrelated first plan.
+        idx.activeId = idx.plans.some((plan) => plan && plan.id === sessionPlanId)
+          ? sessionPlanId : idx.plans[0].id;
+      }
+      saveIndex(idx);
+      if (reloadsThisPage) {
+        suspendSaves();
         location.reload();
         reloaded = true;
-      } else {
-        saveIndex(idx);
       }
       return { ok: true, reloaded };
     },
@@ -887,10 +2148,11 @@
       return true;
     },
     exportPlan(id) {
-      const pid = id || getActivePlanId();
-      if (pid === getActivePlanId()) {
-        for (const fn of saveHooks) {
-          try { fn(); } catch (_) {}
+      const pid = id || sessionPlanId || getActivePlanId();
+      if (pid === sessionPlanId) {
+        if (!flushSaves()) {
+          showSaveFailure();
+          return false;
         }
       }
       const obj = buildExportObject(pid);
@@ -900,27 +2162,56 @@
       return true;
     },
     async importPlanFile(file, options) {
+      if (!file || typeof file !== 'object') throw new Error('Invalid file');
+      if (Number.isFinite(file.size) && file.size > IMPORT_MAX_FILE_BYTES) {
+        throw new Error('Plan file is too large (maximum 2 MB).');
+      }
       const text = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(String(reader.result || ''));
         reader.onerror = () => reject(new Error('Failed to read file'));
         reader.readAsText(file);
       });
+      if (text.length > IMPORT_MAX_FILE_BYTES) throw new Error('Plan file is too large (maximum 2 MB).');
       const obj = safeJsonParse(text, null);
       const id = importExportObject(obj, options || { activate: true });
       return id;
     },
     importPlanObject: importExportObject,
+    validateImportObject,
+    normalizeCustomCourse(course) {
+      return validateCustomCourse(course, 'custom course');
+    },
+    normalizeCustomCourseList(program, list) {
+      const programCode = normalizeCustomCourseProgramCode(program, 'custom course program');
+      const normalized = validateCustomCourses({ [programCode]: list }, 'custom courses');
+      return normalized[programCode];
+    },
   };
 
   // Boot
   ensureIndex();
   migrateLegacyIfNeeded();
-  initAppDataVersion();
+  sessionPlanId = ensureIndex().activeId;
+  initStorageSchemaVersion();
   window.planStorage = planStorage;
   window.uiModal = window.uiModal || uiModal;
 
+  // Flush synchronously when a tab is backgrounded or leaves the page. These
+  // events do not force a reload and remain safe with the back/forward cache.
+  if (typeof window !== 'undefined') {
+    window.addEventListener('pagehide', () => flushSaves({ onlyIfPending: true }));
+  }
   if (typeof document !== 'undefined') {
-    document.addEventListener('DOMContentLoaded', initPlanUi);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flushSaves({ onlyIfPending: true });
+    });
+  }
+
+  if (typeof document !== 'undefined') {
+    document.addEventListener('DOMContentLoaded', () => {
+      initPlanUi();
+      initStaticDisclosureA11y();
+    });
   }
 })();

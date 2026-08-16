@@ -304,7 +304,7 @@ def fetch_section(
     if session is None:
         session = requests.Session()
         session.headers.update(
-            {"User-Agent": "Mozilla/5.0 (compatible; SUrriculum/3.0; +https://github.com/)"}
+            {"User-Agent": "Mozilla/5.0 (compatible; SUrriculum/3.1; +https://github.com/)"}
         )
         local_state.session = session
 

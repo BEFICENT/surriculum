@@ -1,0 +1,4 @@
+{
+  "//": "Marks scripts/data/* as ES modules for Node (unit tests import them directly). The browser loads them via <script type=\"module\">, which is unaffected by this file. Not served to users.",
+  "type": "module"
+}

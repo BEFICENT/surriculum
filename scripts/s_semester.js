@@ -3,6 +3,14 @@ function s_semester(id, course_data)
 {
     this.courses = [];
     this.id = id;
+    // Workload is independent of degree allocation: every positive-SU course
+    // card contributes even when its grade or category makes it N/A for the
+    // primary program. `totalCredit` below retains its historical graduation-
+    // total meaning.
+    this.totalLoadCredit = null;
+    this.primaryAllocatedCredit = null;
+    this.primaryUnallocatedCredit = null;
+    this.primaryProgramCode = '';
     this.totalCredit = 0;
     this.totalArea = 0;
     this.totalCore = 0;
@@ -12,13 +20,13 @@ function s_semester(id, course_data)
     this.totalScience = 0.0;
     this.totalEngineering = 0.0;
     this.totalECTS = 0.0;
-    // Track the chronological order of this semester in the academic calendar. This index
-    // corresponds to the position of the semester's term string within the global
-    // `terms` array defined in helper_functions.js. The array lists the most
-    // recent term first, so a larger index represents an earlier semester.
-    // `termIndex` is set when the semester is created and whenever the user edits
-    // the term via the UI.
+    // Legacy UI lookup retained for compatibility. Academic chronology never
+    // reads this generated-window index; it uses the stable canonical termCode.
     this.termIndex = null;
+    // Stable identity used by progress/graduation audits. Unlike termIndex this
+    // remains meaningful when the generated `terms` window moves over time.
+    this.termCode = '';
+    this.termName = '';
 
     this.totalGPA = 0.0;
     this.totalGPACredits = 0.0;
@@ -43,6 +51,10 @@ function s_semester(id, course_data)
             }
         }
         this.courses.push(course);
+        try {
+            const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+            if (storage && typeof storage.requestSave === 'function') storage.requestSave();
+        } catch (_) {}
     }
     this.deleteCourse = function(id_c)
     {
@@ -100,6 +112,10 @@ function s_semester(id, course_data)
                 this.totalECTS -= ects;
                 this.totalCredit -= credit;
                 this.courses.splice(a,1);
+                try {
+                    const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+                    if (storage && typeof storage.requestSave === 'function') storage.requestSave();
+                } catch (_) {}
                 return;
             }
         }
@@ -108,10 +124,33 @@ function s_semester(id, course_data)
 }
 
 //struct representing course:
-function s_course(code, id = 0)
+function s_course(code, id = 0, grade = '', gradingBasis = 'unknown')
 {
     this.code = code.toUpperCase().trim();
     this.id = id
+    // Keep the grade on the model as well as in the UI. Graduation and
+    // allocation rules must not depend on reading rendered DOM text, and the
+    // model value also prevents an open grade picker from being autosaved as a
+    // blank grade. "Registered" is the persisted label for a planned course.
+    const rawGrade = String(grade ?? '').trim().toUpperCase();
+    const policy = (typeof window !== 'undefined' && window.gradePolicy)
+        ? window.gradePolicy : null;
+    const normalizedGrade = policy && typeof policy.normalizeGrade === 'function'
+        ? policy.normalizeGrade(rawGrade)
+        : (rawGrade === 'REGISTERED' ? '' : rawGrade);
+    // Keep an unsupported token visible on the model. The policy then treats
+    // it as needing review and awards neither credit nor GPA, instead of
+    // quietly turning bad imported data into an ungraded projected course.
+    this.grade = normalizedGrade === null ? rawGrade : normalizedGrade;
+    if (policy && typeof policy.inferGradingBasis === 'function') {
+        this.gradingBasis = policy.inferGradingBasis(this.grade, gradingBasis);
+    } else {
+        const explicit = String(gradingBasis || '').trim().toLowerCase();
+        if (/^(?:A|A-|B\+|B|B-|C\+|C|C-|D\+|D|F)$/.test(this.grade)) this.gradingBasis = 'letter';
+        else if (/^(?:S|U)$/.test(this.grade)) this.gradingBasis = 'satisfactory';
+        else if (explicit === 'letter' || explicit === 'satisfactory') this.gradingBasis = explicit;
+        else this.gradingBasis = 'unknown';
+    }
     // Effective type of the course after category reallocation. Initially null and
     // will be set by curriculum.recalcEffectiveTypes().
     this.effective_type = null;

@@ -1,5 +1,84 @@
-function createSemeter(aslastelement=true, courseList=[], curriculum, course_data, grade_list=[], date_custom="")
+function createSemeter(aslastelement=true, courseList=[], curriculum, course_data, grade_list=[], date_custom="", grading_basis_list=[])
 {
+    const interactiveDefault = !date_custom && arguments.length <= 4;
+    if (interactiveDefault) {
+        const canonicalCode = (term) => {
+            try {
+                const fn = (typeof semesterTermCode === 'function')
+                    ? semesterTermCode
+                    : ((typeof window !== 'undefined' && typeof window.semesterTermCode === 'function')
+                        ? window.semesterTermCode : null);
+                if (fn) return String(fn(term) || '');
+            } catch (_) {}
+            try {
+                return typeof termNameToCode === 'function' ? String(termNameToCode(term) || '') : '';
+            } catch (_) {
+                return '';
+            }
+        };
+        const existing = curriculum && Array.isArray(curriculum.semesters)
+            ? curriculum.semesters : [];
+        const usedCodes = new Set(existing.map(canonicalCode).filter(Boolean));
+        const isUnused = (termName) => {
+            const code = canonicalCode(termName);
+            return !!code && !usedCodes.has(code);
+        };
+
+        let startIndex = -1;
+        existing.forEach((semester) => {
+            const code = canonicalCode(semester);
+            const label = code && typeof termCodeToName === 'function'
+                ? termCodeToName(code) : '';
+            const index = terms.indexOf(label);
+            if (index >= 0 && (startIndex < 0 || index < startIndex)) startIndex = index;
+        });
+
+        if (startIndex < 0) {
+            let entryTerm = '';
+            try {
+                const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+                const planId = storage && typeof storage.getSessionPlanId === 'function'
+                    ? storage.getSessionPlanId() : null;
+                entryTerm = storage && planId && typeof storage.getItem === 'function'
+                    ? String(storage.getItem('entryTerm', planId) || '') : '';
+            } catch (_) {}
+            if (!entryTerm && typeof window !== 'undefined') entryTerm = window.currentTermName || '';
+            startIndex = terms.indexOf(entryTerm);
+            if (startIndex < 0) startIndex = 0;
+        }
+
+        let chosenIndex = -1;
+        if (!existing.length && isUnused(terms[startIndex])) {
+            chosenIndex = startIndex;
+        } else {
+            // Search every generated term across the wrap boundary. Summer is
+            // still opt-in through the term editor; automatic additions retain
+            // the established Fall/Spring behavior.
+            for (let distance = 1; distance <= terms.length; distance++) {
+                const index = (startIndex - distance + terms.length) % terms.length;
+                const candidate = terms[index];
+                if (!String(candidate || '').includes('Summer') && isUnused(candidate)) {
+                    chosenIndex = index;
+                    break;
+                }
+            }
+        }
+
+        if (chosenIndex < 0) {
+            try {
+                const ui = (typeof window !== 'undefined') ? window.uiModal : null;
+                if (ui && typeof ui.alert === 'function') {
+                    ui.alert(
+                        'No semester term available',
+                        '<p>Every available Fall and Spring term is already in this plan. Edit an existing semester or remove one before adding another.</p>',
+                    );
+                }
+            } catch (_) {}
+            return null;
+        }
+        date_custom = String(terms[chosenIndex] || '');
+    }
+
     const board = document.querySelector(".board");
 
     let container = document.createElement("div");
@@ -27,7 +106,7 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
     total_credit_line_r.classList.add("total_credit_line");
     let total_credit_text = document.createElement("div");
     total_credit_text.classList.add("total_credit_text");
-    total_credit_text.innerHTML = "<span> Total: 0 credits </span>"
+    total_credit_text.innerHTML = "<span>0 SU</span>"
     total_credit.appendChild(total_credit_line_l);
     total_credit.appendChild(total_credit_text);
     total_credit.appendChild(total_credit_line_r);
@@ -40,6 +119,7 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
     let date = document.createElement("div");
     date.classList.add("date");
 
+    const dateText = document.createElement('p');
     //DATE DEFAULT:
     if(!date_custom) {
         // Find next logical semester to add
@@ -101,8 +181,13 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
             let entryTermName = '';
             try {
                 const ps = (typeof window !== 'undefined') ? window.planStorage : null;
+                const planId = (ps && typeof ps.getSessionPlanId === 'function')
+                    ? ps.getSessionPlanId() : null;
                 const get = (k) => {
-                    try { return ps ? ps.getItem(k) : localStorage.getItem(k); } catch (_) {}
+                    if (ps && typeof ps.getItem === 'function') {
+                        if (!planId) return null;
+                        try { return ps.getItem(k, planId); } catch (_) { return null; }
+                    }
                     try { return localStorage.getItem(k); } catch (_) {}
                     return null;
                 };
@@ -114,20 +199,24 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
             nextTermIndex = (idx !== -1) ? idx : terms.length - 1;
         }
 
-        date.innerHTML = '<p>' + terms[nextTermIndex] + '</p>';
+        dateText.textContent = String(terms[nextTermIndex] || '');
     }
     //DATE CUSTOM:
     else 
     {
-        date.innerHTML = '<p>' + date_custom + '</p>';
+        dateText.textContent = String(date_custom);
     }
+    date.appendChild(dateText);
 
     let closebtn = document.createElement("button");
     closebtn.classList.add("delete_semester");
+    closebtn.type = "button";
     let drag = document.createElement("div");
     drag.classList.add("semester_drag");
-    let edit = document.createElement("div");
+    drag.setAttribute('aria-hidden', 'true');
+    let edit = document.createElement("button");
     edit.classList.add("semester_date_edit");
+    edit.type = "button";
     let icons = document.createElement("div");
     icons.classList.add("icons");
     icons.appendChild(edit);
@@ -149,22 +238,26 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
     else{
         curriculum.semesters.unshift(newsem);
     }
-    // Record the term index for chronological ordering. The date element
-    // contains a <p> with the term string. Use it to compute the index
-    // within the global `terms` array (defined in helper_functions.js).
+    // Retain the generated-list index for legacy UI compatibility, while the
+    // canonical termCode below is the sole academic chronology identity.
     try {
         const dateTextElem = date.querySelector('p');
-        const dateText = dateTextElem ? dateTextElem.innerHTML : '';
-        newsem.termIndex = terms.indexOf(dateText);
+        const semesterLabel = dateTextElem ? dateTextElem.textContent : '';
+        newsem.termIndex = terms.indexOf(semesterLabel);
+        newsem.termName = semesterLabel;
+        newsem.termCode = (typeof termNameToCode === 'function') ? termNameToCode(semesterLabel) : '';
     } catch (err) {
         // If date or terms are unavailable, leave termIndex as null
         newsem.termIndex = null;
+        newsem.termName = '';
+        newsem.termCode = '';
     }
 
     // Ghost course placeholder similar to the ghost semester container
-    let addCourse = document.createElement("div");
+    let addCourse = document.createElement("button");
     addCourse.classList.add("addCourse");
-    addCourse.innerHTML = "+ Add course";
+    addCourse.type = "button";
+    addCourse.textContent = "+ Add course";
 
 
     subcontainer.appendChild(semester);
@@ -189,7 +282,14 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
     for(let i = 0; i < courseList.length; i++)
     {
         curriculum.course_id++;
-        let myCourse = new s_course(courseList[i], 'c' + curriculum.course_id);
+        let myCourse = new s_course(
+            courseList[i],
+            'c' + curriculum.course_id,
+            grade_list && grade_list[i] !== undefined && grade_list[i] !== null
+                ? grade_list[i] : '',
+            grading_basis_list && grading_basis_list[i] !== undefined && grading_basis_list[i] !== null
+                ? grading_basis_list[i] : 'unknown',
+        );
         let courseCode = myCourse.code;
         try
         {
@@ -201,9 +301,19 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
         }
         if(!curriculum.hasCourse(myCourse.code)) 
         {
+            const courseInfo = getInfo(courseCode, course_data);
             let courseCredit = (typeof parseCreditValue === 'function')
-                ? parseCreditValue(getInfo(courseCode, course_data)['SU_credit'])
-                : (parseFloat(getInfo(courseCode, course_data)['SU_credit']) || 0);
+                ? parseCreditValue(courseInfo['SU_credit'])
+                : (parseFloat(courseInfo['SU_credit']) || 0);
+            // GPA and status checks can run before the graduation allocation
+            // pass. Seed inherent catalog metadata as the course is loaded so
+            // an F/letter-NA attempt still contributes its real denominator.
+            myCourse.SU_credit = courseCredit;
+            myCourse.Basic_Science = parseFloat(courseInfo['Basic_Science'] || '0') || 0;
+            myCourse.Engineering = parseFloat(courseInfo['Engineering'] || '0') || 0;
+            myCourse.ECTS = parseFloat(courseInfo['ECTS'] || '0') || 0;
+            myCourse.Faculty_Course = courseInfo['Faculty_Course'] || 'No';
+            myCourse.Faculty = courseInfo['Faculty'] || '';
             curriculum.getSemester(semester.id).addCourse(myCourse);
             let dom_course = document.createElement('div');
             dom_course.classList.add('course');
@@ -217,19 +327,39 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
             c_container.classList.add("course_container");
             let c_label = document.createElement("div");
             c_label.classList.add("course_label");
-            c_label.innerHTML =
-                '<div class="course_code">' + courseList[i] + '</div>' +
-                '<div class="course_actions">' +
-                '<button class="details_course" type="button" title="Details" aria-label="Course details">' +
-                '<i class="fa-solid fa-circle-info"></i>' +
-                '</button>' +
-                '<button class="delete_course" type="button" title="Delete" aria-label="Delete course"></button>' +
-                '</div>';
+            const codeDiv = document.createElement('div');
+            codeDiv.className = 'course_code';
+            codeDiv.textContent = String(courseList[i] || '');
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = 'course_actions';
+            const detailsButton = document.createElement('button');
+            detailsButton.className = 'details_course';
+            detailsButton.type = 'button';
+            detailsButton.title = `Details for ${courseCode}`;
+            detailsButton.setAttribute('aria-label', `Details for ${courseCode}`);
+            const detailsIcon = document.createElement('i');
+            detailsIcon.className = 'fa-solid fa-circle-info';
+            detailsIcon.setAttribute('aria-hidden', 'true');
+            detailsButton.appendChild(detailsIcon);
+            const deleteButton = document.createElement('button');
+            deleteButton.className = 'delete_course';
+            deleteButton.type = 'button';
+            deleteButton.title = `Delete ${courseCode}`;
+            deleteButton.setAttribute('aria-label', `Delete ${courseCode}`);
+            actionsDiv.appendChild(detailsButton);
+            actionsDiv.appendChild(deleteButton);
+            c_label.appendChild(codeDiv);
+            c_label.appendChild(actionsDiv);
             let c_info = document.createElement("div");
             c_info.classList.add("course_info");
-            c_info.innerHTML = '<div class="course_name">'+ getInfo(courseCode, course_data)['Course_Name'] +'</div>';
-            //console.log(getInfo(courseCode, course_data)['EL_Type']);
-            c_info.innerHTML += '<div class="course_type">'+getInfo(courseCode, course_data)['EL_Type'].toUpperCase() + '</div>';
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'course_name';
+            nameDiv.textContent = String(courseInfo['Course_Name'] || '');
+            c_info.appendChild(nameDiv);
+            const typeDiv = document.createElement('div');
+            typeDiv.className = 'course_type';
+            typeDiv.textContent = String(courseInfo['EL_Type'] || '').toUpperCase();
+            c_info.appendChild(typeDiv);
 
             //let gr_container = document.createElement('div');
             //gr_container.classList.add('grade_container');
@@ -237,7 +367,10 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
             const creditText = (typeof formatCreditValue === 'function')
                 ? formatCreditValue(courseCredit)
                 : (Number(courseCredit).toFixed(1));
-            c_info.innerHTML += '<div class="course_credit">' + creditText + ' credits </div>';
+            const creditDiv = document.createElement('div');
+            creditDiv.className = 'course_credit';
+            creditDiv.textContent = String(creditText) + ' credits';
+            c_info.appendChild(creditDiv);
             const bsDiv = document.createElement('div');
             bsDiv.classList.add('course_bs_credit');
             bsDiv.textContent = 'BS: ' + (getInfo(courseCode, course_data)['Basic_Science'] || '0') + ' credits';
@@ -247,31 +380,40 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
             c_info.appendChild(bsDiv);
             //gr_container.innerHTML += '<div class="grade">Add grade</div>';
             //c_info.appendChild(gr_container);
-            var grade = document.createElement('div');
+            var grade = document.createElement('button');
             grade.classList.add('grade');
-            if(!grade_list.length || !grade_list[i].length)
+            grade.type = 'button';
+            grade.setAttribute('aria-haspopup', 'listbox');
+            grade.setAttribute('aria-expanded', 'false');
+            if(!myCourse.grade)
             {
-                grade.innerHTML = 'Add grade';
+                grade.textContent = 'Add grade';
             }
             else
             {
-                grade.innerHTML = grade_list[i];
-                const gradeValue = letter_grades_global_dic[grade_list[i]];
-                if (gradeValue !== undefined) {
-                    // GPA is affected by all letter grades except transfers (T)
-                    curriculum.getSemester(semester.id).totalGPA += courseCredit * gradeValue;
-                    if (grade_list[i] !== 'T') {
-                        curriculum.getSemester(semester.id).totalGPACredits += courseCredit;
-                    }
-                    // If grade is F, the course should not count towards earned credits
-                    if (grade_list[i] === 'F') {
-                        let info = getInfo(courseCode, course_data);
-                        if (info) {
-                            adjustSemesterTotals(curriculum.getSemester(semester.id), info, -1);
-                        }
+                grade.textContent = myCourse.grade;
+                const gradeOutcome = (typeof evaluateGradeForLegacyTotals === 'function')
+                    ? evaluateGradeForLegacyTotals(myCourse.grade, myCourse.gradingBasis) : null;
+                if (gradeOutcome && gradeOutcome.countsInGpa) {
+                    curriculum.getSemester(semester.id).totalGPA += courseCredit * gradeOutcome.gpaPoints;
+                    curriculum.getSemester(semester.id).totalGPACredits += courseCredit;
+                }
+                // Explicitly unsuccessful attempts do not count toward the
+                // degree plan. The full allocation pass below recomputes these
+                // totals too; this keeps the pre-allocation display consistent.
+                const degreeEligible = typeof curriculum.isDegreeEligibleCourse !== 'function'
+                    || curriculum.isDegreeEligibleCourse(myCourse);
+                if (!degreeEligible) {
+                    let info = getInfo(courseCode, course_data);
+                    if (info) {
+                        adjustSemesterTotals(curriculum.getSemester(semester.id), info, -1);
                     }
                 }
             }
+            grade.setAttribute(
+                'aria-label',
+                `Grade for ${courseCode}: ${myCourse.grade || 'not entered'}`,
+            );
             c_container.appendChild(c_label)
             c_container.appendChild(c_info);
             c_container.appendChild(grade);
@@ -283,14 +425,15 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
             dom_semester.insertBefore(dom_course, dom_semester.querySelector(".addCourse"));
 
             let dom_tc = dom_course.parentNode.parentNode.parentNode.querySelector('span');
-            const totalText = (typeof formatCreditValue === 'function')
-                ? formatCreditValue(curriculum.getSemester(semester.id).totalCredit)
-                : (Number(curriculum.getSemester(semester.id).totalCredit || 0).toFixed(1));
-            dom_tc.innerHTML = 'Total: ' + totalText + ' credits';
-            try {
-                const tc = curriculum.getSemester(semester.id).totalCredit || 0;
-                dom_tc.classList.toggle('is-overlimit', tc > 20);
-            } catch (_) {}
+            const semesterObj = curriculum.getSemester(semester.id);
+            if (typeof updateSemesterCreditIndicator === 'function') {
+                updateSemesterCreditIndicator(dom_tc, semesterObj);
+            } else {
+                const totalText = (typeof formatCreditValue === 'function')
+                    ? formatCreditValue(semesterObj.totalCredit)
+                    : (Number(semesterObj.totalCredit || 0).toFixed(1));
+                dom_tc.textContent = totalText + ' SU';
+            }
         }
     }
 
@@ -307,5 +450,12 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
     } catch (err) {
         // Silent failure if curriculum or recalc is undefined
     }
+    try {
+        const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+        if (storage && typeof storage.requestSave === 'function') storage.requestSave();
+    } catch (_) {}
+    try {
+        if (typeof refreshSemesterAccessibility === 'function') refreshSemesterAccessibility();
+    } catch (_) {}
     return container;
 }

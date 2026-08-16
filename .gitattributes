@@ -6,9 +6,22 @@
 # - collapses them in PR diffs (generated files can be hidden)
 
 Academic*Records*Summary_ex.html linguist-generated=true
+index.html text eol=lf
 
 Degree*Detail*Pages*inspect*/** linguist-generated=true
 Pre-Conversion*Files/** linguist-generated=true
 Example*Files/** linguist-generated=true
 minor_htmls/** linguist-generated=true
 updated_htmls/** linguist-generated=true
+assets/vendor/pdfjs-*/*.mjs text eol=lf linguist-vendored=true
+assets/vendor/pdfjs-*/LICENSE text eol=lf linguist-vendored=true
+assets/vendor/pdfjs-*/README.md text eol=lf linguist-vendored=true
+assets/vendor/fontawesome-*/*.txt text eol=lf linguist-vendored=true
+assets/vendor/fontawesome-*/**/*.css text eol=lf linguist-vendored=true
+assets/vendor/fontawesome-*/**/*.woff2 -text linguist-vendored=true
+assets/vendor/fontawesome-*/**/*.ttf -text linguist-vendored=true
+assets/vendor/fontawesome-*/README.md text eol=lf linguist-vendored=true
+assets/vendor/inter-*/LICENSE text eol=lf linguist-vendored=true
+assets/vendor/inter-*/**/*.css text eol=lf linguist-vendored=true
+assets/vendor/inter-*/**/*.woff2 -text linguist-vendored=true
+assets/vendor/inter-*/README.md text eol=lf linguist-vendored=true

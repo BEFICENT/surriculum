@@ -10,6 +10,7 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 import requests
 from bs4 import BeautifulSoup
 
+from sync_coursepage_offerings import reconcile_coursepage_offerings
 from term_utils import generate_terms, term_code_from_date, today_in_tz
 
 
@@ -20,6 +21,7 @@ SEARCH_URL = f"{BASE}/bwckschd.p_get_crse_unsec"
 DETAIL_URL = f"{BASE}/bwckschd.p_disp_detail_sched"
 SCHEDULE_DIR = Path("courses") / "schedule"
 SUBJECT_MANIFEST_PATH = Path("courses") / "schedule_subjects.json"
+COURSEPAGE_INFO_PATH = Path("courses") / "all_coursepage_info.jsonl"
 
 
 def _parse_float(s: str) -> float:
@@ -509,6 +511,11 @@ def _parse_sections_from_listing(html: str) -> List[Dict[str, Any]]:
     return out
 
 
+def _is_explicitly_empty_listing(html: str) -> bool:
+    text = BeautifulSoup(html or "", "lxml").get_text(" ", strip=True).lower()
+    return "no classes were found" in text or "no sections found" in text
+
+
 def write_jsonl(path: Path, rows: Iterable[Dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="\n") as f:
@@ -527,7 +534,7 @@ def scrape_term_schedule(
     sess = requests.Session()
     sess.headers.update(
         {
-            "User-Agent": "Mozilla/5.0 (compatible; SUrriculum/3.0; +https://github.com/)",
+            "User-Agent": "Mozilla/5.0 (compatible; SUrriculum/3.1; +https://github.com/)",
         }
     )
 
@@ -560,11 +567,14 @@ def scrape_term_schedule(
     if not subjects:
         raise RuntimeError("Could not determine subject list from schedule search page or local manifest.")
     subject_list_was_truncated = False
+    omitted_subjects: List[str] = []
     if max_subjects is not None:
         subject_list_was_truncated = len(subjects) > max_subjects
+        omitted_subjects = subjects[max_subjects:]
         subjects = subjects[: max_subjects]
 
     all_sections: List[Dict[str, Any]] = []
+    failed_subjects: List[str] = []
     for idx, subj in enumerate(subjects, start=1):
         print(f"[{idx}/{len(subjects)}] Fetching schedule listing for {subj}...")
         # Banner can return 500 errors if time fields are omitted; send a full
@@ -596,6 +606,8 @@ def scrape_term_schedule(
         try:
             html = _fetch_with_retry(sess, "POST", SEARCH_URL, data=data, timeout=timeout)
             rows = _parse_sections_from_listing(html)
+            if not rows and not _is_explicitly_empty_listing(html):
+                raise RuntimeError("schedule listing response contained neither sections nor an empty-result marker")
             for r in rows:
                 r["term"] = term
                 r["subject"] = subj
@@ -604,6 +616,7 @@ def scrape_term_schedule(
         except Exception as e:
             # Avoid aborting the entire scrape due to transient server errors.
             print(f"Warning: failed to fetch {subj}: {e}")
+            failed_subjects.append(subj)
         if delay_s:
             time.sleep(delay_s)
 
@@ -615,6 +628,13 @@ def scrape_term_schedule(
         "used_fallback_subjects": subject_source != "live",
         "had_live_subjects": bool(live_subjects),
         "subject_list_was_truncated": subject_list_was_truncated,
+        "omitted_subjects": omitted_subjects,
+        "failed_subjects": failed_subjects,
+        "all_subjects_succeeded": not omitted_subjects and not failed_subjects,
+        # Only a live subject list can prove that an absent course was removed.
+        # Fallback subjects are useful for additions, but may omit a newly
+        # introduced subject and therefore must not drive destructive syncing.
+        "complete": subject_source == "live" and not omitted_subjects and not failed_subjects,
         "section_count": len(all_sections),
     }
     return all_sections, meta
@@ -744,6 +764,48 @@ def _read_schedule_jsonl(path: Path) -> List[Dict[str, Any]]:
             continue
         if isinstance(obj, dict):
             rows.append(obj)
+    return rows
+
+
+def _row_subject(row: Dict[str, Any]) -> str:
+    subject = str(row.get("subject") or "").strip().upper()
+    if subject:
+        return subject
+    course_id = str(row.get("course_id") or "").strip().upper()
+    match = re.match(r"^[A-Z]+", course_id)
+    return match.group(0) if match else ""
+
+
+def _preserve_incomplete_subject_rows(
+    old_rows: Iterable[Dict[str, Any]],
+    new_rows: Iterable[Dict[str, Any]],
+    meta: Optional[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    old_rows = list(old_rows)
+    rows = list(new_rows)
+    if not meta:
+        return rows
+    incomplete_subjects = {
+        str(subject or "").strip().upper()
+        for subject in [
+            *list(meta.get("failed_subjects") or []),
+            *list(meta.get("omitted_subjects") or []),
+        ]
+        if str(subject or "").strip()
+    }
+    if meta.get("used_fallback_subjects"):
+        attempted_subjects = {
+            str(subject or "").strip().upper()
+            for subject in list(meta.get("subjects") or [])
+            if str(subject or "").strip()
+        }
+        for row in old_rows:
+            subject = _row_subject(row)
+            if subject and subject not in attempted_subjects:
+                incomplete_subjects.add(subject)
+    if not incomplete_subjects:
+        return rows
+    rows.extend(row for row in old_rows if _row_subject(row) in incomplete_subjects)
     return rows
 
 
@@ -908,6 +970,7 @@ def main() -> None:
         raise RuntimeError("--out can only be used when scraping exactly one term.")
 
     written_paths: List[Path] = []
+    complete_written_terms: Set[str] = set()
     changed_section_crns_by_term: Dict[str, Set[str]] = {}
     subject_manifest = _load_subject_manifest()
 
@@ -923,11 +986,17 @@ def main() -> None:
         for resolved_term, rows, meta in scraped:
             out_path = SCHEDULE_DIR / f"{resolved_term}.jsonl"
             old_rows = _read_schedule_jsonl(out_path)
-            if _write_rows_if_nonempty(out_path, rows):
+            rows_to_write = _preserve_incomplete_subject_rows(old_rows, rows, meta)
+            if not meta.get("all_subjects_succeeded") and not old_rows:
+                print(f"Skipped incomplete new schedule output for {resolved_term}")
+                continue
+            if _write_rows_if_nonempty(out_path, rows_to_write):
                 written_paths.append(out_path)
-                changed_section_crns_by_term[resolved_term] = _changed_primary_crns(old_rows, rows)
+                if meta.get("complete"):
+                    complete_written_terms.add(resolved_term)
+                changed_section_crns_by_term[resolved_term] = _changed_primary_crns(old_rows, rows_to_write)
                 print(
-                    f"Wrote {len(rows)} sections to {out_path}"
+                    f"Wrote {len(rows_to_write)} sections to {out_path}"
                     + (f" [{meta.get('subject_source')} subjects]" if meta.get("subject_source") else "")
                 )
     else:
@@ -950,15 +1019,49 @@ def main() -> None:
                     _record_subject_manifest_entry(subject_manifest, resolved_term, meta.get("subjects", []))
             out_path = Path(args.out) if args.out else SCHEDULE_DIR / f"{resolved_term}.jsonl"
             old_rows = _read_schedule_jsonl(out_path) if _is_schedule_output_path(out_path) else []
-            if _write_rows_if_nonempty(out_path, rows):
+            rows_to_write = _preserve_incomplete_subject_rows(old_rows, rows, meta)
+            if meta and not meta.get("all_subjects_succeeded") and not old_rows and _is_schedule_output_path(out_path):
+                print(f"Skipped incomplete new schedule output for {resolved_term}")
+                continue
+            if _write_rows_if_nonempty(out_path, rows_to_write):
                 written_paths.append(out_path)
                 if _is_schedule_output_path(out_path):
-                    changed_section_crns_by_term[resolved_term] = _changed_primary_crns(old_rows, rows)
-                print(f"Wrote {len(rows)} sections to {out_path}")
+                    if meta and meta.get("complete"):
+                        complete_written_terms.add(resolved_term)
+                    changed_section_crns_by_term[resolved_term] = _changed_primary_crns(old_rows, rows_to_write)
+                print(f"Wrote {len(rows_to_write)} sections to {out_path}")
             else:
                 print(f"Skipped writing empty schedule output for {resolved_term}")
 
     _save_subject_manifest(subject_manifest)
+
+    written_terms = [path.stem for path in written_paths if _is_schedule_output_path(path)]
+    terms_to_reconcile = [term for term in written_terms if term in complete_written_terms]
+    if terms_to_reconcile:
+        stats = reconcile_coursepage_offerings(
+            coursepage_info_path=COURSEPAGE_INFO_PATH,
+            schedule_dir=SCHEDULE_DIR,
+            terms=terms_to_reconcile,
+        )
+        print(
+            "Reconciled schedule offerings into course-page info: "
+            f"terms={','.join(stats.terms)} matched={stats.matched_courses} "
+            f"missing_coursepages={stats.missing_coursepage_records} "
+            f"changed_records={stats.changed_records}"
+        )
+    terms_to_add = [term for term in written_terms if term not in complete_written_terms]
+    if terms_to_add:
+        stats = reconcile_coursepage_offerings(
+            coursepage_info_path=COURSEPAGE_INFO_PATH,
+            schedule_dir=SCHEDULE_DIR,
+            terms=terms_to_add,
+            remove_absent=False,
+        )
+        print(
+            "Added schedule-proven offerings from incomplete/fallback terms: "
+            f"terms={','.join(stats.terms)} matched={stats.matched_courses} "
+            f"changed_records={stats.changed_records}"
+        )
 
     should_rebuild_history = (
         not args.skip_instructor_history and any(_is_schedule_output_path(path) for path in written_paths)
@@ -973,7 +1076,6 @@ def main() -> None:
         and any(_is_schedule_output_path(path) for path in written_paths)
     )
     if should_rebuild_section_history:
-        written_terms = [path.stem for path in written_paths if _is_schedule_output_path(path)]
         print(
             f"Updating course section history: mode={args.section_history_mode} "
             f"terms={','.join(written_terms)}",

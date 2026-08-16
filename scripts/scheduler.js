@@ -2,16 +2,148 @@
 // Loads meeting times from courses/schedule/<termCode>.jsonl.
 
 (function () {
+  const PLAN_ID_FOR_SESSION = (() => {
+    try {
+      const ps = (typeof window !== 'undefined') ? window.planStorage : null;
+      return (ps && typeof ps.getSessionPlanId === 'function')
+        ? ps.getSessionPlanId() : null;
+    } catch (_) {
+      return null;
+    }
+  })();
+
   const DAYS = [
     { key: 'M', label: 'Mon' },
     { key: 'T', label: 'Tue' },
     { key: 'W', label: 'Wed' },
     { key: 'R', label: 'Thu' },
     { key: 'F', label: 'Fri' },
+    { key: 'S', label: 'Sat', optional: true },
+    { key: 'U', label: 'Sun', optional: true },
   ];
 
   const DAY_START_MIN = 8 * 60 + 40;  // 08:40
   const DAY_END_MIN = 19 * 60 + 30;   // 19:30
+
+  let schedulerDialogSequence = 0;
+
+  function nextSchedulerDialogId(prefix) {
+    schedulerDialogSequence += 1;
+    return `${prefix || 'scheduler-dialog'}-${schedulerDialogSequence}`;
+  }
+
+  function getSchedulerDialogFocusables(overlay) {
+    if (!overlay || typeof overlay.querySelectorAll !== 'function') return [];
+    return Array.from(overlay.querySelectorAll(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), ' +
+      'textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )).filter((element) => {
+      if (!element || element.getAttribute('aria-hidden') === 'true') return false;
+      if (element.closest('[hidden], [inert], [aria-hidden="true"]')) return false;
+      try {
+        const style = getComputedStyle(element);
+        return style.display !== 'none' && style.visibility !== 'hidden';
+      } catch (_) {
+        return true;
+      }
+    });
+  }
+
+  function isTopModalDialog(overlay) {
+    if (!overlay || !overlay.isConnected) return false;
+    try {
+      const dialogs = Array.from(document.querySelectorAll('[role="dialog"][aria-modal="true"]'))
+        .filter((dialog) => {
+          if (!dialog || !dialog.isConnected || dialog.hidden) return false;
+          try {
+            const style = getComputedStyle(dialog);
+            return style.display !== 'none' && style.visibility !== 'hidden';
+          } catch (_) {
+            return true;
+          }
+        });
+      return dialogs.length ? dialogs[dialogs.length - 1] === overlay : true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  function activateSchedulerDialog(overlay, options) {
+    const opts = options || {};
+    const previouslyFocused = opts.previouslyFocused || (
+      typeof HTMLElement !== 'undefined' && document.activeElement instanceof HTMLElement
+        ? document.activeElement : null
+    );
+    let active = true;
+
+    const focusElement = (element) => {
+      try {
+        if (element && element.isConnected && typeof element.focus === 'function') {
+          element.focus({ preventScroll: true });
+          return true;
+        }
+      } catch (_) {}
+      return false;
+    };
+
+    const resolveInitialFocus = () => {
+      try {
+        const requested = typeof opts.initialFocus === 'function'
+          ? opts.initialFocus()
+          : opts.initialFocus;
+        if (focusElement(requested)) return;
+        const focusables = getSchedulerDialogFocusables(overlay);
+        if (focusElement(focusables[0])) return;
+        if (overlay) {
+          if (!overlay.hasAttribute('tabindex')) overlay.tabIndex = -1;
+          focusElement(overlay);
+        }
+      } catch (_) {}
+    };
+
+    const onKeyDown = (event) => {
+      if (!active || !isTopModalDialog(overlay)) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+        if (typeof opts.onEscape === 'function') opts.onEscape();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const focusables = getSchedulerDialogFocusables(overlay);
+      if (!focusables.length) {
+        event.preventDefault();
+        if (!overlay.hasAttribute('tabindex')) overlay.tabIndex = -1;
+        focusElement(overlay);
+        return;
+      }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const current = document.activeElement;
+      if (event.shiftKey && (current === first || !overlay.contains(current))) {
+        event.preventDefault();
+        focusElement(last);
+      } else if (!event.shiftKey && (current === last || !overlay.contains(current))) {
+        event.preventDefault();
+        focusElement(first);
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown, true);
+    try { setTimeout(resolveInitialFocus, 0); } catch (_) { resolveInitialFocus(); }
+
+    return {
+      release({ restoreFocus = true } = {}) {
+        if (!active) return;
+        active = false;
+        try { document.removeEventListener('keydown', onKeyDown, true); } catch (_) {}
+        if (restoreFocus) focusElement(previouslyFocused);
+      },
+      focusInitial: resolveInitialFocus,
+    };
+  }
 
   function escapeHtml(value) {
     return String(value ?? '')
@@ -23,21 +155,39 @@
   }
 
   function planGetItem(key) {
-    try {
-      const ps = (typeof window !== 'undefined') ? window.planStorage : null;
-      return ps ? ps.getItem(key) : localStorage.getItem(key);
-    } catch (_) {}
+    const ps = (typeof window !== 'undefined') ? window.planStorage : null;
+    if (ps && typeof ps.getItem === 'function') {
+      if (!PLAN_ID_FOR_SESSION) return null;
+      try { return ps.getItem(key, PLAN_ID_FOR_SESSION); } catch (_) { return null; }
+    }
     try { return localStorage.getItem(key); } catch (_) {}
     return null;
   }
 
   function planSetItem(key, value) {
-    try {
-      const ps = (typeof window !== 'undefined') ? window.planStorage : null;
-      if (ps) return ps.setItem(key, value);
-      return localStorage.setItem(key, value);
-    } catch (_) {}
-    try { return localStorage.setItem(key, value); } catch (_) {}
+    const ps = (typeof window !== 'undefined') ? window.planStorage : null;
+    if (ps && typeof ps.setItem === 'function') {
+      if (!PLAN_ID_FOR_SESSION) return false;
+      try { return ps.setItem(key, value, PLAN_ID_FOR_SESSION); } catch (_) { return false; }
+    }
+    try { localStorage.setItem(key, value); return true; } catch (_) {}
+    return false;
+  }
+
+  function preferenceGetItem(key) {
+    const preferences = (typeof window !== 'undefined') ? window.preferenceStorage : null;
+    if (preferences && typeof preferences.getItem === 'function') {
+      try { return preferences.getItem(key); } catch (_) { return null; }
+    }
+    return null;
+  }
+
+  function preferenceSetItem(key, value) {
+    const preferences = (typeof window !== 'undefined') ? window.preferenceStorage : null;
+    if (preferences && typeof preferences.setItem === 'function') {
+      try { return preferences.setItem(key, value); } catch (_) { return false; }
+    }
+    return false;
   }
 
   function termNameToCodeSafe(name) {
@@ -172,12 +322,11 @@
 
   function parseDaysToKeys(days) {
     const s = String(days || '').toUpperCase().replace(/\s+/g, '');
-    const keys = [];
-    for (let i = 0; i < s.length; i++) {
-      const ch = s[i];
-      if (ch === 'M' || ch === 'T' || ch === 'W' || ch === 'R' || ch === 'F') keys.push(ch);
-    }
-    return keys;
+    // Banner's compact day codes are combinations such as M, TR, or MTWRF.
+    // Reject whole malformed/TBA tokens instead of accidentally interpreting
+    // one of their letters as a real meeting day (for example TBA -> Tuesday).
+    if (!s || !/^[MTWRFSU]+$/.test(s)) return [];
+    return Array.from(new Set(s.split('')));
   }
 
   function parseClockToMinutes(token) {
@@ -221,8 +370,13 @@
     const s = String(str || '');
     let hash = 0;
     for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
-    const hue = hash % 360;
-    return `hsl(${hue} 75% 55%)`;
+    // Distribute across the hue circle but skip the yellow / yellow-green band
+    // (~45–80°): with the theme's course-color saturation/lightness those hues
+    // are too pale for block text. Map into the remaining arc, then hop over it.
+    const EXCL_START = 45, EXCL_WIDTH = 35; // 45–80° reserved (unreadable yellows)
+    let hue = hash % (360 - EXCL_WIDTH);
+    if (hue >= EXCL_START) hue += EXCL_WIDTH;
+    return `hsl(${hue} var(--scheduler-course-saturation) var(--scheduler-course-lightness))`;
   }
 
   async function loadTermScheduleIndex(termCode) {
@@ -309,29 +463,35 @@
     try {
       const cur = window.curriculum;
       if (!cur || !cur.semesters) return [];
-      const targetTermName = displayTermNameSafe(termCode);
-      if (!targetTermName) return [];
-      const containers = document.querySelectorAll('.container_semester');
-      for (let i = 0; i < containers.length; i++) {
-        const c = containers[i];
-        const p = c.querySelector('.date p');
-        const name = p ? String(p.textContent || '').trim() : '';
-        if (name !== targetTermName) continue;
-        const sem = c.querySelector('.semester');
-        if (!sem) continue;
-        const semObj = cur.getSemester(sem.id);
-        if (!semObj || !Array.isArray(semObj.courses)) return [];
-        return semObj.courses.map(x => normalizeCourseId(x && x.code)).filter(Boolean);
-      }
+      const target = String(termCode || '').trim();
+      if (!/^\d{4}(01|02|03)$/.test(target)) return [];
+      const codes = new Set();
+      cur.semesters.forEach((semester) => {
+        const code = (typeof window.semesterTermCode === 'function')
+          ? String(window.semesterTermCode(semester) || '')
+          : String((semester && semester.termCode) || '');
+        if (code !== target) return;
+        (Array.isArray(semester && semester.courses) ? semester.courses : []).forEach((course) => {
+          const normalized = normalizeCourseId(course && course.code);
+          if (normalized) codes.add(normalized);
+        });
+      });
+      return Array.from(codes);
     } catch (_) {}
     return [];
   }
 
   function extractCoreqCourseIdsFromCoursePageInfoField(coreq) {
+    try {
+      const shared = (typeof window !== 'undefined') ? window.courseRequisites : null;
+      if (shared && typeof shared.extractCourseCodes === 'function') {
+        return shared.extractCourseCodes(coreq);
+      }
+    } catch (_) {}
     const s = String(coreq || '');
     if (!s) return [];
     const out = new Set();
-    const re = /([A-Z]{2,5})\s*([0-9]{3}[A-Z0-9]?)/g;
+    const re = /([A-Z]{2,5})\s*([0-9]{3,5}[A-Z]?)/g;
     let m;
     while ((m = re.exec(s)) !== null) {
       out.add((m[1] + m[2]).toUpperCase());
@@ -341,13 +501,20 @@
 
   function createPickerModal({ title, bodyHtml, listItems, buttons }) {
     return new Promise((resolve) => {
+      const previouslyFocused = typeof HTMLElement !== 'undefined' && document.activeElement instanceof HTMLElement
+        ? document.activeElement : null;
+      const dialogId = nextSchedulerDialogId('scheduler-picker');
       const overlay = document.createElement('div');
       overlay.className = 'modal-overlay scheduler-picker-overlay';
       overlay.setAttribute('role', 'dialog');
       overlay.setAttribute('aria-modal', 'true');
+      overlay.setAttribute('aria-labelledby', `${dialogId}-title`);
+      overlay.setAttribute('aria-describedby', `${dialogId}-body`);
 
       const modal = document.createElement('div');
       modal.className = 'modal app-modal scheduler-picker-modal';
+      modal.id = dialogId;
+      modal.tabIndex = -1;
       modal.addEventListener('click', (e) => e.stopPropagation());
 
       const header = document.createElement('div');
@@ -355,15 +522,18 @@
 
       const h = document.createElement('h3');
       h.className = 'app-modal-title';
+      h.id = `${dialogId}-title`;
       h.textContent = title || '';
 
       const close = document.createElement('button');
       close.type = 'button';
       close.className = 'app-modal-close';
       close.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+      close.setAttribute('aria-label', `Close ${title || 'dialog'}`);
 
       const body = document.createElement('div');
       body.className = 'app-modal-body';
+      body.id = `${dialogId}-body`;
       body.innerHTML = bodyHtml || '';
 
       if (Array.isArray(listItems) && listItems.length) {
@@ -386,9 +556,13 @@
       const footer = document.createElement('div');
       footer.className = 'app-modal-footer';
 
+      let settled = false;
+      let dialogController = null;
       const cleanup = (payload) => {
-        try { document.removeEventListener('keydown', onKeyDown); } catch (_) {}
+        if (settled) return;
+        settled = true;
         try { overlay.remove(); } catch (_) {}
+        try { if (dialogController) dialogController.release(); } catch (_) {}
         resolve(payload);
       };
 
@@ -411,6 +585,7 @@
               : 'btn-secondary';
         btn.className = 'btn ' + cls + ' btn-sm';
         btn.textContent = b.label;
+        if (b && b.ariaLabel) btn.setAttribute('aria-label', String(b.ariaLabel));
         btn.addEventListener('click', () => cleanup({ action: b.action, value: b.value }));
         footer.appendChild(btn);
       });
@@ -426,22 +601,30 @@
         document.body.appendChild(overlay);
       }
 
-      const onKeyDown = (e) => {
-        if (e.key === 'Escape') cleanup({ action: 'cancel' });
-      };
-      document.addEventListener('keydown', onKeyDown);
+      dialogController = activateSchedulerDialog(overlay, {
+        previouslyFocused,
+        initialFocus: () => body.querySelector('.scheduler-picker-option') || footer.querySelector('button') || close,
+        onEscape: () => cleanup({ action: 'cancel' }),
+      });
     });
   }
 
   function createInfoModal({ title, bodyHtml, buttons, onMount }) {
     return new Promise((resolve) => {
+      const previouslyFocused = typeof HTMLElement !== 'undefined' && document.activeElement instanceof HTMLElement
+        ? document.activeElement : null;
+      const dialogId = nextSchedulerDialogId('scheduler-info');
       const overlay = document.createElement('div');
       overlay.className = 'modal-overlay scheduler-picker-overlay';
       overlay.setAttribute('role', 'dialog');
       overlay.setAttribute('aria-modal', 'true');
+      overlay.setAttribute('aria-labelledby', `${dialogId}-title`);
+      overlay.setAttribute('aria-describedby', `${dialogId}-body`);
 
       const modal = document.createElement('div');
       modal.className = 'modal app-modal scheduler-picker-modal scheduler-details-modal';
+      modal.id = dialogId;
+      modal.tabIndex = -1;
       modal.addEventListener('click', (e) => e.stopPropagation());
 
       const header = document.createElement('div');
@@ -449,23 +632,30 @@
 
       const h = document.createElement('h3');
       h.className = 'app-modal-title';
+      h.id = `${dialogId}-title`;
       h.textContent = title || '';
 
       const close = document.createElement('button');
       close.type = 'button';
       close.className = 'app-modal-close';
       close.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+      close.setAttribute('aria-label', `Close ${title || 'dialog'}`);
 
       const body = document.createElement('div');
       body.className = 'app-modal-body';
+      body.id = `${dialogId}-body`;
       body.innerHTML = bodyHtml || '';
 
       const footer = document.createElement('div');
       footer.className = 'app-modal-footer';
 
+      let settled = false;
+      let dialogController = null;
       const cleanup = (payload) => {
-        try { document.removeEventListener('keydown', onKeyDown); } catch (_) {}
+        if (settled) return;
+        settled = true;
         try { overlay.remove(); } catch (_) {}
+        try { if (dialogController) dialogController.release(); } catch (_) {}
         resolve(payload);
       };
 
@@ -488,6 +678,7 @@
               : 'btn-secondary';
         btn.className = 'btn ' + cls + ' btn-sm';
         btn.textContent = b.label;
+        if (b && b.ariaLabel) btn.setAttribute('aria-label', String(b.ariaLabel));
         btn.addEventListener('click', () => cleanup({ action: b.action, value: b.value }));
         footer.appendChild(btn);
       });
@@ -513,22 +704,30 @@
         if (typeof onMount === 'function') onMount({ overlay, modal, body, close: () => cleanup({ action: 'close' }) });
       } catch (_) {}
 
-      const onKeyDown = (e) => {
-        if (e.key === 'Escape') cleanup({ action: 'cancel' });
-      };
-      document.addEventListener('keydown', onKeyDown);
+      dialogController = activateSchedulerDialog(overlay, {
+        previouslyFocused,
+        initialFocus: close,
+        onEscape: () => cleanup({ action: 'cancel' }),
+      });
     });
   }
 
   function createTextInputModal({ title, bodyHtml, initialValue, placeholder, okLabel }) {
     return new Promise((resolve) => {
+      const previouslyFocused = typeof HTMLElement !== 'undefined' && document.activeElement instanceof HTMLElement
+        ? document.activeElement : null;
+      const dialogId = nextSchedulerDialogId('scheduler-input');
       const overlay = document.createElement('div');
       overlay.className = 'modal-overlay scheduler-picker-overlay';
       overlay.setAttribute('role', 'dialog');
       overlay.setAttribute('aria-modal', 'true');
+      overlay.setAttribute('aria-labelledby', `${dialogId}-title`);
+      overlay.setAttribute('aria-describedby', `${dialogId}-body`);
 
       const modal = document.createElement('div');
       modal.className = 'modal app-modal scheduler-picker-modal';
+      modal.id = dialogId;
+      modal.tabIndex = -1;
       modal.addEventListener('click', (e) => e.stopPropagation());
 
       const header = document.createElement('div');
@@ -536,15 +735,18 @@
 
       const h = document.createElement('h3');
       h.className = 'app-modal-title';
+      h.id = `${dialogId}-title`;
       h.textContent = title || '';
 
       const close = document.createElement('button');
       close.type = 'button';
       close.className = 'app-modal-close';
       close.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+      close.setAttribute('aria-label', `Close ${title || 'dialog'}`);
 
       const body = document.createElement('div');
       body.className = 'app-modal-body';
+      body.id = `${dialogId}-body`;
       body.innerHTML = bodyHtml || '';
 
       const input = document.createElement('input');
@@ -552,6 +754,8 @@
       input.className = 'select-control';
       input.placeholder = placeholder || '';
       input.value = String(initialValue || '');
+      input.maxLength = 200;
+      input.setAttribute('aria-label', title || 'Dialog input');
       input.style.width = '100%';
       input.style.marginTop = bodyHtml ? '10px' : '0';
       body.appendChild(input);
@@ -559,9 +763,13 @@
       const footer = document.createElement('div');
       footer.className = 'app-modal-footer';
 
+      let settled = false;
+      let dialogController = null;
       const cleanup = (payload) => {
-        try { document.removeEventListener('keydown', onKeyDown); } catch (_) {}
+        if (settled) return;
+        settled = true;
         try { overlay.remove(); } catch (_) {}
+        try { if (dialogController) dialogController.release(); } catch (_) {}
         resolve(payload);
       };
 
@@ -603,12 +811,11 @@
         document.body.appendChild(overlay);
       }
 
-      const onKeyDown = (e) => {
-        if (e.key === 'Escape') cleanup({ action: 'cancel' });
-      };
-      document.addEventListener('keydown', onKeyDown);
-
-      try { setTimeout(() => input.focus(), 0); } catch (_) {}
+      dialogController = activateSchedulerDialog(overlay, {
+        previouslyFocused,
+        initialFocus: input,
+        onEscape: () => cleanup({ action: 'cancel' }),
+      });
     });
   }
 
@@ -726,12 +933,16 @@
   }
 
   async function openSchedulerModal(preferredTermCode) {
+    const schedulerOpener = typeof HTMLElement !== 'undefined' && document.activeElement instanceof HTMLElement
+      ? document.activeElement : null;
     const currentTermName = getCurrentTermNameSafe();
     const currentTermCode = getCurrentTermCodeSafe();
     const ui = (typeof window !== 'undefined') ? window.uiModal : null;
     const DISPLAY_END_EXTRA_MIN = 10; // show the final boundary at 19:40
     const DISPLAY_END_MIN = DAY_END_MIN + DISPLAY_END_EXTRA_MIN;
-    const BLOCK_END_MIN = DISPLAY_END_MIN;
+    const GRID_MAX_END_MIN = 24 * 60;
+    let currentGridEndMin = DISPLAY_END_MIN;
+    let activePreviewIntervals = [];
 
     if (!currentTermCode) {
       if (ui && typeof ui.alert === 'function') {
@@ -765,20 +976,24 @@
     const termCode = initialTermCode;
     const termName = displayTermNameSafe(termCode) || currentTermName || termCode;
     const isCurrentSchedulerTerm = termCode === currentTermCode;
+    const schedulerDialogId = nextSchedulerDialogId('scheduler');
 
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay scheduler-overlay';
     overlay.setAttribute('role', 'dialog');
     overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-labelledby', `${schedulerDialogId}-title`);
 
     const modal = document.createElement('div');
     modal.className = 'modal scheduler-modal';
+    modal.id = schedulerDialogId;
+    modal.tabIndex = -1;
     modal.addEventListener('click', (e) => e.stopPropagation());
 
     const header = document.createElement('div');
     header.className = 'scheduler-header';
     header.innerHTML =
-      `<div class="scheduler-title">Scheduler <span class="scheduler-term${isCurrentSchedulerTerm ? ' is-current' : ''}">— ${escapeHtml(termName || termCode)}</span></div>` +
+      `<div class="scheduler-title" id="${schedulerDialogId}-title">Scheduler <span class="scheduler-term${isCurrentSchedulerTerm ? ' is-current' : ''}">— ${escapeHtml(termName || termCode)}</span></div>` +
       `<div class="scheduler-legend">` +
       `  <span class="scheduler-legend-item"><span class="scheduler-legend-dot"></span> Course color</span>` +
       `  <span class="scheduler-legend-item"><span class="scheduler-legend-badge scheduler-legend-conflict"></span> Time conflict</span>` +
@@ -800,6 +1015,14 @@
     const moreBtn = header.querySelector('.scheduler-more');
     let onDocMouseUp = null;
     let onWinResize = null;
+    let mainDialogController = null;
+    let mobileDayObserver = null;
+    let onSharedHideTakenChange = null;
+    let onSharedDetailsChange = null;
+    let onSharedSortChange = null;
+    let schedulerClosed = false;
+    let filterMenuOpen = false;
+    let setFilterMenuOpen = null;
 
     const buildDetailUrl = (crn) => {
       const c = String(crn || '').trim();
@@ -824,20 +1047,26 @@
 
     const sectionMeetingPreview = (sec, maxMeetings = 3) => {
       try {
-        const meetings = (sec && Array.isArray(sec.meetings)) ? sec.meetings : [];
-        return meetings.slice(0, maxMeetings).map(m => {
-          const days = (m && m.days ? String(m.days) : '').trim();
-          const tr = (m && m.time ? String(m.time) : '').trim();
-          const where = (m && m.where ? String(m.where) : '').trim();
-          const base = `${days} ${tr}`.trim();
-          return where ? `${base} @ ${where}` : base;
+        const intervals = getSectionIntervals(sec);
+        return intervals.slice(0, maxMeetings).map(it => {
+          const base = `${it.dayKey} ${minutesToLabel(it.start)}–${minutesToLabel(it.end)}`;
+          const where = it.where && it.where.includes(' / ') ? 'Multiple locations' : it.where;
+          let dateHint = '';
+          if (Array.isArray(it.dateLabels) && it.dateLabels.length > 1) {
+            dateHint = `${it.dateLabels.length} date ranges`;
+          } else if (Array.isArray(it.dateWindows) && it.dateWindows.length === 1 && it.dateWindows[0].startDay === it.dateWindows[0].endDay) {
+            dateHint = String((it.dateLabels && it.dateLabels[0]) || '').split(' - ')[0];
+          }
+          return `${base}${where ? ` @ ${where}` : ''}${dateHint ? ` (${dateHint})` : ''}`;
         }).filter(Boolean).join(' • ');
       } catch (_) {
         return '';
       }
     };
 
-    // Stable key for "same timing" comparisons (ignores classroom/instructor).
+    // Stable key for "same timing" comparisons (ignores classroom/instructor,
+    // but preserves date windows so separate intensive offerings are not listed
+    // as interchangeable CRNs).
     // Expands multi-day strings ("MW") into per-day slots so equivalent schedules
     // normalize the same even if meetings are represented differently.
     const sectionTimeKey = (sec) => {
@@ -859,8 +1088,9 @@
             }
           }
           if (start == null || end == null) continue;
+          const dateRange = String(m.date_range || m.dateRange || '').trim().replace(/\s+/g, ' ');
           for (let di = 0; di < daysArr.length; di++) {
-            parts.push(`${daysArr[di]}|${start}|${end}`);
+            parts.push(`${daysArr[di]}|${start}|${end}|${dateRange || 'DATE-TBA'}`);
           }
         }
         parts.sort();
@@ -1089,6 +1319,12 @@
           const eng = (pi.engineering != null) ? fmtNum(pi.engineering) : '';
           const prereq = (pi.prerequisites != null) ? String(pi.prerequisites) : '';
           const coreq = (pi.corequisites != null) ? String(pi.corequisites) : '';
+          const generalPrereq = (pi.general_requirement_prerequisites != null)
+            ? String(pi.general_requirement_prerequisites) : '';
+          const minimumPriorSu = (pi.minimum_earned_su_credits != null)
+            ? fmtNum(pi.minimum_earned_su_credits) : '';
+          const generalRequirements = (pi.general_requirements != null)
+            ? String(pi.general_requirements) : '';
           const desc = (pi.description != null) ? String(pi.description) : '';
           const offered = Array.isArray(pi.last_offered_terms) ? pi.last_offered_terms : [];
           const formatDescription = (value) => {
@@ -1238,15 +1474,31 @@
               `</div>`
             )
             : '';
+          const prereqHtml = prereq || !generalPrereq
+            ? (
+              `<div class="scheduler-details-subsection">` +
+              `<div class="scheduler-details-subtitle">Prerequisites</div>` +
+              `<div class="scheduler-details-paragraph">${prereq ? escapeHtml(prereq) : 'None'}</div>` +
+              `</div>`
+            )
+            : '';
+          const generalRequirementsText = generalRequirements || (minimumPriorSu
+            ? `Minimum ${minimumPriorSu} prior SU credits.` : '');
+          const generalRequirementsHtml = generalRequirementsText
+            ? (
+              `<div class="scheduler-details-subsection">` +
+              `<div class="scheduler-details-subtitle">General requirements</div>` +
+              `<div class="scheduler-details-paragraph">${escapeHtml(generalRequirementsText)}</div>` +
+              `</div>`
+            )
+            : '';
 
           return (
             `<div class="scheduler-details-card">` +
             `<div class="scheduler-details-card-title">Catalog info</div>` +
             (metaParts.length ? `<div class="scheduler-details-meta">${metaParts.join('')}</div>` : '') +
-            `<div class="scheduler-details-subsection">` +
-            `<div class="scheduler-details-subtitle">Prerequisites</div>` +
-            `<div class="scheduler-details-paragraph">${prereq ? escapeHtml(prereq) : 'None'}</div>` +
-            `</div>` +
+            prereqHtml +
+            generalRequirementsHtml +
             `<div class="scheduler-details-subsection">` +
             `<div class="scheduler-details-subtitle">Corequisites</div>` +
             `<div class="scheduler-details-paragraph">${coreq ? escapeHtml(coreq) : 'None'}</div>` +
@@ -1391,11 +1643,20 @@
     try { document.addEventListener('fullscreenchange', onFullscreenChange); } catch (_) {}
 
     const cleanup = () => {
-      try { document.removeEventListener('keydown', onKeyDown); } catch (_) {}
+      if (schedulerClosed) return;
+      schedulerClosed = true;
       try { document.removeEventListener('fullscreenchange', onFullscreenChange); } catch (_) {}
       try { if (onWinResize) window.removeEventListener('resize', onWinResize); } catch (_) {}
       try { if (onDocMouseUp) document.removeEventListener('mouseup', onDocMouseUp); } catch (_) {}
+      try { if (onSharedHideTakenChange) document.removeEventListener('hideTakenCoursesToggleChanged', onSharedHideTakenChange); } catch (_) {}
+      try { if (onSharedDetailsChange) document.removeEventListener('courseDetailsToggleChanged', onSharedDetailsChange); } catch (_) {}
+      try { if (onSharedSortChange) document.removeEventListener('sortByScoreToggleChanged', onSharedSortChange); } catch (_) {}
+      try { if (mobileDayObserver) mobileDayObserver.disconnect(); } catch (_) {}
+      try {
+        if (typeof modal.__setCourseSheetOpen === 'function') modal.__setCourseSheetOpen(false);
+      } catch (_) {}
       try { overlay.remove(); } catch (_) {}
+      try { if (mainDialogController) mainDialogController.release(); } catch (_) {}
     };
     closeBtn.addEventListener('click', cleanup);
     overlay.addEventListener('click', cleanup);
@@ -1567,55 +1828,55 @@
       `<div class="scheduler-controls">` +
       `  <div class="scheduler-control control-row toggle-row">` +
       `    <div class="toggle-text">Hide taken courses</div>` +
-      `    <label class="toggle-switch"><input class="scheduler-toggle-hide-taken" type="checkbox" /><span class="toggle-slider"></span></label>` +
+      `    <label class="toggle-switch"><input class="scheduler-toggle-hide-taken" type="checkbox" aria-label="Hide taken courses" /><span class="toggle-slider"></span></label>` +
       `  </div>` +
       `  <div class="scheduler-control control-row toggle-row">` +
       `    <div class="toggle-text">Show course details</div>` +
-      `    <label class="toggle-switch"><input class="scheduler-toggle-details" type="checkbox" /><span class="toggle-slider"></span></label>` +
+      `    <label class="toggle-switch"><input class="scheduler-toggle-details" type="checkbox" aria-label="Show course details" /><span class="toggle-slider"></span></label>` +
       `  </div>` +
       `  <div class="scheduler-control control-row toggle-row">` +
       `    <div class="toggle-text">Smart Sort</div>` +
-      `    <label class="toggle-switch"><input class="scheduler-toggle-score" type="checkbox" /><span class="toggle-slider"></span></label>` +
+      `    <label class="toggle-switch"><input class="scheduler-toggle-score" type="checkbox" aria-label="Smart Sort" /><span class="toggle-slider"></span></label>` +
       `  </div>` +
       `  <div class="scheduler-control control-row toggle-row">` +
       `    <div class="toggle-text">Hover preview</div>` +
-      `    <label class="toggle-switch"><input class="scheduler-toggle-hover-preview" type="checkbox" /><span class="toggle-slider"></span></label>` +
+      `    <label class="toggle-switch"><input class="scheduler-toggle-hover-preview" type="checkbox" aria-label="Hover preview" /><span class="toggle-slider"></span></label>` +
       `  </div>` +
       `  <div class="scheduler-control control-row toggle-row">` +
       `    <div class="toggle-text">Highlight course availability</div>` +
-      `    <label class="toggle-switch"><input class="scheduler-toggle-highlight" type="checkbox" /><span class="toggle-slider"></span></label>` +
+      `    <label class="toggle-switch"><input class="scheduler-toggle-highlight" type="checkbox" aria-label="Highlight course availability" /><span class="toggle-slider"></span></label>` +
       `  </div>` +
       `  <div class="scheduler-control control-row toggle-row">` +
       `    <div class="toggle-text">Show blocked courses</div>` +
-      `    <label class="toggle-switch"><input class="scheduler-toggle-show-blocked" type="checkbox" /><span class="toggle-slider"></span></label>` +
+      `    <label class="toggle-switch"><input class="scheduler-toggle-show-blocked" type="checkbox" aria-label="Show blocked courses" /><span class="toggle-slider"></span></label>` +
       `  </div>` +
       `  <div class="scheduler-control control-row toggle-row">` +
       `    <div class="toggle-text">Check prerequisites</div>` +
-      `    <label class="toggle-switch"><input class="scheduler-toggle-prereq" type="checkbox" /><span class="toggle-slider"></span></label>` +
+      `    <label class="toggle-switch"><input class="scheduler-toggle-prereq" type="checkbox" aria-label="Check prerequisites" /><span class="toggle-slider"></span></label>` +
       `  </div>` +
       `  <div class="scheduler-control control-row toggle-row">` +
       `    <div class="toggle-text">Show unmet prerequisites</div>` +
-      `    <label class="toggle-switch"><input class="scheduler-toggle-show-unmet-prereq" type="checkbox" /><span class="toggle-slider"></span></label>` +
+      `    <label class="toggle-switch"><input class="scheduler-toggle-show-unmet-prereq" type="checkbox" aria-label="Show unmet prerequisites" /><span class="toggle-slider"></span></label>` +
       `  </div>` +
       `  <div class="scheduler-control scheduler-filter-row">` +
-      `    <div class="scheduler-filter-label">Min SU credits</div>` +
-      `    <input class="select-control scheduler-filter-min-su" type="number" min="0" step="0.5" placeholder="0" />` +
+      `    <label class="scheduler-filter-label" for="${schedulerDialogId}-min-su">Min SU credits</label>` +
+      `    <input id="${schedulerDialogId}-min-su" class="select-control scheduler-filter-min-su" type="number" min="0" step="0.5" placeholder="0" />` +
       `  </div>` +
       `  <div class="scheduler-control scheduler-filter-row">` +
-      `    <div class="scheduler-filter-label">Min ECTS</div>` +
-      `    <input class="select-control scheduler-filter-min-ects" type="number" min="0" step="1" placeholder="0" />` +
+      `    <label class="scheduler-filter-label" for="${schedulerDialogId}-min-ects">Min ECTS</label>` +
+      `    <input id="${schedulerDialogId}-min-ects" class="select-control scheduler-filter-min-ects" type="number" min="0" step="1" placeholder="0" />` +
       `  </div>` +
       `  <div class="scheduler-control scheduler-filter-row">` +
-      `    <div class="scheduler-filter-label">Min Basic Science</div>` +
-      `    <input class="select-control scheduler-filter-min-bs" type="number" min="0" step="0.5" placeholder="0" />` +
+      `    <label class="scheduler-filter-label" for="${schedulerDialogId}-min-bs">Min Basic Science</label>` +
+      `    <input id="${schedulerDialogId}-min-bs" class="select-control scheduler-filter-min-bs" type="number" min="0" step="0.5" placeholder="0" />` +
       `  </div>` +
       `  <div class="scheduler-control scheduler-filter-row">` +
-      `    <div class="scheduler-filter-label">Min Engineering</div>` +
-      `    <input class="select-control scheduler-filter-min-eng" type="number" min="0" step="0.5" placeholder="0" />` +
+      `    <label class="scheduler-filter-label" for="${schedulerDialogId}-min-eng">Min Engineering</label>` +
+      `    <input id="${schedulerDialogId}-min-eng" class="select-control scheduler-filter-min-eng" type="number" min="0" step="0.5" placeholder="0" />` +
       `  </div>` +
       `  <div class="scheduler-control scheduler-filter-row">` +
-      `    <div class="scheduler-filter-label">Min Major type</div>` +
-      `    <select class="select-control scheduler-filter-min-main">` +
+      `    <label class="scheduler-filter-label" for="${schedulerDialogId}-min-main">Min Major type</label>` +
+      `    <select id="${schedulerDialogId}-min-main" class="select-control scheduler-filter-min-main">` +
       `      <option value="">Any</option>` +
       `      <option value="free">Free</option>` +
       `      <option value="area">Area</option>` +
@@ -1625,8 +1886,8 @@
       `    </select>` +
       `  </div>` +
       `  <div class="scheduler-control scheduler-filter-row">` +
-      `    <div class="scheduler-filter-label">Min Double Major type</div>` +
-      `    <select class="select-control scheduler-filter-min-dm">` +
+      `    <label class="scheduler-filter-label" for="${schedulerDialogId}-min-dm">Min Double Major type</label>` +
+      `    <select id="${schedulerDialogId}-min-dm" class="select-control scheduler-filter-min-dm">` +
       `      <option value="">Any</option>` +
       `      <option value="free">Free</option>` +
       `      <option value="area">Area</option>` +
@@ -1636,8 +1897,8 @@
       `    </select>` +
       `  </div>` +
       `  <div class="scheduler-control scheduler-filter-row">` +
-      `    <div class="scheduler-filter-label">Min Minor type</div>` +
-      `    <select class="select-control scheduler-filter-min-minor">` +
+      `    <label class="scheduler-filter-label" for="${schedulerDialogId}-min-minor">Min Minor type</label>` +
+      `    <select id="${schedulerDialogId}-min-minor" class="select-control scheduler-filter-min-minor">` +
       `      <option value="">Any</option>` +
       `      <option value="free">Free</option>` +
       `      <option value="area">Area</option>` +
@@ -1653,33 +1914,33 @@
       `  <div class="scheduler-sidebar">` +
       `    <div class="scheduler-sidebar-top">` +
       `      <div class="scheduler-term-row">` +
-      `        <div class="scheduler-term-label">Schedule term</div>` +
+      `        <label class="scheduler-term-label" for="${schedulerDialogId}-term">Schedule term</label>` +
       `        <div class="scheduler-term-controls">` +
-      `          <select class="select-control scheduler-term-select${isCurrentSchedulerTerm ? ' is-current' : ''}"></select>` +
+      `          <select id="${schedulerDialogId}-term" class="select-control scheduler-term-select${isCurrentSchedulerTerm ? ' is-current' : ''}"></select>` +
       `          ${isCurrentSchedulerTerm ? '<span class="scheduler-term-badge is-current">Current</span>' : ''}` +
       `        </div>` +
       `      </div>` +
       `      <div class="scheduler-schedule-row">` +
-      `        <button type="button" class="btn btn-secondary btn-sm scheduler-schedule-toggle" title="Switch schedule"><i class="fa-solid fa-layer-group"></i>&nbsp;<span class="scheduler-schedule-name">Default schedule</span></button>` +
+      `        <button type="button" class="btn btn-secondary btn-sm scheduler-schedule-toggle" title="Switch schedule" aria-label="Switch schedule"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>&nbsp;<span class="scheduler-schedule-name">Default schedule</span></button>` +
       `      </div>` +
       `      <div class="scheduler-hint">Adds sections with lecture/recitation/lab meeting times. Conflicts are highlighted.</div>` +
       `    </div>` +
       `    <div class="scheduler-sidebar-section scheduler-collapsible" data-collapsible="plan">` +
-      `      <button type="button" class="scheduler-collapsible-header">` +
+      `      <button type="button" class="scheduler-collapsible-header" aria-expanded="true" aria-controls="${schedulerDialogId}-plan-panel">` +
       `        <span>${escapeHtml(plannerSectionTitle)}</span>` +
-      `        <i class="fa-solid fa-chevron-down"></i>` +
+      `        <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>` +
       `      </button>` +
-      `      <div class="scheduler-collapsible-body">` +
+      `      <div id="${schedulerDialogId}-plan-panel" class="scheduler-collapsible-body">` +
       `        ${plannerHintHtml}` +
       `        <div class="scheduler-plan-list"></div>` +
       `      </div>` +
       `    </div>` +
       `    <div class="scheduler-sidebar-section scheduler-collapsible" data-collapsible="selected">` +
-      `      <button type="button" class="scheduler-collapsible-header">` +
+      `      <button type="button" class="scheduler-collapsible-header" aria-expanded="true" aria-controls="${schedulerDialogId}-selected-panel">` +
       `        <span>Selected Sections</span>` +
-      `        <i class="fa-solid fa-chevron-down"></i>` +
+      `        <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>` +
       `      </button>` +
-      `      <div class="scheduler-collapsible-body">` +
+      `      <div id="${schedulerDialogId}-selected-panel" class="scheduler-collapsible-body">` +
       `        <div class="scheduler-selected"></div>` +
       `        <div class="scheduler-selected-actions">` +
       `          <button class="btn btn-danger btn-sm scheduler-clear" type="button">Clear</button>` +
@@ -1688,11 +1949,11 @@
       `      </div>` +
       `    </div>` +
       `    <div class="scheduler-sidebar-section scheduler-collapsible" data-collapsible="blocked">` +
-      `      <button type="button" class="scheduler-collapsible-header">` +
+      `      <button type="button" class="scheduler-collapsible-header" aria-expanded="true" aria-controls="${schedulerDialogId}-blocked-panel">` +
       `        <span>Blocked Hours</span>` +
-      `        <i class="fa-solid fa-chevron-down"></i>` +
+      `        <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>` +
       `      </button>` +
-      `      <div class="scheduler-collapsible-body">` +
+      `      <div id="${schedulerDialogId}-blocked-panel" class="scheduler-collapsible-body">` +
       `        <div class="scheduler-blocked-hint">Click <strong>Block hours</strong>, then click+drag on the grid to block time.</div>` +
       `        <div class="scheduler-blocked-list"></div>` +
       `        <div class="scheduler-blocked-actions">` +
@@ -1705,11 +1966,11 @@
       `      <div class="scheduler-results-head">` +
       `        <div class="scheduler-section-title">Courses</div>` +
       `        <div class="scheduler-search-row">` +
-      `          <input class="scheduler-search" type="text" placeholder="Search courses (e.g., CS 201, programming)..." />` +
-      `          <button class="btn btn-secondary btn-sm scheduler-filter-btn" type="button" aria-expanded="false"><i class="fa-solid fa-filter"></i>&nbsp;Filters</button>` +
+      `          <input class="scheduler-search" type="text" aria-label="Search courses" placeholder="Search courses (e.g., CS 201, programming)..." />` +
+      `          <button class="btn btn-secondary btn-sm scheduler-filter-btn" type="button" aria-expanded="false" aria-controls="${schedulerDialogId}-filters"><i class="fa-solid fa-filter" aria-hidden="true"></i>&nbsp;Filters</button>` +
       `        </div>` +
-      `        <div class="scheduler-filter-menu" hidden>` +
-      `          <div class="scheduler-filter-menu-header">Filter Options</div>` +
+      `        <div id="${schedulerDialogId}-filters" class="scheduler-filter-menu" role="region" aria-labelledby="${schedulerDialogId}-filters-title" hidden>` +
+      `          <div id="${schedulerDialogId}-filters-title" class="scheduler-filter-menu-header">Filter Options</div>` +
       schedulerFilterControlsHtml +
       `        </div>` +
       `      </div>` +
@@ -1722,13 +1983,13 @@
       `  <div class="scheduler-grid-wrap">` +
       `    <div class="scheduler-grid-header">` +
       `      <div class="scheduler-grid-corner">` +
-      `        <button type="button" class="scheduler-corner-btn scheduler-sidebar-toggle" title="Toggle sidebar" aria-label="Toggle sidebar"><i class="fa-solid fa-angles-left"></i></button>` +
+      `        <button type="button" class="scheduler-corner-btn scheduler-sidebar-toggle" title="Collapse sidebar" aria-label="Collapse scheduler sidebar" aria-expanded="true"><i class="fa-solid fa-angles-left" aria-hidden="true"></i></button>` +
       `      </div>` +
-      DAYS.map(d => `<div class="scheduler-grid-day">${escapeHtml(d.label)}</div>`).join('') +
+      DAYS.map(d => `<div class="scheduler-grid-day" data-day="${d.key}"${d.optional ? ' hidden' : ''}>${escapeHtml(d.label)}</div>`).join('') +
       `    </div>` +
       `    <div class="scheduler-grid">` +
       `      <div class="scheduler-times"></div>` +
-      DAYS.map(d => `<div class="scheduler-day-col" data-day="${d.key}"></div>`).join('') +
+      DAYS.map(d => `<div class="scheduler-day-col" data-day="${d.key}"${d.optional ? ' hidden' : ''}></div>`).join('') +
       `    </div>` +
       `  </div>` +
       `</div>`;
@@ -1737,6 +1998,86 @@
     modal.appendChild(body);
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
+
+    const syncMobileDayTabSemantics = () => {
+      try {
+        const tablist = modal.querySelector('.m-sched-days');
+        if (!tablist) return;
+        tablist.setAttribute('role', 'tablist');
+        tablist.setAttribute('aria-label', 'Schedule days');
+        tablist.setAttribute('aria-orientation', 'horizontal');
+        const tabs = Array.from(tablist.querySelectorAll('.m-sched-day'));
+        const selectedDay = String(modal.getAttribute('data-m-day') || '');
+        tabs.forEach((tab, index) => {
+          const dayKey = String(tab.getAttribute('data-day') || '');
+          const selected = dayKey === selectedDay || (!selectedDay && index === 0);
+          const panel = modal.querySelector(`.scheduler-day-col[data-day="${dayKey}"]`);
+          if (panel && !panel.id) panel.id = `${schedulerDialogId}-day-${dayKey}`;
+          tab.setAttribute('role', 'tab');
+          tab.setAttribute('aria-selected', selected ? 'true' : 'false');
+          tab.tabIndex = selected ? 0 : -1;
+          if (panel && panel.id) tab.setAttribute('aria-controls', panel.id);
+        });
+      } catch (_) {}
+    };
+
+    modal.addEventListener('click', (event) => {
+      const tab = event.target && event.target.closest ? event.target.closest('.m-sched-day') : null;
+      if (!tab) return;
+      try { setTimeout(syncMobileDayTabSemantics, 0); } catch (_) { syncMobileDayTabSemantics(); }
+    });
+    modal.addEventListener('keydown', (event) => {
+      const tab = event.target && event.target.closest ? event.target.closest('.m-sched-day') : null;
+      if (!tab || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      const tabs = Array.from(modal.querySelectorAll('.m-sched-days .m-sched-day'));
+      const currentIndex = tabs.indexOf(tab);
+      if (currentIndex < 0 || !tabs.length) return;
+      let nextIndex = currentIndex;
+      if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+      if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % tabs.length;
+      if (event.key === 'Home') nextIndex = 0;
+      if (event.key === 'End') nextIndex = tabs.length - 1;
+      event.preventDefault();
+      const next = tabs[nextIndex];
+      if (!next) return;
+      next.click();
+      try { next.focus({ preventScroll: true }); } catch (_) {}
+      syncMobileDayTabSemantics();
+    });
+    try {
+      mobileDayObserver = new MutationObserver(syncMobileDayTabSemantics);
+      mobileDayObserver.observe(modal, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['data-m-day'],
+      });
+    } catch (_) {}
+
+    mainDialogController = activateSchedulerDialog(overlay, {
+      previouslyFocused: schedulerOpener,
+      initialFocus: () => (
+        document.body.classList.contains('is-mobile')
+          ? closeBtn
+          : (body.querySelector('.scheduler-search') || closeBtn)
+      ),
+      onEscape: () => {
+        if (filterMenuOpen && typeof setFilterMenuOpen === 'function') {
+          setFilterMenuOpen(false);
+          try { body.querySelector('.scheduler-filter-btn').focus({ preventScroll: true }); } catch (_) {}
+          return;
+        }
+        if (modal.classList.contains('m-sheet-open')) {
+          if (typeof modal.__setCourseSheetOpen === 'function') {
+            modal.__setCourseSheetOpen(false);
+          } else {
+            modal.classList.remove('m-sheet-open');
+          }
+          return;
+        }
+        cleanup();
+      },
+    });
 
     const schedulerGridEl = body.querySelector('.scheduler-grid');
     const sidebarToggleBtn = body.querySelector('.scheduler-sidebar-toggle');
@@ -1753,11 +2094,6 @@
     } catch (_) {}
     onWinResize = () => updateScrollbarCompensation();
     try { window.addEventListener('resize', onWinResize); } catch (_) {}
-
-    const onKeyDown = (e) => {
-      if (e.key === 'Escape') cleanup();
-    };
-    document.addEventListener('keydown', onKeyDown);
 
     const getSchedulerLayout = () => {
       let pxPerMin = 1.05;
@@ -1812,41 +2148,46 @@
       // Only stretch "standard" 50-minute blocks to avoid distorting other patterns.
       if (dur === 50 || (s % 60 === 40 && e % 60 === 30)) {
         const ee = snapUpToHourLine(e);
-        if (ee > e && ee <= DISPLAY_END_MIN) return { start: s, end: ee };
+        if (ee > e && ee <= currentGridEndMin) return { start: s, end: ee };
       }
       return { start: s, end: e };
     };
 
-    // Render time labels and grid lines
+    // Render the visible time scale. The base grid ends at 19:40; selected or
+    // previewed late meetings can temporarily extend it in hour-sized steps.
     const timesEl = body.querySelector('.scheduler-times');
-    const totalMins = DAY_END_MIN - DAY_START_MIN;
-    const hourSlots = Math.floor(totalMins / 60) + 1;
-    for (let i = 0; i < hourSlots; i++) {
-      const t = DAY_START_MIN + i * 60;
-      const row = document.createElement('div');
-      row.className = 'scheduler-time-row';
-      row.textContent = minutesToLabel(t);
-      timesEl.appendChild(row);
-    }
-
-    // Draw hour separators in each day column
     const cols = body.querySelectorAll('.scheduler-day-col');
-    cols.forEach((col) => {
-      const { pxPerMin, topGapPx } = getSchedulerLayout();
-      for (let i = 0; i < hourSlots; i++) {
-        const line = document.createElement('div');
-        line.className = 'scheduler-hour-line';
-        line.style.top = `${topGapPx + (i * 60 * pxPerMin)}px`;
-        col.appendChild(line);
-      }
-      // Also draw a final guideline at 19:40 so the last slot has a clear boundary.
+    const renderTimeGrid = (requestedEndMin) => {
       try {
-        const endLine = document.createElement('div');
-        endLine.className = 'scheduler-hour-line';
-        endLine.style.top = `${topGapPx + ((DISPLAY_END_MIN - DAY_START_MIN) * pxPerMin)}px`;
-        col.appendChild(endLine);
+        const safeEnd = Math.max(DISPLAY_END_MIN, Math.min(GRID_MAX_END_MIN, Number(requestedEndMin) || DISPLAY_END_MIN));
+        currentGridEndMin = safeEnd;
+        const totalMins = Math.max(60, safeEnd - DAY_START_MIN);
+        const hourSlots = Math.max(1, Math.ceil(totalMins / 60));
+        if (schedulerGridEl) schedulerGridEl.style.setProperty('--scheduler-total-minutes', String(totalMins));
+
+        if (timesEl) {
+          timesEl.innerHTML = '';
+          for (let i = 0; i < hourSlots; i++) {
+            const row = document.createElement('div');
+            row.className = 'scheduler-time-row';
+            row.textContent = minutesToLabel(DAY_START_MIN + i * 60);
+            timesEl.appendChild(row);
+          }
+        }
+
+        cols.forEach((col) => {
+          col.querySelectorAll('.scheduler-hour-line').forEach(line => line.remove());
+          const { pxPerMin, topGapPx } = getSchedulerLayout();
+          for (let i = 0; i <= hourSlots; i++) {
+            const line = document.createElement('div');
+            line.className = 'scheduler-hour-line';
+            line.style.top = `${topGapPx + (i * 60 * pxPerMin)}px`;
+            col.insertBefore(line, col.firstChild);
+          }
+        });
       } catch (_) {}
-    });
+    };
+    renderTimeGrid(DISPLAY_END_MIN);
 
     // Block-hours interaction: click+drag to create blocked time ranges.
     let blockDrag = null; // { dayKey, startY, ghostEl }
@@ -1862,7 +2203,7 @@
       // This avoids a click in the lower half of an hour selecting the next cell.
       const rel = min - DAY_START_MIN;
       const snapped = DAY_START_MIN + Math.floor(rel / 60) * 60;
-      const maxStart = BLOCK_END_MIN - 60;
+      const maxStart = currentGridEndMin - 60;
       return Math.max(DAY_START_MIN, Math.min(maxStart, snapped));
     };
     const snapRange = (a, b) => {
@@ -1870,9 +2211,9 @@
       const hi = Math.max(a, b);
       const start = DAY_START_MIN + Math.floor((lo - DAY_START_MIN) / 60) * 60;
       const end = DAY_START_MIN + Math.ceil((hi - DAY_START_MIN) / 60) * 60;
-      const maxStart = BLOCK_END_MIN - 60;
+      const maxStart = currentGridEndMin - 60;
       const s = Math.max(DAY_START_MIN, Math.min(maxStart, start));
-      const e = Math.max(s + 60, Math.min(BLOCK_END_MIN, end));
+      const e = Math.max(s + 60, Math.min(currentGridEndMin, end));
       return { start: s, end: e };
     };
 
@@ -1905,7 +2246,6 @@
 
       const ghost = document.createElement('div');
       ghost.className = 'scheduler-block is-preview is-blocked scheduler-block-ghost';
-      ghost.style.background = 'rgba(107, 114, 128, 0.45)';
       ghost.innerHTML = `<div class="scheduler-block-title">Blocking</div>` +
         `<div class="scheduler-block-time">${escapeHtml(minutesToLabel(startMin))}–${escapeHtml(minutesToLabel(startMin + 60))}</div>`;
       col.appendChild(ghost);
@@ -2039,7 +2379,12 @@
     const applyCollapse = (key, collapsed) => {
       const sec = body.querySelector(`.scheduler-collapsible[data-collapsible="${key}"]`);
       if (!sec) return;
-      sec.classList.toggle('is-collapsed', !!collapsed);
+      const next = !!collapsed;
+      sec.classList.toggle('is-collapsed', next);
+      const btn = sec.querySelector('.scheduler-collapsible-header');
+      const panel = sec.querySelector('.scheduler-collapsible-body');
+      if (btn) btn.setAttribute('aria-expanded', next ? 'false' : 'true');
+      if (panel) panel.hidden = next;
     };
     const applyScheduleUi = () => {
       try {
@@ -2056,6 +2401,12 @@
             icon.className = body.classList.contains('is-sidebar-collapsed')
               ? 'fa-solid fa-angles-right'
               : 'fa-solid fa-angles-left';
+          }
+          if (sidebarToggleBtn) {
+            const expanded = !body.classList.contains('is-sidebar-collapsed');
+            sidebarToggleBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+            sidebarToggleBtn.setAttribute('aria-label', expanded ? 'Collapse scheduler sidebar' : 'Expand scheduler sidebar');
+            sidebarToggleBtn.setAttribute('title', expanded ? 'Collapse sidebar' : 'Expand sidebar');
           }
         } catch (_) {}
         try { updateScrollbarCompensation(); } catch (_) {}
@@ -2078,6 +2429,10 @@
               ? 'fa-solid fa-angles-right'
               : 'fa-solid fa-angles-left';
           }
+          const expanded = !active.ui.sidebarCollapsed;
+          sidebarToggleBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+          sidebarToggleBtn.setAttribute('aria-label', expanded ? 'Collapse scheduler sidebar' : 'Expand scheduler sidebar');
+          sidebarToggleBtn.setAttribute('title', expanded ? 'Collapse sidebar' : 'Expand sidebar');
         } catch (_) {}
         try {
           updateScrollbarCompensation();
@@ -2090,14 +2445,15 @@
       btn.addEventListener('click', () => {
         const sec = btn.closest('.scheduler-collapsible');
         if (!sec) return;
-        sec.classList.toggle('is-collapsed');
         const key = sec.getAttribute('data-collapsible') || '';
+        const collapsed = !sec.classList.contains('is-collapsed');
+        applyCollapse(key, collapsed);
         const root = loadSchedulerState(termCode);
         const active = getActiveSchedule(root);
         active.ui = active.ui && typeof active.ui === 'object' ? active.ui : {};
-        if (key === 'plan') active.ui.planCollapsed = sec.classList.contains('is-collapsed');
-        if (key === 'selected') active.ui.selectedCollapsed = sec.classList.contains('is-collapsed');
-        if (key === 'blocked') active.ui.blockedCollapsed = sec.classList.contains('is-collapsed');
+        if (key === 'plan') active.ui.planCollapsed = collapsed;
+        if (key === 'selected') active.ui.selectedCollapsed = collapsed;
+        if (key === 'blocked') active.ui.blockedCollapsed = collapsed;
         // Persist only UI state (stored on the active schedule).
         saveSchedulerState(termCode, { ui: active.ui });
       });
@@ -2107,7 +2463,7 @@
     const planListEl = body.querySelector('.scheduler-plan-list');
     if (plannedCourses.length) {
       planListEl.innerHTML = plannedCourses.map(c => (
-        `<button type="button" class="scheduler-pill scheduler-plan-pick" data-course="${escapeHtml(c)}" title="Pick a section">${escapeHtml(c)}</button>`
+        `<button type="button" class="scheduler-pill scheduler-plan-pick" data-course="${escapeHtml(c)}" title="Pick a section" aria-label="Pick a section for ${escapeHtml(c)}">${escapeHtml(c)}</button>`
       )).join('');
     } else {
       planListEl.innerHTML = `<div class="scheduler-muted">No courses in your planner semester for <strong>${escapeHtml(termName)}</strong> yet.</div>`;
@@ -2143,7 +2499,7 @@
     // Scheduler controls mirror the main app's settings (sidebar toggles).
     const readBoolLS = (key, fallback) => {
       try {
-        const v = localStorage.getItem(key);
+        const v = preferenceGetItem(key);
         if (v === null) return fallback;
         return v === 'true';
       } catch (_) {
@@ -2152,7 +2508,7 @@
     };
     const readStrLS = (key, fallback) => {
       try {
-        const v = localStorage.getItem(key);
+        const v = preferenceGetItem(key);
         if (v === null) return fallback;
         return String(v);
       } catch (_) {
@@ -2160,7 +2516,7 @@
       }
     };
     const setGlobalBool = (key, value) => {
-      try { localStorage.setItem(key, value ? 'true' : 'false'); } catch (_) {}
+      preferenceSetItem(key, value ? 'true' : 'false');
       try {
         if (key === 'hideTakenCourses') window.hideTakenCourses = !!value;
         if (key === 'showCourseDetails') window.showCourseDetails = !!value;
@@ -2211,8 +2567,7 @@
     };
     syncPrereqUi();
 
-    let filterMenuOpen = false;
-    const setFilterMenuOpen = (open) => {
+    setFilterMenuOpen = (open) => {
       try {
         const next = !!open;
         filterMenuOpen = next;
@@ -2283,8 +2638,9 @@
             }
           }
           const where = String(m.where || m.Where || '').trim();
+          const dateRange = String(m.date_range || m.dateRange || '').trim().replace(/\s+/g, ' ');
           if (days && start != null && end != null) {
-            meetingBits.push(`${days}|${start}|${end}|${where}`);
+            meetingBits.push(`${days}|${start}|${end}|${dateRange || 'DATE-TBA'}|${where}`);
           }
           const instr = String(m.instructors || m.Instructors || m.instructor || m.Instructor || '').trim();
           if (instr) instrSet.add(instr.replace(/\s+/g, ' '));
@@ -2701,7 +3057,7 @@
           `<div class="scheduler-blocked-item" data-block-id="${escapeHtml(String(b.id || ''))}">` +
           `<div class="scheduler-blocked-label">${escapeHtml(label)}</div>` +
           `<div class="scheduler-blocked-actions-row">` +
-          `<button type="button" class="btn btn-secondary btn-sm scheduler-blocked-remove" data-block-id="${escapeHtml(String(b.id || ''))}">Remove</button>` +
+          `<button type="button" class="btn btn-secondary btn-sm scheduler-blocked-remove" data-block-id="${escapeHtml(String(b.id || ''))}" aria-label="Remove blocked time ${escapeHtml(label)}">Remove</button>` +
           `</div>` +
           `</div>`
         );
@@ -2754,21 +3110,30 @@
       }
     };
 
-    // In the scheduler, "taken" is treated as "already present anywhere in the
-    // user's plan". We keep current-term planned/selected courses visible via
-    // keepVisible so users can still schedule them.
-    let takenAnySet = null; // Set(courseId) populated per renderResults
+    // The "hide taken" filter treats a course as taken only if it's planned for
+    // the scheduler's selected term OR an earlier one. A course planned solely
+    // for a LATER term hasn't been taken yet as of the selected term, so it must
+    // stay visible instead of being filtered out. (Current-term planned/selected
+    // courses are also kept visible via keepVisible so users can schedule them.)
+    let takenUpToTermSet = null; // Set(courseId): selected term and earlier
     let takenBeforeCurrentSet = null; // Set(courseId) populated per renderResults (previous terms only)
-    const computeTakenAnySet = () => {
+    const computeTakenUpToTermSet = () => {
       try {
         const cur = (typeof window !== 'undefined') ? window.curriculum : null;
-        if (!cur || !Array.isArray(cur.semesters)) return null;
+        if (!cur) return null;
+        const curCode = parseInt(String(termCode || ''), 10) || 0;
+        if (!curCode) return null;
         const out = new Set();
-        for (let i = 0; i < cur.semesters.length; i++) {
-          const sem = cur.semesters[i];
-          if (!sem || !Array.isArray(sem.courses)) continue;
-          for (let j = 0; j < sem.courses.length; j++) {
-            const cc = sem.courses[j];
+        const semesters = Array.isArray(cur.semesters) ? cur.semesters : [];
+        for (let i = 0; i < semesters.length; i++) {
+          const semObj = semesters[i];
+          const canonical = typeof window.semesterTermCode === 'function'
+            ? window.semesterTermCode(semObj) : (semObj && semObj.termCode);
+          const code = parseInt(String(canonical || ''), 10) || 0;
+          if (!code || code > curCode) continue; // skip future terms only
+          if (!semObj || !Array.isArray(semObj.courses)) continue;
+          for (let j = 0; j < semObj.courses.length; j++) {
+            const cc = semObj.courses[j];
             const cid = normalizeCourseId(cc && cc.code);
             if (cid) out.add(cid);
           }
@@ -2787,19 +3152,18 @@
         const curCode = parseInt(String(termCode || ''), 10) || 0;
         if (!curCode) return null;
         const out = new Set();
-        const containers = document.querySelectorAll('.container_semester');
-        for (let i = 0; i < containers.length; i++) {
-          const c = containers[i];
-          const p = c ? c.querySelector('.date p') : null;
-          const name = p ? String(p.textContent || '').trim() : '';
-          const code = parseInt(String(termNameToCodeSafe(name) || ''), 10) || 0;
+        const semesters = Array.isArray(cur.semesters) ? cur.semesters : [];
+        for (let i = 0; i < semesters.length; i++) {
+          const semObj = semesters[i];
+          const canonical = typeof window.semesterTermCode === 'function'
+            ? window.semesterTermCode(semObj) : (semObj && semObj.termCode);
+          const code = parseInt(String(canonical || ''), 10) || 0;
           if (!code || code >= curCode) continue;
-          const semEl = c ? c.querySelector('.semester') : null;
-          if (!semEl) continue;
-          const semObj = (cur && typeof cur.getSemester === 'function') ? cur.getSemester(semEl.id) : null;
           if (!semObj || !Array.isArray(semObj.courses)) continue;
           for (let j = 0; j < semObj.courses.length; j++) {
             const cc = semObj.courses[j];
+            if (typeof cur.isDegreeEligibleCourse === 'function'
+                && !cur.isDegreeEligibleCourse(cc)) continue;
             const cid = normalizeCourseId(cc && cc.code);
             if (cid) out.add(cid);
           }
@@ -2817,7 +3181,7 @@
       try {
         const cid = normalizeCourseId(courseId);
         if (!cid) return false;
-        if (takenAnySet instanceof Set) return takenAnySet.has(cid);
+        if (takenUpToTermSet instanceof Set) return takenUpToTermSet.has(cid);
         const cur = (typeof window !== 'undefined') ? window.curriculum : null;
         if (!cur || typeof cur.hasCourse !== 'function') return false;
         return !!cur.hasCourse(cid);
@@ -2826,10 +3190,100 @@
       }
     };
 
-    const getSectionIntervals = (sec) => {
-      const out = [];
+    const DATE_DAY_MS = 24 * 60 * 60 * 1000;
+    const DATE_MONTHS = {
+      Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
+      Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11,
+    };
+    const DAY_KEY_TO_UTC_DAY = { U: 0, M: 1, T: 2, W: 3, R: 4, F: 5, S: 6 };
+
+    const parseMeetingDateRange = (value) => {
       try {
-        const meetings = Array.isArray(sec && sec.meetings) ? sec.meetings : [];
+        const label = String(value || '').trim().replace(/\s+/g, ' ');
+        const match = label.match(/^([A-Z][a-z]{2}) (\d{1,2}), (\d{4}) - ([A-Z][a-z]{2}) (\d{1,2}), (\d{4})$/);
+        if (!match) return null;
+        const startMonth = DATE_MONTHS[match[1]];
+        const endMonth = DATE_MONTHS[match[4]];
+        if (!Number.isInteger(startMonth) || !Number.isInteger(endMonth)) return null;
+        const startYear = Number(match[3]);
+        const startDate = Number(match[2]);
+        const endYear = Number(match[6]);
+        const endDate = Number(match[5]);
+        const startMs = Date.UTC(startYear, startMonth, startDate);
+        const endMs = Date.UTC(endYear, endMonth, endDate);
+        const startCheck = new Date(startMs);
+        const endCheck = new Date(endMs);
+        if (startCheck.getUTCFullYear() !== startYear || startCheck.getUTCMonth() !== startMonth || startCheck.getUTCDate() !== startDate) return null;
+        if (endCheck.getUTCFullYear() !== endYear || endCheck.getUTCMonth() !== endMonth || endCheck.getUTCDate() !== endDate) return null;
+        const startDay = Math.floor(startMs / DATE_DAY_MS);
+        const endDay = Math.floor(endMs / DATE_DAY_MS);
+        if (endDay < startDay) return null;
+        return { startDay, endDay, label };
+      } catch (_) {
+        return null;
+      }
+    };
+
+    const dateWindowContainsDay = (windowRange, dayKey) => {
+      try {
+        if (!windowRange) return false;
+        const wantedDay = DAY_KEY_TO_UTC_DAY[dayKey];
+        if (!Number.isInteger(wantedDay)) return false;
+        const firstWeekday = new Date(windowRange.startDay * DATE_DAY_MS).getUTCDay();
+        const firstOccurrence = windowRange.startDay + ((wantedDay - firstWeekday + 7) % 7);
+        return firstOccurrence <= windowRange.endDay;
+      } catch (_) {
+        return false;
+      }
+    };
+
+    const mergeDateWindows = (windows) => {
+      const sorted = (Array.isArray(windows) ? windows : [])
+        .filter(w => w && Number.isInteger(w.startDay) && Number.isInteger(w.endDay) && w.endDay >= w.startDay)
+        .map(w => ({ startDay: w.startDay, endDay: w.endDay }))
+        .sort((a, b) => (a.startDay - b.startDay) || (a.endDay - b.endDay));
+      const merged = [];
+      for (let i = 0; i < sorted.length; i++) {
+        const next = sorted[i];
+        const last = merged[merged.length - 1];
+        if (last && next.startDay <= last.endDay + 1) {
+          if (next.endDay > last.endDay) last.endDay = next.endDay;
+        } else {
+          merged.push(next);
+        }
+      }
+      return merged;
+    };
+
+    const dateWindowsOverlapOnDay = (dayKey, aWindows, bWindows) => {
+      // A missing/invalid date range is treated conservatively as recurring for
+      // the whole term so unknown data can never produce a false "available".
+      if (!Array.isArray(aWindows) || !aWindows.length) return true;
+      if (!Array.isArray(bWindows) || !bWindows.length) return true;
+      for (let ai = 0; ai < aWindows.length; ai++) {
+        for (let bi = 0; bi < bWindows.length; bi++) {
+          const startDay = Math.max(aWindows[ai].startDay, bWindows[bi].startDay);
+          const endDay = Math.min(aWindows[ai].endDay, bWindows[bi].endDay);
+          if (endDay < startDay) continue;
+          if (dateWindowContainsDay({ startDay, endDay }, dayKey)) return true;
+        }
+      }
+      return false;
+    };
+
+    const sectionMeetingModelCache = new WeakMap();
+    const getSectionMeetingModel = (sec) => {
+      if (!sec || typeof sec !== 'object') return { intervals: [], incomplete: true };
+      try {
+        const cached = sectionMeetingModelCache.get(sec);
+        if (cached) return cached;
+      } catch (_) {}
+
+      const bySlot = new Map();
+      let incomplete = false;
+      try {
+        const meetings = Array.isArray(sec.meetings) ? sec.meetings : [];
+        if (!meetings.length) incomplete = true;
         for (let i = 0; i < meetings.length; i++) {
           const m = meetings[i] || {};
           const days = parseDaysToKeys(m.days || m.Days || '');
@@ -2837,18 +3291,160 @@
           let end = m.end_min;
           if (start == null || end == null) {
             const tr = parseTimeRangeToMinutes(m.time || m.Time || '');
-            if (!tr) continue;
-            start = tr.start;
-            end = tr.end;
+            if (tr) {
+              start = tr.start;
+              end = tr.end;
+            } else {
+              // Do not let Number(null) turn a partially missing endpoint into
+              // midnight and admit a plausible-looking but bogus interval.
+              start = Number.NaN;
+              end = Number.NaN;
+            }
           }
-          if (!days.length) continue;
-          if (start < DAY_START_MIN || end > DAY_END_MIN) continue;
+          start = Number(start);
+          end = Number(end);
+          const rawDateRange = m.date_range || m.dateRange || '';
+          const dateWindow = parseMeetingDateRange(rawDateRange);
+          const validTime = Number.isFinite(start) && Number.isFinite(end) && start >= 0 && end > start && end <= GRID_MAX_END_MIN;
+          if (!days.length || !validTime || !dateWindow) incomplete = true;
+          if (!days.length || !validTime) continue;
+
           for (let di = 0; di < days.length; di++) {
-            out.push({ dayKey: days[di], start, end });
+            const dayKey = days[di];
+            const windowMatchesDay = !!(dateWindow && dateWindowContainsDay(dateWindow, dayKey));
+            if (dateWindow && !windowMatchesDay) incomplete = true;
+            const key = `${dayKey}|${start}|${end}`;
+            let slot = bySlot.get(key);
+            if (!slot) {
+              slot = {
+                dayKey,
+                start,
+                end,
+                dateWindows: [],
+                dateLabels: new Set(),
+                locations: new Set(),
+                instructors: new Set(),
+                unknownDates: false,
+              };
+              bySlot.set(key, slot);
+            }
+            if (windowMatchesDay) {
+              slot.dateWindows.push(dateWindow);
+              slot.dateLabels.add(dateWindow.label);
+            } else {
+              slot.unknownDates = true;
+            }
+            const where = String(m.where || m.Where || '').trim();
+            const instructors = String(m.instructors || m.Instructors || '').trim();
+            if (where) slot.locations.add(where);
+            if (instructors) slot.instructors.add(instructors);
           }
+        }
+      } catch (_) {
+        incomplete = true;
+      }
+
+      const intervals = Array.from(bySlot.values()).map(slot => ({
+        dayKey: slot.dayKey,
+        start: slot.start,
+        end: slot.end,
+        dateWindows: slot.unknownDates ? null : mergeDateWindows(slot.dateWindows),
+        dateLabels: Array.from(slot.dateLabels),
+        where: Array.from(slot.locations).join(' / '),
+        instructors: Array.from(slot.instructors).join(' / '),
+      }));
+      const model = { intervals, incomplete };
+      try { sectionMeetingModelCache.set(sec, model); } catch (_) {}
+      return model;
+    };
+
+    const getSectionIntervals = (sec) => getSectionMeetingModel(sec).intervals;
+
+    const sectionHasIncompleteMeetingData = (sec) => getSectionMeetingModel(sec).incomplete;
+
+    const isGridRenderableInterval = (it) => {
+      try {
+        if (!it || !DAYS.some(d => d.key === it.dayKey)) return false;
+        return Number.isFinite(it.start) && Number.isFinite(it.end) &&
+          it.start >= DAY_START_MIN && it.end > it.start && it.end <= GRID_MAX_END_MIN;
+      } catch (_) {
+        return false;
+      }
+    };
+
+    const getSelectedIntervals = (idx) => {
+      const out = [];
+      try {
+        if (!idx) return out;
+        for (const rawCourseId of Object.keys(selected)) {
+          const courseId = normalizeCourseId(rawCourseId);
+          const pick = selected[rawCourseId] || selected[courseId] || {};
+          const entry = courseId ? idx.get(courseId) : null;
+          const crn = String(pick && pick.crn ? pick.crn : '');
+          const sec = entry && Array.isArray(entry.sections)
+            ? (entry.sections.find(s => String(s && s.crn ? s.crn : '') === crn) || null)
+            : null;
+          if (sec) out.push(...getSectionIntervals(sec));
         }
       } catch (_) {}
       return out;
+    };
+
+    const updateGridExtent = (idx) => {
+      try {
+        const intervals = getSelectedIntervals(idx)
+          .concat(Array.isArray(activePreviewIntervals) ? activePreviewIntervals : [])
+          .filter(isGridRenderableInterval);
+        const optionalDays = new Set(
+          intervals.map(it => it.dayKey).filter(dayKey => dayKey === 'S' || dayKey === 'U')
+        );
+
+        let requiredEnd = DISPLAY_END_MIN;
+        for (let i = 0; i < intervals.length; i++) {
+          if (intervals[i].end > requiredEnd) requiredEnd = intervals[i].end;
+        }
+        const slotCount = Math.max(1, Math.ceil((requiredEnd - DAY_START_MIN) / 60));
+        const nextEnd = Math.min(GRID_MAX_END_MIN, DAY_START_MIN + slotCount * 60);
+        const visibleDays = DAYS.filter(d => !d.optional || optionalDays.has(d.key));
+        const signature = `${visibleDays.map(d => d.key).join('')}:${nextEnd}`;
+        if (body.getAttribute('data-grid-layout') === signature) return;
+
+        DAYS.forEach((d) => {
+          if (!d.optional) return;
+          const visible = optionalDays.has(d.key);
+          const head = body.querySelector(`.scheduler-grid-day[data-day="${d.key}"]`);
+          const col = body.querySelector(`.scheduler-day-col[data-day="${d.key}"]`);
+          if (head) head.hidden = !visible;
+          if (col) col.hidden = !visible;
+        });
+
+        const dayCount = visibleDays.length;
+        const headerEl = body.querySelector('.scheduler-grid-header');
+        if (headerEl) headerEl.style.setProperty('--scheduler-day-count', String(dayCount));
+        if (schedulerGridEl) schedulerGridEl.style.setProperty('--scheduler-day-count', String(dayCount));
+        renderTimeGrid(nextEnd);
+
+        body.setAttribute('data-grid-layout', signature);
+        modal.setAttribute('data-grid-days', visibleDays.map(d => d.key).join(''));
+        modal.setAttribute('data-grid-minutes', String(nextEnd - DAY_START_MIN));
+        try {
+          modal.dispatchEvent(new CustomEvent('schedulergridchange', {
+            detail: { days: visibleDays.map(d => d.key), endMin: nextEnd },
+          }));
+        } catch (_) {}
+      } catch (_) {}
+    };
+
+    const intervalsOverlap = (a, b) => {
+      try {
+        if (!a || !b) return false;
+        if (a.end <= b.start || a.start >= b.end) return false;
+        const dayKey = a.dayKey || b.dayKey || '';
+        if (a.dayKey && b.dayKey && a.dayKey !== b.dayKey) return false;
+        return dateWindowsOverlapOnDay(dayKey, a.dateWindows, b.dateWindows);
+      } catch (_) {
+        return false;
+      }
     };
 
     const countIntervalOverlaps = (interval, existingIntervals) => {
@@ -2858,9 +3454,7 @@
         for (let i = 0; i < list.length; i++) {
           const it = list[i];
           if (!it) continue;
-          if (interval.end <= it.start) continue;
-          if (interval.start >= it.end) continue;
-          c += 1;
+          if (intervalsOverlap(interval, it)) c += 1;
         }
       } catch (_) {}
       return c;
@@ -2878,7 +3472,7 @@
             const list = byDay[dayKey] || [];
             for (let i = 0; i < list.length; i++) {
               const b = list[i];
-              occ[dayKey].push({ start: b.start, end: b.end, course_id: '__blocked__' });
+              occ[dayKey].push({ dayKey, start: b.start, end: b.end, dateWindows: null, course_id: '__blocked__' });
             }
           }
         }
@@ -2896,7 +3490,13 @@
           for (let j = 0; j < intervals.length; j++) {
             const it = intervals[j];
             if (!occ[it.dayKey]) occ[it.dayKey] = [];
-            occ[it.dayKey].push({ start: it.start, end: it.end, course_id: courseId });
+            occ[it.dayKey].push({
+              dayKey: it.dayKey,
+              start: it.start,
+              end: it.end,
+              dateWindows: it.dateWindows,
+              course_id: courseId,
+            });
           }
         }
       } catch (_) {}
@@ -2916,7 +3516,9 @@
         if (shouldHighlightAvailability()) {
           const intervals = getSectionIntervals(sec);
           const conflict = intervals.some((it) => countIntervalOverlaps(it, (occForAvailability && occForAvailability[it.dayKey]) || []) > 0);
-          classes.push(conflict ? 'is-available-conflict' : 'is-available');
+          if (conflict) classes.push('is-available-conflict');
+          else if (sectionHasIncompleteMeetingData(sec)) classes.push('is-time-unknown');
+          else classes.push('is-available');
         }
         if (Array.isArray(blocked) && blocked.length && shouldShowBlockedCourses()) {
           const blockedByDay = getBlockedByDay();
@@ -2982,14 +3584,15 @@
         const occ = {};
         DAYS.forEach(d => { occ[d.key] = (baseOccByDay && Array.isArray(baseOccByDay[d.key])) ? baseOccByDay[d.key].slice() : []; });
 
-        let best = { conflicts: Infinity, picked: null };
+        let best = { score: Infinity, conflicts: Infinity, unknowns: Infinity, picked: null };
         const picked = {};
 
-        const dfs = (i, conflicts) => {
-          if (conflicts >= best.conflicts) return;
-          if (best.conflicts === 0) return;
+        const dfs = (i, conflicts, unknowns) => {
+          const partialScore = conflicts * 1000 + unknowns;
+          if (partialScore >= best.score) return;
+          if (best.score === 0) return;
           if (i >= bundleCourseIds.length) {
-            best = { conflicts, picked: Object.assign({}, picked) };
+            best = { score: partialScore, conflicts, unknowns, picked: Object.assign({}, picked) };
             return;
           }
           const cid = bundleCourseIds[i];
@@ -2999,33 +3602,52 @@
             const intervals = getSectionIntervals(sec);
             let extra = 0;
             const addedByDay = {};
+            // A section's own date-specific rows are one schedule choice, not
+            // competing choices. Score every row against the already occupied
+            // schedule first, then add the section as a unit.
             for (let j = 0; j < intervals.length; j++) {
               const it = intervals[j];
               if (!occ[it.dayKey]) occ[it.dayKey] = [];
               extra += countIntervalOverlaps(it, occ[it.dayKey]);
-              occ[it.dayKey].push({ start: it.start, end: it.end, course_id: cid });
+            }
+            for (let j = 0; j < intervals.length; j++) {
+              const it = intervals[j];
+              occ[it.dayKey].push({
+                dayKey: it.dayKey,
+                start: it.start,
+                end: it.end,
+                dateWindows: it.dateWindows,
+                course_id: cid,
+              });
               addedByDay[it.dayKey] = (addedByDay[it.dayKey] || 0) + 1;
             }
             picked[cid] = sec;
-            dfs(i + 1, conflicts + extra);
+            dfs(i + 1, conflicts + extra, unknowns + (sectionHasIncompleteMeetingData(sec) ? 1 : 0));
             delete picked[cid];
             for (const dayKey of Object.keys(addedByDay)) {
               const n = addedByDay[dayKey] || 0;
               if (n > 0 && occ[dayKey] && occ[dayKey].length >= n) occ[dayKey].splice(-n, n);
             }
-            if (best.conflicts === 0) return;
+            if (best.score === 0) return;
           }
         };
 
-        dfs(0, 0);
+        dfs(0, 0, 0);
         return best && best.picked ? best : null;
       } catch (_) {
         return null;
       }
     };
 
-    const clearPreviewBlocks = () => {
+    const removePreviewBlocks = () => {
       try { body.querySelectorAll('.scheduler-block.is-preview').forEach(el => el.remove()); } catch (_) {}
+    };
+
+    const clearPreviewBlocks = () => {
+      removePreviewBlocks();
+      activePreviewIntervals = [];
+      try { updateGridExtent(scheduleIndex); } catch (_) {}
+      try { renderBlockedBackground(); } catch (_) {}
     };
 
     const clearHoverHighlights = () => {
@@ -3045,11 +3667,11 @@
       } catch (_) {}
     };
 
-    const renderPreviewForCourse = (idx, baseCourseId, forcedSection) => {
+    const renderPreviewForCourse = (idx, baseCourseId, forcedSection, options) => {
       clearPreviewBlocks();
       try {
         if (!idx || !baseCourseId) return;
-        if (!shouldHoverPreview()) return;
+        if (!(options && options.ignoreHoverPreference) && !shouldHoverPreview()) return;
         const cid = normalizeCourseId(baseCourseId);
         if (!cid) return;
         try {
@@ -3079,6 +3701,7 @@
           if (!best || !best.picked) return;
           Object.assign(picked, best.picked);
         }
+        const previewItems = [];
         for (let i = 0; i < bundle.length; i++) {
           const courseId = bundle[i];
           const entry = idx.get(courseId);
@@ -3090,23 +3713,53 @@
           const intervals = getSectionIntervals(sec);
           for (let j = 0; j < intervals.length; j++) {
             const it = intervals[j];
-            const col = body.querySelector(`.scheduler-day-col[data-day="${it.dayKey}"]`);
-            if (!col) continue;
-            const block = document.createElement('div');
-            block.className = 'scheduler-block is-preview';
-            const dr = getDisplayRange(it.start, it.end);
-            setBlockPosition(block, dr.start, dr.end);
-            block.style.background = color;
-            block.setAttribute('data-course', courseId);
-            block.innerHTML = `<div class="scheduler-block-title">${escapeHtml(label)}</div>` +
-              `<div class="scheduler-block-time">${escapeHtml(minutesToLabel(it.start))}–${escapeHtml(minutesToLabel(it.end))}</div>`;
-            try {
-              if (countIntervalOverlaps(it, baseOcc[it.dayKey] || []) > 0) block.classList.add('is-preview-conflict');
-            } catch (_) {}
-            col.appendChild(block);
+            previewItems.push({ courseId, label, color, interval: it });
           }
         }
-      } catch (_) {}
+
+        activePreviewIntervals = previewItems.map(item => item.interval);
+        updateGridExtent(idx);
+        try { renderBlockedBackground(); } catch (_) {}
+
+        const previewBlocksByDay = {};
+        DAYS.forEach(d => { previewBlocksByDay[d.key] = []; });
+        for (let i = 0; i < previewItems.length; i++) {
+          const item = previewItems[i];
+          const courseId = item.courseId;
+          const it = item.interval;
+          if (!isGridRenderableInterval(it)) continue;
+          const col = body.querySelector(`.scheduler-day-col[data-day="${it.dayKey}"]`);
+          if (!col || col.hidden) continue;
+          const block = document.createElement('div');
+          block.className = 'scheduler-block is-preview';
+          const dr = getDisplayRange(it.start, it.end);
+          setBlockPosition(block, dr.start, dr.end);
+          block.style.background = item.color;
+          block.setAttribute('data-course', courseId);
+          block.setAttribute('data-day', String(it.dayKey));
+          block.setAttribute('data-start', String(it.start));
+          block.setAttribute('data-end', String(it.end));
+          block.setAttribute('data-display-start', String(dr.start));
+          block.setAttribute('data-display-end', String(dr.end));
+          block.setAttribute('data-date-count', String(Array.isArray(it.dateLabels) ? it.dateLabels.length : 0));
+          try {
+            const dates = Array.isArray(it.dateLabels) ? it.dateLabels.join(', ') : '';
+            if (dates) block.setAttribute('title', `${item.label} • ${minutesToLabel(it.start)}–${minutesToLabel(it.end)} • ${dates}`);
+          } catch (_) {}
+          block.innerHTML = `<div class="scheduler-block-title">${escapeHtml(item.label)}</div>` +
+            `<div class="scheduler-block-time">${escapeHtml(minutesToLabel(it.start))}–${escapeHtml(minutesToLabel(it.end))}</div>`;
+          try {
+            if (countIntervalOverlaps(it, baseOcc[it.dayKey] || []) > 0) block.classList.add('is-preview-conflict');
+          } catch (_) {}
+          col.appendChild(block);
+          previewBlocksByDay[it.dayKey].push({ start: it.start, end: it.end, el: block });
+        }
+        // Date-specific phases may overlap in the weekly projection while
+        // never occurring on the same calendar date. Keep every phase visible.
+        layoutOverlaps(previewBlocksByDay);
+      } catch (_) {
+        clearPreviewBlocks();
+      }
     };
 
     let hoverSelectedCourseId = '';
@@ -3171,6 +3824,20 @@
 
         const instr = sectionInstructorPreview(sec);
         const url = (s && s.crn) ? buildDetailUrl(s.crn) : '';
+        const scheduleWarningHtml = (() => {
+          try {
+            if (!sec) return '<div class="scheduler-selected-warning"><span class="muted">Schedule:</span> Section details are unavailable.</div>';
+            const warnings = [];
+            if (sectionHasIncompleteMeetingData(sec)) warnings.push('Some meeting times or dates are unavailable; conflict checks are incomplete.');
+            const hiddenIntervals = getSectionIntervals(sec).filter(it => !isGridRenderableInterval(it));
+            if (hiddenIntervals.length) warnings.push('Some meetings fall outside the supported 08:40–24:00 time grid; their conflicts are still checked.');
+            return warnings.length
+              ? `<div class="scheduler-selected-warning"><span class="muted">Schedule:</span> ${escapeHtml(warnings.join(' '))}</div>`
+              : '';
+          } catch (_) {
+            return '';
+          }
+        })();
 
         const showDetails = shouldShowDetails();
         const d = showDetails ? getCourseDetails(courseId) : null;
@@ -3226,9 +3893,9 @@
                 `<div class="scheduler-coreq-row${missing ? ' is-missing' : ''}">` +
                 `<div class="scheduler-coreq-label">${missing ? '<span class="scheduler-coreq-badge">Required</span>' : ''}${escapeHtml(meta)}</div>` +
                 `<div class="scheduler-coreq-actions">` +
-                `<button class="btn btn-secondary btn-sm scheduler-details" type="button" data-course="${escapeHtml(cid)}">Details</button>` +
-                `<button class="btn btn-secondary btn-sm scheduler-pick" type="button" data-course="${escapeHtml(cid)}">${btnText}</button>` +
-                (sel ? `<button class="scheduler-remove btn btn-secondary btn-sm" type="button" data-course="${escapeHtml(cid)}">Remove</button>` : '') +
+                `<button class="btn btn-secondary btn-sm scheduler-details" type="button" data-course="${escapeHtml(cid)}" aria-label="Details for ${escapeHtml(cid)}">Details</button>` +
+                `<button class="btn btn-secondary btn-sm scheduler-pick" type="button" data-course="${escapeHtml(cid)}" aria-label="${sel ? 'Change section' : 'Pick section'} for ${escapeHtml(cid)}">${btnText}</button>` +
+                (sel ? `<button class="scheduler-remove btn btn-secondary btn-sm" type="button" data-course="${escapeHtml(cid)}" aria-label="Remove ${escapeHtml(cid)}">Remove</button>` : '') +
                 `</div>` +
                 `</div>`
               );
@@ -3242,13 +3909,14 @@
           `<div class="scheduler-selected-label"><span class="scheduler-color-dot" style="background:${escapeHtml(hslFromString(courseId))}"></span>${escapeHtml(label)}</div>` +
           (instr ? `<div class="scheduler-selected-meta"><span class="muted">Instructor:</span> ${escapeHtml(instr)}</div>` : '') +
           detailLine +
+          scheduleWarningHtml +
           (miss.length ? `<div class="scheduler-selected-warning"><span class="muted">Missing coreq:</span> ${escapeHtml(miss.join(', '))}</div>` : '') +
           (orphan.length ? `<div class="scheduler-selected-warning"><span class="muted">Looks like a coreq for:</span> ${escapeHtml(orphan.join(', '))}</div>` : '') +
           `<div class="scheduler-selected-actions-row">` +
-          `<button type="button" class="btn btn-secondary btn-sm scheduler-details" data-course="${escapeHtml(courseId)}">Details</button>` +
-          `<button type="button" class="btn btn-secondary btn-sm scheduler-pick" data-course="${escapeHtml(courseId)}">Change</button>` +
-          ((miss.length || orphan.length) ? `<button type="button" class="btn btn-warning btn-sm scheduler-fix-coreq" data-course="${escapeHtml(courseId)}">Fix</button>` : '') +
-          `<button type="button" class="scheduler-remove btn btn-secondary btn-sm" data-course="${escapeHtml(courseId)}">Remove</button>` +
+          `<button type="button" class="btn btn-secondary btn-sm scheduler-details" data-course="${escapeHtml(courseId)}" aria-label="Details for ${escapeHtml(courseId)}">Details</button>` +
+          `<button type="button" class="btn btn-secondary btn-sm scheduler-pick" data-course="${escapeHtml(courseId)}" aria-label="Change section for ${escapeHtml(courseId)}">Change</button>` +
+          ((miss.length || orphan.length) ? `<button type="button" class="btn btn-warning btn-sm scheduler-fix-coreq" data-course="${escapeHtml(courseId)}" aria-label="Fix corequisites for ${escapeHtml(courseId)}">Fix</button>` : '') +
+          `<button type="button" class="scheduler-remove btn btn-secondary btn-sm" data-course="${escapeHtml(courseId)}" aria-label="Remove ${escapeHtml(courseId)}">Remove</button>` +
           `</div>` +
           coreqHtml +
           `</div>`
@@ -3291,18 +3959,25 @@
       const byDay = getBlockedByDay();
       for (const dayKey of Object.keys(byDay)) {
         const col = body.querySelector(`.scheduler-day-col[data-day="${dayKey}"]`);
-        if (!col) continue;
+        if (!col || col.hidden) continue;
         const list = byDay[dayKey] || [];
         for (let i = 0; i < list.length; i++) {
           const b = list[i];
           const start = b.start;
           const end = b.end;
+          const visibleStart = Math.max(DAY_START_MIN, start);
+          const visibleEnd = Math.min(currentGridEndMin, end);
+          if (visibleEnd <= visibleStart) continue;
           const block = document.createElement('div');
           block.className = 'scheduler-block scheduler-block-bg is-blocked';
           try { if (b && b.id) block.setAttribute('data-block-id', String(b.id)); } catch (_) {}
-          const dr = getDisplayRange(start, end);
+          const dr = getDisplayRange(visibleStart, visibleEnd);
           setBlockPosition(block, dr.start, dr.end);
-          block.style.background = 'rgba(107, 114, 128, 0.35)';
+          block.setAttribute('data-day', String(dayKey));
+          block.setAttribute('data-start', String(start));
+          block.setAttribute('data-end', String(end));
+          block.setAttribute('data-display-start', String(dr.start));
+          block.setAttribute('data-display-end', String(dr.end));
           block.innerHTML = `<div class="scheduler-block-title">Blocked</div>` +
             `<div class="scheduler-block-time">${escapeHtml(minutesToLabel(start))}–${escapeHtml(minutesToLabel(end))}</div>`;
           col.appendChild(block);
@@ -3340,6 +4015,8 @@
         for (let i = 0; i < list.length; i++) {
           for (let j = i + 1; j < list.length; j++) {
             if (list[j].start >= list[i].end) break;
+            if (list[i].selectionKey && list[i].selectionKey === list[j].selectionKey) continue;
+            if (!intervalsOverlap(list[i], list[j])) continue;
             conflictSet.add(list[i].el);
             conflictSet.add(list[j].el);
           }
@@ -3430,7 +4107,9 @@
 
       const addBlock = (dayKey, start, end, label, color, meta) => {
         const col = body.querySelector(`.scheduler-day-col[data-day="${dayKey}"]`);
-        if (!col) return;
+        if (!col || col.hidden) return;
+        const dateLabels = meta && Array.isArray(meta.dateLabels) ? meta.dateLabels : [];
+        const dateText = dateLabels.join(', ');
         const block = document.createElement('button');
         block.type = 'button';
         block.className = 'scheduler-block';
@@ -3442,6 +4121,10 @@
         try { block.setAttribute('data-day', String(dayKey)); } catch (_) {}
         try { block.setAttribute('data-start', String(start)); } catch (_) {}
         try { block.setAttribute('data-end', String(end)); } catch (_) {}
+        try { block.setAttribute('data-display-start', String(dr.start)); } catch (_) {}
+        try { block.setAttribute('data-display-end', String(dr.end)); } catch (_) {}
+        try { block.setAttribute('data-date-count', String(dateLabels.length)); } catch (_) {}
+        try { if (dateText) block.setAttribute('title', `${label} • ${minutesToLabel(start)}–${minutesToLabel(end)} • ${dateText}`); } catch (_) {}
         block.innerHTML = `<div class="scheduler-block-title">${escapeHtml(label)}</div>` +
           `<div class="scheduler-block-time">${escapeHtml(minutesToLabel(start))}–${escapeHtml(minutesToLabel(end))}</div>`;
         try {
@@ -3457,13 +4140,14 @@
             bodyHtml:
               `<p><strong>${escapeHtml(label)}</strong></p>` +
               `<p>${escapeHtml(minutesToLabel(start))}–${escapeHtml(minutesToLabel(end))} • ${escapeHtml(dayKey)}</p>` +
+              (dateText ? `<p><span class="muted">Dates:</span> ${escapeHtml(dateText)}</p>` : '') +
               (meta && meta.where ? `<p><span class="muted">Where:</span> ${escapeHtml(meta.where)}</p>` : '') +
               (meta && meta.instructors ? `<p><span class="muted">Instructors:</span> ${escapeHtml(meta.instructors)}</p>` : ''),
             buttons: [
               { action: 'close', label: 'Close', variant: 'secondary' },
-              { action: 'details', label: 'Details', variant: 'secondary', value: meta && meta.course_id ? meta.course_id : null },
-              { action: 'change', label: 'Change section', variant: 'secondary', value: meta && meta.course_id ? meta.course_id : null },
-              { action: 'remove', label: 'Remove section', variant: 'primary', value: meta && meta.course_id ? meta.course_id : null },
+              { action: 'details', label: 'Details', ariaLabel: `Details for ${normalizeCourseId(meta && meta.course_id) || label}`, variant: 'secondary', value: meta && meta.course_id ? meta.course_id : null },
+              { action: 'change', label: 'Change section', ariaLabel: `Change section for ${normalizeCourseId(meta && meta.course_id) || label}`, variant: 'secondary', value: meta && meta.course_id ? meta.course_id : null },
+              { action: 'remove', label: 'Remove section', ariaLabel: `Remove section for ${normalizeCourseId(meta && meta.course_id) || label}`, variant: 'primary', value: meta && meta.course_id ? meta.course_id : null },
             ],
           });
           if (res.action === 'details' && res.value) {
@@ -3500,7 +4184,14 @@
         });
 
         col.appendChild(block);
-        blocksByDay[dayKey].push({ start, end, el: block });
+        blocksByDay[dayKey].push({
+          dayKey,
+          start,
+          end,
+          dateWindows: meta && Array.isArray(meta.dateWindows) ? meta.dateWindows : null,
+          selectionKey: meta && meta.selectionKey ? String(meta.selectionKey) : '',
+          el: block,
+        });
       };
 
       const selectedKeys = Object.keys(selected);
@@ -3513,27 +4204,18 @@
         if (!sec) continue;
         const color = hslFromString(courseId);
         const label = `${courseId}${sec.section ? `-${sec.section}` : ''}${sec.component ? ` • ${sec.component}` : ''}`;
-        const meetings = Array.isArray(sec.meetings) ? sec.meetings : [];
-        for (let mi = 0; mi < meetings.length; mi++) {
-          const m = meetings[mi] || {};
-          const days = parseDaysToKeys(m.days || m.Days || '');
-          let start = m.start_min;
-          let end = m.end_min;
-          if (start == null || end == null) {
-            const tr = parseTimeRangeToMinutes(m.time || m.Time || '');
-            if (!tr) continue;
-            start = tr.start;
-            end = tr.end;
-          }
-          if (!days.length) continue;
-          if (start < DAY_START_MIN || end > DAY_END_MIN) continue;
-          for (let di = 0; di < days.length; di++) {
-            addBlock(days[di], start, end, label, color, {
-              course_id: courseId,
-              where: m.where || m.Where || '',
-              instructors: m.instructors || m.Instructors || '',
-            });
-          }
+        const intervals = getSectionIntervals(sec);
+        for (let ii = 0; ii < intervals.length; ii++) {
+          const it = intervals[ii];
+          if (!isGridRenderableInterval(it)) continue;
+          addBlock(it.dayKey, it.start, it.end, label, color, {
+            course_id: courseId,
+            selectionKey: `${courseId}:${String(sec.crn || '')}`,
+            dateWindows: it.dateWindows,
+            dateLabels: it.dateLabels,
+            where: it.where,
+            instructors: it.instructors,
+          });
         }
       }
 
@@ -3653,7 +4335,7 @@
 
       // Recompute taken courses set for this render pass so filtering and
       // availability highlighting stays accurate as the user edits the plan.
-      try { takenAnySet = computeTakenAnySet(); } catch (_) { takenAnySet = null; }
+      try { takenUpToTermSet = computeTakenUpToTermSet(); } catch (_) { takenUpToTermSet = null; }
       try { takenBeforeCurrentSet = computeTakenBeforeCurrentTermSet(); } catch (_) { takenBeforeCurrentSet = null; }
 
       // For availability highlighting, treat "taken" as "completed in previous terms".
@@ -3786,10 +4468,39 @@
       const showUnmetPrereqs = checkPrereqs && !!(showUnmetPrereqToggle && showUnmetPrereqToggle.checked);
       const unmetPrereqById = new Map(); // course_id -> { mode, missing }
       const takenBeforeSet = checkPrereqs ? (computeTakenBeforeCurrentTermSet() || new Set()) : null;
+      const priorEligibleSu = (() => {
+        if (!checkPrereqs) return 0;
+        try {
+          const cur = (typeof window !== 'undefined') ? window.curriculum : null;
+          const shared = (typeof window !== 'undefined') ? window.courseRequisites : null;
+          if (!cur || !shared || typeof shared.priorEligibleSuCredits !== 'function') return 0;
+          return shared.priorEligibleSuCredits(
+            cur.semesters,
+            termCode,
+            (course) => (
+              typeof cur.isDegreeEligibleCourse !== 'function'
+              || cur.isDegreeEligibleCourse(course)
+            ),
+          );
+        } catch (_) {
+          return 0;
+        }
+      })();
+      const concurrentPrereqSet = (() => {
+        const out = new Set();
+        if (!checkPrereqs) return out;
+        try {
+          if (takenUpToTermSet instanceof Set) takenUpToTermSet.forEach((code) => out.add(code));
+          Object.keys(selected || {}).forEach((code) => out.add(normalizeCourseId(code)));
+        } catch (_) {}
+        return out;
+      })();
       const takenBeforeSig = (() => {
         try {
           if (!checkPrereqs || !takenBeforeSet || !(takenBeforeSet instanceof Set)) return '';
-          return Array.from(takenBeforeSet).sort().join('|');
+          return Array.from(takenBeforeSet).sort().join('|')
+            + '::' + Array.from(concurrentPrereqSet).sort().join('|')
+            + '::su=' + String(priorEligibleSu);
         } catch (_) {
           return '';
         }
@@ -3823,13 +4534,46 @@
             }
           } catch (_) {}
           const info = coursePageInfoMap.get(cid);
-          const text = info && info.prerequisites ? String(info.prerequisites || '') : '';
+          if (!info) return null;
+          const text = info.prerequisites ? String(info.prerequisites || '') : '';
+
+          // The planner uses this same evaluator. Keep the older local parser
+          // below only as a defensive fallback for a partially cached shell.
+          try {
+            const shared = (typeof window !== 'undefined') ? window.courseRequisites : null;
+            if (shared && typeof shared.evaluatePrerequisites === 'function') {
+              const sharedResult = typeof shared.evaluateCoursePrerequisites === 'function'
+                ? shared.evaluateCoursePrerequisites(info, takenBeforeSet, {
+                  concurrentAvailableCodes: concurrentPrereqSet,
+                })
+                : (text ? shared.evaluatePrerequisites(text, takenBeforeSet, {
+                  concurrentAvailableCodes: concurrentPrereqSet,
+                }) : null);
+              const priorSuRequirement = typeof shared.minimumPriorSuRequirement === 'function'
+                ? shared.minimumPriorSuRequirement(info, priorEligibleSu) : null;
+              const result = sharedResult || priorSuRequirement
+                ? {
+                  ...(sharedResult || {
+                    mode: 'expr', required: [], concurrent: [], oneOf: [], oneOfConcurrent: [],
+                  }),
+                  priorSuRequirement,
+                }
+                : null;
+              try {
+                if (prereqCheckCache && prereqCheckCache.map) {
+                  prereqCheckCache.map.set(cid, result);
+                }
+              } catch (_) {}
+              return result;
+            }
+          } catch (_) {}
+
           if (!text) return null;
 
           const tokenizePrereq = (s) => {
             const out = [];
             try {
-              const re = /([A-Z]{2,5})\s*([0-9]{3}[A-Z0-9]?)|(\()|(\))|\b(and|or)\b/ig;
+              const re = /([A-Z]{2,5})\s*([0-9]{3,5}[A-Z]?)|(\()|(\))|\b(and|or)\b/ig;
               let m;
               while ((m = re.exec(String(s || ''))) !== null) {
                 if (m[1] && m[2]) {
@@ -4123,7 +4867,7 @@
                   if (unmet.mode === 'expr') {
                     const req = Array.isArray(unmet.required) ? unmet.required.length : 0;
                     const groups = Array.isArray(unmet.oneOf) ? unmet.oneOf.length : 0;
-                    return req > 0 || groups > 0;
+                    return req > 0 || groups > 0 || !!unmet.priorSuRequirement;
                   }
                   return Array.isArray(unmet.missing) && unmet.missing.length > 0;
                 } catch (_) {
@@ -4189,9 +4933,12 @@
           const unmetRequired = (unmetPrereq && unmetPrereq.mode === 'expr' && Array.isArray(unmetPrereq.required)) ? unmetPrereq.required.slice() : [];
           const unmetOneOf = (unmetPrereq && unmetPrereq.mode === 'expr' && Array.isArray(unmetPrereq.oneOf)) ? unmetPrereq.oneOf.slice() : [];
           const unmetList = (unmetPrereq && Array.isArray(unmetPrereq.missing)) ? unmetPrereq.missing.slice() : [];
+          const priorSuRequirement = unmetPrereq && unmetPrereq.priorSuRequirement
+            ? unmetPrereq.priorSuRequirement : null;
           const hasUnmetPrereq = !!(
             (unmetPrereq && unmetPrereq.mode === 'expr' && (unmetRequired.length || unmetOneOf.length)) ||
-            (unmetList && unmetList.length)
+            (unmetList && unmetList.length) ||
+            priorSuRequirement
           );
           const typeParts = [];
           try {
@@ -4249,7 +4996,7 @@
                   (meta ? `<div class="scheduler-inline-section-meta">${escapeHtml(meta)}</div>` : '') +
                   `</div>` +
                   `<div class="scheduler-inline-section-actions">` +
-                  `<button class="btn btn-secondary btn-sm scheduler-section-pick" type="button" data-course="${escapeHtml(cid)}" data-crn="${escapeHtml(crn)}">${isSelected ? 'Selected' : 'Pick'}</button>` +
+                  `<button class="btn btn-secondary btn-sm scheduler-section-pick" type="button" data-course="${escapeHtml(cid)}" data-crn="${escapeHtml(crn)}" aria-label="${isSelected ? 'Selected' : 'Pick'} ${escapeHtml(cid)}${sectionLabel ? ` section ${escapeHtml(sectionLabel)}` : ' section'}${crn ? ` CRN ${escapeHtml(crn)}` : ''}">${isSelected ? 'Selected' : 'Pick'}</button>` +
                   `</div>` +
                   `</div>`
                 );
@@ -4284,12 +5031,12 @@
                   `<div class="scheduler-coreq-row${missing ? ' is-missing' : ''}">` +
                   `<div class="scheduler-coreq-label">${missing ? '<span class="scheduler-coreq-badge">Required</span>' : ''}${escapeHtml(meta)}</div>` +
                   `<div class="scheduler-coreq-actions">` +
-                  `<button class="btn btn-secondary btn-sm scheduler-details" type="button" data-course="${escapeHtml(cid)}">Details</button>` +
-                  `<button class="btn btn-secondary btn-sm scheduler-sections-toggle${expanded ? ' is-expanded' : ''}" type="button" data-course="${escapeHtml(cid)}" aria-expanded="${expanded ? 'true' : 'false'}" title="${expanded ? 'Hide sections' : 'Show sections'}" aria-label="${expanded ? 'Hide sections' : 'Show sections'}">` +
+                  `<button class="btn btn-secondary btn-sm scheduler-details" type="button" data-course="${escapeHtml(cid)}" aria-label="Details for ${escapeHtml(cid)}">Details</button>` +
+                  `<button class="btn btn-secondary btn-sm scheduler-sections-toggle${expanded ? ' is-expanded' : ''}" type="button" data-course="${escapeHtml(cid)}" aria-expanded="${expanded ? 'true' : 'false'}" title="${expanded ? 'Hide sections' : 'Show sections'}" aria-label="${expanded ? 'Hide sections' : 'Show sections'} for ${escapeHtml(cid)}">` +
                   `<i class="fa-solid fa-list-ul" aria-hidden="true"></i>` +
                   (entry && Array.isArray(entry.sections) ? `<span class="scheduler-section-count">${entry.sections.length}</span>` : '') +
                   `</button>` +
-                  `<button class="btn btn-secondary btn-sm scheduler-pick" type="button" data-course="${escapeHtml(cid)}">${btnText}</button>` +
+                  `<button class="btn btn-secondary btn-sm scheduler-pick" type="button" data-course="${escapeHtml(cid)}" aria-label="${sel ? 'Change section' : 'Pick section'} for ${escapeHtml(cid)}">${btnText}</button>` +
                   `</div>` +
                   (expanded && entry ? renderInlineSectionsForEntry(cid, entry) : '') +
                   `</div>`
@@ -4317,8 +5064,9 @@
                     const bundle = getRequiredBundleCourseIds(scheduleIndex, e.course_id);
                     const best = pickBestBundleSections(scheduleIndex, bundle, occForAvailability || {});
                     if (best && typeof best.conflicts === 'number') {
-                      if (best.conflicts === 0) classes.push('is-available');
-                      else classes.push('is-available-conflict');
+                      if (best.conflicts > 0) classes.push('is-available-conflict');
+                      else if (best.unknowns > 0) classes.push('is-time-unknown');
+                      else classes.push('is-available');
                     }
                   }
                 }
@@ -4345,6 +5093,14 @@
                       const text = arr.slice(0, 6).join(' / ') + (arr.length > 6 ? ' / …' : '');
                       if (text) lines.push(`<div class="scheduler-course-meta"><span class="scheduler-badge-prereq">Prereq</span> Needs one of: ${escapeHtml(text)}</div>`);
                     });
+                    if (priorSuRequirement) {
+                      const compactSu = (value) => String(
+                        Math.round((Number(value) || 0) * 100) / 100,
+                      );
+                      const actual = compactSu(priorSuRequirement.actual);
+                      const minimum = compactSu(priorSuRequirement.minimum);
+                      lines.push(`<div class="scheduler-course-meta"><span class="scheduler-badge-prereq">Prereq</span> Prior SU: ${escapeHtml(actual)} of ${escapeHtml(minimum)} planned/completed</div>`);
+                    }
                     return lines.join('');
                   }
 
@@ -4378,12 +5134,12 @@
               )
               : '') +
             `<div class="scheduler-course-actions">` +
-            `<button class="btn btn-secondary btn-sm scheduler-details" type="button" data-course="${escapeHtml(e.course_id)}">Details</button>` +
-            `<button class="btn btn-secondary btn-sm scheduler-sections-toggle${sectionsExpanded ? ' is-expanded' : ''}" type="button" data-course="${escapeHtml(e.course_id)}" aria-expanded="${sectionsExpanded ? 'true' : 'false'}" title="${sectionsExpanded ? 'Hide sections' : 'Show sections'}" aria-label="${sectionsExpanded ? 'Hide sections' : 'Show sections'}">` +
+            `<button class="btn btn-secondary btn-sm scheduler-details" type="button" data-course="${escapeHtml(e.course_id)}" aria-label="Details for ${escapeHtml(e.course_id)}">Details</button>` +
+            `<button class="btn btn-secondary btn-sm scheduler-sections-toggle${sectionsExpanded ? ' is-expanded' : ''}" type="button" data-course="${escapeHtml(e.course_id)}" aria-expanded="${sectionsExpanded ? 'true' : 'false'}" title="${sectionsExpanded ? 'Hide sections' : 'Show sections'}" aria-label="${sectionsExpanded ? 'Hide sections' : 'Show sections'} for ${escapeHtml(e.course_id)}">` +
             `<i class="fa-solid fa-list-ul" aria-hidden="true"></i>` +
             (Array.isArray(e.sections) ? `<span class="scheduler-section-count">${e.sections.length}</span>` : '') +
             `</button>` +
-            `<button class="btn btn-secondary btn-sm scheduler-pick" type="button" data-course="${escapeHtml(e.course_id)}">${already ? 'Change section' : 'Pick section'}</button>` +
+            `<button class="btn btn-secondary btn-sm scheduler-pick" type="button" data-course="${escapeHtml(e.course_id)}" aria-label="${already ? 'Change section' : 'Pick section'} for ${escapeHtml(e.course_id)}">${already ? 'Change section' : 'Pick section'}</button>` +
             `</div>` +
             inlineSectionsHtml +
             coreqHtml +
@@ -4566,97 +5322,87 @@
       saveSchedulerState(termCode, { selected });
       missingByCourse = {};
       renderSelected();
-      clearGridBlocks();
+      if (scheduleIndex) renderGrid(scheduleIndex);
+      else {
+        clearGridBlocks();
+        clearPreviewBlocks();
+      }
       resultsEl.innerHTML = '<div class="scheduler-muted">Cleared. Search to add courses.</div>';
     });
 
-    const findOrCreatePlannerSemester = (targetTermCode) => {
+    const findPlannerSemester = (targetTermCode) => {
       const cur = (typeof window !== 'undefined') ? window.curriculum : null;
       if (!cur) return null;
       const targetTermName = displayTermNameSafe(targetTermCode);
       if (!targetTermName) return null;
-      const containers = document.querySelectorAll('.container_semester');
-      for (let i = 0; i < containers.length; i++) {
-        const c = containers[i];
-        const p = c.querySelector('.date p');
-        const name = p ? String(p.textContent || '').trim() : '';
-        if (name !== targetTermName) continue;
-        const semEl = c.querySelector('.semester');
-        if (!semEl) continue;
-        const semObj = cur.getSemester(semEl.id);
-        return { container: c, semesterEl: semEl, semesterObj: semObj };
+      // Prefer stable model identity. A term picker temporarily replaces the
+      // rendered <p>, so DOM text alone can incorrectly create a duplicate.
+      const targetCode = String(targetTermCode || '').trim();
+      const modelMatches = (Array.isArray(cur.semesters) ? cur.semesters : []).filter((semester) => {
+        const code = typeof window.semesterTermCode === 'function'
+          ? String(window.semesterTermCode(semester) || '')
+          : String((semester && semester.termCode) || '').trim();
+        return code === targetCode;
+      });
+      if (modelMatches.length > 1) {
+        throw new Error(`The planner contains multiple semester cards for ${targetTermName}. Resolve the duplicate terms before syncing the scheduler.`);
       }
-      // Create a semester for the selected term if missing.
-      try {
-        if (typeof createSemeter === 'function') {
-          const board = document.querySelector('.board');
-          const ghost = board ? board.querySelector('.add-semester-ghost') : null;
-          const created = createSemeter(true, [], cur, course_data, [], targetTermName);
-          if (created && board && ghost) {
-            // Keep the "+ New Semester" ghost at the end like the normal flow.
-            board.insertBefore(created, ghost);
-          }
-          if (created) {
-            const semEl = created.querySelector('.semester');
-            const semObj = semEl ? cur.getSemester(semEl.id) : null;
-            return { container: created, semesterEl: semEl, semesterObj: semObj };
-          }
+      const modelSemester = modelMatches.length === 1 ? modelMatches[0] : null;
+      if (modelSemester && modelSemester.id) {
+        const semesterEl = document.getElementById(modelSemester.id);
+        const container = semesterEl && semesterEl.closest
+          ? semesterEl.closest('.container_semester') : null;
+        if (semesterEl && container) {
+          return { container, semesterEl, semesterObj: modelSemester };
         }
-      } catch (_) {}
-      // Retry lookup after creation attempt.
-      try {
-        const containers2 = document.querySelectorAll('.container_semester');
-        for (let i = 0; i < containers2.length; i++) {
-          const c = containers2[i];
-          const p = c.querySelector('.date p');
-          const name = p ? String(p.textContent || '').trim() : '';
-          if (name !== targetTermName) continue;
-          const semEl = c.querySelector('.semester');
-          if (!semEl) continue;
-          const semObj = cur.getSemester(semEl.id);
-          return { container: c, semesterEl: semEl, semesterObj: semObj };
-        }
-      } catch (_) {}
+      }
       return null;
+    };
+
+    const createPlannerSemester = (targetTermCode) => {
+      const cur = (typeof window !== 'undefined') ? window.curriculum : null;
+      const targetTermName = displayTermNameSafe(targetTermCode);
+      if (!cur || !targetTermName || typeof createSemeter !== 'function') {
+        throw new Error('The planner semester could not be created.');
+      }
+      const board = document.querySelector('.board');
+      const ghost = board ? board.querySelector('.add-semester-ghost') : null;
+      const created = createSemeter(true, [], cur, course_data, [], targetTermName);
+      if (created && board && ghost) {
+        // Keep the "+ New Semester" ghost at the end like the normal flow.
+        board.insertBefore(created, ghost);
+      }
+      const semEl = created ? created.querySelector('.semester') : null;
+      const semObj = semEl ? cur.getSemester(semEl.id) : null;
+      if (!created || !semEl || !semObj) {
+        throw new Error('The planner semester could not be created.');
+      }
+      return { container: created, semesterEl: semEl, semesterObj: semObj };
     };
 
     const refreshPlannerTotalsForContainer = (container, semesterObj) => {
       try {
         const span = container ? container.querySelector('.total_credit_text span') : null;
         if (!span) return;
-        const tc = semesterObj ? (semesterObj.totalCredit || 0) : 0;
-        const totalText = (typeof window !== 'undefined' && typeof window.formatCreditValue === 'function')
-          ? window.formatCreditValue(tc)
-          : (Number(tc).toFixed(1));
-        span.innerHTML = 'Total: ' + totalText + ' credits';
-        try { span.classList.toggle('is-overlimit', tc > 20); } catch (_) {}
-      } catch (_) {}
-    };
-
-    const removeCourseFromOtherSemesters = (courseCode, keepSemesterId) => {
-      try {
-        const cur = (typeof window !== 'undefined') ? window.curriculum : null;
-        if (!cur || !Array.isArray(cur.semesters)) return;
-        const target = normalizePlannerCode(courseCode);
-        for (let i = 0; i < cur.semesters.length; i++) {
-          const sem = cur.semesters[i];
-          if (!sem || sem.id === keepSemesterId) continue;
-          if (!Array.isArray(sem.courses)) continue;
-          for (let j = sem.courses.length - 1; j >= 0; j--) {
-            const c = sem.courses[j];
-            if (!c) continue;
-            if (normalizePlannerCode(c.code) !== target) continue;
-            try {
-              const el = document.getElementById(c.id);
-              if (el) el.remove();
-            } catch (_) {}
-            try { sem.deleteCourse(c.id); } catch (_) {}
-          }
+        const computedLoad = semesterObj && semesterObj.totalLoadCredit;
+        const load = computedLoad !== null && computedLoad !== undefined
+          ? computedLoad : (semesterObj ? (semesterObj.totalCredit || 0) : 0);
+        if (typeof window !== 'undefined' && typeof window.updateSemesterCreditIndicator === 'function') {
+          // The indicator reads the independently recomputed workload fields.
+          // Passing the degree-oriented totalCredit here used to bypass them.
+          window.updateSemesterCreditIndicator(span, semesterObj);
+        } else {
+          const totalText = (typeof window !== 'undefined' && typeof window.formatCreditValue === 'function')
+            ? window.formatCreditValue(load)
+            : (Number(load).toFixed(1));
+          span.textContent = totalText + ' SU';
         }
       } catch (_) {}
     };
 
-    const createPlannerCourseDom = (courseCode, courseId, info) => {
+    const createPlannerCourseDom = (course, info) => {
+      const courseCode = normalizePlannerCode(course && course.code);
+      const courseId = String((course && course.id) || '');
       const domCourse = document.createElement('div');
       domCourse.classList.add('course');
       domCourse.id = courseId;
@@ -4695,7 +5441,7 @@
 
       const grade = document.createElement('div');
       grade.classList.add('grade');
-      grade.textContent = 'Add grade';
+      grade.textContent = course && course.grade ? String(course.grade) : 'Add grade';
 
       cContainer.appendChild(cLabel);
       cContainer.appendChild(cInfo);
@@ -4704,13 +5450,518 @@
       return domCourse;
     };
 
-    pickPlanBtn.addEventListener('click', async () => {
-      try {
-        const keys = Object.keys(selected);
-        if (!keys.length) {
-          if (ui && typeof ui.alert === 'function') ui.alert('Nothing selected', '<p>Select at least one section first.</p>');
-          return;
+    const plannerCourseResolutionFromPage = (code, entry, section) => {
+      let info = null;
+      try { info = getPlannerInfo(code); } catch (_) {}
+      // A selected-program or user-custom row is a complete planner
+      // definition. Internal global rows remain external identity fallbacks and
+      // must stay plan-scoped/N/A when a scheduler selection reuses them.
+      const catalogBacked = !!(info && !info.__globalCourseDefinition);
+      if (!catalogBacked && coursePageInfoMap && typeof coursePageInfoMap.get === 'function') {
+        const pi = coursePageInfoMap.get(code);
+        if (pi) {
+          info = {
+            ...(info || {}),
+            Course_Name: pi.title || pi.header_text || (info && info.Course_Name) || '',
+            EL_Type: 'unknown',
+            SU_credit: (pi.su_credits != null)
+              ? pi.su_credits : ((info && info.SU_credit != null) ? info.SU_credit : 0),
+            Basic_Science: (pi.basic_science != null)
+              ? pi.basic_science : ((info && info.Basic_Science != null) ? info.Basic_Science : 0),
+            Engineering: (pi.engineering != null)
+              ? pi.engineering : ((info && info.Engineering != null) ? info.Engineering : 0),
+            ECTS: (pi.ects != null)
+              ? pi.ects : ((info && info.ECTS != null) ? info.ECTS : 0),
+            Faculty_Course: 'No',
+            Faculty: pi.faculty || (info && info.Faculty) || '',
+          };
         }
+      }
+      if (!catalogBacked && entry) {
+        // The selected schedule row repairs stale/zero-credit placeholders on
+        // repeat sync. Preserve fields the schedule does not publish (notably
+        // ECTS) while refreshing its current title and section-specific SU.
+        info = {
+          ...(info || {}),
+          Course_Name: entry.title || (info && info.Course_Name) || code,
+          EL_Type: 'unknown',
+          // The schedule index aggregates course entries; credits remain on
+          // the individual section selected by the user.
+          SU_credit: (section && section.credits != null)
+            ? section.credits : ((info && info.SU_credit != null) ? info.SU_credit : 0),
+          Basic_Science: (info && info.Basic_Science != null) ? info.Basic_Science : 0,
+          Engineering: (info && info.Engineering != null) ? info.Engineering : 0,
+          ECTS: (info && info.ECTS != null) ? info.ECTS : 0,
+          Faculty_Course: 'No',
+          Faculty: (info && info.Faculty) || '',
+        };
+      }
+      return { info, catalogBacked };
+    };
+
+    const plannerCourseInfoFromPage = (code, entry, section) => (
+      plannerCourseResolutionFromPage(code, entry, section).info
+    );
+
+    const plannerGlobalDefinition = (code, info) => {
+      const normalized = normalizePlannerCode(code);
+      const match = normalized.match(/^([A-Z]{1,12})(\d[A-Z0-9]*)$/);
+      if (!match || !info) return null;
+      const number = (value) => {
+        const parsed = Number(String(value == null ? '' : value).trim().replace(',', '.'));
+        return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+      };
+      return {
+        Major: match[1],
+        Code: match[2],
+        Course_Name: String(info.Course_Name || info.course_name || info.title || normalized),
+        ECTS: String(number(info.ECTS != null ? info.ECTS : info.ects)),
+        Engineering: number(info.Engineering != null ? info.Engineering : info.engineering),
+        Basic_Science: number(info.Basic_Science != null ? info.Basic_Science : info.basic_science),
+        SU_credit: String(number(info.SU_credit != null ? info.SU_credit : info.su_credits)),
+        Faculty: String(info.Faculty || info.faculty || '').trim().toUpperCase(),
+        // Scheduler/global identity cannot claim membership in a selected
+        // undergraduate program. A separate explicit program classification is
+        // required for that; the safe default is N/A.
+        Faculty_Course: 'No',
+        EL_Type: 'unknown',
+        __globalCourseDefinition: true,
+      };
+    };
+
+    const plannerGlobalMetadataSnapshot = (rawValue, definitions) => {
+      let rows = [];
+      if (rawValue) {
+        rows = JSON.parse(rawValue);
+        if (!Array.isArray(rows)) throw new Error('Saved external course metadata is invalid.');
+      }
+      const byCode = new Map();
+      rows.forEach((row) => {
+        const code = normalizePlannerCode(row && row.code);
+        if (code && !byCode.has(code)) byCode.set(code, row);
+      });
+      (Array.isArray(definitions) ? definitions : []).forEach((definition) => {
+        const code = normalizePlannerCode(String(definition.Major || '') + String(definition.Code || ''));
+        if (!code) return;
+        const previous = byCode.get(code) || {};
+        const title = String(definition.Course_Name || '').trim();
+        const suCredits = Number(definition.SU_credit);
+        const nextEcts = Number(definition.ECTS);
+        const previousEcts = Number(previous.ects);
+        byCode.set(code, {
+          code,
+          title: title && title !== code ? title : String(previous.title || title || code),
+          // Section credit is the scheduler's term-specific source of truth;
+          // zero-credit seminars are valid and must not inherit stale credit.
+          suCredits: Number.isFinite(suCredits) && suCredits >= 0 ? suCredits : 0,
+          // Schedule rows do not currently carry ECTS. Preserve a known value
+          // instead of replacing it with that absence-derived zero.
+          ects: Number.isFinite(nextEcts) && nextEcts > 0
+            ? nextEcts : (Number.isFinite(previousEcts) && previousEcts >= 0 ? previousEcts : 0),
+        });
+      });
+      return JSON.stringify(Array.from(byCode.values()).sort((a, b) => a.code.localeCompare(b.code)));
+    };
+
+    const applyPlannerMetadata = (course, info) => {
+      if (!course || !info) return;
+      const credit = (typeof window !== 'undefined' && typeof window.parseCreditValue === 'function')
+        ? window.parseCreditValue(info.SU_credit || 0)
+        : (parseFloat(info.SU_credit || 0) || 0);
+      course.SU_credit = credit;
+      course.Basic_Science = parseFloat(info.Basic_Science || 0) || 0;
+      course.Engineering = parseFloat(info.Engineering || 0) || 0;
+      course.ECTS = parseFloat(info.ECTS || 0) || 0;
+      course.Faculty_Course = info.Faculty_Course || 'No';
+      course.Faculty = info.Faculty || '';
+    };
+
+    const refreshPlannerCourseDomMetadata = (domCourse, course, info) => {
+      if (!domCourse || !course || !info) return;
+      try {
+        const nameNode = domCourse.querySelector('.course_name');
+        const creditNode = domCourse.querySelector('.course_credit');
+        const scienceNode = domCourse.querySelector('.course_bs_credit');
+        if (nameNode) {
+          nameNode.textContent = String(info.Course_Name || info.course_name || info.title || course.code || '');
+        }
+        if (creditNode) creditNode.textContent = fmtCredit(course.SU_credit) + ' credits';
+        if (scienceNode) scienceNode.textContent = 'BS: ' + String(course.Basic_Science || 0) + ' credits';
+      } catch (_) {}
+    };
+
+    const isPlannerComponent = (section) => {
+      const component = String(section && section.component ? section.component : '').trim().toLowerCase();
+      return !(component.includes('rec') || component.includes('lab'));
+    };
+
+    const captureOwnState = (value) => Object.getOwnPropertyDescriptors(value);
+    const restoreOwnState = (value, descriptors) => {
+      Object.keys(value).forEach((key) => {
+        if (!Object.prototype.hasOwnProperty.call(descriptors, key)) {
+          try { delete value[key]; } catch (_) {}
+        }
+      });
+      Object.defineProperties(value, descriptors);
+    };
+
+    const capturePlannerRollback = (cur) => {
+      const semesters = Array.isArray(cur.semesters) ? cur.semesters.slice() : [];
+      const courseDataRows = Array.isArray(course_data) ? course_data.slice() : null;
+      const curState = captureOwnState(cur);
+      const semesterStates = semesters.map((semester) => ({
+        semester,
+        state: captureOwnState(semester),
+      }));
+      const courseStates = [];
+      semesters.forEach((semester) => {
+        (Array.isArray(semester.courses) ? semester.courses : []).forEach((course) => {
+          if (course) courseStates.push({ course, state: captureOwnState(course) });
+        });
+      });
+
+      const board = document.querySelector('.board');
+      const boardChildren = board ? Array.from(board.childNodes) : [];
+      const semesterDomStates = Array.from(document.querySelectorAll('.semester')).map((element) => ({
+        element,
+        children: Array.from(element.childNodes),
+      }));
+      const subcontainerDomStates = Array.from(document.querySelectorAll('.subcontainer_semester')).map((element) => ({
+        element,
+        children: Array.from(element.childNodes),
+      }));
+      const visualStates = Array.from(document.querySelectorAll(
+        '.container_semester, .course_type, .total_credit_text span'
+      )).map((element) => ({
+        element,
+        className: element.className,
+        html: element.matches('.course_type, .total_credit_text span') ? element.innerHTML : null,
+        // The semester-credit indicator now carries its workload split,
+        // threshold, and accessible explanation in attributes. A failed
+        // transactional replacement must restore those alongside its text and
+        // class instead of leaving metadata from the rolled-back schedule.
+        attributes: element.matches('.total_credit_text span')
+          ? Array.from(element.attributes).map((attribute) => [attribute.name, attribute.value])
+          : null,
+      }));
+
+      return () => {
+        courseStates.forEach(({ course, state }) => restoreOwnState(course, state));
+        semesterStates.forEach(({ semester, state }) => restoreOwnState(semester, state));
+        restoreOwnState(cur, curState);
+        cur.semesters = semesters.slice();
+        if (courseDataRows && Array.isArray(course_data)) {
+          course_data.splice(0, course_data.length, ...courseDataRows);
+        }
+        semesterDomStates.forEach(({ element, children }) => element.replaceChildren(...children));
+        subcontainerDomStates.forEach(({ element, children }) => element.replaceChildren(...children));
+        if (board) board.replaceChildren(...boardChildren);
+        visualStates.forEach(({ element, className, html, attributes }) => {
+          if (attributes) {
+            Array.from(element.attributes).forEach((attribute) => {
+              element.removeAttribute(attribute.name);
+            });
+            attributes.forEach(([name, value]) => element.setAttribute(name, value));
+          } else {
+            element.className = className;
+          }
+          if (html !== null) element.innerHTML = html;
+        });
+      };
+    };
+
+    const recomputePlannerSemesterGpa = (semester) => {
+      let totalGPA = 0;
+      let totalGPACredits = 0;
+      (Array.isArray(semester && semester.courses) ? semester.courses : []).forEach((course) => {
+        let outcome = null;
+        if (typeof evaluateGradeForLegacyTotals === 'function') {
+          outcome = evaluateGradeForLegacyTotals(course && course.grade, course && course.gradingBasis);
+        } else {
+          const policy = (typeof window !== 'undefined') ? window.gradePolicy : null;
+          if (policy && typeof policy.evaluateGrade === 'function') {
+            outcome = policy.evaluateGrade(course && course.grade, course && course.gradingBasis);
+          }
+        }
+        if (!outcome || !outcome.countsInGpa) return;
+        const info = plannerCourseInfoFromPage(normalizePlannerCode(course && course.code), null);
+        const rawCredit = course && course.SU_credit != null
+          ? course.SU_credit : (info ? info.SU_credit : 0);
+        const credit = (typeof window !== 'undefined' && typeof window.parseCreditValue === 'function')
+          ? window.parseCreditValue(rawCredit || 0)
+          : (parseFloat(rawCredit || 0) || 0);
+        totalGPA += credit * outcome.gpaPoints;
+        totalGPACredits += credit;
+      });
+      semester.totalGPA = totalGPA;
+      semester.totalGPACredits = totalGPACredits;
+    };
+
+    const preparePlannerReplacement = (selectionSnapshot, idx, cur) => {
+      const retakePolicy = (typeof window !== 'undefined') ? window.courseRetakes : null;
+
+      const retakeFailureMessage = (code, reason) => {
+        const messages = {
+          'target-not-later': 'the existing attempt is not in an earlier semester',
+          'no-prior-occurrence': 'the existing attempt is not in an earlier semester',
+          'unfinished-grade': 'the existing attempt does not yet have a final grade',
+          'transfer-requires-substitution-review': 'a T grade uses the separate university substitution process',
+          'passing-retake-window-expired': 'the passing-grade repeat window cannot be confirmed from the selected terms',
+          'multiple-prior-occurrences': 'the plan contains multiple earlier attempts',
+          'multiple-existing-occurrences': 'the plan contains multiple attempts',
+          'unknown-source-term': 'the existing attempt has no valid semester',
+          'unknown-target-term': 'the target semester is not valid',
+          'source-term-not-completed': 'the existing attempt is in a future semester',
+          'code-alias-requires-review': 'an older or renamed course code matches it and requires manual review',
+          'unsupported-grade': 'the existing grade is not supported for automatic retake planning',
+        };
+        return `${code} cannot be moved into ${termName} because ${messages[reason] || 'its retake eligibility could not be confirmed'}.`;
+      };
+
+      let nextCourseId = Number(cur.course_id || 0);
+      const seen = new Set();
+      const rows = [];
+      const retakes = [];
+      const globalDefinitions = [];
+      selectionSnapshot.forEach(({ raw, crn }) => {
+        const entry = idx && idx.get ? idx.get(raw) : null;
+        const section = entry && Array.isArray(entry.sections)
+          ? entry.sections.find((candidate) => String(candidate && candidate.crn) === String(crn || ''))
+          : null;
+        if (!entry || !section) {
+          throw new Error(`The selected section for ${raw} is no longer available. Re-pick it and try again.`);
+        }
+        // Component-only sections never belong in the planner. Filter them
+        // before deciding which existing course occurrences must move.
+        if (!isPlannerComponent(section)) return;
+        const code = normalizePlannerCode(raw);
+        if (!code || seen.has(code)) return;
+        seen.add(code);
+
+        const resolution = plannerCourseResolutionFromPage(code, entry, section);
+        const info = resolution.info;
+        const globalDefinition = resolution.catalogBacked
+          ? null : plannerGlobalDefinition(code, info);
+        if (globalDefinition) globalDefinitions.push(globalDefinition);
+        const occurrences = retakePolicy && typeof retakePolicy.findCourseOccurrences === 'function'
+          ? retakePolicy.findCourseOccurrences(cur, code) : [];
+        // The planner has one legacy canonical alias (CS210/DSA210). It blocks
+        // duplicates, but a renamed/different code is not an automatic
+        // same-code retake under the university rules. Detect it before the
+        // replacement commit's canonical filtering could silently remove it.
+        const canonicalOccurrences = [];
+        (Array.isArray(cur.semesters) ? cur.semesters : []).forEach((semester) => {
+          (Array.isArray(semester && semester.courses) ? semester.courses : []).forEach((candidate) => {
+            if (normalizePlannerCode(candidate && candidate.code) === code) {
+              canonicalOccurrences.push({ semester, course: candidate });
+            }
+          });
+        });
+        if (canonicalOccurrences.length !== occurrences.length) {
+          throw new Error(retakeFailureMessage(code, 'code-alias-requires-review'));
+        }
+        if (occurrences.length > 1) {
+          throw new Error(retakeFailureMessage(code, 'multiple-existing-occurrences'));
+        }
+
+        const existing = occurrences.length ? occurrences[0] : null;
+        const existingTermCode = existing && existing.termCode
+          ? String(existing.termCode) : '';
+        let course = null;
+        let retake = null;
+
+        if (existing && existingTermCode === String(termCode || '')) {
+          // Replacing sections in the same planner semester is not a retake.
+          course = existing.course;
+        } else if (existing) {
+          const rawGrade = String((existing.course && existing.course.grade) || '').trim().toUpperCase();
+          if (!rawGrade || rawGrade === 'REGISTERED') {
+            // Preserve the scheduler's established rescheduling behavior for an
+            // ungraded placeholder. Completed/in-progress attempts are handled
+            // only by the explicit retake policy below.
+            course = existing.course;
+          } else {
+            if (!retakePolicy || typeof retakePolicy.classifyRetake !== 'function') {
+              throw new Error(retakeFailureMessage(code, 'unsupported-grade'));
+            }
+            const classification = retakePolicy.classifyRetake(
+              existing.semester,
+              existing.course,
+              { termCode },
+            );
+            if (!classification.eligible) {
+              throw new Error(retakeFailureMessage(code, classification.reason));
+            }
+            nextCourseId += 1;
+            course = new s_course(code, 'c' + nextCourseId);
+            applyPlannerMetadata(course, info);
+            retake = { code, occurrence: existing, classification };
+            retakes.push(retake);
+          }
+        }
+
+        let domCourse = course && course.id ? document.getElementById(course.id) : null;
+        if (!course) {
+          nextCourseId += 1;
+          course = new s_course(code, 'c' + nextCourseId);
+          applyPlannerMetadata(course, info);
+        }
+        if (!domCourse) domCourse = createPlannerCourseDom(course, info);
+        // Keep preflight side-effect-free for reused live objects/DOM. Their
+        // scheduler metadata is applied only after commit rollback is armed.
+        rows.push({ code, course, domCourse, crn: String(crn || ''), retake, info });
+      });
+      return { rows, nextCourseId, retakes, globalDefinitions };
+    };
+
+    const commitPlannerReplacement = (prepared, cur) => {
+      const rollback = capturePlannerRollback(cur);
+      const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+      const hasGlobalDefinitions = Array.isArray(prepared.globalDefinitions)
+        && prepared.globalDefinitions.length > 0;
+      const planId = storage && typeof storage.getSessionPlanId === 'function'
+        ? storage.getSessionPlanId() : null;
+      let previousGlobalMetadataRaw = null;
+      let nextGlobalMetadataRaw = null;
+      let globalMetadataWritten = false;
+      let loc = null;
+      try {
+        if (!storage || typeof storage.requestSave !== 'function'
+            || typeof storage.flushSaves !== 'function') {
+          throw new Error('Planner saving is unavailable.');
+        }
+        if (hasGlobalDefinitions) {
+          if (typeof storage.getItem !== 'function' || typeof storage.setItem !== 'function'
+              || typeof storage.removeItem !== 'function') {
+            throw new Error('External course metadata saving is unavailable.');
+          }
+          previousGlobalMetadataRaw = storage.getItem('globalCourseMetadata', planId || undefined);
+          nextGlobalMetadataRaw = plannerGlobalMetadataSnapshot(
+            previousGlobalMetadataRaw,
+            prepared.globalDefinitions,
+          );
+        }
+
+        loc = findPlannerSemester(termCode) || createPlannerSemester(termCode);
+        if (!loc || !loc.container || !loc.semesterEl || !loc.semesterObj) {
+          throw new Error(`The planner semester for ${termName} could not be prepared.`);
+        }
+
+        const desiredCodes = new Set(prepared.rows.map((row) => row.code));
+        const desiredCourses = prepared.rows.map((row) => row.course);
+        cur.course_id = prepared.nextCourseId;
+
+        // Refresh reused stale placeholders only inside the transaction, after
+        // capturePlannerRollback has snapshotted their previous model state.
+        prepared.rows.forEach((row) => applyPlannerMetadata(row.course, row.info));
+
+        // Apply every model mutation synchronously. Same-term and ungraded
+        // rescheduled course objects are reused. Confirmed retakes use a fresh,
+        // ungraded object so an earlier result is never carried into the repeat.
+        (Array.isArray(cur.semesters) ? cur.semesters : []).forEach((semester) => {
+          if (semester === loc.semesterObj) {
+            semester.courses = desiredCourses.slice();
+            return;
+          }
+          semester.courses = (Array.isArray(semester.courses) ? semester.courses : [])
+            .filter((course) => !desiredCodes.has(normalizePlannerCode(course && course.code)));
+        });
+        prepared.rows.forEach((row) => {
+          row.course.scheduler_crn = row.crn;
+        });
+
+        // Mirror the already-committed model in the DOM without any await gap.
+        loc.semesterEl.querySelectorAll('.course').forEach((element) => element.remove());
+        loc.container.querySelectorAll('.input_container').forEach((element) => element.remove());
+        document.querySelectorAll('.container_semester .course').forEach((element) => {
+          if (element.closest('.container_semester') === loc.container) return;
+          const codeNode = element.querySelector('.course_code');
+          const code = normalizePlannerCode(codeNode ? codeNode.textContent : '');
+          if (desiredCodes.has(code)) element.remove();
+        });
+        prepared.rows.forEach((row) => loc.semesterEl.appendChild(row.domCourse));
+
+        // Make scheduler-only university courses resolvable before allocation.
+        // These internal rows remain excluded from Add Course and use unknown/N/A
+        // classification until a program supplies an authoritative definition.
+        prepared.globalDefinitions.forEach((definition) => {
+          const code = normalizePlannerCode(String(definition.Major || '') + String(definition.Code || ''));
+          const existingIndex = course_data.findIndex((record) => (
+            normalizePlannerCode(String((record && record.Major) || '') + String((record && record.Code) || '')) === code
+          ));
+          if (existingIndex < 0) course_data.push(definition);
+          else if (course_data[existingIndex] && course_data[existingIndex].__globalCourseDefinition) {
+            course_data[existingIndex] = definition;
+          }
+        });
+
+        if (typeof cur.recalcEffectiveTypes === 'function') cur.recalcEffectiveTypes(course_data);
+        (Array.isArray(cur.semesters) ? cur.semesters : []).forEach((semester) => {
+          recomputePlannerSemesterGpa(semester);
+          const semesterEl = document.getElementById(semester.id);
+          const container = semesterEl && semesterEl.closest
+            ? semesterEl.closest('.container_semester') : null;
+          refreshPlannerTotalsForContainer(container, semester);
+        });
+        if (typeof window !== 'undefined' && typeof window.updateCurrentTermHighlights === 'function') {
+          window.updateCurrentTermHighlights();
+        }
+
+        if (nextGlobalMetadataRaw !== null) {
+          if (storage.setItem('globalCourseMetadata', nextGlobalMetadataRaw, planId || undefined) === false) {
+            throw new Error('External course metadata could not be saved.');
+          }
+          globalMetadataWritten = true;
+        }
+        if (storage.requestSave() === false || storage.flushSaves() === false) {
+          throw new Error('The updated planner could not be saved.');
+        }
+        // No failure boundary remains after persistence succeeds. Updating
+        // attached name/credit nodes here keeps failed commits and cancelled
+        // preflights from leaking scheduler metadata into the visible plan.
+        prepared.rows.forEach((row) => refreshPlannerCourseDomMetadata(row.domCourse, row.course, row.info));
+        return loc;
+      } catch (error) {
+        try { rollback(); } catch (rollbackError) {
+          try { console.error('Failed to roll back scheduler planner update:', rollbackError); } catch (_) {}
+        }
+        if (globalMetadataWritten) {
+          try {
+            if (previousGlobalMetadataRaw === null) {
+              storage.removeItem('globalCourseMetadata', planId || undefined);
+            } else {
+              storage.setItem('globalCourseMetadata', previousGlobalMetadataRaw, planId || undefined);
+            }
+          } catch (metadataRollbackError) {
+            try { console.error('Failed to roll back external course metadata:', metadataRollbackError); } catch (_) {}
+          }
+        }
+        // A semester creation may have queued a save. Flush the restored model
+        // so an autosave cannot later persist the failed intermediate state.
+        try {
+          const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+          if (storage && typeof storage.requestSave === 'function') storage.requestSave();
+          if (storage && typeof storage.flushSaves === 'function') storage.flushSaves();
+        } catch (_) {}
+        throw error;
+      }
+    };
+
+    let plannerUpdateInProgress = false;
+    pickPlanBtn.addEventListener('click', async () => {
+      if (plannerUpdateInProgress) return;
+      const keys = Object.keys(selected);
+      if (!keys.length) {
+        if (ui && typeof ui.alert === 'function') ui.alert('Nothing selected', '<p>Select at least one section first.</p>');
+        return;
+      }
+      plannerUpdateInProgress = true;
+      pickPlanBtn.disabled = true;
+      try {
+        const selectionSnapshot = keys.map((raw) => ({
+          raw,
+          crn: selected[raw] && selected[raw].crn ? String(selected[raw].crn) : '',
+        }));
         const ok = (ui && typeof ui.confirm === 'function')
           ? await ui.confirm(
               `Update ${termName}`,
@@ -4720,109 +5971,55 @@
           : true;
         if (!ok) return;
 
-        const loc = findOrCreatePlannerSemester(termCode);
-        if (!loc || !loc.container || !loc.semesterEl || !loc.semesterObj) {
-          if (ui && typeof ui.alert === 'function') ui.alert('Update failed', `<p>Could not find (or create) the planner semester for <strong>${escapeHtml(termName)}</strong>.</p>`);
-          return;
-        }
-
-        // Avoid duplicates across semesters: move any matching courses into the selected planner term.
-        for (let i = 0; i < keys.length; i++) {
-          removeCourseFromOtherSemesters(keys[i], loc.semesterObj.id);
-        }
-
-        // Clear selected planner semester DOM + any open add-course inputs.
-        try { loc.semesterEl.querySelectorAll('.course').forEach(el => el.remove()); } catch (_) {}
-        try { loc.container.querySelectorAll('.input_container').forEach(el => el.remove()); } catch (_) {}
-
-        // Clear selected planner semester model.
-        try {
-          loc.semesterObj.courses = [];
-          loc.semesterObj.totalCredit = 0;
-          loc.semesterObj.totalArea = 0;
-          loc.semesterObj.totalCore = 0;
-          loc.semesterObj.totalFree = 0;
-          loc.semesterObj.totalUniversity = 0;
-          loc.semesterObj.totalRequired = 0;
-          loc.semesterObj.totalScience = 0.0;
-          loc.semesterObj.totalEngineering = 0.0;
-          loc.semesterObj.totalECTS = 0.0;
-          loc.semesterObj.totalGPA = 0.0;
-          loc.semesterObj.totalGPACredits = 0.0;
-        } catch (_) {}
-        refreshPlannerTotalsForContainer(loc.container, loc.semesterObj);
-
-        // Ensure schedule index is loaded for possible title/credits fallbacks.
+        // Complete every asynchronous load before the first planner mutation.
         const idx = scheduleIndex || await loadTermScheduleIndex(termCode);
-        if (idx) scheduleIndex = idx;
-
-        const cur = (typeof window !== 'undefined') ? window.curriculum : null;
-        for (let i = 0; i < keys.length; i++) {
-          const raw = keys[i];
-          const code = normalizePlannerCode(raw);
-          if (!code) continue;
-
-          // Do NOT add lab/recitation sections to the term plan; only add the course itself.
-          // Scheduler still tracks labs/recitations, but the planner semester should stay clean.
-          try {
-            const sec = getSelectedSection(raw);
-            const comp = String(sec && sec.component ? sec.component : '').toLowerCase();
-            if (comp && (comp.includes('rec') || comp.includes('lab'))) {
-              continue;
-            }
-          } catch (_) {}
-
-          try {
-            if (cur && typeof cur.hasCourse === 'function' && cur.hasCourse(code)) continue;
-          } catch (_) {}
-
-          try { cur.course_id = (cur.course_id || 0) + 1; } catch (_) {}
-          const newId = 'c' + (cur ? cur.course_id : Date.now());
-          const myCourse = new s_course(code, newId);
-
-          // Keep CRN around for future integrations.
-          try {
-            const pick = selected[raw];
-            if (pick && pick.crn) myCourse.scheduler_crn = String(pick.crn);
-          } catch (_) {}
-
-          // Prefer planner catalog info; fall back to course-page index.
-          let info = null;
-          try { info = getPlannerInfo(code); } catch (_) {}
-          if (!info && coursePageInfoMap && typeof coursePageInfoMap.get === 'function') {
-            const pi = coursePageInfoMap.get(code);
-            if (pi) {
-              info = {
-                Course_Name: pi.title || pi.header_text || '',
-                EL_Type: '',
-                SU_credit: (pi.su_credits != null) ? pi.su_credits : 0,
-                Basic_Science: (pi.basic_science != null) ? pi.basic_science : 0,
-                Engineering: (pi.engineering != null) ? pi.engineering : 0,
-                ECTS: (pi.ects != null) ? pi.ects : 0,
-              };
-            }
-          }
-
-          try { loc.semesterObj.addCourse(myCourse); } catch (_) {
-            try { loc.semesterObj.courses.push(myCourse); } catch (_) {}
-          }
-
-          const domCourse = createPlannerCourseDom(code, newId, info);
-          loc.semesterEl.appendChild(domCourse);
-        }
-
-        // Recompute effective categories and totals and refresh semester highlights.
+        if (!idx) throw new Error(`Schedule data for ${termName} could not be loaded.`);
+        scheduleIndex = idx;
         try {
-          if (cur && typeof cur.recalcEffectiveTypes === 'function') cur.recalcEffectiveTypes(course_data);
-          if (cur && cur.doubleMajor && typeof cur.recalcEffectiveTypesDouble === 'function') {
-            cur.recalcEffectiveTypesDouble(cur.doubleMajorCourseData);
-          }
-          if (typeof window !== 'undefined' && typeof window.updateCurrentTermHighlights === 'function') {
-            window.updateCurrentTermHighlights();
-          }
-        } catch (_) {}
-
-        refreshPlannerTotalsForContainer(loc.container, loc.semesterObj);
+          const loadInfo = (typeof window !== 'undefined') ? window.loadCoursePageInfoIndex : null;
+          if (typeof loadInfo === 'function') coursePageInfoMap = await loadInfo();
+        } catch (_) {
+          // Planner catalog and schedule metadata remain valid fallbacks.
+        }
+        const cur = (typeof window !== 'undefined') ? window.curriculum : null;
+        if (!cur || !Array.isArray(cur.semesters)) throw new Error('The planner is not ready yet.');
+        const prepared = preparePlannerReplacement(selectionSnapshot, idx, cur);
+        if (!prepared.rows.length) {
+          throw new Error('Only lab or recitation sections are selected; there are no planner courses to add.');
+        }
+        if (prepared.retakes && prepared.retakes.length) {
+          const items = prepared.retakes.map((item) => {
+            const occurrence = item.occurrence || {};
+            const source = occurrence.semester && (occurrence.semester.termName || occurrence.termCode)
+              ? String(occurrence.semester.termName || occurrence.termCode) : 'an earlier semester';
+            const grade = occurrence.course ? String(occurrence.course.grade || '') : '';
+            return `<li><strong>${escapeHtml(item.code)}</strong> — ${escapeHtml(source)}, grade <strong>${escapeHtml(grade)}</strong></li>`;
+          }).join('');
+          const plannerImpact = '<p><strong>This temporarily removes each earlier attempt\'s credit, GPA, and prerequisite effect from the planner until a new result is entered.</strong></p>';
+          const retakeOk = (ui && typeof ui.confirm === 'function')
+            ? await ui.confirm(
+                'Confirm planned retake',
+                `<p>The scheduler selection repeats course(s) already recorded in an earlier semester:</p><ul>${items}</ul>`
+                  + `<p>Continue by removing each earlier planner entry and adding a new ungraded attempt in <strong>${escapeHtml(termName)}</strong>?</p>`
+                  + plannerImpact
+                  + '<p>The university transcript retains all registrations; this is only a simplified planning view. The newest repeat grade can replace the earlier grade even when it is lower, and university rules do not allow withdrawal from a repeated course.</p>'
+                  + '<p>SUrriculum cannot verify approved leave or first-offering/program exceptions; confirm the registration with your advisor or SUIS.</p>',
+                { confirmText: 'Replace earlier entries', danger: true },
+              )
+            : false;
+          if (!retakeOk) return;
+        }
+        // Establish a known-good persisted checkpoint immediately before the
+        // synchronous commit. If current edits cannot be saved, leave both the
+        // planner model and DOM completely untouched.
+        const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+        if (!storage || typeof storage.requestSave !== 'function'
+            || typeof storage.flushSaves !== 'function'
+            || storage.requestSave() === false
+            || storage.flushSaves() === false) {
+          throw new Error('Your current planner changes could not be saved, so the update was cancelled.');
+        }
+        const loc = commitPlannerReplacement(prepared, cur);
 
         // Refresh scheduler planner-semester pills.
         try {
@@ -4832,7 +6029,7 @@
           plannedCourses.splice(0, plannedCourses.length, ...nextCourses);
           planListEl.innerHTML = plannedCourses.length
             ? plannedCourses.map(c => (
-                `<button type="button" class="scheduler-pill scheduler-plan-pick" data-course="${escapeHtml(c)}" title="Pick a section">${escapeHtml(c)}</button>`
+                `<button type="button" class="scheduler-pill scheduler-plan-pick" data-course="${escapeHtml(c)}" title="Pick a section" aria-label="Pick a section for ${escapeHtml(c)}">${escapeHtml(c)}</button>`
               )).join('')
             : `<div class="scheduler-muted">No courses in your planner semester for <strong>${escapeHtml(termName)}</strong> yet.</div>`;
         } catch (_) {}
@@ -4842,7 +6039,15 @@
           if (scheduleIndex) renderResults(scheduleIndex, lastQuery);
           if (scheduleIndex) renderGrid(scheduleIndex);
         } catch (_) {}
-      } catch (_) {}
+      } catch (error) {
+        if (ui && typeof ui.alert === 'function') {
+          const message = error && error.message ? error.message : 'The planner was left unchanged.';
+          ui.alert('Update failed', `<p>${escapeHtml(message)}</p><p>Your previous planner courses were kept.</p>`);
+        }
+      } finally {
+        plannerUpdateInProgress = false;
+        pickPlanBtn.disabled = false;
+      }
     });
 
     selectedEl.addEventListener('click', async (e) => {
@@ -5027,10 +6232,37 @@
         try { if (scheduleIndex) renderResults(scheduleIndex, lastQuery); } catch (_) {}
       });
     }
+    onSharedHideTakenChange = () => {
+      if (!hideTakenToggle || typeof window.hideTakenCourses !== 'boolean') return;
+      const enabled = !!window.hideTakenCourses;
+      if (hideTakenToggle.checked === enabled) return;
+      hideTakenToggle.checked = enabled;
+      try { if (scheduleIndex) renderResults(scheduleIndex, lastQuery); } catch (_) {}
+    };
+    onSharedDetailsChange = () => {
+      if (!detailsToggle || typeof window.showCourseDetails !== 'boolean') return;
+      const enabled = !!window.showCourseDetails;
+      if (detailsToggle.checked === enabled) return;
+      detailsToggle.checked = enabled;
+      try {
+        renderSelected();
+        if (scheduleIndex) renderResults(scheduleIndex, lastQuery);
+      } catch (_) {}
+    };
+    onSharedSortChange = () => {
+      if (!scoreToggle || typeof window.sortBasedOnScore !== 'boolean') return;
+      const enabled = !!window.sortBasedOnScore;
+      if (scoreToggle.checked === enabled) return;
+      scoreToggle.checked = enabled;
+      try { if (scheduleIndex) renderResults(scheduleIndex, lastQuery); } catch (_) {}
+    };
+    document.addEventListener('hideTakenCoursesToggleChanged', onSharedHideTakenChange);
+    document.addEventListener('courseDetailsToggleChanged', onSharedDetailsChange);
+    document.addEventListener('sortByScoreToggleChanged', onSharedSortChange);
     if (hoverPreviewToggle) {
       hoverPreviewToggle.addEventListener('change', () => {
         const enabled = !!hoverPreviewToggle.checked;
-        try { localStorage.setItem('schedulerHoverPreview', enabled ? 'true' : 'false'); } catch (_) {}
+        preferenceSetItem('schedulerHoverPreview', enabled ? 'true' : 'false');
         hoverSelectedCourseId = '';
         hoverResultCourseId = '';
         clearPreviewBlocks();
@@ -5040,14 +6272,14 @@
     if (highlightToggle) {
       highlightToggle.addEventListener('change', () => {
         const enabled = !!highlightToggle.checked;
-        try { localStorage.setItem('schedulerHighlightAvailability', enabled ? 'true' : 'false'); } catch (_) {}
+        preferenceSetItem('schedulerHighlightAvailability', enabled ? 'true' : 'false');
         try { if (scheduleIndex) renderResults(scheduleIndex, lastQuery); } catch (_) {}
       });
     }
     if (showBlockedToggle) {
       showBlockedToggle.addEventListener('change', () => {
         const enabled = !!showBlockedToggle.checked;
-        try { localStorage.setItem('schedulerShowBlockedCourses', enabled ? 'true' : 'false'); } catch (_) {}
+        preferenceSetItem('schedulerShowBlockedCourses', enabled ? 'true' : 'false');
         try { if (scheduleIndex) renderResults(scheduleIndex, lastQuery); } catch (_) {}
       });
     }
@@ -5057,7 +6289,7 @@
     const onMinTypeChange = (key, el) => {
       if (!el) return;
       el.addEventListener('change', () => {
-        try { localStorage.setItem(key, String(el.value || '')); } catch (_) {}
+        preferenceSetItem(key, String(el.value || ''));
         rerenderResultsSafe();
       });
     };
@@ -5069,7 +6301,7 @@
       if (!el) return;
       let t = null;
       const flush = () => {
-        try { localStorage.setItem(key, String(el.value || '')); } catch (_) {}
+        preferenceSetItem(key, String(el.value || ''));
         rerenderResultsSafe();
       };
       el.addEventListener('input', () => {
@@ -5086,7 +6318,7 @@
     if (prereqToggle) {
       prereqToggle.addEventListener('change', () => {
         const enabled = !!prereqToggle.checked;
-        try { localStorage.setItem('schedulerCheckPrereqs', enabled ? 'true' : 'false'); } catch (_) {}
+        preferenceSetItem('schedulerCheckPrereqs', enabled ? 'true' : 'false');
         syncPrereqUi();
         rerenderResultsSafe();
       });
@@ -5094,13 +6326,14 @@
     if (showUnmetPrereqToggle) {
       showUnmetPrereqToggle.addEventListener('change', () => {
         const enabled = !!showUnmetPrereqToggle.checked;
-        try { localStorage.setItem('schedulerShowUnmetPrereqs', enabled ? 'true' : 'false'); } catch (_) {}
+        preferenceSetItem('schedulerShowUnmetPrereqs', enabled ? 'true' : 'false');
         rerenderResultsSafe();
       });
     }
 
     // Multiple schedules (within the current term, per saved plan).
     const newScheduleId = () => `sched_${Date.now().toString(16)}_${Math.random().toString(16).slice(2)}`;
+    const normalizeScheduleName = (value) => String(value || '').trim().replace(/\s+/g, ' ').slice(0, 200);
     const maxSchedules = 10;
 
     const applyActiveScheduleFromRoot = async (root) => {
@@ -5183,7 +6416,7 @@
           const copy = (res.action === 'dup');
           const next = {
             id,
-            name: copy ? `${String(active && active.name ? active.name : 'Schedule')} (copy)` : 'New schedule',
+            name: copy ? normalizeScheduleName(`${String(active && active.name ? active.name : 'Schedule')} (copy)`) : 'New schedule',
             selected: copy && active && active.selected ? JSON.parse(JSON.stringify(active.selected)) : {},
             blocked: copy && Array.isArray(active && active.blocked) ? JSON.parse(JSON.stringify(active.blocked)) : [],
             ui: copy && active && active.ui ? JSON.parse(JSON.stringify(active.ui)) : (active && active.ui ? JSON.parse(JSON.stringify(active.ui)) : {}),
@@ -5203,7 +6436,9 @@
             placeholder: 'Schedule name',
             okLabel: 'Rename',
           });
-          const name = (promptRes && promptRes.action === 'ok') ? String(promptRes.value || '').trim() : '';
+          const name = (promptRes && promptRes.action === 'ok')
+            ? normalizeScheduleName(promptRes.value)
+            : '';
           if (!name) continue;
           try { items[activeId].name = name; } catch (_) {}
           saveSchedulerRoot(root);
@@ -5241,6 +6476,24 @@
         try { await openScheduleManager(); } catch (_) {}
       });
     }
+
+    // Touch devices use an explicit preview request because they have no hover.
+    // Keep that interaction independent from the desktop hover-preview setting:
+    // disabling mouse hover must not leave mobile's visible Preview action inert.
+    modal.addEventListener('schedulerpreviewrequest', (e) => {
+      try {
+        const detail = e && e.detail ? e.detail : {};
+        const courseId = normalizeCourseId(detail.courseId || '');
+        const crn = String(detail.crn || '').trim();
+        if (!scheduleIndex || !courseId) return;
+        const entry = scheduleIndex.get(courseId);
+        const section = crn && entry && Array.isArray(entry.sections)
+          ? (entry.sections.find(sec => String(sec && sec.crn ? sec.crn : '') === crn) || null)
+          : null;
+        if (crn && !section) return;
+        renderPreviewForCourse(scheduleIndex, courseId, section, { ignoreHoverPreference: true });
+      } catch (_) {}
+    });
 
     // Hover interactions (optional)
     if (selectedEl) {
@@ -5505,6 +6758,21 @@
   }
 
   if (typeof window !== 'undefined') {
+    window.loadTermScheduleIndex = loadTermScheduleIndex;
     window.openSchedulerModal = openSchedulerModal;
+  }
+
+  const bindSchedulerLauncher = () => {
+    const button = document.getElementById('openSchedulerButton');
+    if (!button || button.dataset.schedulerLauncherBound === 'true') return;
+    button.dataset.schedulerLauncherBound = 'true';
+    button.addEventListener('click', () => { openSchedulerModal(); });
+  };
+  if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', bindSchedulerLauncher, { once: true });
+    } else {
+      bindSchedulerLauncher();
+    }
   }
 })();

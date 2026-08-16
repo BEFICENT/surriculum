@@ -1,122 +1,8 @@
-//checks wheter the course exists:
-function isCourseValid(course, course_data)
-{
-    const code = course && course.code ? course.code.replace(/\s+/g, '') : '';
-    // First check within the main major's course data
-    for (let i = 0; i < course_data.length; i++) {
-        if (((course_data[i]['Major'] + course_data[i]['Code']) === code)) return true;
-    }
-    // If not found and a double major is active, check the double major's
-    // course catalog for this course code. The global curriculum object
-    // exposes doubleMajorCourseData when a second major is selected.
-    try {
-        const cur = (typeof window !== 'undefined') ? window.curriculum : null;
-        if (cur && cur.doubleMajor && Array.isArray(cur.doubleMajorCourseData)) {
-            const dmList = cur.doubleMajorCourseData;
-            for (let i = 0; i < dmList.length; i++) {
-                if (((dmList[i]['Major'] + dmList[i]['Code']) === code)) {
-                    return true;
-                }
-            }
-        }
-    } catch (_) {
-        // ignore errors
-    }
-    // If not found and minors are selected, check each selected minor's
-    // catalog. Minor courses are valid for planning even if they are not
-    // part of the primary major's scraped pools.
-    try {
-        const cur = (typeof window !== 'undefined') ? window.curriculum : null;
-        if (cur && Array.isArray(cur.minors) && cur.minors.length && cur.minorCourseDataByCode) {
-            for (let mi = 0; mi < cur.minors.length; mi++) {
-                const minorCode = cur.minors[mi];
-                const list = cur.minorCourseDataByCode[minorCode];
-                if (!Array.isArray(list)) continue;
-                for (let i = 0; i < list.length; i++) {
-                    if (((list[i]['Major'] + list[i]['Code']) === code)) return true;
-                }
-            }
-        }
-    } catch (_) {}
-    return false;
-}
-
-//returns info's of the course:
-function getInfo(course, course_data)
-{
-    const code = (course || '').replace(/\s+/g, '');
-    // First search within the primary course data
-    for (let i = 0; i < course_data.length; i++) {
-        if ((course_data[i]['Major'] + course_data[i]['Code']) === code) return course_data[i];
-    }
-    // If not found and a double major is active, search within the double
-    // major's catalog so that course details (name, credits) can be
-    // retrieved for DM-only courses.  This allows unknown courses to
-    // provide their metadata while still being ignored for the main
-    // major's allocations.
-    try {
-        const cur = (typeof window !== 'undefined') ? window.curriculum : null;
-        if (cur && cur.doubleMajor && Array.isArray(cur.doubleMajorCourseData)) {
-            const dmList = cur.doubleMajorCourseData;
-            for (let i = 0; i < dmList.length; i++) {
-                if (((dmList[i]['Major'] + dmList[i]['Code']) === code)) {
-                    return dmList[i];
-                }
-            }
-        }
-    } catch (_) {
-        // ignore errors
-    }
-    // If not found and minors are selected, search within each selected
-    // minor's catalog so we can retrieve metadata (name/credits) for
-    // minor-only courses.
-    try {
-        const cur = (typeof window !== 'undefined') ? window.curriculum : null;
-        if (cur && Array.isArray(cur.minors) && cur.minors.length && cur.minorCourseDataByCode) {
-            for (let mi = 0; mi < cur.minors.length; mi++) {
-                const minorCode = cur.minors[mi];
-                const list = cur.minorCourseDataByCode[minorCode];
-                if (!Array.isArray(list)) continue;
-                for (let i = 0; i < list.length; i++) {
-                    if (((list[i]['Major'] + list[i]['Code']) === code)) {
-                        return list[i];
-                    }
-                }
-            }
-        }
-    } catch (_) {}
-    return 0;
-}
-
-function extractNumericValue(string) {
-    const matches = string.match(/\d+/); // Match one or more digits
-    if (matches) {
-      return parseInt(matches[0], 10); // Parse the matched value as an integer
-    }
-    return null; // No numeric value found
-}
-
-// Credit helpers: allow half-credits (e.g., 2.5) for custom/imported courses.
-function parseCreditValue(v) {
-    try {
-        const raw = String(v ?? '').trim();
-        if (!raw) return 0;
-        const n = parseFloat(raw.replace(',', '.'));
-        return isFinite(n) ? n : 0;
-    } catch (_) {
-        return 0;
-    }
-}
-
-function formatCreditValue(v) {
-    const n = parseCreditValue(v);
-    return n.toFixed(1);
-}
-
-if (typeof window !== 'undefined') {
-    window.parseCreditValue = parseCreditValue;
-    window.formatCreditValue = formatCreditValue;
-}
+// isCourseValid / getInfo (course-catalog lookups) moved to the
+// scripts/data/catalog.js ES module; extractNumericValue / parseCreditValue /
+// formatCreditValue moved to scripts/domain/credits.js. All are exposed on
+// window there (bridge) so the classic scripts here still call them by their
+// bare global names.
 
 // Terms list & date_list_InnerHTML:
 // Determine the current term based on the device date.
@@ -239,6 +125,80 @@ function termCodeToName(code) {
     return term + ' ' + year + '-' + nextYear;
 }
 
+// Canonical academic-term identity for semester models and raw term values.
+// `termIndex` and DOM position are deliberately excluded: both are presentation
+// details that can change when a semester card is moved. If a model carries two
+// valid but conflicting identities, fail closed instead of guessing which one
+// should control prerequisites or allocation order.
+function semesterTermCode(value) {
+    const normalize = (candidate) => {
+        const raw = String(candidate || '').trim();
+        if (/^\d{4}(01|02|03)$/.test(raw)) return raw;
+        const match = raw.match(/^(Fall|Spring|Summer)\s+(\d{4})-(\d{4})$/i);
+        if (!match || Number(match[3]) !== Number(match[2]) + 1) return '';
+        const suffix = { fall: '01', spring: '02', summer: '03' }[match[1].toLowerCase()];
+        return match[2] + suffix;
+    };
+
+    if (!value || typeof value !== 'object') return normalize(value);
+    const candidates = [value.termCode, value.termName, value.date, value.term]
+        .map(normalize)
+        .filter(Boolean);
+    if (!candidates.length) return '';
+    const first = candidates[0];
+    return candidates.every((code) => code === first) ? first : '';
+}
+
+function semesterAcademicTieKey(semester) {
+    const courses = semester && Array.isArray(semester.courses) ? semester.courses : [];
+    const courseSignature = courses.map((course) => {
+        const code = String(course && course.code !== undefined ? course.code : course)
+            .toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const grade = String((course && course.grade) || '').trim().toUpperCase();
+        const basis = String((course && course.gradingBasis) || '').trim().toLowerCase();
+        return [code, grade, basis].join('|');
+    })
+        .filter((value) => value.replace(/\|/g, ''))
+        .sort()
+        .join('\u0001');
+    const storedIdentity = ['termCode', 'termName', 'date', 'term']
+        .map((field) => String((semester && semester[field]) || '').trim().toUpperCase())
+        .join('|');
+    return [courseSignature, storedIdentity].join('\u0000');
+}
+
+// Oldest-to-newest academic order. Duplicate valid terms and invalid/legacy
+// rows receive a semantic tie-breaker so array/visual order never decides which
+// course claims a limited curriculum pool first. Invalid terms sort last and do
+// not establish chronology.
+function compareSemesterTerms(left, right) {
+    const leftCode = semesterTermCode(left);
+    const rightCode = semesterTermCode(right);
+    if (leftCode && rightCode && leftCode !== rightCode) {
+        return Number(leftCode) - Number(rightCode);
+    }
+    if (leftCode && !rightCode) return -1;
+    if (!leftCode && rightCode) return 1;
+    const leftTie = semesterAcademicTieKey(left);
+    const rightTie = semesterAcademicTieKey(right);
+    return leftTie < rightTie ? -1 : (leftTie > rightTie ? 1 : 0);
+}
+
+function hasDuplicateSemesterTerm(curriculumOrSemesters, candidate, options) {
+    const semesters = Array.isArray(curriculumOrSemesters)
+        ? curriculumOrSemesters
+        : (curriculumOrSemesters && Array.isArray(curriculumOrSemesters.semesters)
+            ? curriculumOrSemesters.semesters : []);
+    const candidateCode = semesterTermCode(candidate);
+    if (!candidateCode) return false;
+    const excludedId = String((options && options.excludeSemesterId) || '');
+    return semesters.some((semester) => {
+        if (!semester || semester === candidate) return false;
+        if (excludedId && String(semester.id || '') === excludedId) return false;
+        return semesterTermCode(semester) === candidateCode;
+    });
+}
+
 function normalizeTermIdentifier(term) {
     const raw = String(term || '').trim();
     if (!raw) return '';
@@ -253,6 +213,105 @@ function displayTermIdentifier(term) {
         return termCodeToName(normalized) || normalized;
     }
     return normalized;
+}
+
+// These are advisory approval-free semester loads, not hard planner limits.
+// Students may retain an overload in the plan; the UI only highlights it.
+const REGULAR_SEMESTER_CREDIT_LIMIT = 20;
+const SUMMER_SEMESTER_CREDIT_LIMIT = 8;
+
+function isSummerTerm(termOrSemester) {
+    if (termOrSemester && typeof termOrSemester === 'object') {
+        const stableCode = String(termOrSemester.termCode || '').trim();
+        if (/^\d{4}(01|02|03)$/.test(stableCode)) return stableCode.endsWith('03');
+        return isSummerTerm(termOrSemester.termName);
+    }
+    const raw = String(termOrSemester || '').trim();
+    if (!raw) return false;
+    const normalized = normalizeTermIdentifier(raw);
+    return /^\d{4}03$/.test(normalized);
+}
+
+function semesterCreditLimit(termOrSemester) {
+    return isSummerTerm(termOrSemester)
+        ? SUMMER_SEMESTER_CREDIT_LIMIT
+        : REGULAR_SEMESTER_CREDIT_LIMIT;
+}
+
+function isSemesterCreditOverLimit(termOrSemester, explicitTotal) {
+    const storedLoadValue = termOrSemester && typeof termOrSemester === 'object'
+        ? termOrSemester.totalLoadCredit : null;
+    const storedLoad = storedLoadValue !== null && storedLoadValue !== undefined
+        ? Number(storedLoadValue) : NaN;
+    const rawTotal = Number.isFinite(storedLoad) && storedLoad >= 0
+        ? storedLoad
+        : (explicitTotal !== undefined
+            ? explicitTotal
+            : (termOrSemester && typeof termOrSemester === 'object'
+                ? termOrSemester.totalCredit : 0));
+    const total = Number(rawTotal);
+    return Number.isFinite(total) && total > semesterCreditLimit(termOrSemester);
+}
+
+function updateSemesterCreditIndicator(span, semester, explicitLoad) {
+    if (!span) return null;
+    const storedLoadValue = semester && semester.totalLoadCredit;
+    const storedLoad = storedLoadValue !== null && storedLoadValue !== undefined
+        ? Number(storedLoadValue) : NaN;
+    const rawLoad = Number.isFinite(storedLoad) && storedLoad >= 0
+        ? storedLoad
+        : (explicitLoad !== undefined
+            ? explicitLoad
+            : (semester && semester.totalCredit !== undefined ? semester.totalCredit : 0));
+    const load = Math.max(0, Number(rawLoad) || 0);
+    const storedAllocatedValue = semester && semester.primaryAllocatedCredit;
+    const storedAllocated = storedAllocatedValue !== null && storedAllocatedValue !== undefined
+        ? Number(storedAllocatedValue) : NaN;
+    const allocated = Number.isFinite(storedAllocated) && storedAllocated >= 0
+        ? Math.min(load, storedAllocated) : load;
+    const storedUnallocatedValue = semester && semester.primaryUnallocatedCredit;
+    const storedUnallocated = storedUnallocatedValue !== null && storedUnallocatedValue !== undefined
+        ? Number(storedUnallocatedValue) : NaN;
+    const unallocated = Number.isFinite(storedUnallocated) && storedUnallocated >= 0
+        ? Math.min(load, storedUnallocated) : Math.max(0, load - allocated);
+    const compactCredit = (value) => String(
+        Math.round((Number(value) || 0) * 1000) / 1000
+    );
+    const loadText = compactCredit(load);
+    const allocatedText = compactCredit(allocated);
+    const unallocatedText = compactCredit(unallocated);
+    const limit = semesterCreditLimit(semester);
+    const overLimit = isSemesterCreditOverLimit(semester, load);
+    const summer = isSummerTerm(semester);
+    const seasonLabel = summer ? 'Summer' : 'regular semester';
+
+    span.textContent = loadText + ' SU' + (unallocated > 0
+        ? ' (' + unallocatedText + ' N/A)' : '');
+    span.classList.toggle('is-overlimit', overLimit);
+    span.dataset.suLoad = loadText;
+    span.dataset.primaryAllocatedSu = allocatedText;
+    span.dataset.primaryUnallocatedSu = unallocatedText;
+    span.dataset.creditLimit = String(limit);
+    span.dataset.overloadAdvisory = overLimit ? 'true' : 'false';
+    const program = String((semester && semester.primaryProgramCode) || '').trim().toUpperCase();
+    const allocatedDestination = program
+        ? `${program} degree categories` : "the primary program's degree categories";
+    const unallocatedDestination = program
+        ? `a ${program} degree category` : 'a primary-program degree category';
+    const thresholdText = overLimit
+        ? `Above the standard ${limit}-SU ${seasonLabel} load; an overload may be possible with approval.`
+        : `Standard ${summer ? 'Summer' : 'regular-semester'} load threshold: ${limit} SU.`;
+    const message = `${loadText} SU semester load: ${allocatedText} SU are allocated to ${allocatedDestination}; ${unallocatedText} SU are not allocated to ${unallocatedDestination} (N/A). Grade, PGPA, and other-program treatment are separate. ${thresholdText}`;
+    span.title = message;
+    span.setAttribute('aria-label', message);
+    return { load, allocated, unallocated, limit, overLimit };
+}
+
+if (typeof window !== 'undefined') {
+    window.isSummerTerm = isSummerTerm;
+    window.semesterCreditLimit = semesterCreditLimit;
+    window.isSemesterCreditOverLimit = isSemesterCreditOverLimit;
+    window.updateSemesterCreditIndicator = updateSemesterCreditIndicator;
 }
 
 function buildCourseHistoryTableElement(rows, options) {
@@ -504,19 +563,48 @@ if (typeof window !== 'undefined') {
     window.updateCurrentTermHighlights = updateCurrentTermHighlights;
     window.termNameToCode = termNameToCode;
     window.termCodeToName = termCodeToName;
+    window.semesterTermCode = semesterTermCode;
+    window.compareSemesterTerms = compareSemesterTerms;
+    window.hasDuplicateSemesterTerm = hasDuplicateSemesterTerm;
     window.normalizeTermIdentifier = normalizeTermIdentifier;
     window.displayTermIdentifier = displayTermIdentifier;
     window.buildCourseHistoryTableElement = buildCourseHistoryTableElement;
 }
 
 var grade_list_InnerHTML = '';
-let letter_grades_global = ['S', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'F'];
-let letter_grades_global_dic = {'S':4.0, 'A':4.0, 'A-':3.7, 'B+':3.3, 'B':3.0, 'B-':2.7, 'C+':2.3, 'C':2.0, 'C-':1.7, 'D+':1.3, 'D':1.0, 'F':0.0}
+let letter_grades_global = ['A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'F'];
+let letter_grades_global_dic = {'A':4.0, 'A-':3.7, 'B+':3.3, 'B':3.0, 'B-':2.7, 'C+':2.3, 'C':2.0, 'C-':1.7, 'D+':1.3, 'D':1.0, 'F':0.0}
 for(let i = 0; i < letter_grades_global.length; i++)
 {
     grade_list_InnerHTML += "<option value='" + letter_grades_global[i] + "'>";
 }
 
+function evaluateGradeForLegacyTotals(grade, gradingBasis)
+{
+    try {
+        if (typeof window !== 'undefined' && window.gradePolicy
+            && typeof window.gradePolicy.evaluateGrade === 'function') {
+            return window.gradePolicy.evaluateGrade(grade, gradingBasis);
+        }
+    } catch (_) {}
+    const token = String(grade || '').trim().toUpperCase();
+    const points = letter_grades_global_dic[token];
+    return {
+        countsInGpa: points !== undefined,
+        gpaPoints: points === undefined ? null : points,
+    };
+}
+
+
+function escapeCourseOptionHtml(value)
+{
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
 
 function getCoursesDataList(course_data)
 {
@@ -524,7 +612,12 @@ function getCoursesDataList(course_data)
     // merge courses unique to the double major into the primary list so
     // that users can select DM-only courses from the dropdown.  We
     // construct a copy of course_data and append unique DM courses.
-    let combined = Array.isArray(course_data) ? course_data.slice() : [];
+    // Global course definitions are loaded only to rehydrate/import courses
+    // which are absent from the selected program catalogs. They are not a
+    // planning catalog and must never leak into the Add Course dropdown.
+    let combined = Array.isArray(course_data)
+        ? course_data.filter(function(c) { return !(c && c.__globalCourseDefinition); })
+        : [];
     try {
         const cur = (typeof window !== 'undefined') ? window.curriculum : null;
         if (cur && cur.doubleMajor && Array.isArray(cur.doubleMajorCourseData)) {
@@ -533,6 +626,7 @@ function getCoursesDataList(course_data)
                 return (c.Major + c.Code);
             }));
             cur.doubleMajorCourseData.forEach(function(dm) {
+                if (dm && dm.__globalCourseDefinition) return;
                 const key = dm.Major + dm.Code;
                 if (!mainSet.has(key)) {
                     combined.push(dm);
@@ -546,6 +640,7 @@ function getCoursesDataList(course_data)
                 const list = cur.minorCourseDataByCode[minorCode];
                 if (!Array.isArray(list)) return;
                 list.forEach(function(mc) {
+                    if (mc && mc.__globalCourseDefinition) return;
                     const key = mc.Major + mc.Code;
                     if (!mainSet.has(key)) {
                         combined.push(mc);
@@ -573,8 +668,9 @@ function getCoursesDataList(course_data)
     let datalistInnerHTML = '';
     for (let i = 0; i < combined.length; i++) {
         const item = combined[i];
-        const text = item['Major'] + item['Code'] + ' ' + item['Course_Name'];
-        datalistInnerHTML += `<option value='${text}'>${text}</option>`;
+        const text = String(item['Major'] || '') + String(item['Code'] || '') + ' ' + String(item['Course_Name'] || '');
+        const escaped = escapeCourseOptionHtml(text);
+        datalistInnerHTML += `<option value="${escaped}">${escaped}</option>`;
     }
     return datalistInnerHTML;
 }
@@ -584,12 +680,15 @@ function getCoursesDataList(course_data)
 // returned by getCoursesDataList but in array form so it can be rendered
 // manually instead of relying on the browser's default datalist styling.
 function getCoursesList(course_data) {
-    let combined = Array.isArray(course_data) ? course_data.slice() : [];
+    let combined = Array.isArray(course_data)
+        ? course_data.filter(c => !(c && c.__globalCourseDefinition))
+        : [];
     let mainSet = new Set(combined.map(c => c.Major + c.Code));
     try {
         const cur = (typeof window !== 'undefined') ? window.curriculum : null;
         if (cur && cur.doubleMajor && Array.isArray(cur.doubleMajorCourseData)) {
             cur.doubleMajorCourseData.forEach(dm => {
+                if (dm && dm.__globalCourseDefinition) return;
                 const key = dm.Major + dm.Code;
                 if (!mainSet.has(key)) {
                     dm.__fromDoubleMajor = true;
@@ -604,6 +703,7 @@ function getCoursesList(course_data) {
                 const list = cur.minorCourseDataByCode[minorCode];
                 if (!Array.isArray(list)) return;
                 list.forEach(mc => {
+                    if (mc && mc.__globalCourseDefinition) return;
                     const key = mc.Major + mc.Code;
                     if (!mainSet.has(key)) {
                         mc.__fromMinor = true;
@@ -672,19 +772,22 @@ function computeCourseSuggestionScore(courseCode, opts) {
             return isFinite(n) ? n : 0;
         };
         const typeScore = { university: 36, required: 28, core: 18, area: 12, free: 0 };
+        // Bonus for a course that is a member of an UNMET enumerable requirement
+        // group (Core I/II pool, math/philosophy one-of, …). Sized to lift a
+        // pool-filling course above its plain type-mates (core 18 -> 24) without
+        // leaping a tier (required 28). Suppressed once the group is met (below).
+        const GROUP_BONUS = 6;
 
         const lookupReq = (majorCode, termCode) => {
             const allReq = (typeof globalThis !== 'undefined' && globalThis.requirements)
                 ? globalThis.requirements
                 : (window.requirements ? window.requirements : {});
             if (!majorCode) return {};
-            if (allReq && allReq[majorCode]) return allReq[majorCode];
+            if (typeof globalThis !== 'undefined' && typeof globalThis.getRequirementRecord === 'function') {
+                return globalThis.getRequirementRecord(majorCode, termCode) || {};
+            }
             if (termCode && allReq && allReq[termCode] && allReq[termCode][majorCode]) return allReq[termCode][majorCode];
-            try {
-                for (const t of Object.keys(allReq || {})) {
-                    if (allReq[t] && allReq[t][majorCode]) return allReq[t][majorCode];
-                }
-            } catch (_) {}
+            if (allReq && allReq[majorCode]) return allReq[majorCode];
             return {};
         };
         const isEngineeringMajor = (majorCode, termCode) => {
@@ -706,15 +809,11 @@ function computeCourseSuggestionScore(courseCode, opts) {
             const map = new Map();
             try {
                 if (!previousOnly || !currentTermCode) return map;
-                const containers = document.querySelectorAll('.container_semester');
-                for (let i = 0; i < containers.length; i++) {
-                    const c = containers[i];
-                    const p = c ? c.querySelector('.date p') : null;
-                    const name = p ? String(p.textContent || '').trim() : '';
-                    const code = window.termNameToCode ? window.termNameToCode(name) : '';
-                    const codeN = parseInt(String(code || ''), 10) || 0;
-                    const semEl = c ? c.querySelector('.semester') : null;
-                    const id = semEl ? String(semEl.id || '') : '';
+                const semesters = cur && Array.isArray(cur.semesters) ? cur.semesters : [];
+                for (let i = 0; i < semesters.length; i++) {
+                    const semester = semesters[i];
+                    const codeN = parseInt(String(semesterTermCode(semester) || ''), 10) || 0;
+                    const id = String((semester && semester.id) || '');
                     if (id && codeN) map.set(id, codeN);
                 }
             } catch (_) {}
@@ -725,7 +824,7 @@ function computeCourseSuggestionScore(courseCode, opts) {
                 if (!previousOnly || !currentTermCode) return true;
                 const id = sem && sem.id ? String(sem.id) : '';
                 const code = id && semesterIdToTermCode.has(id) ? semesterIdToTermCode.get(id) : 0;
-                if (!code) return true; // if unknown, don't undercount
+                if (!code) return false;
                 return code < currentTermCode;
             } catch (_) {
                 return true;
@@ -769,6 +868,36 @@ function computeCourseSuggestionScore(courseCode, opts) {
             return { uni, req };
         };
 
+        // A compact "which groups are met" signature for the cache key, so a
+        // course's group bonus turns off the moment its pool becomes met (the
+        // uni/req credit signals in the key don't capture one-of / pool met-ness).
+        const groupSignature = (view) => {
+            try {
+                if (!cur || typeof cur.requirementGroupProgress !== 'function') return '';
+                return cur.requirementGroupProgress(view).map((r) => r.id + (r.ok ? '1' : '0')).join(',');
+            } catch (_) {
+                return '';
+            }
+        };
+        // The set of course codes belonging to an UNMET enumerable group (a group
+        // with an explicit `members` list — credits pools + the one-of rules).
+        // Prefix/faculty/level rules have no member list and contribute none.
+        const groupBonusCodes = (view, req) => {
+            const set = new Set();
+            try {
+                if (!cur || typeof cur.requirementGroupProgress !== 'function') return set;
+                if (!req || !Array.isArray(req.groups)) return set;
+                const okById = {};
+                cur.requirementGroupProgress(view).forEach((r) => { okById[r.id] = r.ok; });
+                req.groups.forEach((g) => {
+                    if (Array.isArray(g.members) && g.members.length && okById[g.id] === false) {
+                        g.members.forEach((c) => set.add(canonicalize(c)));
+                    }
+                });
+            } catch (_) {}
+            return set;
+        };
+
         // Cache contexts + maps based on current program config and progress so
         // we can score hundreds of courses quickly.
         const cacheKey = (() => {
@@ -801,6 +930,7 @@ function computeCourseSuggestionScore(courseCode, opts) {
                 Math.round(progMain.req * 10) / 10,
                 Math.round(progDm.uni * 10) / 10,
                 Math.round(progDm.req * 10) / 10,
+                groupSignature('main'), groupSignature('dm'),
             ].join('|');
         })();
 
@@ -836,6 +966,7 @@ function computeCourseSuggestionScore(courseCode, opts) {
                         includeEngWeights: isEng && currentSciEng.eng < parseNum(req.engineering),
                         includeUniversityWeights: (reqUni > 0) ? (prog.uni < reqUni) : true,
                         includeRequiredWeights: (reqReq > 0) ? (prog.req < reqReq) : true,
+                        groupBonusCodes: groupBonusCodes('main', req),
                         map: buildMap(course_data),
                     });
                 } else {
@@ -865,6 +996,7 @@ function computeCourseSuggestionScore(courseCode, opts) {
                         includeEngWeights: isEng && currentSciEng.eng < parseNum(req.engineering),
                         includeUniversityWeights: (reqUni > 0) ? (prog.uni < reqUni) : true,
                         includeRequiredWeights: (reqReq > 0) ? (prog.req < reqReq) : true,
+                        groupBonusCodes: groupBonusCodes('dm', req),
                         map: buildMap(cur.doubleMajorCourseData),
                     });
                 }
@@ -894,8 +1026,8 @@ function computeCourseSuggestionScore(courseCode, opts) {
         const scoreFromRecord = (rec, ctx) => {
             if (!rec) return 0;
             let baseType = String(rec.EL_Type || '').toLowerCase();
+            const recCode = canonicalize((rec.Major || '') + (rec.Code || ''));
             try {
-                const recCode = canonicalize((rec.Major || '') + (rec.Code || ''));
                 const majorCode = String((ctx && ctx.majorCode) || '').toUpperCase();
                 const termNum = parseInt(String((ctx && ctx.termCode) || '0'), 10);
                 if (majorCode === 'ME' && !isNaN(termNum) && termNum >= 202501) {
@@ -927,6 +1059,10 @@ function computeCourseSuggestionScore(courseCode, opts) {
                 s += (typeScore[baseType] || 0);
             }
             s += su * 0.1;
+            // Reward a course that fills an unmet enumerable requirement group
+            // (its pool is still short). Suppressed automatically once the group
+            // is met — groupBonusCodes only holds unmet groups' members.
+            if (ctx && ctx.groupBonusCodes && ctx.groupBonusCodes.has(recCode)) s += GROUP_BONUS;
             if (ctx && ctx.includeBsWeights) s += bs * 2;
             if (ctx && ctx.includeEngWeights) s += eng * 1;
             return s;
@@ -950,15 +1086,60 @@ if (typeof window !== 'undefined') {
     window.computeCourseSuggestionScore = computeCourseSuggestionScore;
 }
 
-// Lazy-load the course page scrape index so we can check whether a course has
-// been offered in the current term. This is used for optional filtering in the
-// course dropdown (Add Course).
+// Lazy-load the cumulative course info index so we can check whether a course
+// has been offered in the current term. Current/future entries are reconciled
+// from the authoritative term schedules after every schedule refresh.
+function loadCurrentTermScheduleOfferings() {
+    try {
+        if (typeof window === 'undefined') return Promise.resolve(null);
+        if (window.__currentTermScheduleOfferingsPromise) return window.__currentTermScheduleOfferingsPromise;
+        window.__currentTermScheduleOfferingsPromise = (async () => {
+            try {
+                const termCode = String(window.currentTermCode || '').trim();
+                if (!termCode || typeof window.loadTermScheduleIndex !== 'function') return null;
+                const scheduleIndex = await window.loadTermScheduleIndex(termCode);
+                if (!scheduleIndex || typeof scheduleIndex.keys !== 'function') return null;
+                if (typeof scheduleIndex.size === 'number' && scheduleIndex.size === 0) return null;
+                const offered = new Set(Array.from(scheduleIndex.keys(), code => String(code || '').replace(/\s+/g, '').toUpperCase()));
+                window.currentTermScheduledCourseIds = offered;
+                return offered;
+            } catch (_) {
+                return null;
+            }
+        })();
+        return window.__currentTermScheduleOfferingsPromise;
+    } catch (_) {
+        return Promise.resolve(null);
+    }
+}
+
+// Preferred datalist renderer. User-defined course names remain plain text and
+// never pass through the HTML parser. `getCoursesDataList` stays available for
+// legacy callers, but it now escapes both attribute and text contexts too.
+function populateCourseDataList(datalist, course_data)
+{
+    if (!datalist || typeof document === 'undefined') return;
+    datalist.replaceChildren();
+    const fragment = document.createDocumentFragment();
+    const options = getCoursesList(course_data);
+    for (let i = 0; i < options.length; i++) {
+        const item = options[i] || {};
+        const text = String(item.code || '') + ' ' + String(item.name || '');
+        const option = document.createElement('option');
+        option.value = text;
+        option.textContent = text;
+        fragment.appendChild(option);
+    }
+    datalist.appendChild(fragment);
+}
+
 function loadCourseOfferingsIndex() {
     try {
         if (typeof window === 'undefined') return Promise.resolve(null);
         if (window.__courseOfferingsPromise) return window.__courseOfferingsPromise;
 
         window.__courseOfferingsPromise = (async () => {
+            const schedulePromise = loadCurrentTermScheduleOfferings();
             const tryReadText = async () => {
                 const isFile = (() => {
                     try { return typeof location !== 'undefined' && location && location.protocol === 'file:'; } catch (_) { return false; }
@@ -993,6 +1174,7 @@ function loadCourseOfferingsIndex() {
             const byCode = new Map();
             if (!text) {
                 window.courseOfferingsByCode = byCode;
+                await schedulePromise;
                 return byCode;
             }
             const lines = text.split(/\r?\n/);
@@ -1001,7 +1183,7 @@ function loadCourseOfferingsIndex() {
                 if (!line) continue;
                 try {
                     const obj = JSON.parse(line);
-                    const id = obj && obj.course_id ? String(obj.course_id) : '';
+                    const id = obj && obj.course_id ? String(obj.course_id).replace(/\s+/g, '').toUpperCase() : '';
                     if (!id) continue;
                     const termsArr = Array.isArray(obj.last_offered_terms) ? obj.last_offered_terms : [];
                     const set = new Set();
@@ -1015,6 +1197,7 @@ function loadCourseOfferingsIndex() {
                 }
             }
             window.courseOfferingsByCode = byCode;
+            await schedulePromise;
             return byCode;
         })();
 
@@ -1029,9 +1212,14 @@ if (typeof window !== 'undefined') {
         try {
             const ctName = window.currentTermName || '';
             const ctCode = window.currentTermCode || '';
+            const normalizedCode = String(code || '').replace(/\s+/g, '').toUpperCase();
+            const scheduled = window.currentTermScheduledCourseIds;
+            if (scheduled && typeof scheduled.has === 'function') {
+                return scheduled.has(normalizedCode);
+            }
             const idx = window.courseOfferingsByCode;
             if ((!ctName && !ctCode) || !idx) return true; // if unknown/unloaded, don't filter out
-            const set = idx.get(String(code)) || null;
+            const set = idx.get(normalizedCode) || null;
             if (!set) return true;
             return (ctCode && set.has(ctCode)) || (ctName && set.has(ctName));
         } catch (_) {
@@ -1040,8 +1228,305 @@ if (typeof window !== 'undefined') {
     };
 }
 
+// Normalize course codes at the boundary shared by the global course-page
+// index, transcript imports, and stored curricula. Keep this helper private so
+// it cannot collide with the plan importer's stricter code validator.
+function normalizeGlobalCourseDefinitionCode(value) {
+    try {
+        let raw = value;
+        if (raw && typeof raw === 'object') {
+            if (raw.code != null) raw = raw.code;
+            else if (raw.course_id != null) raw = raw.course_id;
+            else raw = String(raw.Major || '') + String(raw.Code || '');
+        }
+        return String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
+    } catch (_) {
+        return '';
+    }
+}
+
+function globalCourseDefinitionNumber(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const normalized = (typeof value === 'string') ? value.trim().replace(',', '.') : value;
+    if (normalized === '') return null;
+    const number = Number(normalized);
+    return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function globalCourseDefinitionText(value) {
+    return (typeof value === 'string') ? value.trim().replace(/\s+/g, ' ') : '';
+}
+
+function globalCourseDefinitionOverrideValue(overrides, keys) {
+    if (!overrides || typeof overrides !== 'object') return undefined;
+    for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
+        if (Object.prototype.hasOwnProperty.call(overrides, key)) return overrides[key];
+    }
+    return undefined;
+}
+
+// Convert one all_coursepage_info row into the same shape used by program
+// catalogs. The marker deliberately distinguishes this internal fallback from
+// a real catalog/custom-course row, and `unknown` keeps it out of every
+// program requirement pool until a selected catalog supplies a real type.
+function catalogRecordFromGlobalCoursePageInfo(info, overrides) {
+    if (!info || typeof info !== 'object') return null;
+
+    const sourceCode = info.course_id ||
+        (String(info.subj_code || info.parsed_subj_code || '') +
+            String(info.crse_numb || info.parsed_crse_numb || ''));
+    const normalizedCode = normalizeGlobalCourseDefinitionCode(sourceCode);
+    const codeMatch = normalizedCode.match(/^([A-Z]{1,12})(\d[A-Z0-9]*)$/);
+    if (!codeMatch) return null;
+
+    const offered = Array.isArray(info.last_offered_terms) ? info.last_offered_terms : [];
+    let offeredTitle = '';
+    let offeredSuCredit = null;
+    for (let i = 0; i < offered.length; i++) {
+        const row = offered[i] || {};
+        if (!offeredTitle) offeredTitle = globalCourseDefinitionText(row.course_name);
+        if (offeredSuCredit === null) offeredSuCredit = globalCourseDefinitionNumber(row.su_credit);
+        if (offeredTitle && offeredSuCredit !== null) break;
+    }
+
+    const overrideTitle = globalCourseDefinitionText(globalCourseDefinitionOverrideValue(
+        overrides, ['title', 'Course_Name', 'courseName', 'course_name', 'name']
+    ));
+    const title = globalCourseDefinitionText(info.title) || offeredTitle || overrideTitle || normalizedCode;
+
+    const pageSuCredit = globalCourseDefinitionNumber(info.su_credits);
+    const overrideSuCredit = globalCourseDefinitionNumber(globalCourseDefinitionOverrideValue(
+        overrides, ['suCredits', 'SU_credit', 'suCredit', 'su_credits']
+    ));
+    const suCredit = pageSuCredit !== null
+        ? pageSuCredit : (offeredSuCredit !== null ? offeredSuCredit : (overrideSuCredit !== null ? overrideSuCredit : 0));
+
+    const pageEcts = globalCourseDefinitionNumber(info.ects);
+    const overrideEcts = globalCourseDefinitionNumber(globalCourseDefinitionOverrideValue(
+        overrides, ['ects', 'ECTS']
+    ));
+    const ects = pageEcts !== null ? pageEcts : (overrideEcts !== null ? overrideEcts : 0);
+    const engineering = globalCourseDefinitionNumber(info.engineering);
+    const basicScience = globalCourseDefinitionNumber(info.basic_science);
+    // `faculty` is catalog identity metadata from the hydrated scrape. It is
+    // safe to carry across program contexts, unlike Faculty_Course membership,
+    // which intentionally remains contextual and therefore defaults to No.
+    const faculty = globalCourseDefinitionText(info.faculty).toUpperCase();
+
+    return {
+        Major: codeMatch[1],
+        Code: codeMatch[2],
+        Course_Name: title,
+        ECTS: String(ects),
+        Engineering: engineering !== null ? engineering : 0,
+        Basic_Science: basicScience !== null ? basicScience : 0,
+        SU_credit: String(suCredit),
+        Faculty: faculty,
+        Faculty_Course: 'No',
+        EL_Type: 'unknown',
+        __globalCourseDefinition: true
+    };
+}
+
+// Synchronous by design: callers which already loaded the index can resolve a
+// single definition without another promise boundary. Use
+// appendGlobalCourseDefinitions for the lazy-loading batch path.
+function resolveGlobalCourseDefinition(code, overrides) {
+    try {
+        if (typeof window === 'undefined') return null;
+        const normalizedCode = normalizeGlobalCourseDefinitionCode(code);
+        if (!normalizedCode) return null;
+        const index = window.coursePageInfoByCode;
+        if (!index || typeof index.get !== 'function') return null;
+        return catalogRecordFromGlobalCoursePageInfo(index.get(normalizedCode), overrides);
+    } catch (_) {
+        return null;
+    }
+}
+
+const GLOBAL_COURSE_METADATA_STORAGE_KEY = 'globalCourseMetadata';
+
+function getPlanStorageSessionId(storage) {
+    try {
+        if (storage && typeof storage.getSessionPlanId === 'function') {
+            return storage.getSessionPlanId() || null;
+        }
+    } catch (_) {}
+    return null;
+}
+
+function globalCourseMetadataFromRecord(record) {
+    if (!record || typeof record !== 'object') return null;
+    const code = normalizeGlobalCourseDefinitionCode(record);
+    if (!/^([A-Z]{1,12})(\d[A-Z0-9]*)$/.test(code)) return null;
+    const title = globalCourseDefinitionText(globalCourseDefinitionOverrideValue(
+        record, ['title', 'Course_Name', 'courseName', 'course_name', 'name']
+    )) || code;
+    const suCredits = globalCourseDefinitionNumber(globalCourseDefinitionOverrideValue(
+        record, ['suCredits', 'SU_credit', 'suCredit', 'su_credits']
+    ));
+    const ects = globalCourseDefinitionNumber(globalCourseDefinitionOverrideValue(
+        record, ['ects', 'ECTS']
+    ));
+    return {
+        code,
+        title,
+        suCredits: suCredits !== null ? suCredits : 0,
+        ects: ects !== null ? ects : 0
+    };
+}
+
+// Keep a small, plan-scoped metadata snapshot for globally resolved transcript
+// courses. The shipped index remains authoritative; this snapshot only fills
+// missing fields and prevents a transient index failure from changing credits
+// or erasing the saved occurrence on the next reload.
+function getStoredGlobalCourseMetadata() {
+    const byCode = new Map();
+    try {
+        const ps = (typeof window !== 'undefined') ? window.planStorage : null;
+        let raw = null;
+        if (ps && typeof ps.getItem === 'function') {
+            const planId = getPlanStorageSessionId(ps);
+            if (!planId) return byCode;
+            try { raw = ps.getItem(GLOBAL_COURSE_METADATA_STORAGE_KEY, planId); } catch (_) { return byCode; }
+        } else {
+            try { raw = localStorage.getItem(GLOBAL_COURSE_METADATA_STORAGE_KEY); } catch (_) {}
+        }
+        const parsed = JSON.parse(raw || '[]');
+        if (!Array.isArray(parsed)) return byCode;
+        for (let i = 0; i < parsed.length && i < 2000; i++) {
+            const metadata = globalCourseMetadataFromRecord(parsed[i]);
+            if (metadata) byCode.set(metadata.code, metadata);
+        }
+    } catch (_) {}
+    return byCode;
+}
+
+function rememberGlobalCourseDefinition(record) {
+    const metadata = globalCourseMetadataFromRecord(record);
+    if (!metadata) return null;
+    try {
+        const byCode = getStoredGlobalCourseMetadata();
+        byCode.set(metadata.code, metadata);
+        const rows = Array.from(byCode.values()).sort(function(a, b) {
+            return a.code.localeCompare(b.code);
+        });
+        const value = JSON.stringify(rows);
+        const ps = (typeof window !== 'undefined') ? window.planStorage : null;
+        if (ps && typeof ps.setItem === 'function') {
+            const planId = getPlanStorageSessionId(ps);
+            if (!planId) return metadata;
+            ps.setItem(GLOBAL_COURSE_METADATA_STORAGE_KEY, value, planId);
+        } else if (typeof localStorage !== 'undefined') {
+            localStorage.setItem(GLOBAL_COURSE_METADATA_STORAGE_KEY, value);
+        }
+    } catch (_) {}
+    return metadata;
+}
+
+function findLoadedCatalogDefinition(courseData, normalizedCode) {
+    try {
+        if (typeof window !== 'undefined' && typeof window.getInfo === 'function') {
+            const resolved = window.getInfo(normalizedCode, Array.isArray(courseData) ? courseData : []);
+            if (resolved) return resolved;
+        }
+    } catch (_) {}
+
+    // The module bridge may not have executed yet. Mirror its precedence so
+    // callers still cannot insert a global fallback ahead of a real record.
+    let internalFallback = null;
+    const lists = [Array.isArray(courseData) ? courseData : []];
+    try {
+        const cur = (typeof window !== 'undefined') ? window.curriculum : null;
+        if (cur && cur.doubleMajor && Array.isArray(cur.doubleMajorCourseData)) {
+            lists.push(cur.doubleMajorCourseData);
+        }
+        if (cur && Array.isArray(cur.minors) && cur.minorCourseDataByCode) {
+            for (let i = 0; i < cur.minors.length; i++) {
+                const list = cur.minorCourseDataByCode[cur.minors[i]];
+                if (Array.isArray(list)) lists.push(list);
+            }
+        }
+    } catch (_) {}
+
+    for (let li = 0; li < lists.length; li++) {
+        const list = lists[li];
+        for (let i = 0; i < list.length; i++) {
+            const record = list[i];
+            if (!record || normalizeGlobalCourseDefinitionCode(record) !== normalizedCode) continue;
+            if (record.__globalCourseDefinition) {
+                if (!internalFallback) internalFallback = record;
+                continue;
+            }
+            return record;
+        }
+    }
+    return internalFallback;
+}
+
+function normalizedGlobalOverrides(overridesByCode) {
+    const normalized = new Map();
+    if (!overridesByCode || typeof overridesByCode !== 'object') return normalized;
+    try {
+        if (typeof overridesByCode.forEach === 'function' && typeof overridesByCode.get === 'function') {
+            overridesByCode.forEach(function(value, key) {
+                const code = normalizeGlobalCourseDefinitionCode(key);
+                if (code) normalized.set(code, value);
+            });
+            return normalized;
+        }
+        Object.keys(overridesByCode).forEach(function(key) {
+            const code = normalizeGlobalCourseDefinitionCode(key);
+            if (code) normalized.set(code, overridesByCode[key]);
+        });
+    } catch (_) {}
+    return normalized;
+}
+
+// Lazily load the global index once, then append definitions only for the
+// explicitly requested codes. Existing primary/DM/minor/user-custom records
+// always win, and no index-wide list is ever merged into courseData.
+async function appendGlobalCourseDefinitions(courseData, codes, overridesByCode) {
+    const added = [];
+    const missing = [];
+    if (!Array.isArray(courseData)) return { added, missing };
+
+    let requested;
+    if (typeof codes === 'string' || !codes || typeof codes[Symbol.iterator] !== 'function') {
+        requested = [codes];
+    } else {
+        requested = Array.from(codes);
+    }
+    const normalizedCodes = [];
+    const seen = new Set();
+    for (let i = 0; i < requested.length; i++) {
+        const code = normalizeGlobalCourseDefinitionCode(requested[i]);
+        if (!code || seen.has(code)) continue;
+        seen.add(code);
+        normalizedCodes.push(code);
+    }
+    if (!normalizedCodes.length) return { added, missing };
+
+    try { await loadCoursePageInfoIndex(); } catch (_) {}
+    const overrides = normalizedGlobalOverrides(overridesByCode);
+    for (let i = 0; i < normalizedCodes.length; i++) {
+        const code = normalizedCodes[i];
+        if (findLoadedCatalogDefinition(courseData, code)) continue;
+        const definition = resolveGlobalCourseDefinition(code, overrides.get(code));
+        if (!definition) {
+            missing.push(code);
+            continue;
+        }
+        courseData.push(definition);
+        added.push(definition);
+    }
+    return { added, missing };
+}
+
 // Load the full course-page scrape info (courses/all_coursepage_info.jsonl) and
-// index it by course_id. This powers the "Details" button on course cards.
+// index it by normalized course_id. This powers course-card details and the
+// contained global-definition fallback above.
 function loadCoursePageInfoIndex() {
     try {
         if (typeof window === 'undefined') return Promise.resolve(null);
@@ -1053,17 +1538,31 @@ function loadCoursePageInfoIndex() {
                     if (window.__courseOfferingsJsonlText) return window.__courseOfferingsJsonlText;
                 } catch (_) {}
 
-                // Prefer synchronous XHR under file:// where fetch can be blocked.
-                try {
-                    const xhr = new XMLHttpRequest();
-                    xhr.open('GET', './courses/all_coursepage_info.jsonl', false);
-                    xhr.overrideMimeType('application/json');
-                    xhr.send(null);
-                    if (xhr.status === 200 || xhr.status === 0) return xhr.responseText;
-                } catch (_) {}
+                const isFile = (() => {
+                    try { return typeof location !== 'undefined' && location && location.protocol === 'file:'; } catch (_) { return false; }
+                })();
 
+                // The cumulative file is large, so never block the main thread
+                // with synchronous XHR on http(s).
                 try {
                     const res = await fetch('./courses/all_coursepage_info.jsonl');
+                    if (res.ok) return await res.text();
+                } catch (_) {}
+
+                // Browsers commonly block fetch for local file:// pages. Keep
+                // the legacy synchronous fallback narrowly scoped to that mode.
+                if (isFile) {
+                    try {
+                        const xhr = new XMLHttpRequest();
+                        xhr.open('GET', './courses/all_coursepage_info.jsonl', false);
+                        xhr.overrideMimeType('application/json');
+                        xhr.send(null);
+                        if (xhr.status === 200 || xhr.status === 0) return xhr.responseText;
+                    } catch (_) {}
+                }
+
+                try {
+                    const res = await fetch('./courses/all_coursepage_info.jsonl', { cache: 'no-store' });
                     if (res.ok) return await res.text();
                 } catch (_) {}
                 return '';
@@ -1073,6 +1572,8 @@ function loadCoursePageInfoIndex() {
             const byCode = new Map();
             if (!text) {
                 window.coursePageInfoByCode = byCode;
+                // Do not permanently memoize a transient network/file failure.
+                window.__coursePageInfoPromise = null;
                 return byCode;
             }
             const lines = text.split(/\r?\n/);
@@ -1081,7 +1582,8 @@ function loadCoursePageInfoIndex() {
                 if (!line) continue;
                 try {
                     const obj = JSON.parse(line);
-                    const id = obj && obj.course_id ? String(obj.course_id) : '';
+                    const id = obj && obj.course_id
+                        ? normalizeGlobalCourseDefinitionCode(obj.course_id) : '';
                     if (!id) continue;
                     if (!byCode.has(id)) byCode.set(id, obj);
                 } catch (_) {
@@ -1089,6 +1591,7 @@ function loadCoursePageInfoIndex() {
                 }
             }
             window.coursePageInfoByCode = byCode;
+            if (!byCode.size) window.__coursePageInfoPromise = null;
             return byCode;
         })();
 
@@ -1100,6 +1603,10 @@ function loadCoursePageInfoIndex() {
 
 if (typeof window !== 'undefined') {
     window.loadCoursePageInfoIndex = loadCoursePageInfoIndex;
+    window.resolveGlobalCourseDefinition = resolveGlobalCourseDefinition;
+    window.appendGlobalCourseDefinitions = appendGlobalCourseDefinitions;
+    window.getStoredGlobalCourseMetadata = getStoredGlobalCourseMetadata;
+    window.rememberGlobalCourseDefinition = rememberGlobalCourseDefinition;
 }
 
 // Load the derived course instructor history index
@@ -1235,24 +1742,23 @@ function adjustSemesterTotals(semesterObj, courseInfo, multiplier) {
 
 function serializator(curriculum)
 {
-    let result = '[';
-    for (let i = 0; i < curriculum.semesters.length; i++)
-    {
-        result = result + '[';
-        for (let n = 0; n < curriculum.semesters[i].courses.length; n++)
-        {
-            result = result + '"' + curriculum.semesters[i].courses[n].code + '"';
-            if((n+1) !=curriculum.semesters[i].courses.length) result = result + ','
-        }
-        result = result + ']';
-        if((i+1) != curriculum.semesters.length) result = result + ",";
-    }
-    result = result + ']';
-    return result;
+    const semesters = curriculum && Array.isArray(curriculum.semesters) ? curriculum.semesters : [];
+    return JSON.stringify(semesters.map((semester) =>
+        (semester && Array.isArray(semester.courses) ? semester.courses : [])
+            .map((course) => String((course && course.code) || ''))));
 }
 
-function grades_serializator()
+function grades_serializator(curriculum)
 {
+    // The course model is authoritative. In particular, opening the grade
+    // picker temporarily replaces the DOM text with dropdown markup; serializing
+    // that transient UI used to turn a saved F into a blank grade on reload.
+    if (curriculum && Array.isArray(curriculum.semesters)) {
+        return JSON.stringify(curriculum.semesters.map((semester) =>
+            (semester.courses || []).map((course) => String(course.grade || ''))));
+    }
+
+    // Legacy fallback for callers that do not yet have a curriculum instance.
     let containers = document.querySelectorAll('.container_semester');
 
 
@@ -1273,46 +1779,102 @@ function grades_serializator()
     return result;
 }
 
-function dates_serializator()
+function grading_bases_serializator(curriculum)
 {
-    let result = '[';
-    let dates = document.querySelectorAll('.date');
-    dates.forEach((date)=>{
-        try
-        {
-            let date_val = date.querySelector('p').innerHTML;
-            result = result + '"' + date_val + '"' + ',';
-        }
-        catch
-        {
-            result = result + '"' + '...' + '"' + ',';
-        }
-    })
-    if(result[result.length-1] == ',') result = result.slice(0,-1)
-    result = result + ']';
-    return result;
+    const semesters = curriculum && Array.isArray(curriculum.semesters) ? curriculum.semesters : [];
+    return JSON.stringify(semesters.map((semester) =>
+        (semester && Array.isArray(semester.courses) ? semester.courses : [])
+            .map((course) => {
+                const basis = String((course && course.gradingBasis) || '').trim().toLowerCase();
+                return basis === 'letter' || basis === 'satisfactory' ? basis : 'unknown';
+            })));
+}
+
+function dates_serializator(curriculum)
+{
+    // The model is authoritative. While a term is being edited, the UI
+    // temporarily replaces its <p> with a <select>; reading that transient DOM
+    // used to persist "..." if the tab was backgrounded at that moment.
+    const semesters = curriculum && Array.isArray(curriculum.semesters)
+        ? curriculum.semesters : null;
+    const dates = semesters
+        ? semesters.map((semester) => String((semester && semester.termName) || ''))
+        : Array.from(document.querySelectorAll('.date')).map((date) => {
+            const label = date.querySelector('p');
+            return label ? String(label.textContent || '') : '';
+        });
+    return JSON.stringify(dates);
+}
+
+function term_codes_serializator(curriculum)
+{
+    const semesters = curriculum && Array.isArray(curriculum.semesters)
+        ? curriculum.semesters : [];
+    return JSON.stringify(semesters.map((semester) => {
+        // Preserve a valid stored code even when it conflicts with the label.
+        // Keeping both fields is what lets semesterTermCode fail closed after a
+        // reload instead of silently choosing one side of corrupted metadata.
+        const stored = String((semester && semester.termCode) || '').trim();
+        if (/^\d{4}(01|02|03)$/.test(stored)) return stored;
+        return semesterTermCode(semester && (semester.termName || semester.date || semester.term));
+    }));
 }
 
 function reload(curriculum, course_data)
 {
-    let data, grades, dates;
+    let data, grades, gradingBases, dates, termCodes;
     const ps = (typeof window !== 'undefined') ? window.planStorage : null;
+    const planId = getPlanStorageSessionId(ps);
     const get = (k) => {
-        try { return ps ? ps.getItem(k) : localStorage.getItem(k); } catch (_) {}
+        if (ps && typeof ps.getItem === 'function') {
+            if (!planId) return null;
+            try { return ps.getItem(k, planId); } catch (_) { return null; }
+        }
         try { return localStorage.getItem(k); } catch (_) {}
         return null;
     };
     try{data = JSON.parse(get("curriculum"));} catch{}
     try{grades = JSON.parse(get("grades"));}   catch{}
+    try{gradingBases = JSON.parse(get("gradingBases"));} catch{}
     try{dates = JSON.parse(get("dates"))}      catch{}
+    try{termCodes = JSON.parse(get("termCodes"))} catch{}
     if(data)
     {
         for(let i = 0; i < data.length; i++)
         {
-            if(grades && dates)
-                createSemeter(true, data[i], curriculum, course_data, grades[i], dates[i]);
-            else
-                createSemeter(true, data[i], curriculum, course_data);
+            const persistedTermCode = Array.isArray(termCodes) && typeof termCodes[i] === 'string'
+                && /^\d{4}(01|02|03)$/.test(String(termCodes[i]).trim())
+                ? String(termCodes[i]).trim() : '';
+            const persistedTermName = dates && typeof dates[i] === 'string'
+                ? dates[i]
+                : (persistedTermCode ? termCodeToName(persistedTermCode) : '');
+            // Each persisted field is optional in imported/legacy plans. Keep
+            // fields that are present instead of dropping grades merely because
+            // the plan did not include custom semester labels.
+            const created = createSemeter(
+                true,
+                data[i],
+                curriculum,
+                course_data,
+                grades && Array.isArray(grades[i]) ? grades[i] : [],
+                persistedTermName,
+                gradingBases && Array.isArray(gradingBases[i]) ? gradingBases[i] : [],
+            );
+
+            // Dates remain the human-readable label. The optional parallel
+            // termCodes array is the stable identity boundary introduced after
+            // legacy plans had already been saved, so its absence is expected.
+            if (created && Array.isArray(termCodes) && typeof termCodes[i] === 'string') {
+                try {
+                    const semesterElement = created.querySelector('.semester');
+                    const semester = semesterElement && curriculum
+                        && typeof curriculum.getSemester === 'function'
+                        ? curriculum.getSemester(semesterElement.id) : null;
+                    if (semester) {
+                        semester.termCode = persistedTermCode;
+                    }
+                } catch (_) {}
+            }
 
         }
     }
@@ -1320,10 +1882,14 @@ function reload(curriculum, course_data)
 
 function getAncestor(element, ancestor_class)
 {
-    let parent = element.parentNode;
+    let parent = element ? element.parentNode : null;
     while(parent)
     {
-        if(parent.classList.contains(ancestor_class))
+        // Not every node up the chain is an Element: the walk ends at `document`,
+        // which has no classList, so an unmatched search used to throw a
+        // TypeError instead of returning null. That fired on any drag dropped
+        // outside a semester.
+        if(parent.classList && parent.classList.contains(ancestor_class))
         {return parent;}
         else{parent = parent.parentNode;}
     }

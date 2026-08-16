@@ -6,8 +6,10 @@ import datetime
 import re
 import argparse
 import subprocess
+import tempfile
 
 from term_utils import generate_terms
+from suis_page_validation import require_matching_admit_term, validate_suis_term_code
 
 REQUIREMENTS_DIR = 'requirements'
 BASE = 'https://suis.sabanciuniv.edu/prod/'
@@ -28,6 +30,17 @@ PROGRAM_CODES = {
     'BAPSY': 'PSY',
     'BAVACD': 'VACD',
 }
+
+EXPECTED_MAJORS = tuple(sorted(PROGRAM_CODES.values()))
+REQUIRED_CREDIT_FIELDS = ('university', 'required', 'core', 'area', 'free')
+REQUIRED_NUMERIC_FIELDS = REQUIRED_CREDIT_FIELDS + ('ects', 'total', 'humRequired')
+ENGINEERING_REQUIREMENT_MAJORS = frozenset({'CS', 'EE', 'IE', 'MAT', 'ME'})
+INTERNSHIP_MAJORS = frozenset({'BIO', 'CS', 'DSA', 'EE', 'IE', 'MAT', 'ME'})
+REQUIREMENT_GROUP_RULES = frozenset({
+    'faculty', 'credits', 'oneOf', 'entryGatedOneOf', 'languageCap',
+    'levelCredits', 'specialAny', 'prefixSpan', 'offeringCredits',
+    'offeringCount', 'advancedCount',
+})
 
 _session = None
 
@@ -52,6 +65,7 @@ def fetch_requirements(program, term, offline_dir=None, timeout_s: float = 30.0)
     Returns a dict with ``ects`` and ``total`` keys if found.
     """
 
+    term = validate_suis_term_code(term)
     html = None
     major = PROGRAM_CODES.get(program, program)
     if offline_dir:
@@ -71,6 +85,7 @@ def fetch_requirements(program, term, offline_dir=None, timeout_s: float = 30.0)
         html = resp.text
 
     soup = BeautifulSoup(html, 'lxml')
+    require_matching_admit_term(soup, term)
     # Summary table usually has class "t_mezuniyet"; fall back to the first
     # table containing "SUMMARY OF DEGREE" text.
     table = soup.find('table', class_='t_mezuniyet')
@@ -132,7 +147,343 @@ def fetch_requirements(program, term, offline_dir=None, timeout_s: float = 30.0)
         if major == 'PSY' and re.search(r'PSY\s*395', text, re.I):
             req['internshipCourse'] = 'PSY300'
 
+    # The enumerable Core-Elective pools (VACD/PSIR) drift term-to-term as courses
+    # are added/removed, so scrape their live member lists / minimums / overflow
+    # off the page. special_requirements() merges these into the hand-authored
+    # group skeleton (which owns the app-semantic fields the page doesn't carry:
+    # flag, rule, base, exclusivePairs). Stashed under a private key main() pops
+    # before writing the record. Only attached to a non-empty record so it can't
+    # mask an otherwise-failed parse (the emptiness check in main).
+    if req:
+        req['_pools'] = parse_core_pools(soup)
+
     return req
+
+
+# Course code like "HART 292" / "VA302" -> ("HART","292"). The catalog prints a
+# space between subject and number; the app stores them joined.
+_CODE_RE = re.compile(r"\b([A-Z]{2,4})\s?(\d{3})\b")
+
+
+def _pool_member_codes(table):
+    """Course code of each member row in a pool's course table. The leading cell
+    is often empty or a '*' note marker, so scan cells left-to-right and take the
+    first code; the header row has none and is skipped naturally."""
+    out = []
+    for tr in table.find_all('tr'):
+        for td in tr.find_all('td'):
+            m = _CODE_RE.search(td.get_text(' ', strip=True))
+            if m:
+                out.append(m.group(1) + m.group(2))
+                break
+    return out
+
+
+def parse_core_pools(soup):
+    """Parse the enumerable Core-Elective pools off a degree-detail page.
+
+    Returns an ORDERED list of ``{"poolno", "name", "min", "overflowTo",
+    "members"}`` — one per ``Core Electives I/II (Name)`` section. Each such
+    section is a ``table.t_kategori`` heading followed (until the next heading)
+    by a rule-line table (``Min. N SU credits …`` + the overflow sentence) and a
+    member table. Empty for programs without these enumerated pools. The page
+    carries only this volatile data; the rule type / flag / base stay
+    hand-authored (see PROGRAM_GROUPS)."""
+    tables = soup.find_all('table')
+    kat = [i for i, t in enumerate(tables) if 't_kategori' in (t.get('class') or [])]
+    pools = []
+    for k, start in enumerate(kat):
+        heading = re.sub(r"\s+", " ", tables[start].get_text(' ', strip=True))
+        m = re.match(r"Core Electives\s+(I{1,3})\b\s*\(([^)]*)\)", heading)
+        if not m:
+            continue
+        poolno, name = m.group(1), m.group(2).strip()
+        end = kat[k + 1] if k + 1 < len(kat) else len(tables)
+        minimum = overflow = None
+        members = []
+        for t in tables[start + 1:end]:
+            txt = re.sub(r"\s+", " ", t.get_text(' ', strip=True))
+            if minimum is None:
+                mm = re.search(r"Min(?:imum)?\.?\s*(\d+)\s*SU credits", txt, re.I)
+                if mm:
+                    minimum = int(mm.group(1))
+            if overflow is None:
+                ov = re.search(r"counted towards\s+(Area|Free)\s+Elective", txt, re.I)
+                if ov:
+                    overflow = ov.group(1).lower()
+            if 'Course Name' in txt and 'SU Credits' in txt:
+                members += _pool_member_codes(t)
+        pools.append({"poolno": poolno, "name": name, "min": minimum,
+                      "overflowTo": overflow, "members": members})
+    return pools
+
+def hum_required(major, university):
+    """HUM graduation requirement, materialized as data so the app's rule tables
+    don't hard-list it (flags 12/13). FASS/SBS programs — university credit 44 —
+    require one 2xx AND one 3xx HUM (returns 2); the FENS programs (41) require
+    one. Only CS's SUIS states the single-HUM rule explicitly, so the other FENS
+    programs carry none (0) rather than an unverified check. The `university == 44`
+    split matches the two-HUM set exactly (the extra 3 SU is that second HUM)."""
+    if university == 44:
+        return 2
+    return 1 if major == "CS" else 0
+
+
+# Hand-authored special-requirement SKELETON, materializing the app's constants
+# (s_curriculum.js) as data. See docs/requirement-groups-design.md.
+# This carries the app-semantic fields the SUIS page does NOT state — rule type,
+# flag (an app message id), base, exclusivePairs. For the enumerable Core-Elective
+# pools (VACD/PSIR, rule "credits"), the VOLATILE data — member list, min credits,
+# overflowTo — is scraped off the page at fetch time and supersedes the copies here
+# (parse_core_pools + _merge_scraped_pool); the copies below are the fallback used
+# when the parse finds no pool. The non-pool rules (EE/ME/ECON/MAN/PSY/DSA) are not
+# enumerated pools, so they stay fully hand-authored.
+#   groups     — the program's ORDERED special rules (first-unmet-wins). Each is a
+#                named subset of a base type, OR the {"rule": "faculty"} marker that
+#                splices the cross-cutting faculty ticker in at its position.
+#   facultyReq — the faculty-course ticker minimums (a course carries the
+#                `Faculty_Course` tag alongside its base type). All programs have it.
+# Group fields: base (the base type / cascade+display); overflowTo (where credits
+# beyond `min` go — from "The extra courses taken from this pool are directly counted
+# towards [X] requirements", §11; scraped for the credits pools); requireBase
+# (measure only base-effective credit — the pools do, per that same overflow rule);
+# rule + its params (see groupRules in s_curriculum.js).
+_FACULTY = {"rule": "faculty"}
+
+
+def _lang_cap(major):
+    return {
+        "id": "lang_cap", "label": "Free Electives — beginning/basic language cap",
+        "base": "free", "rule": "languageCap", "max": 2, "flag": 40,
+        "suis": major + " > Free Electives (language cap)",
+    }
+
+
+def _core_pool(program, gid, label, poolno, members, minimum, flag, pairs=None):
+    g = {
+        "id": gid, "label": label, "base": "core", "overflowTo": "area",
+        "rule": "credits", "min": minimum, "requireBase": True, "members": members,
+        "flag": flag, "suis": program + " > Core Electives " + poolno + " (" + label + ")",
+    }
+    if pairs:
+        g["exclusivePairs"] = pairs
+    return g
+
+
+PROGRAM_GROUPS = {
+    "EE": [
+        _FACULTY,
+        {"id": "ee400", "label": "400-level EE requirement", "base": "core", "rule": "levelCredits",
+         "prefix": "EE4", "category": "Core", "min": 9, "flag": 23, "suis": "EE > 400-level EE requirement"},
+        {"id": "special_area", "label": "Area electives — special topics", "base": "area", "rule": "specialAny",
+         "members": ["CS300", "CS401", "CS412", "ME303", "PHYS302", "PHYS303"],
+         "altPrefix": "EE48", "altCategory": "Area", "flag": 24, "suis": "EE > Area electives (special topics)"},
+    ],
+    "ME": [
+        {"id": "cs_alt", "label": "2025 curriculum — CS404/CS412", "base": "required", "rule": "entryGatedOneOf",
+         "minTerm": 202501, "members": ["CS404", "CS412"], "flag": 2, "suis": "ME > 2025 curriculum (CS404/CS412)"},
+        _FACULTY,
+    ],
+    "ECON": [
+        {"id": "math_req", "label": "Mathematics Requirement", "base": "required", "rule": "oneOf",
+         "members": ["MATH201", "MATH202", "MATH204", "MATH212"], "flag": 25, "suis": "ECON > Mathematics Requirement"},
+        _FACULTY,
+        _lang_cap("ECON"),
+    ],
+    "MAN": [
+        _FACULTY,
+        {"id": "core_areas", "label": "Core Electives — 6 areas", "base": "core", "rule": "prefixSpan",
+         "category": "core", "prefixes": ["ACC", "FIN", "MGMT", "MKTG", "OPIM", "ORG"], "min": 6,
+         "flag": 35, "suis": "MAN > Core Electives (6 areas)"},
+        {"id": "area_areas", "label": "Area Electives — 5 areas", "base": "area", "rule": "prefixSpan",
+         "category": "area", "prefixes": ["ACC", "FIN", "MKTG", "OPIM", "ORG"], "min": 5,
+         "flag": 36, "suis": "MAN > Area Electives (5 areas)"},
+        {"id": "free_fassfens", "label": "Free Electives — 9cr FASS/FENS", "base": "free", "rule": "offeringCredits",
+         "faculties": ["FASS", "FENS"], "min": 9, "flag": 37, "suis": "MAN > Free Electives (9cr FASS/FENS)"},
+        _lang_cap("MAN"),
+    ],
+    "PSIR": [
+        _FACULTY,
+        _core_pool("PSIR", "core_polisci", "Political Science", "I",
+                   ["LAW312", "POLS251", "POLS353", "POLS404", "POLS455", "POLS483", "POLS493", "SOC201"], 12, 33),
+        _core_pool("PSIR", "core_ir", "International Relations", "II",
+                   ["CONF400", "IR301", "IR342", "IR391", "IR394", "IR405", "IR489", "LAW311", "POLS492"], 12, 34),
+        _lang_cap("PSIR"),
+    ],
+    "PSY": [
+        {"id": "philosophy", "label": "Philosophy Requirement", "base": "required", "rule": "oneOf",
+         "members": ["PHIL300", "PHIL301"], "flag": 26, "suis": "PSY > Philosophy Requirement"},
+        _FACULTY,
+        {"id": "psy_advanced", "label": "Area Electives — 2 PSY 4XX", "base": "area", "rule": "advancedCount",
+         "min": 2, "flag": 39, "suis": "PSY > Area Electives (2 PSY 4XX)"},
+        _lang_cap("PSY"),
+    ],
+    "VACD": [
+        _FACULTY,
+        _core_pool("VACD", "core_arthistory", "Art/Design History", "I",
+                   ["HART292", "HART293", "HART380", "HART413", "HART426", "VA315", "VA420", "VA430"], 9, 30),
+        _core_pool("VACD", "core_skill", "Skill Courses", "II",
+                   ["VA202", "VA204", "VA234", "VA302", "VA304", "VA402", "VA404"], 12, 31,
+                   pairs=[["VA302", "VA304"], ["VA402", "VA404"]]),
+        _lang_cap("VACD"),
+    ],
+    "DSA": [
+        _FACULTY,
+        {"id": "core_fens", "label": "Core Electives — 3 FENS", "base": "core", "rule": "offeringCount",
+         "faculty": "FENS", "min": 3, "flag": 27, "suis": "DSA > Core Electives (3 FENS)"},
+        {"id": "core_fass", "label": "Core Electives — 3 FASS", "base": "core", "rule": "offeringCount",
+         "faculty": "FASS", "min": 3, "flag": 28, "suis": "DSA > Core Electives (3 FASS)"},
+        {"id": "core_sbs", "label": "Core Electives — 3 SBS", "base": "core", "rule": "offeringCount",
+         "faculty": "SBS", "min": 3, "flag": 29, "suis": "DSA > Core Electives (3 SBS)"},
+    ],
+}
+PROGRAM_FACULTY_REQ = {
+    "CS": {"total": 5, "math": 2, "fens": 3},
+    "IE": {"total": 5, "math": 2, "fens": 3},
+    "MAT": {"total": 5, "math": 2, "fens": 3},
+    "BIO": {"total": 5, "math": 2, "fens": 3},
+    "EE": {"total": 5, "math": 2, "fens": 3},
+    "ME": {"total": 5, "math": 2, "fens": 3},
+    "ECON": {"total": 5, "fass": 3, "areas": 3},
+    "MAN": {"total": 5, "sbs": 2},
+    "PSIR": {"total": 5, "fass": 3, "areas": 3},
+    "PSY": {"total": 5, "fass": 3, "areas": 3},
+    "VACD": {"total": 5, "fass": 3, "areas": 3},
+    "DSA": {"total": 5, "fens": 1, "fass": 1, "sbs": 1},
+}
+
+
+def _pool_number_of(group):
+    m = re.search(r"Core Electives\s+(\w+)\s*\(", group.get("suis", ""))
+    return m.group(1) if m else None
+
+
+def _merge_scraped_pool(group, scraped_pools):
+    """Refresh an enumerable Core-Elective pool group with the live page data,
+    keeping the hand-authored app-semantics. Matched to a scraped pool by its
+    roman numeral (Core Electives I/II). On a parse miss the hand-authored members
+    are kept as the fallback, so a page-format change can't blank a pool."""
+    if group.get("rule") != "credits" or not scraped_pools:
+        return group
+    poolno = _pool_number_of(group)
+    match = next((p for p in scraped_pools if p.get("poolno") == poolno), None)
+    if not match or not match.get("members"):
+        return group
+    merged = dict(group)
+    merged["members"] = match["members"]
+    if match.get("min") is not None:
+        merged["min"] = match["min"]
+    if match.get("overflowTo"):
+        merged["overflowTo"] = match["overflowTo"]
+    return merged
+
+
+def special_requirements(major, scraped_pools=None):
+    """Groups + faculty ticker to merge into a program's requirements record.
+    The hand-authored PROGRAM_GROUPS is the skeleton (rule/flag/base/pairs); when
+    the scrape found the program's Core-Elective pools, their live members / min /
+    overflow supersede the hand-authored copies (see _merge_scraped_pool)."""
+    out = {}
+    if major in PROGRAM_GROUPS:
+        out["groups"] = [_merge_scraped_pool(g, scraped_pools) for g in PROGRAM_GROUPS[major]]
+    if major in PROGRAM_FACULTY_REQ:
+        out["facultyReq"] = PROGRAM_FACULTY_REQ[major]
+    return out
+
+
+def _is_nonnegative_int(value):
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def validate_requirement_record(major, data):
+    """Reject incomplete scraper output before it can replace known-good data."""
+    if major not in EXPECTED_MAJORS:
+        raise ValueError(f'unknown major {major!r}')
+    if not isinstance(data, dict):
+        raise ValueError('record is not an object')
+
+    for field in REQUIRED_NUMERIC_FIELDS:
+        if not _is_nonnegative_int(data.get(field)):
+            raise ValueError(f'{field} must be a non-negative integer')
+    if data['total'] <= 0 or data['ects'] <= 0:
+        raise ValueError('total and ects must be positive')
+    # The category values are independent minimums, not a decomposition that
+    # must always add up to Total.  EE/ME curricula with the four-credit
+    # MATH212 route legitimately leave a two-credit gap which students fill
+    # elsewhere while still meeting the separately published overall Total.
+    # A sum above Total is still contradictory and must never replace known-
+    # good data.
+    if sum(data[field] for field in REQUIRED_CREDIT_FIELDS) > data['total']:
+        raise ValueError('credit bucket minimums exceed total')
+    if data['humRequired'] not in (0, 1, 2):
+        raise ValueError('humRequired must be 0, 1, or 2')
+
+    faculty_req = data.get('facultyReq')
+    if not isinstance(faculty_req, dict) or not faculty_req:
+        raise ValueError('facultyReq is missing or empty')
+    for field, value in faculty_req.items():
+        if not isinstance(field, str) or not _is_nonnegative_int(value):
+            raise ValueError('facultyReq values must be non-negative integers')
+
+    if major in ENGINEERING_REQUIREMENT_MAJORS:
+        for field in ('science', 'engineering'):
+            if not _is_nonnegative_int(data.get(field)) or data[field] <= 0:
+                raise ValueError(f'{field} is missing for {major}')
+    else:
+        for field in ('science', 'engineering'):
+            if field in data and not _is_nonnegative_int(data[field]):
+                raise ValueError(f'{field} must be a non-negative integer')
+
+    if major in INTERNSHIP_MAJORS:
+        internship = data.get('internshipCourse')
+        if not isinstance(internship, str) or not internship.strip():
+            raise ValueError(f'internshipCourse is missing for {major}')
+
+    if major in PROGRAM_GROUPS:
+        groups = data.get('groups')
+        if not isinstance(groups, list) or not groups:
+            raise ValueError(f'groups are missing for {major}')
+    if 'groups' in data:
+        groups = data['groups']
+        if not isinstance(groups, list):
+            raise ValueError('groups must be a list')
+        for group in groups:
+            if not isinstance(group, dict) or group.get('rule') not in REQUIREMENT_GROUP_RULES:
+                raise ValueError('groups contain an unknown or malformed rule')
+
+
+def write_requirements_term_atomic(term, records):
+    """Write one complete term without exposing a truncated intermediate file."""
+    if set(records) != set(EXPECTED_MAJORS):
+        missing = sorted(set(EXPECTED_MAJORS) - set(records))
+        extra = sorted(set(records) - set(EXPECTED_MAJORS))
+        raise ValueError(f'incomplete major set (missing={missing}, extra={extra})')
+    for major in EXPECTED_MAJORS:
+        validate_requirement_record(major, records[major])
+
+    target = os.path.join(REQUIREMENTS_DIR, f'{term}.jsonl')
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode='w',
+            encoding='utf-8',
+            newline='\n',
+            dir=REQUIREMENTS_DIR,
+            prefix=f'.{term}.',
+            suffix='.tmp',
+            delete=False,
+        ) as fh:
+            temp_path = fh.name
+            for major in EXPECTED_MAJORS:
+                fh.write(json.dumps({"major": major, **records[major]}, ensure_ascii=False) + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(temp_path, target)
+        temp_path = None
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.unlink(temp_path)
+
 
 def main():
     parser = argparse.ArgumentParser(description="Fetch and regenerate graduation requirement summaries.")
@@ -145,31 +496,54 @@ def main():
     os.makedirs(REQUIREMENTS_DIR, exist_ok=True)
 
     if args.terms.strip():
-        terms = [t.strip() for t in args.terms.split(",") if t.strip()]
+        terms = [validate_suis_term_code(t) for t in args.terms.split(",") if t.strip()]
     else:
         # Generate terms dynamically (same date rules as the web app) so we do
         # not have to bump a hard-coded year cap each year.
-        terms = generate_terms(start_year=2019)
+        terms = [validate_suis_term_code(t) for t in generate_terms(start_year=2019)]
 
     if args.max_terms and args.max_terms > 0:
         terms = terms[: int(args.max_terms)]
 
+    failed_terms = []
     for term in terms:
         out = {}
+        failures = []
         for prog, major in PROGRAM_CODES.items():
             try:
                 data = fetch_requirements(prog, term, None, timeout_s=args.timeout)
                 if not data:
                     raise ValueError('no data parsed')
-            except Exception as e:
-                print(f"Failed {major} {term}: {e}")
-                data = {}
-            if data:
+                data['humRequired'] = hum_required(major, data.get('university'))
+                scraped_pools = data.pop('_pools', None)
+                data.update(special_requirements(major, scraped_pools))
+                validate_requirement_record(major, data)
                 out[major] = data
-        if out:
-            with open(os.path.join(REQUIREMENTS_DIR, f'{term}.jsonl'), 'w', encoding='utf-8') as f:
-                for major in sorted(out.keys()):
-                    f.write(json.dumps({"major": major, **out[major]}, ensure_ascii=False) + "\n")
+            except Exception as e:
+                failures.append((major, str(e)))
+                print(f"Failed {major} {term}: {e}")
+
+        if failures:
+            failed_terms.append(term)
+            print(
+                f"Skipped {term}: {len(failures)} of {len(EXPECTED_MAJORS)} programs failed; "
+                "the existing requirements file was preserved."
+            )
+            continue
+
+        try:
+            write_requirements_term_atomic(term, out)
+            print(f"Wrote complete requirements for {term} ({len(out)} programs).")
+        except Exception as e:
+            failed_terms.append(term)
+            print(f"Failed to publish {term}: {e}; the existing requirements file was preserved.")
+
+    if failed_terms:
+        print(
+            "Requirement refresh failed for: " + ", ".join(failed_terms) +
+            ". No incomplete term file was published."
+        )
+        return 1
 
     if not args.skip_minors:
         # Keep minors in sync with the same term set as major requirements.
@@ -201,7 +575,10 @@ def main():
                 check=True,
             )
         except Exception as e:
-            print(f"Warning: failed to fetch minors: {e}")
+            print(f"Failed to fetch minors: {e}")
+            return 1
+
+    return 0
 
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main())
