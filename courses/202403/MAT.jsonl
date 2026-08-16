@@ -94,7 +94,6 @@
 {"Major": "BIO", "Code": "421", "Course_Name": "Tissue Engineering", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "423", "Course_Name": "Neurobiology", "ECTS": "6", "Engineering": 2.0, "Basic_Science": 4.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "444", "Course_Name": "Bioengineering", "ECTS": "6", "Engineering": 4.0, "Basic_Science": 2.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
-{"Major": "BIO", "Code": "445", "Course_Name": "Plant Tissue Culture Techniques", "ECTS": "7", "Engineering": 3.0, "Basic_Science": 4.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "446", "Course_Name": "Biology of Aging", "ECTS": "6", "Engineering": 1.0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "452", "Course_Name": "Immunology", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "460", "Course_Name": "Evolution", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
@@ -188,7 +187,6 @@
 {"Major": "ENS", "Code": "303", "Course_Name": "Introduction to Space Technology", "ECTS": "6", "Engineering": 4.0, "Basic_Science": 2.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "ENS", "Code": "413", "Course_Name": "Experimental Methods in Nanoscience I", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "ENS", "Code": "414", "Course_Name": "Experimental Methods in Nanoscience II", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
-{"Major": "ENS", "Code": "4803", "Course_Name": "Special Topics in FENS: Nanobiotechnology", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "IE", "Code": "303", "Course_Name": "Decision Economics", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "IE", "Code": "304", "Course_Name": "Production and Service Systems Planning and Design", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "IE", "Code": "305", "Course_Name": "Simulation", "ECTS": "6", "Engineering": 5.0, "Basic_Science": 1.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
@@ -253,7 +251,6 @@
 {"Major": "NS", "Code": "209", "Course_Name": "What is there in the Universe: \"Beyond the Milky Way\"", "ECTS": "5", "Engineering": 0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "NS", "Code": "214", "Course_Name": "Oscillations, Waves and Optics", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "FENS"}
 {"Major": "NS", "Code": "216", "Course_Name": "Life on Earth", "ECTS": "6", "Engineering": 1.0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "FENS"}
-{"Major": "NS", "Code": "222", "Course_Name": "Planetary Systems and Extrasolar Planets", "ECTS": "5", "Engineering": 0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "PHYS", "Code": "113", "Course_Name": "Basic Concepts of Physics for Scientists and Engineers", "ECTS": "7", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "PHYS", "Code": "211", "Course_Name": "Modern Physics", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "FENS"}
 {"Major": "PHYS", "Code": "304", "Course_Name": "Quantum Mechanics II", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}

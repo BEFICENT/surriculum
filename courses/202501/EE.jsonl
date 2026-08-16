@@ -84,7 +84,6 @@
 {"Major": "BIO", "Code": "415", "Course_Name": "Plant Nutrition", "ECTS": "5", "Engineering": 0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "423", "Course_Name": "Neurobiology", "ECTS": "6", "Engineering": 2.0, "Basic_Science": 4.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "444", "Course_Name": "Bioengineering", "ECTS": "6", "Engineering": 4.0, "Basic_Science": 2.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
-{"Major": "BIO", "Code": "445", "Course_Name": "Plant Tissue Culture Techniques", "ECTS": "7", "Engineering": 3.0, "Basic_Science": 4.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "446", "Course_Name": "Biology of Aging", "ECTS": "6", "Engineering": 1.0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "452", "Course_Name": "Immunology", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "467", "Course_Name": "Signal Transduction", "ECTS": "6", "Engineering": 1.0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
@@ -163,7 +162,6 @@
 {"Major": "ENS", "Code": "410", "Course_Name": "Advanced Solid Modeling Techniques", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "ENS", "Code": "413", "Course_Name": "Experimental Methods in Nanoscience I", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "ENS", "Code": "414", "Course_Name": "Experimental Methods in Nanoscience II", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
-{"Major": "ENS", "Code": "4803", "Course_Name": "Special Topics in FENS: Nanobiotechnology", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "IE", "Code": "404", "Course_Name": "Digital Transformation", "ECTS": "6", "Engineering": 5.0, "Basic_Science": 1.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "IE", "Code": "435", "Course_Name": "Production Dynamics and Control", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "IE", "Code": "436", "Course_Name": "Monte Carlo Methods in Finance", "ECTS": "6", "Engineering": 4.0, "Basic_Science": 2.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
@@ -267,6 +265,7 @@
 {"Major": "ECON", "Code": "492", "Course_Name": "Seminar on the Turkish Economy", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ECON", "Code": "494", "Course_Name": "Spatial Data Science", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ECON", "Code": "495", "Course_Name": "Machine Learning for Policy Evaluation", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
+{"Major": "EE", "Code": "234", "Course_Name": "Electronics Engineering Vertical Integration & Professional Seminar", "ECTS": "0", "Engineering": 0, "Basic_Science": 0, "SU_credit": "0", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "EE", "Code": "321", "Course_Name": "Introduction to Digital Circuits", "ECTS": "7", "Engineering": 0, "Basic_Science": 0, "SU_credit": "4", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "EE", "Code": "423", "Course_Name": "Embedded Systems", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "EE", "Code": "426", "Course_Name": "Heterogeneous Computing and System-on-Chip Design", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
@@ -433,7 +432,6 @@
 {"Major": "NS", "Code": "208", "Course_Name": "General Biotechnology", "ECTS": "5", "Engineering": 2.0, "Basic_Science": 3.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "NS", "Code": "209", "Course_Name": "What is there in the Universe: \"Beyond the Milky Way\"", "ECTS": "5", "Engineering": 0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "NS", "Code": "216", "Course_Name": "Life on Earth", "ECTS": "6", "Engineering": 1.0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "FENS"}
-{"Major": "NS", "Code": "222", "Course_Name": "Planetary Systems and Extrasolar Planets", "ECTS": "5", "Engineering": 0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "OPIM", "Code": "301", "Course_Name": "Operations Management", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "OPIM", "Code": "302", "Course_Name": "Management Information Systems", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "SBS"}
 {"Major": "OPIM", "Code": "390", "Course_Name": "Introduction to Business Analytics", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}

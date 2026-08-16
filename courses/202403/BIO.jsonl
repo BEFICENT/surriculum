@@ -46,7 +46,6 @@
 {"Major": "BIO", "Code": "423", "Course_Name": "Neurobiology", "ECTS": "6", "Engineering": 2.0, "Basic_Science": 4.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "436", "Course_Name": "Cancer Biology", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "444", "Course_Name": "Bioengineering", "ECTS": "6", "Engineering": 4.0, "Basic_Science": 2.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "No"}
-{"Major": "BIO", "Code": "445", "Course_Name": "Plant Tissue Culture Techniques", "ECTS": "7", "Engineering": 3.0, "Basic_Science": 4.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "446", "Course_Name": "Biology of Aging", "ECTS": "6", "Engineering": 1.0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "452", "Course_Name": "Immunology", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "460", "Course_Name": "Evolution", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "No"}
@@ -109,7 +108,6 @@
 {"Major": "ENRG", "Code": "220", "Course_Name": "World Energy Outlook: The Coming Year", "ECTS": "6", "Engineering": 3.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "ENS", "Code": "311", "Course_Name": "Numerical Analysis", "ECTS": "6", "Engineering": 4.0, "Basic_Science": 2.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "ENS", "Code": "409", "Course_Name": "Numerical Analysis", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
-{"Major": "ENS", "Code": "4803", "Course_Name": "Special Topics in FENS: Nanobiotechnology", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "IE", "Code": "305", "Course_Name": "Simulation", "ECTS": "6", "Engineering": 5.0, "Basic_Science": 1.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "IE", "Code": "311", "Course_Name": "Operations Research I", "ECTS": "6", "Engineering": 4.0, "Basic_Science": 2.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "IE", "Code": "313", "Course_Name": "Operations Research III", "ECTS": "6", "Engineering": 4.0, "Basic_Science": 2.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
@@ -137,7 +135,6 @@
 {"Major": "NS", "Code": "206", "Course_Name": "What is There in the Universe: Inside the Milky Way?", "ECTS": "5", "Engineering": 0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "NS", "Code": "209", "Course_Name": "What is there in the Universe: \"Beyond the Milky Way\"", "ECTS": "5", "Engineering": 0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "NS", "Code": "214", "Course_Name": "Oscillations, Waves and Optics", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "FENS"}
-{"Major": "NS", "Code": "222", "Course_Name": "Planetary Systems and Extrasolar Planets", "ECTS": "5", "Engineering": 0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "350", "Course_Name": "Introduction to Neuroscience", "ECTS": "7", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "ACC", "Code": "201", "Course_Name": "Introduction to Financial Accounting and Reporting", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "SBS"}
 {"Major": "ACC", "Code": "301", "Course_Name": "Managerial Accounting", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
