@@ -1,7 +1,8 @@
 # SUrriculum 3.1 release notes
 
-Status: release candidate. Version 3.1 has not been merged into `main`, tagged,
-published, or deployed from this working branch.
+Status: released as `v3.1.0` on 2026-08-16 from the history-preserving
+`main` merge `498ed78`. The resulting GitHub Pages deployment was verified on
+the public site.
 
 ## Highlights
 
@@ -211,7 +212,9 @@ lists use their matching older catalog configuration, so this should not affect
 ordinary plans; the all-three mixed case remains documented rather than given
 an invented repeat/order rule.
 
-Test results and remaining blockers are maintained in
+Test results and the accepted limitation are maintained in
 [release-readiness-3.1.md](release-readiness-3.1.md) rather than duplicated here.
-The merge, push, `v3.1.0` tag, GitHub Pages setting change, and deployment are
-all intentionally unperformed until the maintainer authorizes the release.
+The maintainer authorized the release on 2026-08-16. The branch was merged and
+pushed, the existing GitHub Pages deployment completed successfully, the public
+site passed the release smoke checks, and the immutable `v3.1.0` tag was pushed.
+No GitHub Pages setting was changed.

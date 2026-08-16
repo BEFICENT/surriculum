@@ -1,8 +1,9 @@
 # SUrriculum 3.1 release and rollback runbook
 
-This runbook prepares the release procedure without performing it. As of this
-document's creation, no merge, push, `v3.1.0` tag, GitHub Pages setting change,
-artifact publication, or deployment has been executed.
+This runbook records the release procedure executed on 2026-08-16. SUrriculum
+3.1 was merged through commit `498ed78`, deployed by the existing GitHub Pages
+branch source, smoke-tested on the public site, and tagged as `v3.1.0`. No
+GitHub Pages setting was changed.
 
 ## Release invariants
 
@@ -102,8 +103,8 @@ git tag -a v3.1.0 -m "SUrriculum 3.1.0"
 git push origin v3.1.0
 ```
 
-These commands are instructions only; they have not been run by preparing this
-document.
+These commands were executed after explicit maintainer approval and a green
+post-merge release gate.
 
 ## 4. Production smoke checks
 
@@ -157,10 +158,11 @@ failure, ship a reviewed forward fix or revert promptly and verify both a fresh
 profile and an upgrading profile; browser storage must not be manually cleared
 as the normal recovery path.
 
-## Unperformed final actions
+## Release outcome
 
-- [ ] Merge `surriculum-3.1` into `main`.
-- [ ] Push the release merge to `origin/main`.
-- [ ] Verify the resulting GitHub Pages deployment.
-- [ ] Create and push `v3.1.0` after production smoke checks pass.
-- [ ] Change GitHub Pages settings or adopt the allowlisted Actions artifact.
+- [x] Merge `surriculum-3.1` into `main` without squashing.
+- [x] Push release merge `498ed78` to `origin/main`.
+- [x] Verify successful GitHub Pages run `31967155857` and the public site.
+- [x] Create and push `v3.1.0` after production smoke checks passed.
+- [x] Keep the existing GitHub Pages settings unchanged; the allowlisted
+  Actions artifact remains an optional future deployment path.

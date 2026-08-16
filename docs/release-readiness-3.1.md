@@ -16,10 +16,9 @@ a time and checked off only after the fix and its verification are complete.
   below.
 - Broad release-blocker coverage remains deferred. Focused graduation and
   scheduler regressions were added when specifically requested.
-- The `surriculum-3.1` branch is published but has not been merged into `main`.
-  Additional local commits and the current worktree are being held for the
-  production-ready push, as requested; topology must be re-measured immediately
-  before release instead of copying a stale ahead/behind count into this file.
+- The `surriculum-3.1` branch was merged into `main` with the history-preserving
+  release commit `498ed78` on 2026-08-16. GitHub Pages deployed that exact merge,
+  the public smoke checks passed, and the immutable `v3.1.0` tag was pushed.
 - Claude co-author trailers were removed from the rewritten branch history.
 - Preserve the individual 3.1 commits. Do not squash or rebase the branch merely
   to simplify GitHub's ahead/behind display; the intended history edits are only
@@ -686,6 +685,7 @@ a time and checked off only after the fix and its verification are complete.
   pinned by the CSP/static tests.
 - [x] Remove the tracked `.claude/launch.json` and `.vscode/settings.json`
   editor files and ignore both project-specific directories going forward.
-- [ ] After explicit release approval, merge into `main`, push, verify GitHub
-  Pages, and create/push the immutable `v3.1.0` tag. None of these final actions
-  has been performed.
+- [x] After explicit release approval, merge into `main`, push, verify GitHub
+  Pages, and create/push the immutable `v3.1.0` tag. Completed on 2026-08-16:
+  merge `498ed78`, successful Pages run `31967155857`, public desktop/mobile
+  onboarding and admit-term smoke checks, and the published release tag.
