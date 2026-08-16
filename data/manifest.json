@@ -1,11 +1,11 @@
 {
-  "dataVersion": "ef2b0500334275c4",
-  "generatedAt": "2026-08-08T18:32:43Z",
+  "dataVersion": "6b5d99f149be3dcd",
+  "generatedAt": "2026-08-13T15:58:19Z",
   "generatedBy": "build_manifest.py",
   "inputs": {
     "jsonl": {
       "count": 697,
-      "hash": "aa008cb2c6037828"
+      "hash": "aa60631e5be3ae70"
     },
     "json": {
       "courses/schedule_subjects.json": "c6f94694d504937e"

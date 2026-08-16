@@ -74,7 +74,7 @@ test.describe('plan autosave hardening', () => {
     const result = await page.evaluate(() => {
       const storage = window.planStorage;
       const id = storage.getActivePlanId();
-      const keys = ['curriculum', 'grades', 'gradingBases', 'dates'];
+      const keys = ['curriculum', 'grades', 'gradingBases', 'dates', 'termCodes'];
       const read = () => Object.fromEntries(keys.map((key) => [key, storage.getItem(key, id)]));
       const before = read();
       let message = '';
@@ -86,6 +86,7 @@ test.describe('plan autosave hardening', () => {
           grades: JSON.stringify([['B']]),
           gradingBases: null,
           dates: JSON.stringify(['Spring 2024-2025']),
+          termCodes: JSON.stringify(['202402']),
         }, id);
       } catch (error) {
         message = String(error && error.message || error);

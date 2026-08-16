@@ -41,18 +41,22 @@ All plans and progress are stored locally in your browser. Use the plan
 
 - **Programs**: select a main major, optional double major, and up to **3 minors**.
 - **Admit terms**:
-  - Main major and double major each have an admit term selector.
-  - Each minor slot (`Minor 1/2/3`) has its own admit term selector.
+  - Verify the relevant dates in **SUIS → Student Records → General Student Information**.
+  - For the main major and every minor, usually use your initial university entry term. For most students, this means the minors use the same admit term as the main major.
+  - For a double major started before **Fall 2026-2027**, use the first term after the double-major application was accepted. For one started in **Fall 2026-2027 or later**, use your initial university entry term.
+  - Main major and double major each have an admit-term selector, and each minor slot (`Minor 1/2/3`) has its own.
 - **Plans**: keep up to **10 saved plans**, reorder them by dragging in the plan menu, rename, export, import, and delete (while keeping at least 1 plan).
-- **Planner board**: add semesters and courses, reorder semesters with their drag handle (mouse or touch), remove courses, and see each term's full SU workload. Every positive-SU course card contributes to this load even when it is N/A for the primary program; that portion is shown separately, for example **15 SU (3 N/A)**. The full load turns red above the standard 8-SU Summer or 20-SU Fall/Spring threshold, but this is advisory and does not prevent an approved overload. Graduation-credit totals remain separate. Course cards themselves are not draggable between semesters; move one by removing it and adding it to the destination term.
-- **Course details**: open a details view for planned courses using the course row actions.
+- **Planner board**: add semesters and courses, reorder semesters with the desktop drag handle or directional controls, restore oldest-to-newest display order with **Sort Semesters**, remove courses, and see each term's full SU workload. Card order is presentation-only: prerequisites, retakes, progress, GPA, and curriculum allocation use each semester's persisted academic term code. New and edited cards cannot duplicate an existing term; legacy duplicate-term plans remain lossless but ambiguous scheduler sync fails closed. Every positive-SU course card contributes to this load even when it is N/A for the primary program; that portion is shown separately, for example **15 SU (3 N/A)**. The full load turns red above the standard 8-SU Summer or 20-SU Fall/Spring threshold, but this is advisory and does not prevent an approved overload. Graduation-credit totals remain separate. On desktop, courses can be dragged between semesters with a visible insertion preview; the course move control also provides a keyboard destination picker.
+- **Course details**: open a details view for planned courses using the course
+  row actions. Catalog details include the university's prerequisite,
+  corequisite, and **General Requirements** text when available.
 - **Import transcript**: import **Academic Records Summary** (HTML/PDF) or a **YÖK transcript PDF** (not preferred).
 - **Graduation + summaries**: check requirement progress and open detailed summaries for majors and minors.
 - **Current-term tools**:
   - Current term highlight
-  - Optional “only show offered courses” filter for the current term
+  - Optional exact-term offered-course filtering for each planner semester
   - **Scheduler** for picking sections and building weekly timetables by term
-- **Quality of life**: dark/light theme, collapsible sidebar, touch-friendly behavior, custom modals (no default browser prompts).
+- **Quality of life**: dark/light theme, collapsible sidebar, touch-friendly behavior, custom modals (no default browser prompts), first-use guidance, and a concise one-time release summary for returning users.
 
 If you hit a bug or want to improve the tool, open an issue/discussion or contact: [bilal.gebenoglu@sabanciuniv.edu](mailto:bilal.gebenoglu@sabanciuniv.edu)
 
@@ -63,7 +67,10 @@ If you hit a bug or want to improve the tool, open an issue/discussion or contac
 1. Choose your **main major** (required).
 2. Optionally choose a **double major**.
 3. Add up to **3 minors** using the “Add minor” flow.
-4. Set admit terms for each selected program.
+4. Verify the dates in **SUIS → Student Records → General Student Information**, then set each selected program's admit term:
+   - **Main major and minors:** usually use your initial university entry term. For most students, the minor terms therefore match the main-major term.
+   - **Double major before Fall 2026-2027:** use the first term after your double-major application was accepted.
+   - **Double major from Fall 2026-2027 onward:** use your initial university entry term.
 
 Course catalogs and requirement rules are loaded based on these selections.
 
@@ -71,21 +78,63 @@ Course catalogs and requirement rules are loaded based on these selections.
 
 - Use **“+ New Semester”** to add a term to your plan.
 - Use **“+ Add course”** in a semester to pick a course from the catalog.
-- Use a semester's drag handle to reorder terms with a mouse or touch gesture.
-- To move a course to another semester, remove it and add it to the destination term; course cards are not drag targets.
+- Use a semester's desktop drag handle or its directional controls to reorder terms.
+- Semester order is only visual. Academic chronology always follows the saved term codes; use **Sort Semesters** to restore an oldest-to-newest view.
+- On desktop, drag a course to another semester or activate its move control and choose a destination. The move preserves the course record and recalculates both terms.
 - Use per-course buttons (next to delete) to open **details** and other actions.
+
+The course picker can combine search with program/category, course level,
+credit, exact-term offering, already-planned, and prerequisite filters. Its
+prerequisite checks use the target semester's canonical term code: ordinary
+prerequisites and prior-SU requirements look strictly earlier, while only
+explicit concurrent clauses can use the target term.
+
+The suggestion list adapts to the selected semester's visible course pane. It
+uses extra room on tall cards, contracts inside short viewports, and opens below
+the search controls only when the space above is genuinely too limited.
+
+Picker results and planned course cards can also show advisory offering-history
+tags such as **No Fall offerings found**, **No Spring offerings found**,
+**No Summer offerings found**, and **Not offered every year**. These are derived
+from deduplicated recorded
+offerings, not hardcoded course lists. Failed, empty, or sparse histories remain
+untagged, and an exact published target-term offering suppresses all historical
+warnings for that selection. The
+tags describe past evidence only; future availability can change.
+
+Course and credit prerequisites are advisory planning guidance. A requirement
+such as SPS 303's 58 prior SU is checked against positive SU credits in strictly
+earlier planner semesters. Successful and still-planned eligible courses count,
+matching ordinary course-prerequisite planning; failed, withdrawn, grade NA,
+unsupported-grade, same-term, and later courses do not. The warning therefore
+says **planned/completed**, not officially earned. It does not remove a course
+or prevent an approved exception, and official enrollment eligibility must
+still be confirmed in SUIS.
+
+This is an overall prior-SU check, not a program-allocation total. A course
+categorized N/A for the selected major can still contribute when its own grade
+is successful or pending; the separate transcript grade `NA` (Not Attended)
+cannot.
 
 ### Custom courses
 
 If a course is missing from the catalog (or you want placeholders), you can add a **custom course** and set its credits (including `.5`). Its category is saved separately for every selected program: for example, the form shows **CS Category**, **IE Category**, and one category selector for each selected minor. Changing which program is the main or double major does not move those classifications between programs. Use the **?** beside a selector to see how its available categories are allocated, including the difference between **None** and **N/A**. An official catalog classification always takes priority when that course is listed by the selected program and admit term.
 
-## Sidebar options (course dropdown behavior)
+## Course picker defaults and filters
 
-The “Add course” dropdown has several optional helpers:
+Controls provides four course-picker defaults: **Show course
+details**, **Hide courses planned by this term**, **Only show courses offered in
+the semester**, and **Smart Sort**. They are applied when a course picker opens.
+The offered-only control inside a picker is local to that semester: changing it
+does not rewrite the sidebar default or another open semester's picker.
 
-- **Hide taken courses**: hides courses you’ve already taken/added (and also respects currently selected sections in the scheduler for the current term).
-- **Only show offered courses for … term**: filters the dropdown only for the **current term** using the same term schedule as the scheduler (with reconciled course-page history as a fallback).
-- **Smart Sort**: sorts the dropdown by a per-course “suggestion score” (highest first).
+The offered-only setting uses the destination semester's exact schedule. If
+that schedule is unavailable, it fails open and leaves courses visible;
+offering-history badges remain advisory and do not drive this filter.
+
+Open **Filters** beside the course search for program, category, level, credit,
+and course-requirement controls. Planner credit and requirement choices persist
+independently from Scheduler choices.
 
 ### How “Smart Sort” works
 
@@ -187,6 +236,8 @@ Key features:
 - Optional helpers (toggles):
   - Hide taken courses
   - Show course details in the list (credits/type)
+  - Check course prerequisites, including prior-SU and General Requirements
+    rules, with an option to keep unmet courses visible
 - Smart Sort (same scoring as the main planner)
   - Hover preview (shows a translucent preview of how a course would look if added)
   - Availability highlighting (taken / conflict-free / conflict-prone indicators)
@@ -250,7 +301,9 @@ unrequested terms remain discoverable. Full minor-term refreshes publish only
 after every selected minor succeeds; program-limited runs merge with the
 existing snapshot instead of truncating it.
 
-Scrape course pages for metadata (including Basic Science/Engineering credit breakdowns and “offered term” history):
+Scrape course pages for metadata (including prerequisite/corequisite and
+General Requirements rules, Basic Science/Engineering credit breakdowns, and
+“offered term” history):
 
 ```bash
 python scrape_coursepages.py
@@ -322,8 +375,19 @@ python migrate_to_jsonl.py --delete-json
 ## Known limitations (v3.1)
 
 - **Graduation logic is complex**: requirements are scraped and normalized, but edge cases exist. Always confirm with official program rules.
-- **Repeated attempts and retakes are not fully modelled**: the planner stores one occurrence per canonical course code. A retained failed or withdrawn attempt can therefore prevent planning the same code again. Import reconciliation keeps the latest chronological record and reports superseded or `Repeated` rows, but it does not preserve a complete attempt history or infer cross-code substitutions. Do not treat the planner as the official record for retake GPA replacement.
-- **Course movement is not drag-and-drop**: semester and saved-plan ordering have drag controls, but moving a course between terms requires removing and re-adding it.
+- **Repeated attempts are represented as a planning replacement**: when an exact
+  same-code course in an earlier term has a supported final grade, adding it to
+  a later term can offer a confirmed retake replacement. `F/U/NA/W` are accepted
+  without a deadline; passing `A-D` (and `S`) use the three-regular-semester
+  window, with Summer excluded from the count. The new attempt starts ungraded
+  and the earlier planner card is removed. This is intentionally not complete
+  attempt history: the university transcript retains both registrations, while
+  SUrriculum keeps one. `T`, unfinished/unknown grades, future source terms,
+  ambiguous duplicates, and different-code substitutions fail closed. Always
+  verify official repeat eligibility and GPA replacement. The planner excludes
+  Summer from its window count but cannot identify approved leave semesters, so
+  it may conservatively decline a passing-grade repeat that the university
+  would allow after leave.
 - **PDFs need readable text**: image-only files, including some Microsoft Print-to-PDF exports, must be re-exported with browser **Save as PDF**, saved as complete HTML, or processed with OCR.
 - **Scheduler scraping reliability**: the university schedule endpoints can occasionally return server errors; re-run later or with delays.
 - **Minor rule parsing**: minor pages vary; some rules are simplified into structured checks and may miss special cases.
@@ -331,6 +395,13 @@ python migrate_to_jsonl.py --delete-json
 
 ## Roadmap
 
+- **Post-3.1:** replace full-page reloads for main-major, double-major, minor,
+  and admit-term changes with one transactional in-place program switch. The
+  switch should fetch and validate the next catalogs/requirements, atomically
+  replace program state, recalculate and rerender every dependent view, and
+  restore the previous state on failure. Whole-plan switching, import, reset,
+  and deletion may keep their reload boundary because they change the active
+  plan identity rather than only its academic configuration.
 - More robust schedule scraping and section metadata (and smarter conflict-free suggestions).
 - A first-class course-attempt model for retakes, repeated grades, and explicit substitutions.
 - Richer course detail views (prerequisite parsing, nicer formatting, quick links).

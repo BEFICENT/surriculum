@@ -87,7 +87,12 @@ test.describe('minors + double major (desktop)', () => {
     });
 
     await page.locator('.summary').click();
-    await page.locator('.summary_minor_btn').click();
+    await page.locator(
+      '.summary_program_tab[data-program-kind="minor"][data-program-code="ANALY-MINOR"]',
+    ).click();
+    await page.locator(
+      '.summary_program_card.is-active[data-program-kind="minor"][data-program-code="ANALY-MINOR"] .summary_detail_btn',
+    ).click();
     await expect(page.locator('.summary_minor_panel .ms-average-projection'))
       .toContainText('Projected minor PGPA from entered grades: 4.000');
   });
@@ -173,7 +178,12 @@ test.describe('minors + double major (desktop)', () => {
     expect(result.pgpa).toBe(2);
 
     await page.locator('.summary').click();
-    await page.locator('.summary_minor_btn').click();
+    await page.locator(
+      '.summary_program_tab[data-program-kind="minor"][data-program-code="ANALY-MINOR"]',
+    ).click();
+    await page.locator(
+      '.summary_program_card.is-active[data-program-kind="minor"][data-program-code="ANALY-MINOR"] .summary_detail_btn',
+    ).click();
     const minorPanel = page.locator('.summary_minor_panel');
     const failedRow = minorPanel.locator('.ms-course').filter({ hasText: 'OPIM390' }).first();
     await expect(failedRow).toHaveClass(/is-unsuccessful/);
@@ -225,7 +235,12 @@ test.describe('minors + double major (desktop)', () => {
     });
 
     await page.locator('.summary').click();
-    await page.locator('.summary_minor_btn').click();
+    await page.locator(
+      '.summary_program_tab[data-program-kind="minor"][data-program-code="ANALY-MINOR"]',
+    ).click();
+    await page.locator(
+      '.summary_program_card.is-active[data-program-kind="minor"][data-program-code="ANALY-MINOR"] .summary_detail_btn',
+    ).click();
 
     const minorPanel = page.locator('.summary_minor_panel');
     await expect(minorPanel.locator('[data-summary-injected]'), 'markup-like data must not create elements')

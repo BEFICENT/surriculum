@@ -28,6 +28,12 @@ DEFAULT_OUT_BASIC_SCIENCE = os.path.join(DEFAULT_COURSES_DIR, "basic_science_cre
 DEFAULT_OUT_ALL_INFO = os.path.join(DEFAULT_COURSES_DIR, "all_coursepage_info.jsonl")
 DEFAULT_CACHE_DIR = os.path.join(DEFAULT_COURSES_DIR, "coursepage_html_cache")
 
+GENERAL_REQUIREMENT_FIELDS = (
+    "general_requirements",
+    "minimum_earned_su_credits",
+    "general_requirement_prerequisites",
+)
+
 
 # Program catalogs contain both intrinsic course metadata and contextual degree
 # metadata.  Only the former belongs in the course-page index: EL_Type and
@@ -114,6 +120,117 @@ def _first_text(el) -> str:
     return el.get_text(" ", strip=True)
 
 
+def parse_minimum_earned_su_credits(value: Any) -> Optional[float]:
+    """Extract Banner's cumulative earned-credit prerequisite, when present.
+
+    SUIS renders this as part of the free-form ``General Requirements`` block,
+    for example ``58.000 credits 000 to 9999 ...``.  Keep the complete source
+    text separately and expose this narrow structured value for consumers that
+    need to compare it with a student's earned SU credits.
+    """
+    normalized = " ".join(str(value or "").split())
+    match = re.search(r"\b(\d+(?:[.,]\d+)?)\s+credits?\b", normalized, flags=re.IGNORECASE)
+    return _to_float(match.group(1)) if match else None
+
+
+def normalize_general_requirements(value: Any) -> Optional[str]:
+    """Normalize a meaningful Banner General Requirements block.
+
+    Banner emits an empty-range boilerplate for some courses.  It carries no
+    usable registration rule by itself, so do not persist it and flood course
+    details with a misleading requirement.
+    """
+    normalized = " ".join(str(value or "").split()).strip()
+    if not normalized or normalized in {"__", "-", "N/A"}:
+        return None
+    if re.fullmatch(
+        r"000\s+to\s+9999\s+Minimum\s+Grade\s+of\s+D\s+"
+        r"May\s+not\s+be\s+taken\s+concurrently\.?",
+        normalized,
+        flags=re.IGNORECASE,
+    ):
+        return None
+    return normalized
+
+
+def parse_general_requirement_prerequisites(value: Any, *, course_id: str = "") -> Optional[str]:
+    """Convert explicit non-self ``Course or Test`` clauses for the evaluator.
+
+    The Banner block is flat prose rather than a stable machine format.  Only
+    explicit course clauses are promoted.  Self-referential rules such as
+    TLL001's repeat/withdrawal constraint remain visible in the raw field but
+    are not presented as an ordinary course prerequisite.
+    """
+    text = " ".join(str(value or "").split()).strip()
+    matches = list(re.finditer(
+        r"\bCourse\s+or\s+Test\s*:\s*([A-Z]{2,5})\s*([0-9]{3,5}[A-Z]?)\b",
+        text,
+        flags=re.IGNORECASE,
+    ))
+    if not matches:
+        return None
+
+    target = re.sub(r"[^A-Z0-9]", "", str(course_id or "").upper())
+    clauses: List[Dict[str, Any]] = []
+    for index, match in enumerate(matches):
+        next_start = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        qualifier = text[match.end() : next_start]
+        connector_match = re.search(r"\b(and|or)\s*$", qualifier, flags=re.IGNORECASE)
+        connector = connector_match.group(1).lower() if connector_match else ""
+        if connector_match:
+            qualifier = qualifier[: connector_match.start()]
+        subject = match.group(1).upper()
+        number = match.group(2).upper()
+        normalized_id = f"{subject}{number}"
+        grade_match = re.search(
+            r"Minimum\s+Grade\s+of\s+([A-Z][+-]?)",
+            qualifier,
+            flags=re.IGNORECASE,
+        )
+        min_grade = grade_match.group(1).upper() if grade_match else ""
+        concurrent = bool(re.search(
+            r"\bMay\s+be\s+taken\s+concurrently\b",
+            qualifier,
+            flags=re.IGNORECASE,
+        ))
+        label = f"{subject} {number}"
+        if min_grade:
+            label += f" - Undergraduate - Min Grade {min_grade}"
+        if concurrent:
+            label += " (can be taken concurrently)"
+        clauses.append({
+            "course_id": normalized_id,
+            "label": label,
+            "connector": connector,
+        })
+
+    if target and any(clause["course_id"] == target for clause in clauses):
+        # Removing a self-clause from an OR expression could make the remaining
+        # branch look mandatory.  Only drop self-clauses from a pure AND chain.
+        if any(clause["connector"] == "or" for clause in clauses):
+            return None
+        clauses = [clause for clause in clauses if clause["course_id"] != target]
+    if not clauses:
+        return None
+
+    parts = [clauses[0]["label"]]
+    for index in range(1, len(clauses)):
+        connector = clauses[index - 1]["connector"] or "and"
+        parts.extend([connector, clauses[index]["label"]])
+    return " ".join(parts)
+
+
+def ensure_general_requirement_fields(record: Dict[str, Any], *, course_id: str = "") -> None:
+    """Normalize/backfill the additive fields on cumulative legacy records."""
+    raw = normalize_general_requirements(record.get("general_requirements"))
+    record["general_requirements"] = raw
+    record["minimum_earned_su_credits"] = parse_minimum_earned_su_credits(raw)
+    record["general_requirement_prerequisites"] = parse_general_requirement_prerequisites(
+        raw,
+        course_id=course_id or str(record.get("course_id") or ""),
+    )
+
+
 def parse_coursepage_html(html: str, *, source_url: str) -> Dict[str, Any]:
     soup = BeautifulSoup(html, "lxml")
 
@@ -145,6 +262,7 @@ def parse_coursepage_html(html: str, *, source_url: str) -> Dict[str, Any]:
     basic_science = None
     prerequisites: List[str] = []
     corequisites: List[str] = []
+    general_requirements: List[str] = []
     last_offered: List[Dict[str, Any]] = []
 
     # Description: first non-empty td after header that isn't a nested table and
@@ -203,7 +321,7 @@ def parse_coursepage_html(html: str, *, source_url: str) -> Dict[str, Any]:
             break
 
     # Prerequisite/corequisite blocks: scan rows in the outer table.
-    collecting: Optional[str] = None  # "pre" | "co"
+    collecting: Optional[str] = None  # "pre" | "co" | "general"
     if outer_table:
         for tr in outer_table.find_all("tr"):
             td = tr.find("td")
@@ -226,12 +344,22 @@ def parse_coursepage_html(html: str, *, source_url: str) -> Dict[str, Any]:
                     if rest:
                         corequisites.append(rest)
                     continue
+                if "general requirements" in label:
+                    collecting = "general"
+                    if rest:
+                        general_requirements.append(rest)
+                    continue
                 collecting = None
             else:
                 if collecting == "pre":
                     prerequisites.append(text)
                 elif collecting == "co":
                     corequisites.append(text)
+                elif collecting == "general":
+                    general_requirements.append(text)
+
+    general_requirements_text = normalize_general_requirements(" ".join(general_requirements))
+    parsed_course_id = f"{parsed_subj or ''}{parsed_numb or ''}"
 
     result: Dict[str, Any] = {
         "parsed_subj_code": parsed_subj,
@@ -245,6 +373,12 @@ def parse_coursepage_html(html: str, *, source_url: str) -> Dict[str, Any]:
         "description": description,
         "prerequisites": " ".join(prerequisites).strip() or None,
         "corequisites": " ".join(corequisites).strip() or None,
+        "general_requirements": general_requirements_text,
+        "minimum_earned_su_credits": parse_minimum_earned_su_credits(general_requirements_text),
+        "general_requirement_prerequisites": parse_general_requirement_prerequisites(
+            general_requirements_text,
+            course_id=parsed_course_id,
+        ),
         "last_offered_terms": last_offered,
         "source_url": source_url,
         "scraped_at": _now_iso(),
@@ -428,12 +562,17 @@ def apply_catalog_fallbacks(
                 "description": None,
                 "prerequisites": None,
                 "corequisites": None,
+                "general_requirements": None,
+                "minimum_earned_su_credits": None,
+                "general_requirement_prerequisites": None,
                 "last_offered_terms": [],
                 "source_url": build_coursepage_url(course.subj_code, course.crse_numb),
                 "scraped_at": None,
             }
             coursepage_info[course_id] = record
             records_created += 1
+
+        ensure_general_requirement_fields(record, course_id=course_id)
 
         successful_scrape = record.get("scrape_ok") is True
         fallback = fallback_by_course_id.get(course_id) or {}
@@ -473,6 +612,39 @@ def read_jsonl_by_course_id(path: str) -> Dict[str, Dict[str, Any]]:
             if isinstance(course_id, str) and course_id:
                 out[course_id] = obj
     return out
+
+
+def hydrate_general_requirement_fields_from_cache(
+    coursepage_info: Dict[str, Dict[str, Any]],
+    cache_dir: str,
+) -> int:
+    """Reparse cached pages for additive fields without altering old metadata."""
+    hydrated = 0
+    for course_id, record in coursepage_info.items():
+        if all(field in record for field in GENERAL_REQUIREMENT_FIELDS):
+            continue
+        subject = str(record.get("subj_code") or "").strip()
+        number = str(record.get("crse_numb") or "").strip()
+        if not subject or not number:
+            continue
+        course = CourseKey(subject, number)
+        cache_path = os.path.join(cache_dir, f"{course_id}.html")
+        if not os.path.exists(cache_path):
+            continue
+        try:
+            with open(cache_path, "r", encoding="utf-8") as handle:
+                parsed = parse_coursepage_html(
+                    handle.read(),
+                    source_url=str(record.get("source_url") or build_coursepage_url(subject, number)),
+                )
+        except Exception:
+            continue
+        if not _is_valid_scrape(parsed, course):
+            continue
+        for field in GENERAL_REQUIREMENT_FIELDS:
+            record[field] = parsed.get(field)
+        hydrated += 1
+    return hydrated
 
 
 def write_jsonl(path: str, records: List[Dict[str, Any]]) -> None:
@@ -615,11 +787,25 @@ def main() -> int:
 
     existing_info = read_jsonl_by_course_id(args.out_all_info)
     existing_credits = read_jsonl_by_course_id(args.out_basic_science)
+    cache_dir = None if args.no_cache else args.cache_dir
+    if cache_dir and not args.refresh:
+        hydrated = hydrate_general_requirement_fields_from_cache(existing_info, cache_dir)
+        if hydrated:
+            print(f"Hydrated General Requirements fields from {hydrated} cached course pages.")
 
     unique_courses, expected_breakdown, catalog_fallbacks = collect_catalog_courses(courses_dir)
     needed: List[CourseKey] = []
     for course_id in sorted(unique_courses.keys()):
-        if args.refresh or (course_id not in existing_info) or (course_id not in existing_credits):
+        existing_record = existing_info.get(course_id) or {}
+        missing_general_requirement_fields = any(
+            field not in existing_record for field in GENERAL_REQUIREMENT_FIELDS
+        )
+        if (
+            args.refresh
+            or (course_id not in existing_info)
+            or (course_id not in existing_credits)
+            or missing_general_requirement_fields
+        ):
             needed.append(unique_courses[course_id])
             continue
 
@@ -655,7 +841,6 @@ def main() -> int:
             tls.session = sess
         return sess
 
-    cache_dir = None if args.no_cache else args.cache_dir
     net_semaphore = threading.Semaphore(max(1, int(args.max_inflight)))
 
     accepted_scrapes = 0
@@ -828,6 +1013,8 @@ def main() -> int:
     # Every catalog course must have useful intrinsic metadata even when its
     # course page could not be fetched or omitted an individual field.
     apply_catalog_fallbacks(existing_info, unique_courses, catalog_fallbacks)
+    for course_id, record in existing_info.items():
+        ensure_general_requirement_fields(record, course_id=course_id)
 
     # Write cumulative outputs (deterministic ordering).
     write_jsonl(args.out_all_info, [existing_info[k] for k in sorted(existing_info.keys())])

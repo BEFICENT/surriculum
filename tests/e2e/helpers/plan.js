@@ -20,9 +20,11 @@ async function seedPlan(page, state) {
 
   await page.evaluate((s) => {
     // Keep most fixtures on v1 so every test exercises migration. Grading
-    // bases require v2; global transcript metadata was added in v3.
-    const version = Object.prototype.hasOwnProperty.call(s, 'globalCourseMetadata')
-      ? 3 : (Object.prototype.hasOwnProperty.call(s, 'gradingBases') ? 2 : 1);
+    // bases require v2; global transcript metadata was added in v3; canonical
+    // per-semester term identities were added in v4.
+    const version = Object.prototype.hasOwnProperty.call(s, 'termCodes')
+      ? 4 : (Object.prototype.hasOwnProperty.call(s, 'globalCourseMetadata')
+        ? 3 : (Object.prototype.hasOwnProperty.call(s, 'gradingBases') ? 2 : 1));
     const obj = { type: 'surriculum_plan', version, plan: { name: 'E2E Plan', state: s } };
     window.planStorage.importPlanObject(obj, { activate: true });
   }, state);
@@ -34,7 +36,13 @@ async function seedPlan(page, state) {
     // Wait for BOTH the rendered courses and the model to be populated — the
     // plan loads async after reload (course DB fetch -> reload()), and tests
     // read window.curriculum immediately, so racing that is the main flake source.
-    await page.waitForSelector('.container_semester .course', { timeout: 15000 });
+    // Mobile semesters may legitimately start collapsed, so the course can be
+    // present in the rendered plan without being visible.  Attachment plus the
+    // model check below is the stable indication that async hydration finished.
+    await page.waitForSelector('.container_semester .course', {
+      state: 'attached',
+      timeout: 15000,
+    });
     await page.waitForFunction(
       () => !!(window.curriculum && Array.isArray(window.curriculum.semesters)
         && window.curriculum.semesters.some((s) => s.courses && s.courses.length)),

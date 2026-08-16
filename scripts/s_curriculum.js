@@ -97,13 +97,13 @@ function isDegreeEligibleCourse(course) {
 
 function normalizeProgressTermCode(term) {
     const raw = String(term || '').trim();
-    if (/^\d{6}$/.test(raw)) return raw;
+    if (/^\d{4}(01|02|03)$/.test(raw)) return raw;
     try {
         const fn = (typeof termNameToCode === 'function') ? termNameToCode
             : ((typeof window !== 'undefined' && typeof window.termNameToCode === 'function')
                 ? window.termNameToCode : null);
         const code = fn ? String(fn(raw) || '') : '';
-        return /^\d{6}$/.test(code) ? code : '';
+        return /^\d{4}(01|02|03)$/.test(code) ? code : '';
     } catch (_) {
         return '';
     }
@@ -128,29 +128,56 @@ function currentProgressTermCode(explicitCode) {
 
 function semesterProgressTermCode(semester) {
     if (!semester) return '';
-    const direct = normalizeProgressTermCode(
-        semester.termCode || semester.term || semester.termName || semester.date,
-    );
-    if (direct) return direct;
     try {
-        const termList = (typeof terms !== 'undefined' && Array.isArray(terms)) ? terms
-            : ((typeof window !== 'undefined' && Array.isArray(window.terms)) ? window.terms : []);
-        const idx = semester.termIndex;
-        if (idx !== null && idx !== undefined && idx >= 0 && idx < termList.length) {
-            const fromIndex = normalizeProgressTermCode(termList[idx]);
-            if (fromIndex) return fromIndex;
-        }
+        const fn = (typeof semesterTermCode === 'function') ? semesterTermCode
+            : ((typeof window !== 'undefined' && typeof window.semesterTermCode === 'function')
+                ? window.semesterTermCode : null);
+        if (fn) return String(fn(semester) || '');
     } catch (_) {}
-    // Legacy plans did not persist a term on the semester model. The rendered
-    // semester heading is the last-resort bridge until such a plan is saved.
+
+    // Pure-test/partial-load fallback with the same fail-closed contract as
+    // helper_functions.js. A stale index or rendered label is not academic
+    // identity and therefore cannot establish chronology.
+    const codes = [semester.termCode, semester.termName, semester.date, semester.term]
+        .map(normalizeProgressTermCode)
+        .filter(Boolean);
+    if (!codes.length) return '';
+    return codes.every((code) => code === codes[0]) ? codes[0] : '';
+}
+
+function curriculumSemesterTieKey(semester) {
+    const courses = semester && Array.isArray(semester.courses) ? semester.courses : [];
+    const courseSignature = courses.map((course) => {
+        const code = String(course && course.code !== undefined ? course.code : course)
+            .toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const grade = String((course && course.grade) || '').trim().toUpperCase();
+        const basis = String((course && course.gradingBasis) || '').trim().toLowerCase();
+        return [code, grade, basis].join('|');
+    })
+        .filter((value) => value.replace(/\|/g, ''))
+        .sort()
+        .join('\u0001');
+    const identity = ['termCode', 'termName', 'date', 'term']
+        .map((field) => String((semester && semester[field]) || '').trim().toUpperCase())
+        .join('|');
+    return [courseSignature, identity].join('\u0000');
+}
+
+function compareCurriculumSemesterTerms(left, right) {
     try {
-        const elem = document.getElementById(semester.id);
-        const container = elem && elem.closest ? elem.closest('.container_semester') : null;
-        const label = container ? container.querySelector('.date p') : null;
-        return normalizeProgressTermCode(label ? label.textContent : '');
-    } catch (_) {
-        return '';
-    }
+        const fn = (typeof compareSemesterTerms === 'function') ? compareSemesterTerms
+            : ((typeof window !== 'undefined' && typeof window.compareSemesterTerms === 'function')
+                ? window.compareSemesterTerms : null);
+        if (fn) return fn(left, right);
+    } catch (_) {}
+    const leftCode = semesterProgressTermCode(left);
+    const rightCode = semesterProgressTermCode(right);
+    if (leftCode && rightCode && leftCode !== rightCode) return Number(leftCode) - Number(rightCode);
+    if (leftCode && !rightCode) return -1;
+    if (!leftCode && rightCode) return 1;
+    const leftTie = curriculumSemesterTieKey(left);
+    const rightTie = curriculumSemesterTieKey(right);
+    return leftTie < rightTie ? -1 : (leftTie > rightTie ? 1 : 0);
 }
 
 // A real final grade proves completion even while the course still sits in the
@@ -1845,16 +1872,7 @@ function s_curriculum()
         }
     };
 
-    const sortedProgressSemesters = () => this.semesters.slice().sort((a, b) => {
-        const codeA = semesterProgressTermCode(a);
-        const codeB = semesterProgressTermCode(b);
-        if (codeA && codeB && codeA !== codeB) return codeA.localeCompare(codeB);
-        if (codeA && !codeB) return -1;
-        if (!codeA && codeB) return 1;
-        const idxA = (a.termIndex !== null && a.termIndex !== undefined) ? a.termIndex : -1;
-        const idxB = (b.termIndex !== null && b.termIndex !== undefined) ? b.termIndex : -1;
-        return idxB - idxA;
-    });
+    const sortedProgressSemesters = () => this.semesters.slice().sort(compareCurriculumSemesterTerms);
 
     const addProgressMetric = (sem, fields, key, value) => {
         const n = parseFloat(value || '0');
@@ -2524,10 +2542,9 @@ function s_curriculum()
 
     /**
      * Recalculate the effective category (core/area/free) for every course
-     * across all semesters based on chronological order. The `terms` array
-     * lists the most recent term first, so larger `termIndex` values represent
-     * earlier semesters. This method therefore sorts semesters in descending
-     * order of `termIndex` and then
+     * across all semesters based on canonical chronological term codes, wholly
+     * independent of planner card order. This method sorts semesters oldest to
+     * newest and then
      * allocates course credits to required, core, area and free categories
      * according to the major requirements. If the required requirement is
      * filled, additional required courses count toward the core requirement.
@@ -2582,16 +2599,10 @@ function s_curriculum()
             // depend on the user's recorded grades rather than the static type.
         }
 
-        // Sort a copy of semesters chronologically based on the stored
-        // `termIndex` property. The `terms` array is ordered most-recent
-        // first, so larger indices represent earlier (older) semesters.
-        // If `termIndex` is null/undefined (e.g., a semester without a valid
-        // date), treat it as very small so it will be allocated last.
-        const sortedSemesters = this.semesters.slice().sort((a, b) => {
-            const idxA = (a.termIndex !== null && a.termIndex !== undefined) ? a.termIndex : -1;
-            const idxB = (b.termIndex !== null && b.termIndex !== undefined) ? b.termIndex : -1;
-            return idxB - idxA; // larger index = earlier term
-        });
+        // Academic allocation follows canonical term identity rather than the
+        // card order. Unknown/conflicting legacy terms sort last and equal-term
+        // duplicates receive a deterministic semantic tie-breaker.
+        const sortedSemesters = this.semesters.slice().sort(compareCurriculumSemesterTerms);
 
         // Running credit counters and their thresholds for the allocation
         // cascade (allocateCascade): once a pool is full its surplus spills to
@@ -2987,13 +2998,7 @@ function s_curriculum()
             sem.totalEngineeringDM = 0;
             sem.totalECTSDM = 0;
         }
-        // Sort semesters chronologically by termIndex (larger index = earlier).
-        // If a semester has no valid termIndex, allocate it last.
-        const sorted = this.semesters.slice().sort((a, b) => {
-            const aIdx = (a.termIndex !== null && a.termIndex !== undefined) ? a.termIndex : -1;
-            const bIdx = (b.termIndex !== null && b.termIndex !== undefined) ? b.termIndex : -1;
-            return bIdx - aIdx;
-        });
+        const sorted = this.semesters.slice().sort(compareCurriculumSemesterTerms);
 
         // Alternative-course rules for the double major, resolved BEFORE the
         // allocation loop below — the same shared helper as the main-major pass,

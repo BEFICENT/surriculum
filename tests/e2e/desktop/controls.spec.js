@@ -3,16 +3,24 @@
 const { test, expect } = require('../fixtures');
 
 test.describe('controls (desktop)', () => {
-  test('offered-courses toggle uses the "for <term> term" wording', async ({ page }) => {
+  test('sidebar exposes only the four course-picker defaults', async ({ page }) => {
     await page.goto('/');
-    // main.js rewrites this label from window.currentTermName on load.
-    const label = page.locator('#offeredThisTermLabel');
-    await expect(label).toHaveText(/^Only show offered courses for .+ term$/);
-  });
 
-  test('hide-taken and offered-courses toggles exist and default on', async ({ page }) => {
-    await page.goto('/');
+    const defaultIds = await page.locator('.control-group-option input[type="checkbox"]')
+      .evaluateAll((inputs) => inputs.map((input) => input.id));
+    expect(defaultIds).toEqual([
+      'courseDetailsToggle',
+      'hideTakenCoursesToggle',
+      'plannerOfferedOnlyToggle',
+      'sortByScoreToggle',
+    ]);
+
+    await expect(page.locator('#plannerOfferedOnlyToggle'))
+      .toHaveAccessibleName(/offered.*semester/i);
+    await expect(page.locator('#offeredThisTermToggle')).toHaveCount(0);
+    await expect(page.locator('#offeredThisTermLabel')).toHaveCount(0);
+
     await expect(page.locator('#hideTakenCoursesToggle')).toBeChecked();
-    await expect(page.locator('#offeredThisTermToggle')).toBeChecked();
+    await expect(page.locator('#plannerOfferedOnlyToggle')).toBeChecked();
   });
 });

@@ -130,6 +130,97 @@ test('completed courses can satisfy prerequisites without becoming warning targe
     'the completed MATH101 still satisfies the projected MATH102');
 });
 
+test('prior-SU prerequisites count eligible positive credits only in strictly earlier terms', () => {
+  const rows = [
+    semester('202401', [
+      { code: 'MATH101', grade: 'A', SU_credit: 3 },
+      { code: 'MATH102', grade: '', SU_credit: 3 },
+      { code: 'FAILED', grade: 'F', SU_credit: 4 },
+      { code: 'WITHDRAWN', grade: 'W', SU_credit: 4 },
+      { code: 'NAATTEMPT', grade: 'NA', SU_credit: 4 },
+      { code: 'UNSUPPORTED', grade: 'A+', SU_credit: 4 },
+      { code: 'ZERO', grade: 'A', SU_credit: 0 },
+      { code: 'NEGATIVE', grade: 'A', SU_credit: -3 },
+      { code: 'DUPLICATE', grade: 'A', SU_credit: 2 },
+    ]),
+    semester('202402', [
+      { code: 'DUPLICATE', grade: '', SU_credit: 3 },
+      { code: 'CURRENT', grade: 'A', SU_credit: 30 },
+    ]),
+    semester('202403', [{ code: 'LATER', grade: 'A', SU_credit: 30 }]),
+    semester('', [{ code: 'UNKNOWNTERM', grade: 'A', SU_credit: 30 }]),
+  ];
+  const planningEligible = (value) => (
+    !['F', 'U', 'NA', 'W', 'A+'].includes(String(value.grade || '').toUpperCase())
+  );
+
+  assert.equal(req.priorEligibleSuCredits(rows, '202402', planningEligible), 8,
+    'successful and pending earlier courses count, duplicate codes count once at max credit');
+  assert.equal(req.priorEligibleSuCredits(rows, '202403', planningEligible), 39,
+    'the previously same-term course contributes only when the target moves later');
+  assert.equal(req.priorEligibleSuCredits(rows, '', planningEligible), 0,
+    'unknown target identity fails open without inventing prior credits');
+});
+
+test('minimum prior-SU comparison preserves exact decimal boundaries', () => {
+  const under = req.minimumPriorSuRequirement({ minimum_earned_su_credits: 58 }, 57.99);
+  assert.equal(under.minimum, 58);
+  assert.equal(under.actual, 57.99);
+  assert.ok(Math.abs(under.missing - 0.01) < 1e-9);
+  assert.equal(req.minimumPriorSuRequirement(
+    { minimum_earned_su_credits: 58 },
+    58,
+  ), null);
+  assert.equal(req.minimumPriorSuRequirement(
+    { minimum_earned_su_credits: 58 },
+    60,
+  ), null);
+  assert.equal(req.minimumPriorSuRequirement({}, 0), null);
+});
+
+test('ordinary and General Requirements course clauses are independent AND conditions', () => {
+  const info = {
+    prerequisites: 'MATH 101 - Undergraduate - Min Grade D',
+    general_requirement_prerequisites:
+      'SPS 101 - Undergraduate - Min Grade D and SPS 102 - Undergraduate - Min Grade D',
+  };
+
+  const missingGeneral = req.evaluateCoursePrerequisites(info, ['MATH101', 'SPS101']);
+  assert.deepEqual([...missingGeneral.required], ['SPS102']);
+  const missingOrdinary = req.evaluateCoursePrerequisites(info, ['SPS101', 'SPS102']);
+  assert.deepEqual([...missingOrdinary.required], ['MATH101']);
+  assert.equal(req.evaluateCoursePrerequisites(info, ['MATH101', 'SPS101', 'SPS102']), null);
+});
+
+test('planner combines a HUM General Requirements course clause with its prior-SU threshold', () => {
+  const info = new Map([['HUM201', {
+    general_requirement_prerequisites:
+      'SPS 101 - Undergraduate - Min Grade D and SPS 102 - Undergraduate - Min Grade D',
+    minimum_earned_su_credits: 23,
+  }]]);
+  const eligibleCourse = (value) => !['F', 'U', 'NA', 'W'].includes(
+    String(value.grade || '').toUpperCase(),
+  );
+  const rows = [
+    semester('202401', [
+      { code: 'SPS101', id: 'sps101', grade: 'A', SU_credit: 3 },
+      { code: 'MATH101', id: 'math101', grade: '', SU_credit: 20 },
+    ]),
+    semester('202402', [{ code: 'HUM201', id: 'hum201', grade: '', SU_credit: 3 }]),
+  ];
+
+  const missingCourse = req.plannerWarningsForSemesters(rows, info, eligibleCourse)[0];
+  assert.deepEqual([...missingCourse.prerequisite.required], ['SPS102']);
+  assert.equal(missingCourse.priorSuRequirement, null, '23 earlier SU clears the credit clause');
+
+  rows[0].courses.push({ code: 'SPS102', id: 'sps102', grade: '', SU_credit: 3 });
+  rows[0].courses[1].SU_credit = 16.99;
+  const missingCredits = req.plannerWarningsForSemesters(rows, info, eligibleCourse)[0];
+  assert.equal(missingCredits.prerequisite, null, 'both SPS clauses are now planned earlier');
+  assert.equal(missingCredits.priorSuRequirement.minimum, 23);
+  assert.equal(missingCredits.priorSuRequirement.actual, 22.99);
+});
+
 test('planner checks different-course corequisites but suppresses recitation/lab components', () => {
   const info = new Map([
     ['EE200', { corequisites: 'EE 202' }],

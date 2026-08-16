@@ -96,10 +96,11 @@ jobs:
           fi
 
       # Auto-refreshes intentionally do not trigger the full Node/browser CI.
-      # Keep two fast, data-specific gates here so malformed scraper output can
+      # Keep fast, data-specific gates here so malformed scraper output can
       # never be proposed for merging merely because the heavy suite was skipped.
-      - name: Validate refreshed requirements and data manifest
+      - name: Validate refreshed course rules, requirements, and data manifest
         run: |
+          python tests/coursepage_requirements_data_test.py
           python tests/requirements_validation_test.py
           python tests/scraper_term_identity_test.py
           python tests/manifest_integrity_test.py

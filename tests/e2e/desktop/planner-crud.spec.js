@@ -40,6 +40,9 @@ test.describe('planner CRUD (desktop)', () => {
 
     await expect(page.locator('.course:has(.course_code:text-is("CS201"))')).toHaveCount(1);
     expect(await page.evaluate(() => window.curriculum.hasCourse('CS201'))).toBe(true);
+    await expect(page.getByRole('button', { name: 'Details for CS201' })).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Delete CS201' })).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Grade for CS201: not entered' })).toHaveCount(1);
   });
 
   test('assigning a grade to an ungraded course updates the GPA', async ({ page }) => {

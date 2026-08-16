@@ -2,7 +2,7 @@
 
 // Unit tests for getCurrentTermNameFromDate(), which decides what "now" means
 // academically. It is load-bearing well beyond its size: the scheduler's default
-// term, the "only show offered courses for <term>" filter, the current-term
+// term, destination-semester offering filters, the current-term
 // highlight, and the academicYear the term dropdowns are built from all derive
 // from it. An off-by-one here silently shifts every one of them, and only for
 // students unlucky enough to load the app near a boundary.

@@ -94,6 +94,14 @@ const readProgramDefinitions = (page, programs, code) => page.evaluate(({ keys, 
 }, { keys: programs, target: code.toUpperCase() });
 
 const addCourseToFirstSemester = async (page, code) => {
+  // Custom-course category tests are independent of the destination term's
+  // official schedule, where a newly created code is necessarily absent.
+  const offeredOnly = page.locator('#plannerOfferedOnlyToggle');
+  if (await offeredOnly.isChecked()) {
+    await page.locator('.toggle-switch:has(#plannerOfferedOnlyToggle)').click();
+    await expect(offeredOnly).not.toBeChecked();
+  }
+
   const semester = page.locator('.container_semester').first();
   await semester.locator('.addCourse').click();
   await semester.locator('.course_select').fill(code);
@@ -440,14 +448,17 @@ test.describe('per-program custom-course categories', () => {
       dates: [TERM],
     });
 
-    const modal = page.locator('.double_major_modal');
+    const modal = page.getByRole('dialog', { name: 'Set DSA Category' });
     await expect(modal).toBeVisible({ timeout: 15000 });
+    await expect(modal).toHaveAttribute('aria-modal', 'true');
     await expect(modal.getByRole('heading', { name: 'Set DSA Category', exact: true }))
       .toBeVisible();
     await expect(modal.locator('.program-category-label-line > label'))
       .toHaveText('DSA Category:');
     await expect(modal.getByRole('combobox', { name: 'DSA Category:', exact: true }))
       .toHaveValue('core');
+    await expect(modal.getByRole('combobox', { name: 'DSA Category:', exact: true }))
+      .toBeFocused();
 
     const help = modal.getByRole('button', {
       name: 'Explain DSA course categories', exact: true,
@@ -482,6 +493,9 @@ test.describe('per-program custom-course categories', () => {
     await help.click();
     await expect(help).toHaveAttribute('aria-expanded', 'false');
     await expect(panel).toBeHidden();
+
+    await page.keyboard.press('Escape');
+    await expect(modal).toHaveCount(0);
   });
 
   test('program role swaps, duplicate minors, and remove/re-add keep categories tied to codes', async ({ page }) => {

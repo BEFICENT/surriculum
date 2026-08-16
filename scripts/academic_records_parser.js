@@ -937,15 +937,106 @@ function curriculumCourseOccurrences(curriculum, rawCode) {
 function curriculumSemesterName(semester) {
     if (!semester) return '';
     if (semester.termName) return formatTranscriptSemester(semester.termName);
+    return '';
+}
+
+function transcriptTermCode(value) {
+    const normalized = normalizeTranscriptSemester(value && typeof value === 'object'
+        ? (value.termName || value.date || value.term || '') : value);
+    const match = normalized.match(/^(Fall|Spring|Summer)\s+(\d{4})-\d{4}$/);
+    if (!match) return '';
+    const suffix = { Fall: '01', Spring: '02', Summer: '03' }[match[1]];
+    return match[2] + suffix;
+}
+
+function curriculumSemesterTermCode(semester) {
     try {
-        if (typeof document !== 'undefined' && semester.id) {
-            const node = document.getElementById(semester.id);
-            const label = node && node.closest('.container_semester')
-                ? node.closest('.container_semester').querySelector('.date p') : null;
-            if (label) return formatTranscriptSemester(label.textContent);
+        const shared = (typeof window !== 'undefined') ? window.semesterTermCode : null;
+        if (typeof shared === 'function') return String(shared(semester) || '');
+    } catch (_) {
+        return '';
+    }
+    const stored = String((semester && semester.termCode) || '').trim();
+    const named = transcriptTermCode(semester);
+    if (stored && !/^\d{4}(01|02|03)$/.test(stored)) return '';
+    if (stored && named && stored !== named) return '';
+    return stored || named;
+}
+
+function curriculumSemestersForTranscriptTerm(curriculum, termName) {
+    const targetCode = transcriptTermCode(termName);
+    if (!targetCode) return [];
+    const semesters = curriculum && Array.isArray(curriculum.semesters)
+        ? curriculum.semesters : [];
+    return semesters.filter((semester) => curriculumSemesterTermCode(semester) === targetCode);
+}
+
+function mergeImportedSemesterIntoExisting(curriculum, createdContainer, targetSemester, courseData, previousContainerId) {
+    if (!curriculum || !createdContainer || !targetSemester) return false;
+    const createdElement = createdContainer.querySelector('.semester');
+    const createdSemester = createdElement && typeof curriculum.getSemester === 'function'
+        ? curriculum.getSemester(createdElement.id) : null;
+    const targetElement = targetSemester.id && typeof document !== 'undefined'
+        ? document.getElementById(targetSemester.id) : null;
+    if (!createdElement || !createdSemester || !targetElement || createdSemester === targetSemester) return false;
+
+    const createdIndex = curriculum.semesters.indexOf(createdSemester);
+    const targetCourses = Array.isArray(targetSemester.courses)
+        ? targetSemester.courses.slice() : [];
+    const incomingCourses = Array.isArray(createdSemester.courses)
+        ? createdSemester.courses.slice() : [];
+    const incomingNodes = Array.from(createdElement.querySelectorAll('.course'));
+    if (createdIndex < 0 || incomingCourses.length !== incomingNodes.length) return false;
+
+    try {
+        targetSemester.courses = targetCourses.concat(incomingCourses);
+        incomingNodes.forEach((node) => targetElement.appendChild(node));
+        curriculum.semesters.splice(createdIndex, 1);
+        createdContainer.remove();
+        if (Number.isInteger(previousContainerId)) curriculum.container_id = previousContainerId;
+        try {
+            if (typeof renumberSemesterContainers === 'function') {
+                renumberSemesterContainers(curriculum);
+            }
+        } catch (_) {}
+        recomputeSemesterTranscriptGpa(targetSemester, curriculum, courseData);
+        try {
+            if (typeof refreshSemesterAccessibility === 'function') refreshSemesterAccessibility();
+        } catch (_) {}
+        return true;
+    } catch (_) {
+        targetSemester.courses = targetCourses;
+        incomingNodes.forEach((node) => {
+            try { createdElement.appendChild(node); } catch (_) {}
+        });
+        if (curriculum.semesters.indexOf(createdSemester) < 0) {
+            curriculum.semesters.splice(Math.max(0, createdIndex), 0, createdSemester);
+        }
+        if (Number.isInteger(previousContainerId)) curriculum.container_id = previousContainerId + 1;
+        return false;
+    }
+}
+
+function discardCreatedTranscriptSemester(curriculum, createdContainer, previousContainerId) {
+    if (!curriculum || !createdContainer) return;
+    try {
+        const createdElement = createdContainer.querySelector('.semester');
+        const createdSemester = createdElement && typeof curriculum.getSemester === 'function'
+            ? curriculum.getSemester(createdElement.id) : null;
+        const index = createdSemester && Array.isArray(curriculum.semesters)
+            ? curriculum.semesters.indexOf(createdSemester) : -1;
+        if (index >= 0) curriculum.semesters.splice(index, 1);
+    } catch (_) {}
+    try { createdContainer.remove(); } catch (_) {}
+    if (Number.isInteger(previousContainerId)) curriculum.container_id = previousContainerId;
+    try {
+        if (typeof renumberSemesterContainers === 'function') {
+            renumberSemesterContainers(curriculum);
         }
     } catch (_) {}
-    return '';
+    try {
+        if (typeof refreshSemesterAccessibility === 'function') refreshSemesterAccessibility();
+    } catch (_) {}
 }
 
 function courseCatalogRecord(courseData, curriculum, rawCode) {
@@ -1360,7 +1451,9 @@ function importParsedCourses(parsedCourses, courseData, curriculum) {
         if (existingOccurrences.length === 1) {
             const occurrence = existingOccurrences[0];
             const existingSemester = curriculumSemesterName(occurrence.semester);
-            if (existingSemester && importedSemester && existingSemester === importedSemester) {
+            const sameTerm = curriculumSemesterTermCode(occurrence.semester)
+                && curriculumSemesterTermCode(occurrence.semester) === transcriptTermCode(importedSemester);
+            if (sameTerm) {
                 const resolution = resolveTranscriptCourseRecord(course, courseData, curriculum);
                 const occurrenceChanged = resolution.isGlobal
                     ? applyTranscriptCatalogRecordToOccurrence(occurrence, resolution.record) : false;
@@ -1398,6 +1491,17 @@ function importParsedCourses(parsedCourses, courseData, curriculum) {
                     reason: 'different-semester'
                 });
             }
+            return;
+        }
+
+        const matchingTermSemesters = curriculumSemestersForTranscriptTerm(curriculum, importedSemester);
+        if (matchingTermSemesters.length > 1) {
+            stats.skippedCourses.push({
+                code: course.code,
+                semester: importedSemester,
+                grade: gradeRecord.grade,
+                reason: 'ambiguous-existing-semester'
+            });
             return;
         }
         if (existingOccurrences.length > 1) {
@@ -1745,6 +1849,8 @@ function importParsedCourses(parsedCourses, courseData, curriculum) {
                 courseBySemester[formattedSemester] = {
                     name: formattedSemester,
                     order: getSemesterOrder(course.semester),
+                    existingSemesterId: matchingTermSemesters.length === 1
+                        ? matchingTermSemesters[0].id : '',
                     courses: [],
                     grades: {}, // Store grades for each course
                     gradingBases: {}
@@ -1780,6 +1886,11 @@ function importParsedCourses(parsedCourses, courseData, curriculum) {
             const inspectableCurriculum = curriculum && Array.isArray(curriculum.semesters);
             const priorSemesterIds = new Set(inspectableCurriculum
                 ? curriculum.semesters.map(semester => semester && semester.id) : []);
+            const existingTarget = inspectableCurriculum && semesterData.existingSemesterId
+                ? curriculum.semesters.find(semester => (
+                    semester && semester.id === semesterData.existingSemesterId
+                    && curriculumSemesterTermCode(semester) === transcriptTermCode(semesterData.name)
+                )) : null;
             const createFn = typeof createSemeter === 'function'
                 ? createSemeter
                 : ((typeof window !== 'undefined' && typeof window.createSemeter === 'function')
@@ -1787,8 +1898,37 @@ function importParsedCourses(parsedCourses, courseData, curriculum) {
             let createSucceeded = false;
             if (createFn) {
                 try {
-                    createFn(false, semesterData.courses, curriculum, courseData, gradeList, semesterData.name, gradingBasisList);
-                    createSucceeded = true;
+                    const previousContainerId = Number(curriculum && curriculum.container_id);
+                    const created = createFn(
+                        existingTarget ? true : false,
+                        semesterData.courses,
+                        curriculum,
+                        courseData,
+                        gradeList,
+                        semesterData.name,
+                        gradingBasisList,
+                    );
+                    // Browser production is inspectable and requires the
+                    // created container. Parser-only consumers historically
+                    // inject a void creation callback, where a non-throwing
+                    // call is the only available success signal.
+                    createSucceeded = inspectableCurriculum ? !!created : true;
+                    if (createSucceeded && existingTarget) {
+                        createSucceeded = mergeImportedSemesterIntoExisting(
+                            curriculum,
+                            created,
+                            existingTarget,
+                            courseData,
+                            Number.isInteger(previousContainerId) ? previousContainerId : null,
+                        );
+                        if (!createSucceeded) {
+                            discardCreatedTranscriptSemester(
+                                curriculum,
+                                created,
+                                Number.isInteger(previousContainerId) ? previousContainerId : null,
+                            );
+                        }
+                    }
                 } catch (error) {
                     console.error('Failed to create imported semester:', error);
                 }

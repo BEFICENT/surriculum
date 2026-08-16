@@ -54,6 +54,79 @@ async function waitForLandscapeFit(modal) {
 }
 
 test.describe('mobile scheduler', () => {
+  test('portrait course sheet is removed from tab order and restores its exact opener', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('body')).toHaveClass(/is-mobile/);
+    await page.evaluate(() => { window.openSchedulerModal(); });
+
+    const modal = page.locator('.scheduler-modal.m-scheduler');
+    await expect(modal).toBeVisible({ timeout: 15000 });
+    const sidebar = modal.locator('.scheduler-sidebar');
+    const fab = modal.locator('.m-sched-fab');
+    await expect(sidebar).toHaveAttribute('aria-hidden', 'true');
+    await expect(sidebar).toHaveAttribute('inert', '');
+
+    // The off-canvas sheet may remain in the DOM, but keyboard navigation must
+    // never enter it until the user explicitly opens it.
+    await modal.locator('.scheduler-close').focus();
+    for (let i = 0; i < 8; i += 1) {
+      await page.keyboard.press('Tab');
+      expect(await sidebar.evaluate((panel) => panel.contains(document.activeElement))).toBe(false);
+    }
+
+    await fab.focus();
+    await fab.click();
+    await expect(modal).toHaveClass(/m-sheet-open/);
+    await expect(sidebar).toHaveAttribute('aria-hidden', 'false');
+    await expect(sidebar).not.toHaveAttribute('inert', '');
+    await expect(sidebar.getByRole('textbox', { name: 'Search courses' })).toBeFocused();
+
+    await page.keyboard.press('Escape');
+    await expect(modal).not.toHaveClass(/m-sheet-open/);
+    await expect(sidebar).toHaveAttribute('aria-hidden', 'true');
+    await expect(sidebar).toHaveAttribute('inert', '');
+    await expect(fab).toBeFocused();
+
+    await fab.click();
+    await expect(sidebar.getByRole('textbox', { name: 'Search courses' })).toBeFocused();
+    await modal.locator('.m-sched-done-fab').click();
+    await expect(modal).not.toHaveClass(/m-sheet-open/);
+    await expect(fab).toBeFocused();
+  });
+
+  test('landscape course sheet focuses its close control and restores the corner opener', async ({ page }) => {
+    await page.setViewportSize({ width: 915, height: 412 });
+    await page.goto('/');
+    await expect(page.locator('body')).toHaveClass(/is-mobile/);
+    await page.evaluate(() => { window.openSchedulerModal(); });
+
+    const modal = page.locator('.scheduler-modal.m-scheduler');
+    await expect(modal).toBeVisible({ timeout: 15000 });
+    const sidebar = modal.locator('.scheduler-sidebar');
+    const opener = modal.locator('.m-sched-corner-search');
+    const close = sidebar.locator('.m-sched-sheet-close');
+    await expect(sidebar).toHaveAttribute('aria-hidden', 'true');
+    await expect(sidebar).toHaveAttribute('inert', '');
+
+    await opener.focus();
+    await opener.click();
+    await expect(modal).toHaveClass(/m-sheet-open/);
+    await expect(sidebar).toHaveAttribute('aria-hidden', 'false');
+    await expect(close).toBeFocused();
+
+    await page.keyboard.press('Escape');
+    await expect(modal).not.toHaveClass(/m-sheet-open/);
+    await expect(sidebar).toHaveAttribute('aria-hidden', 'true');
+    await expect(sidebar).toHaveAttribute('inert', '');
+    await expect(opener).toBeFocused();
+
+    await opener.click();
+    await expect(close).toBeFocused();
+    await close.click();
+    await expect(modal).not.toHaveClass(/m-sheet-open/);
+    await expect(opener).toBeFocused();
+  });
+
   test('portrait is a day-at-a-time view with a working day selector', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('body')).toHaveClass(/is-mobile/);

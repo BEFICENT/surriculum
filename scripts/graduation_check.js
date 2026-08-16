@@ -422,41 +422,12 @@ function displayGraduationResults(curriculum) {
                 .replace(/'/g, '&#39;');
         };
 
-        const isDarkTheme = (() => {
-            try { return !!document.body && document.body.classList.contains('dark-theme'); } catch (_) { return false; }
-        })();
-        const PASS_COLOR = '#16A34A';
-        const FAIL_COLOR = '#DC2626';
-        const MUTED_COLOR = isDarkTheme ? '#94A3B8' : '#64748B';
-        const PROJECTED_COLOR = isDarkTheme ? '#C4B5FD' : '#7C3AED';
-        const badgeStyleFor = (state) => {
-            const color = state === 'complete' ? PASS_COLOR
-                : (state === 'projected' ? PROJECTED_COLOR : (state === 'unavailable' ? MUTED_COLOR : FAIL_COLOR));
-            const bg = state === 'complete' ? 'rgba(22, 163, 74, 0.18)'
-                : (state === 'projected' ? 'rgba(124, 58, 237, 0.16)'
-                    : (state === 'unavailable' ? 'rgba(100, 116, 139, 0.14)' : 'rgba(220, 38, 38, 0.18)'));
-            return `color:${color};border-color:${color};background:${bg};`;
-        };
-        const messageStyleFor = (state) => {
-            const color = state === 'complete' ? PASS_COLOR
-                : (state === 'projected' ? PROJECTED_COLOR : (state === 'unavailable' ? MUTED_COLOR : FAIL_COLOR));
-            return `color:${color};font-weight:700;`;
-        };
-        const detailStyleForTone = (tone) => {
-            if (tone === 'danger') return `color:${FAIL_COLOR};font-weight:700;`;
-            if (tone === 'success') return `color:${PASS_COLOR};font-weight:700;`;
-            if (tone === 'muted') return `color:${MUTED_COLOR};`;
-            return '';
-        };
-
         const renderMetaList = (items) => {
             const rows = Array.isArray(items) ? items.filter(Boolean) : [];
             if (!rows.length) return '';
             return `<div class="graduation_meta_list">${rows.map((item) => {
                 const tone = item && item.tone ? ` graduation_meta_item--${esc(item.tone)}` : '';
-                const style = detailStyleForTone(item && item.tone ? String(item.tone) : '');
-                const styleAttr = style ? ` style="${esc(style)}"` : '';
-                return `<div class="graduation_meta_item${tone}"${styleAttr}>${item.html ? item.html : esc(item.text || '')}</div>`;
+                return `<div class="graduation_meta_item${tone}">${item.html ? item.html : esc(item.text || '')}</div>`;
             }).join('')}</div>`;
         };
 
@@ -468,10 +439,8 @@ function displayGraduationResults(curriculum) {
                     : (normalizedState === 'unavailable' ? 'Unavailable' : 'Incomplete'));
             const cardClass = compact ? ' graduation_card--compact' : '';
             const messageClass = ` graduation_card_message--${normalizedState}`;
-            const badgeStyle = badgeStyleFor(normalizedState);
-            const messageStyle = messageStyleFor(normalizedState);
             const messageHtml = message
-                ? `<div class="graduation_card_message${messageClass}" style="${esc(messageStyle)}">${esc(message)}</div>`
+                ? `<div class="graduation_card_message${messageClass}">${esc(message)}</div>`
                 : '';
             return `
                 <div class="graduation_card ${stateClass}${cardClass}">
@@ -480,7 +449,7 @@ function displayGraduationResults(curriculum) {
                             <div class="graduation_card_label">${esc(label)}</div>
                             <div class="graduation_card_title">${esc(title)}</div>
                         </div>
-                        <div class="graduation_status_badge ${stateClass}" style="${esc(badgeStyle)}">${badgeText}</div>
+                        <div class="graduation_status_badge ${stateClass}">${badgeText}</div>
                     </div>
                     ${messageHtml}
                     ${renderMetaList(details)}
@@ -706,6 +675,10 @@ function displaySummary(curriculum, major_chosen_by_user) {
             .replace(/'/g, '&#39;');
     };
 
+    const isMobileSummaryAdapter = !!(document.body && document.body.classList.contains('is-mobile'));
+    const previouslyFocused = document.activeElement instanceof HTMLElement
+        ? document.activeElement : null;
+
     // Ensure the shared overlay exists.
     let overlayEl = document.querySelector('.summary_modal_overlay');
     if (!overlayEl) {
@@ -713,6 +686,9 @@ function displaySummary(curriculum, major_chosen_by_user) {
         overlayEl.classList.add('summary_modal_overlay');
         document.body.appendChild(overlayEl);
     }
+    overlayEl.setAttribute('role', 'dialog');
+    overlayEl.setAttribute('aria-modal', 'true');
+    overlayEl.setAttribute('aria-labelledby', 'summary-program-progress-title');
 
     // Build a stable layout container so we can place minor controls close to
     // the major summary cards and switch between views.
@@ -725,30 +701,423 @@ function displaySummary(curriculum, major_chosen_by_user) {
         contentEl.innerHTML = '';
     }
 
+    let summaryKeydownHandler = null;
+    let summaryResizeHandler = null;
+    let summaryClosed = false;
+    const closeSummary = () => {
+        if (summaryClosed) return;
+        summaryClosed = true;
+        try {
+            if (summaryKeydownHandler) {
+                document.removeEventListener('keydown', summaryKeydownHandler, true);
+            }
+            if (summaryResizeHandler) {
+                window.removeEventListener('resize', summaryResizeHandler);
+            }
+        } catch (_) {}
+        try { overlayEl.remove(); } catch (_) {}
+        try {
+            if (!isMobileSummaryAdapter) {
+                const mobileFallback = document.body && document.body.classList.contains('is-mobile')
+                    ? document.querySelector('.m-nav-item[aria-current="page"]') : null;
+                const restoreTarget = mobileFallback || previouslyFocused;
+                if (restoreTarget && restoreTarget.isConnected) {
+                    restoreTarget.focus({ preventScroll: true });
+                }
+            }
+        } catch (_) {}
+    };
+    overlayEl._closeSummary = closeSummary;
+
     const headerRowEl = document.createElement('div');
     headerRowEl.className = 'summary_header_row';
     contentEl.appendChild(headerRowEl);
 
+    const headerCopyEl = document.createElement('div');
+    headerCopyEl.className = 'summary_surface_header_copy';
+    const overviewTitleEl = document.createElement('h2');
+    overviewTitleEl.id = 'summary-program-progress-title';
+    overviewTitleEl.className = 'summary_surface_title';
+    overviewTitleEl.textContent = 'Program progress';
+    const overviewSubtitleEl = document.createElement('p');
+    overviewSubtitleEl.className = 'summary_surface_subtitle';
+    overviewSubtitleEl.textContent = 'Earned and projected progress for selected programs.';
+    headerCopyEl.appendChild(overviewTitleEl);
+    headerCopyEl.appendChild(overviewSubtitleEl);
+    headerRowEl.appendChild(headerCopyEl);
+
+    const closeButtonEl = document.createElement('button');
+    closeButtonEl.type = 'button';
+    closeButtonEl.className = 'summary_surface_close';
+    closeButtonEl.setAttribute('aria-label', 'Close program progress');
+    closeButtonEl.innerHTML = '<i class="fa-solid fa-xmark" aria-hidden="true"></i>';
+    closeButtonEl.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        closeSummary();
+    });
+    headerRowEl.appendChild(closeButtonEl);
+
+    const programTabsEl = document.createElement('div');
+    programTabsEl.className = 'summary_program_tabs';
+    programTabsEl.setAttribute('role', 'tablist');
+    programTabsEl.setAttribute('aria-label', 'Selected programs');
+    contentEl.appendChild(programTabsEl);
+
     const cardsRowEl = document.createElement('div');
-    cardsRowEl.className = 'summary_cards_row';
+    cardsRowEl.className = 'summary_cards_row summary_scroll_region';
+    cardsRowEl.tabIndex = 0;
+    cardsRowEl.setAttribute('role', 'region');
+    cardsRowEl.setAttribute('aria-label', 'Program progress overview');
+    cardsRowEl.dataset.summaryScrollRegion = 'overview';
     contentEl.appendChild(cardsRowEl);
 
+    const degreeSectionEl = document.createElement('section');
+    degreeSectionEl.className = 'summary_program_section is-degree';
+    const degreeSectionTitleEl = document.createElement('h3');
+    degreeSectionTitleEl.className = 'summary_program_section_title';
+    degreeSectionTitleEl.textContent = 'Degree programs';
+    const degreeGridEl = document.createElement('div');
+    degreeGridEl.className = 'summary_program_grid summary_degree_grid';
+    degreeSectionEl.appendChild(degreeSectionTitleEl);
+    degreeSectionEl.appendChild(degreeGridEl);
+    cardsRowEl.appendChild(degreeSectionEl);
+
+    const minorSectionEl = document.createElement('section');
+    minorSectionEl.className = 'summary_program_section is-minor is-hidden';
+    const minorSectionTitleEl = document.createElement('h3');
+    minorSectionTitleEl.className = 'summary_program_section_title';
+    minorSectionTitleEl.textContent = 'Minors';
+    const minorGridEl = document.createElement('div');
+    minorGridEl.className = 'summary_program_grid summary_minor_grid';
+    minorSectionEl.appendChild(minorSectionTitleEl);
+    minorSectionEl.appendChild(minorGridEl);
+    cardsRowEl.appendChild(minorSectionEl);
+
+    const programTabRecords = [];
+    let activeProgramKey = '';
+    const programKey = (kind, code) => `${String(kind || '').toLowerCase()}:${String(code || '').toUpperCase()}`;
+    const focusProgramAnchor = (record) => {
+        if (!record || isMobileSummaryAdapter) return;
+        const target = contentEl.classList.contains('is-multiple')
+            ? record.tab : record.card.querySelector('.summary_modal_title');
+        if (!target) return;
+        if (target !== record.tab) target.tabIndex = -1;
+        try {
+            target.focus({ preventScroll: true });
+            target.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'nearest' });
+        } catch (_) {}
+    };
+    const activateProgramCard = (kind, code, options = {}) => {
+        const key = programKey(kind, code);
+        const record = programTabRecords.find((candidate) => candidate.key === key);
+        if (!record) return false;
+        activeProgramKey = key;
+        contentEl.dataset.activeProgramKind = record.kind;
+        contentEl.dataset.activeProgramCode = record.code;
+        programTabRecords.forEach((candidate) => {
+            const active = candidate === record;
+            candidate.card.classList.toggle('is-active', active);
+            candidate.card.setAttribute('aria-hidden', active ? 'false' : 'true');
+            candidate.tab.classList.toggle('is-active', active);
+            candidate.tab.setAttribute('aria-selected', active ? 'true' : 'false');
+            candidate.tab.tabIndex = active ? 0 : -1;
+        });
+        if (!isMobileSummaryAdapter) {
+            try { cardsRowEl.scrollTo({ top: 0, behavior: 'auto' }); } catch (_) { cardsRowEl.scrollTop = 0; }
+        }
+        if (options.focus) {
+            focusProgramAnchor(record);
+        }
+        return true;
+    };
+
+    const registerProgramTab = (card, kind, code, title, titleId) => {
+        const normalizedKind = String(kind || 'program').toLowerCase();
+        const normalizedCode = String(code || '').toUpperCase();
+        const key = programKey(normalizedKind, normalizedCode);
+        const index = programTabRecords.length;
+        const tabId = `summary-program-tab-${index + 1}`;
+        const panelId = `summary-program-panel-${index + 1}`;
+        const tab = document.createElement('button');
+        tab.type = 'button';
+        tab.id = tabId;
+        tab.className = 'summary_program_tab';
+        tab.setAttribute('role', 'tab');
+        tab.setAttribute('aria-controls', panelId);
+        tab.setAttribute('aria-selected', 'false');
+        tab.tabIndex = -1;
+        tab.dataset.programKind = normalizedKind;
+        tab.dataset.programCode = normalizedCode;
+        const roleText = normalizedKind === 'main' ? 'Main major'
+            : normalizedKind === 'dm' ? 'Double major' : 'Minor';
+        tab.innerHTML = `
+            <span class="summary_program_tab_role">${esc(roleText)}</span>
+            <span class="summary_program_tab_identity">
+                <strong>${esc(normalizedCode)}</strong>
+                <span>${esc(title || normalizedCode)}</span>
+            </span>
+            <span class="summary_program_tab_status" aria-hidden="true"></span>`;
+        card.id = panelId;
+        card.setAttribute('role', 'tabpanel');
+        card.setAttribute('aria-labelledby', tabId);
+        card.setAttribute('aria-hidden', 'true');
+        card.dataset.summaryTitleId = titleId;
+        const record = { key, kind: normalizedKind, code: normalizedCode,
+            title: String(title || normalizedCode), roleText, card, tab,
+            overviewPanelId: panelId };
+        programTabRecords.push(record);
+        programTabsEl.appendChild(tab);
+        tab.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (contentEl.dataset.summaryView === 'detail') showOverview();
+            activateProgramCard(normalizedKind, normalizedCode, { focus: true });
+        });
+        tab.addEventListener('keydown', (event) => {
+            const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
+            if (!keys.includes(event.key)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            let nextIndex = index;
+            if (event.key === 'Home') nextIndex = 0;
+            else if (event.key === 'End') nextIndex = programTabRecords.length - 1;
+            else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') nextIndex = (index - 1 + programTabRecords.length) % programTabRecords.length;
+            else nextIndex = (index + 1) % programTabRecords.length;
+            const next = programTabRecords[nextIndex];
+            if (next) {
+                if (contentEl.dataset.summaryView === 'detail') showOverview();
+                activateProgramCard(next.kind, next.code, { focus: true });
+            }
+        });
+        if (!activeProgramKey) activateProgramCard(normalizedKind, normalizedCode);
+    };
+
+    const updateProgramSurfaceState = () => {
+        const cards = contentEl.querySelectorAll('.summary_program_card');
+        const count = cards.length;
+        contentEl.dataset.programCount = String(count);
+        contentEl.classList.toggle('is-multiple', count > 1);
+        programTabsEl.classList.toggle('is-single', count <= 1);
+        programTabsEl.setAttribute('aria-hidden', count > 1 ? 'false' : 'true');
+        programTabsEl.setAttribute('aria-orientation', count > 1
+            && window.matchMedia('(min-width: 1180px) and (min-height: 620px)').matches
+            ? 'vertical' : 'horizontal');
+        degreeGridEl.classList.toggle('is-multiple', degreeGridEl.children.length > 1);
+        minorGridEl.dataset.cardCount = String(minorGridEl.children.length);
+        programTabRecords.forEach((record) => {
+            if (count <= 1) {
+                record.tab.tabIndex = -1;
+                record.card.setAttribute('role', 'region');
+                record.card.setAttribute('aria-labelledby', record.card.dataset.summaryTitleId || record.tab.id);
+            } else {
+                record.card.setAttribute('role', 'tabpanel');
+                record.card.setAttribute('aria-labelledby', record.tab.id);
+            }
+            const status = String(record.card.dataset.summaryStatus || 'in-progress');
+            const statusEl = record.tab.querySelector('.summary_program_tab_status');
+            if (!statusEl) return;
+            statusEl.className = `summary_program_tab_status is-${status}`;
+            statusEl.textContent = status === 'complete' ? 'Complete'
+                : status === 'projected' ? 'Projected'
+                    : status === 'unavailable' ? 'Unavailable' : 'In progress';
+            record.tab.setAttribute('aria-label', `${record.roleText}: ${record.code}, ${record.title}. ${statusEl.textContent}.`);
+        });
+        overviewSubtitleEl.textContent = count > 1
+            ? `Earned and projected progress across ${count} selected programs.`
+            : 'Earned and projected progress for your selected program.';
+    };
+
     const minorPanelEl = document.createElement('div');
-    minorPanelEl.className = 'summary_minor_panel is-hidden';
+    minorPanelEl.className = 'summary_minor_panel summary_scroll_region is-hidden';
+    minorPanelEl.dataset.summaryScrollRegion = 'minor-detail';
     contentEl.appendChild(minorPanelEl);
 
     const majorPanelEl = document.createElement('div');
-    majorPanelEl.className = 'summary_major_panel is-hidden';
+    majorPanelEl.className = 'summary_major_panel summary_scroll_region is-hidden';
+    majorPanelEl.dataset.summaryScrollRegion = 'major-detail';
     contentEl.appendChild(majorPanelEl);
 
-    const showOverview = () => {
+    const activeProgramRecord = () => programTabRecords.find((record) => record.key === activeProgramKey) || null;
+    const connectActiveTabToDetail = (panelEl) => {
+        const record = activeProgramRecord();
+        if (!record || !panelEl) return;
+        minorPanelEl.removeAttribute('role');
+        minorPanelEl.removeAttribute('aria-labelledby');
+        majorPanelEl.removeAttribute('role');
+        majorPanelEl.removeAttribute('aria-labelledby');
+        panelEl.id = panelEl === majorPanelEl ? 'summary-major-detail-panel' : 'summary-minor-detail-panel';
+        if (contentEl.classList.contains('is-multiple')) {
+            panelEl.setAttribute('role', 'tabpanel');
+            panelEl.setAttribute('aria-labelledby', record.tab.id);
+            record.tab.setAttribute('aria-controls', panelEl.id);
+        } else {
+            const title = panelEl.querySelector('.summary_minor_panel_title');
+            if (title) {
+                title.id = `${panelEl.id}-title`;
+                panelEl.setAttribute('aria-labelledby', title.id);
+            }
+            panelEl.setAttribute('role', 'region');
+        }
+    };
+    const focusDetailBackButton = (panelEl) => {
+        if (isMobileSummaryAdapter || !panelEl) return;
+        setTimeout(() => {
+            try {
+                const back = panelEl.querySelector('.summary_back_btn');
+                if (back && back.getClientRects().length) back.focus({ preventScroll: true });
+            } catch (_) {}
+        }, 0);
+    };
+    let detailSectionSequence = 0;
+    const wireDetailSectionNavigation = (panelEl) => {
+        if (!panelEl) return;
         try {
+            if (typeof panelEl._summaryDetailNavCleanup === 'function') {
+                panelEl._summaryDetailNavCleanup();
+            }
+        } catch (_) {}
+        panelEl._summaryDetailNavReset = null;
+        const body = panelEl.querySelector('.summary_minor_panel_body');
+        const sections = body ? Array.from(body.querySelectorAll('.ms-section')) : [];
+        if (!body || sections.length < 2) return;
+
+        const nav = document.createElement('nav');
+        nav.className = 'summary_detail_section_nav';
+        nav.setAttribute('aria-label', 'Requirement sections');
+        const records = sections.map((section) => {
+            const source = section.querySelector('.ms-title') || section.querySelector('.ms-header');
+            const rawLabel = String(source && source.textContent || 'Requirement')
+                .trim().replace(/\s+/g, ' ');
+            const label = rawLabel.toLowerCase().replace(/(^|\s)\S/g, (letter) => letter.toUpperCase());
+            if (!section.id) section.id = `summary-detail-section-${++detailSectionSequence}`;
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'summary_detail_section_link';
+            button.textContent = label;
+            button.setAttribute('aria-controls', section.id);
+            nav.appendChild(button);
+            return { section, button };
+        });
+        panelEl.insertBefore(nav, body);
+
+        const setActive = (record) => {
+            records.forEach((candidate) => {
+                const active = candidate === record;
+                candidate.button.classList.toggle('is-active', active);
+                if (active) candidate.button.setAttribute('aria-current', 'true');
+                else candidate.button.removeAttribute('aria-current');
+            });
+        };
+        const scrollToRecord = (record) => {
+            const panelBox = panelEl.getBoundingClientRect();
+            const header = panelEl.querySelector('.summary_minor_panel_header');
+            const stickyHeight = (header ? header.getBoundingClientRect().height : 0)
+                + nav.getBoundingClientRect().height + 12;
+            const sectionTop = panelEl.scrollTop
+                + record.section.getBoundingClientRect().top - panelBox.top - stickyHeight;
+            panelEl.scrollTo({ top: Math.max(0, sectionTop), behavior: 'auto' });
+            setActive(record);
+        };
+        records.forEach((record) => {
+            record.button.addEventListener('click', () => scrollToRecord(record));
+        });
+        const syncFromScroll = () => {
+            const navBottom = nav.getBoundingClientRect().bottom + 28;
+            let current = records[0];
+            records.forEach((record) => {
+                if (record.section.getBoundingClientRect().top <= navBottom) current = record;
+            });
+            setActive(current);
+        };
+        panelEl.addEventListener('scroll', syncFromScroll, { passive: true });
+        panelEl._summaryDetailNavCleanup = () => {
+            panelEl.removeEventListener('scroll', syncFromScroll);
+        };
+        panelEl._summaryDetailNavReset = () => {
+            panelEl.scrollTop = 0;
+            setActive(records[0]);
+        };
+        setActive(records[0]);
+    };
+    const resetVisibleDetailPosition = (panelEl) => {
+        if (!panelEl) return;
+        const reset = () => {
+            if (panelEl.classList.contains('is-hidden')) return;
+            panelEl.scrollTop = 0;
+            try {
+                if (typeof panelEl._summaryDetailNavReset === 'function') {
+                    panelEl._summaryDetailNavReset();
+                }
+            } catch (_) {}
+        };
+        reset();
+        // Chromium can restore a scroll anchor as display:none panels re-enter
+        // layout. Reassert on the next frame, after their geometry is resolved.
+        try { window.requestAnimationFrame(reset); } catch (_) {}
+    };
+
+    const showOverview = (options = {}) => {
+        try {
+            contentEl.dataset.summaryView = 'overview';
+            delete contentEl.dataset.detailProgramKind;
+            delete contentEl.dataset.detailProgramCode;
             minorPanelEl.classList.add('is-hidden');
             majorPanelEl.classList.add('is-hidden');
+            minorPanelEl.removeAttribute('role');
+            minorPanelEl.removeAttribute('aria-labelledby');
+            majorPanelEl.removeAttribute('role');
+            majorPanelEl.removeAttribute('aria-labelledby');
+            programTabRecords.forEach((record) => {
+                record.tab.setAttribute('aria-controls', record.overviewPanelId);
+            });
             cardsRowEl.classList.remove('is-hidden');
-            headerRowEl.classList.remove('is-hidden');
+            overviewSubtitleEl.textContent = contentEl.classList.contains('is-multiple')
+                ? `Earned and projected progress across ${contentEl.dataset.programCount || 'multiple'} selected programs.`
+                : 'Earned and projected progress for your selected program.';
         } catch (_) {}
+        if (options.focusTab && !isMobileSummaryAdapter) {
+            setTimeout(() => {
+                try {
+                    const record = activeProgramRecord();
+                    if (record) focusProgramAnchor(record);
+                } catch (_) {}
+            }, 0);
+        }
     };
+    contentEl.dataset.summaryView = 'overview';
+
+    if (!isMobileSummaryAdapter) {
+        const getSummaryFocusable = () => Array.from(contentEl.querySelectorAll(
+            'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"]), select:not([disabled]), input:not([disabled])'
+        )).filter((element) => element.getAttribute('aria-hidden') !== 'true'
+            && !element.closest('[hidden], .is-hidden')
+            && element.getClientRects().length > 0);
+        summaryKeydownHandler = (event) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                event.stopPropagation();
+                closeSummary();
+                return;
+            }
+            if (event.key !== 'Tab') return;
+            const focusable = getSummaryFocusable();
+            if (!focusable.length) return;
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (event.shiftKey && (document.activeElement === first || !contentEl.contains(document.activeElement))) {
+                event.preventDefault();
+                last.focus({ preventScroll: true });
+            } else if (!event.shiftKey && document.activeElement === last) {
+                event.preventDefault();
+                first.focus({ preventScroll: true });
+            }
+        };
+        document.addEventListener('keydown', summaryKeydownHandler, true);
+        setTimeout(() => {
+            try { closeButtonEl.focus({ preventScroll: true }); } catch (_) {}
+        }, 0);
+    }
 
     function getTakenCourseCodes() {
         const taken = new Set();
@@ -804,13 +1173,204 @@ function displaySummary(curriculum, major_chosen_by_user) {
         return attempt && attempt.state === 'unsuccessful' ? attempt : null;
     };
 
-    // Minor buttons: show a compact, visual guide for each selected minor,
-    // and render the minor summary inside the same overlay (hiding majors).
+    let programCardSequence = 0;
+    const appendProgramCardHeading = (card, kind, code, title) => {
+        const normalizedKind = String(kind || 'program');
+        const normalizedCode = String(code || '').toUpperCase();
+        const titleId = `summary-program-card-title-${++programCardSequence}`;
+        card.classList.add('summary_program_card');
+        card.dataset.programKind = normalizedKind;
+        card.dataset.programCode = normalizedCode;
+
+        const heading = document.createElement('div');
+        heading.className = 'summary_program_card_heading';
+        const eyebrow = document.createElement('span');
+        eyebrow.className = 'summary_program_role';
+        eyebrow.textContent = normalizedKind === 'main' ? 'Main major'
+            : normalizedKind === 'dm' ? 'Double major' : 'Minor';
+        const titleEl = document.createElement('h4');
+        titleEl.id = titleId;
+        titleEl.className = 'summary_modal_title';
+        titleEl.textContent = title || normalizedCode;
+        const codeEl = document.createElement('span');
+        codeEl.className = 'summary_program_code';
+        codeEl.textContent = normalizedCode;
+        heading.appendChild(eyebrow);
+        heading.appendChild(titleEl);
+        heading.appendChild(codeEl);
+        card.appendChild(heading);
+        registerProgramTab(card, normalizedKind, normalizedCode, title || normalizedCode, titleId);
+        return titleEl;
+    };
+
+    const organizeProgramOverviewCard = (card, options = {}) => {
+        if (!card || card.dataset.summaryOrganized === 'true') return;
+        card.dataset.summaryOrganized = 'true';
+
+        const kind = String(options.kind || card.dataset.programKind || 'program').toLowerCase();
+        const directChildren = () => Array.from(card.children);
+        const takeDirect = (selector) => directChildren().find((child) => child.matches(selector)) || null;
+        const takeDirectAll = (selector) => directChildren().filter((child) => child.matches(selector));
+        const makeSectionCopy = (title, description) => {
+            const copy = document.createElement('div');
+            copy.className = 'summary_overview_section_copy';
+            const heading = document.createElement('h5');
+            heading.textContent = title;
+            const body = document.createElement('p');
+            body.textContent = description;
+            copy.appendChild(heading);
+            copy.appendChild(body);
+            return copy;
+        };
+        const markProgressMetric = (metric) => {
+            if (!metric) return;
+            const projected = Number(metric.dataset.projected);
+            const earned = Number(metric.dataset.earned);
+            const limit = Number(metric.dataset.limit);
+            if (!Number.isFinite(limit) || limit <= 0) return;
+            metric.classList.toggle('is-earned-complete', Number.isFinite(earned) && earned >= limit);
+            metric.classList.toggle('is-projected-complete', Number.isFinite(projected)
+                && projected >= limit && !(Number.isFinite(earned) && earned >= limit));
+            metric.classList.toggle('is-incomplete', !Number.isFinite(projected) || projected < limit);
+        };
+
+        const identity = document.createElement('header');
+        identity.className = 'summary_overview_identity';
+        const cardHeading = takeDirect('.summary_program_card_heading');
+        const cardContext = takeDirect('.summary_program_card_context');
+        const cardFooter = takeDirect('.summary_program_card_footer');
+        const identityCopy = document.createElement('div');
+        identityCopy.className = 'summary_program_identity_copy';
+        if (cardHeading) {
+            const meta = document.createElement('div');
+            meta.className = 'summary_program_meta';
+            const role = cardHeading.querySelector('.summary_program_role');
+            const code = cardHeading.querySelector('.summary_program_code');
+            let status = cardContext && cardContext.querySelector('.summary_program_status');
+            if (!status && card.dataset.summaryStatus) {
+                const statusValue = String(card.dataset.summaryStatus || 'in-progress');
+                status = document.createElement('span');
+                status.className = `summary_program_status ${statusValue === 'in-progress' ? 'is-progress' : `is-${statusValue}`}`;
+                status.textContent = statusValue === 'complete' ? 'Requirements met'
+                    : statusValue === 'projected' ? 'Projected complete'
+                        : statusValue === 'unavailable' ? 'Requirements unavailable' : 'In progress';
+            }
+            if (role) meta.appendChild(role);
+            if (code) meta.appendChild(code);
+            if (status) meta.appendChild(status);
+            if (meta.children.length) cardHeading.insertBefore(meta, cardHeading.firstChild);
+            identityCopy.appendChild(cardHeading);
+        }
+        if (cardContext && cardContext.children.length) identityCopy.appendChild(cardContext);
+        if (identityCopy.children.length) identity.appendChild(identityCopy);
+        if (cardFooter) identity.appendChild(cardFooter);
+        if (identity.children.length) card.appendChild(identity);
+
+        const heroMetric = takeDirect('.summary_metric_hero');
+        if (heroMetric) {
+            markProgressMetric(heroMetric);
+            const projected = Number(heroMetric.dataset.projected) || 0;
+            const limit = Number(heroMetric.dataset.limit) || 0;
+            const remaining = Math.max(0, limit - projected);
+            const completion = document.createElement('div');
+            completion.className = 'summary_metric_completion';
+            completion.textContent = limit > 0
+                ? (remaining > 0
+                    ? `${Math.min(100, Math.round((projected / limit) * 100))}% planned • ${formatSummaryNumber(remaining)} remaining`
+                    : 'Requirement reached in the current plan')
+                : 'No overall credit target is configured';
+            heroMetric.appendChild(completion);
+
+            const hero = document.createElement('section');
+            hero.className = 'summary_overview_hero';
+            hero.appendChild(makeSectionCopy(
+                kind === 'minor' ? 'Minor progress' : 'Overall progress',
+                'Earned credit is shown separately from current, future, and needs-grade coursework.'
+            ));
+            hero.appendChild(heroMetric);
+            card.appendChild(hero);
+        }
+
+        const snapshotKeys = kind === 'minor'
+            ? new Set(['cgpa', 'pgpa', 'courses'])
+            : new Set(['gpa', 'main_pgpa', 'pgpa', 'ects']);
+        const snapshotMetrics = takeDirectAll('.summary_metric').filter((metric) => (
+            snapshotKeys.has(String(metric.dataset.metric || '')) && metric !== heroMetric
+        ));
+        const standing = takeDirect('.summary_class_level');
+        if (standing || snapshotMetrics.length) {
+            const snapshot = document.createElement('section');
+            snapshot.className = 'summary_overview_snapshot';
+            snapshot.appendChild(makeSectionCopy(
+                'Academic snapshot',
+                kind === 'minor'
+                    ? 'Current averages and planned course-count progress for this minor.'
+                    : 'Standing and averages based on the grades currently available in your plan.'
+            ));
+            const grid = document.createElement('div');
+            grid.className = 'summary_overview_snapshot_grid';
+            if (standing) grid.appendChild(standing);
+            snapshotMetrics.forEach((metric) => grid.appendChild(metric));
+            snapshot.appendChild(grid);
+            card.appendChild(snapshot);
+        }
+
+        const remainingMetrics = takeDirectAll('.summary_metric').filter((metric) => metric !== heroMetric);
+        remainingMetrics.forEach(markProgressMetric);
+        const categorySummary = takeDirect('.summary_minor_categories');
+        if (remainingMetrics.length || categorySummary) {
+            const requirements = document.createElement('section');
+            requirements.className = 'summary_overview_requirements';
+            requirements.appendChild(makeSectionCopy(
+                'Requirement progress',
+                kind === 'minor'
+                    ? 'Category targets used by the selected minor.'
+                    : 'How the current plan is distributed across degree-credit categories.'
+            ));
+            if (remainingMetrics.length) {
+                const grid = document.createElement('div');
+                grid.className = 'summary_overview_requirements_grid';
+                remainingMetrics.forEach((metric) => grid.appendChild(metric));
+                requirements.appendChild(grid);
+            }
+            if (categorySummary) requirements.appendChild(categorySummary);
+            card.appendChild(requirements);
+        }
+
+        const notices = directChildren().filter((child) => (
+            child.matches('.summary_minor_unavailable')
+            || (child.matches('.summary_modal_child') && !child.matches('.summary_metric, .summary_class_level'))
+        ));
+        if (notices.length) {
+            const noticeRegion = document.createElement('section');
+            noticeRegion.className = 'summary_overview_notice';
+            notices.forEach((notice) => noticeRegion.appendChild(notice));
+            card.appendChild(noticeRegion);
+        }
+
+    };
+
+    const formatSummaryNumber = (value) => {
+        const number = Number(value || 0);
+        if (!Number.isFinite(number)) return '0';
+        return Math.abs(number - Math.round(number)) < 1e-9
+            ? String(Math.round(number)) : number.toFixed(1);
+    };
+
+    let appendMinorOverviewCards = () => {};
+
+    // Keep the existing hidden minor buttons as a compatibility adapter for
+    // the mobile Progress screen, while desktop gets real compact minor cards.
     try {
-        const minors = Array.isArray(curriculum.minors) ? curriculum.minors.filter(Boolean) : [];
+        const minors = Array.from(new Set(
+            (Array.isArray(curriculum.minors) ? curriculum.minors : [])
+                .map(code => String(code || '').trim())
+                .filter(Boolean)
+        ));
         if (minors.length) {
             const minorRow = document.createElement('div');
             minorRow.className = 'summary_minor_row';
+            minorRow.hidden = true;
             headerRowEl.appendChild(minorRow);
 
             const taken = getTakenCourseCodes();
@@ -844,11 +1404,12 @@ function displaySummary(curriculum, major_chosen_by_user) {
             };
 
             const showMajors = () => {
-                showOverview();
+                showOverview({ focusTab: true });
             };
 
             const showMinorSummary = (minorCode) => {
                 try { majorPanelEl.classList.add('is-hidden'); } catch (_) {}
+                activateProgramCard('minor', minorCode);
                 const allocRes = computeMinorAllocation(curriculum, minorCode, {
                     progressGpa: progressMain && progressMain.gpa,
                 });
@@ -1015,24 +1576,23 @@ function displaySummary(curriculum, major_chosen_by_user) {
                 body += `<div class="ms-subtitle">Admit term: <strong>${esc(termName || 'Unknown')}</strong></div>`;
                 try {
                     if (allocRes.gpaResolved === false) {
-                        body += `<div class="ms-subtitle" style="color: #DC2626; font-weight: 700;">CGPA unavailable: review the grading basis of the flagged NA course.</div>`;
+                        body += `<div class="ms-subtitle ms-subtitle--danger">CGPA unavailable: review the grading basis of the flagged NA course.</div>`;
                     } else if (isFinite(allocRes.cgpa) && allocRes.gpaThreshold) {
                         const cgpaStr = Number(allocRes.cgpa).toFixed(3);
                         const thrStr = Number(allocRes.gpaThreshold).toFixed(2);
                         const ok = allocRes.gpaOk !== false;
-                        const color = ok ? 'color: var(--text-secondary);' : 'color: #DC2626; font-weight: 700;';
-                        body += `<div class="ms-subtitle" style="${color}">CGPA requirement: <strong>${thrStr}</strong> • Your CGPA: <strong>${cgpaStr}</strong></div>`;
+                        const toneClass = ok ? 'ms-subtitle--muted' : 'ms-subtitle--danger';
+                        body += `<div class="ms-subtitle ${toneClass}">CGPA requirement: <strong>${thrStr}</strong> • Your CGPA: <strong>${cgpaStr}</strong></div>`;
                     } else {
                         body += `<div class="ms-subtitle">CGPA requirement: <strong>${(String(minorCode || '').toUpperCase() === 'ENTREP-MINOR') ? '2.50' : '2.72'}</strong></div>`;
                     }
                     const thrStr = Number(allocRes.gpaThreshold || 0).toFixed(2);
                     if (allocRes.pgpaResolved === false) {
-                        body += `<div class="ms-subtitle" style="color: #DC2626; font-weight: 700;">Minor PGPA unavailable: review the program-course grades.</div>`;
+                        body += `<div class="ms-subtitle ms-subtitle--danger">Minor PGPA unavailable: review the program-course grades.</div>`;
                     } else if (isFinite(allocRes.pgpa)) {
                         const pgpaStr = Number(allocRes.pgpa).toFixed(3);
-                        const color = allocRes.pgpaOk !== false
-                            ? 'color: var(--text-secondary);' : 'color: #DC2626; font-weight: 700;';
-                        body += `<div class="ms-subtitle" style="${color}">Minor PGPA requirement: <strong>${thrStr}</strong> • Your PGPA: <strong>${pgpaStr}</strong></div>`;
+                        const toneClass = allocRes.pgpaOk !== false ? 'ms-subtitle--muted' : 'ms-subtitle--danger';
+                        body += `<div class="ms-subtitle ${toneClass}">Minor PGPA requirement: <strong>${thrStr}</strong> • Your PGPA: <strong>${pgpaStr}</strong></div>`;
                     } else {
                         body += `<div class="ms-subtitle">Minor PGPA requirement: <strong>${thrStr}</strong></div>`;
                     }
@@ -1097,7 +1657,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
                 // Render inside overlay and hide majors.
                 minorPanelEl.innerHTML = `
                   <div class="summary_minor_panel_header">
-                    <button class="btn btn-secondary summary_back_btn" type="button">Back to majors</button>
+                    <button class="btn btn-secondary summary_back_btn" type="button">Back to program summary</button>
                     <div class="summary_minor_panel_title">${esc(title)}</div>
                   </div>
                   <div class="summary_minor_switch_row">
@@ -1110,6 +1670,10 @@ function displaySummary(curriculum, major_chosen_by_user) {
                   </div>
                   <div class="summary_minor_panel_body">${body}</div>
                 `;
+                // A rebuilt detail view is a fresh navigation context. Keeping the
+                // previous scroll offset would put the visible section out of sync
+                // with the newly rebuilt section navigation's active item.
+                minorPanelEl.scrollTop = 0;
                 try {
                     const backBtn = minorPanelEl.querySelector('.summary_back_btn');
                     if (backBtn) {
@@ -1140,13 +1704,219 @@ function displaySummary(curriculum, major_chosen_by_user) {
                             btn.textContent = willShow ? `Hide untaken (${count})` : `Show untaken (${count})`;
                         });
                     });
+                    wireDetailSectionNavigation(minorPanelEl);
                 } catch (_) {}
 
                 try {
+                    contentEl.dataset.summaryView = 'detail';
+                    contentEl.dataset.detailProgramKind = 'minor';
+                    contentEl.dataset.detailProgramCode = String(minorCode || '').toUpperCase();
                     minorPanelEl.classList.remove('is-hidden');
                     cardsRowEl.classList.add('is-hidden');
-                    headerRowEl.classList.add('is-hidden');
+                    resetVisibleDetailPosition(minorPanelEl);
+                    connectActiveTabToDetail(minorPanelEl);
+                    focusDetailBackButton(minorPanelEl);
+                    overviewSubtitleEl.textContent = `${minorCode} minor details`;
                 } catch (_) {}
+            };
+
+            const formatMinorValue = (value) => {
+                const n = Number(value || 0);
+                if (!isFinite(n)) return '0';
+                return Math.abs(n - Math.round(n)) < 1e-9 ? String(Math.round(n)) : n.toFixed(1);
+            };
+
+            const minorLayerTotals = (allocation) => {
+                const layers = {
+                    earned: { courses: 0, credits: 0 },
+                    current: { courses: 0, credits: 0 },
+                    future: { courses: 0, credits: 0 },
+                    unverified: { courses: 0, credits: 0 },
+                };
+                const records = allocation && allocation.allocationByCode
+                    ? allocation.allocationByCode : {};
+                Object.keys(records).forEach((code) => {
+                    const record = records[code] || {};
+                    const state = Object.prototype.hasOwnProperty.call(layers, record.progressState)
+                        ? record.progressState : 'unverified';
+                    layers[state].courses += 1;
+                    layers[state].credits += Number(record.credit) || 0;
+                });
+                return layers;
+            };
+
+            const appendMinorAverageMetric = (card, key, label, value, resolved, threshold, ok) => {
+                const metric = document.createElement('div');
+                metric.className = `summary_modal_child summary_metric summary_minor_metric ${ok ? 'is-met' : 'is-unmet'}`;
+                metric.dataset.metric = key;
+                metric.dataset.value = isFinite(Number(value)) ? String(Number(value)) : '';
+                metric.dataset.limit = '4';
+                metric.dataset.threshold = String(Number(threshold) || 0);
+                metric.dataset.met = String(!!ok);
+                const display = resolved && isFinite(Number(value)) ? Number(value).toFixed(3) : 'N/A';
+                metric.innerHTML = `
+                    <div class="summary_metric_head"><span>${label}</span><strong>${display} / 4.00</strong></div>
+                    <div class="summary_metric_equation"><span>Required ≥ ${Number(threshold || 0).toFixed(2)}</span></div>`;
+                card.appendChild(metric);
+            };
+
+            const appendMinorProgressMetric = (card, key, label, layers, unit, limit) => {
+                const metric = document.createElement('div');
+                metric.className = 'summary_modal_child summary_metric summary_minor_metric';
+                metric.dataset.metric = key;
+                const field = unit === 'courses' ? 'courses' : 'credits';
+                const values = {
+                    earned: Number(layers.earned[field]) || 0,
+                    current: Number(layers.current[field]) || 0,
+                    future: Number(layers.future[field]) || 0,
+                    unverified: Number(layers.unverified[field]) || 0,
+                };
+                const projected = values.earned + values.current + values.future + values.unverified;
+                const target = Number(limit) || 0;
+                metric.dataset.earned = String(values.earned);
+                metric.dataset.current = String(values.current);
+                metric.dataset.future = String(values.future);
+                metric.dataset.unverified = String(values.unverified);
+                metric.dataset.projected = String(projected);
+                metric.dataset.limit = String(target);
+                metric.classList.toggle('summary_metric_hero', key === 'su');
+                const parts = [
+                    `<span class="summary_part is-earned"><strong>${formatMinorValue(values.earned)}</strong> earned</span>`,
+                ];
+                if (values.current) parts.push(`<span class="summary_part is-current"><strong>+ ${formatMinorValue(values.current)}</strong> current</span>`);
+                if (values.future) parts.push(`<span class="summary_part is-future"><strong>+ ${formatMinorValue(values.future)}</strong> future</span>`);
+                if (values.unverified) parts.push(`<span class="summary_part is-unverified"><strong>+ ${formatMinorValue(values.unverified)}</strong> needs grade</span>`);
+                const denom = Math.max(projected, target, 1);
+                const segment = (state, amount) => amount > 0
+                    ? `<span class="summary_segment is-${state}" style="width:${Math.max(0, amount) / denom * 100}%"></span>` : '';
+                metric.innerHTML = `
+                    <div class="summary_metric_head"><span>${label}</span><strong>${formatMinorValue(projected)} / ${formatMinorValue(target)}</strong></div>
+                    <div class="summary_metric_equation">${parts.join(' ')}</div>
+                    <div class="summary_segment_track" role="progressbar" aria-label="${esc(label)} progress" aria-valuemin="0" aria-valuemax="${Math.max(1, target, projected)}" aria-valuenow="${Math.max(0, projected)}">
+                        ${segment('earned', values.earned)}${segment('current', values.current)}${segment('future', values.future)}${segment('unverified', values.unverified)}
+                    </div>`;
+                card.appendChild(metric);
+            };
+
+            appendMinorOverviewCards = () => {
+                for (const minorCode of minors) {
+                    const card = document.createElement('div');
+                    card.className = 'summary_minor_overview_card';
+                    const progressGpa = progressMain && progressMain.gpa;
+                    const allocRes = computeMinorAllocation(curriculum, minorCode, {
+                        progressGpa,
+                    });
+                    const req = allocRes && !allocRes.error ? (allocRes.req || {}) : (getMinorReq(minorCode) || {});
+                    const title = (allocRes && !allocRes.error && allocRes.title)
+                        ? allocRes.title : (req.name || minorCode);
+                    appendProgramCardHeading(card, 'minor', minorCode, title);
+
+                    if (!allocRes || allocRes.error) {
+                        card.classList.add('is-unavailable');
+                        card.dataset.summaryStatus = 'unavailable';
+                        const unavailable = document.createElement('div');
+                        unavailable.className = 'summary_minor_unavailable';
+                        unavailable.textContent = 'Requirements are unavailable for this minor and admit term.';
+                        card.appendChild(unavailable);
+                        const disabledFooter = document.createElement('div');
+                        disabledFooter.className = 'summary_program_card_footer';
+                        const disabledButton = document.createElement('button');
+                        disabledButton.type = 'button';
+                        disabledButton.className = 'btn btn-secondary summary_detail_btn';
+                        disabledButton.disabled = true;
+                        disabledButton.textContent = 'Requirement details unavailable';
+                        disabledFooter.appendChild(disabledButton);
+                        card.appendChild(disabledFooter);
+                        organizeProgramOverviewCard(card, { kind: 'minor' });
+                        minorGridEl.appendChild(card);
+                        continue;
+                    }
+
+                    const earnedAllocRes = computeMinorAllocation(curriculum, minorCode, {
+                        progressGpa,
+                        isEligible: (course, semester) => {
+                            try {
+                                return curriculum
+                                    && typeof curriculum.getCourseProgressState === 'function'
+                                    && curriculum.getCourseProgressState(course, semester) === 'earned'
+                                    && courseCountsTowardDegreePlan(curriculum, course, semester);
+                            } catch (_) {
+                                return false;
+                            }
+                        },
+                    });
+                    const summaryStatus = earnedAllocRes && !earnedAllocRes.error && earnedAllocRes.ok
+                        ? 'complete' : allocRes.ok ? 'projected' : 'in-progress';
+                    card.dataset.summaryStatus = summaryStatus;
+                    const context = document.createElement('div');
+                    context.className = 'summary_program_card_context';
+                    const termLabel = req.term || termNameFromCode(allocRes.termCode) || 'Unknown term';
+                    const status = document.createElement('span');
+                    const statusClass = summaryStatus === 'complete' ? 'is-complete'
+                        : summaryStatus === 'projected' ? 'is-projected' : 'is-progress';
+                    status.className = `summary_program_status ${statusClass}`;
+                    status.textContent = summaryStatus === 'complete' ? 'Requirements met'
+                        : summaryStatus === 'projected' ? 'Projected complete' : 'In progress';
+                    const term = document.createElement('span');
+                    term.className = 'summary_program_term';
+                    term.textContent = `Admit term: ${termLabel}`;
+                    context.appendChild(status);
+                    context.appendChild(term);
+                    card.appendChild(context);
+
+                    appendMinorAverageMetric(card, 'cgpa', 'CGPA', allocRes.cgpa,
+                        allocRes.gpaResolved !== false, allocRes.gpaThreshold, allocRes.cgpaOk);
+                    appendMinorAverageMetric(card, 'pgpa', 'Minor PGPA', allocRes.pgpa,
+                        allocRes.pgpaResolved !== false && Number(allocRes.pgpaCredits) > 0,
+                        allocRes.gpaThreshold, allocRes.pgpaOk);
+                    const layers = minorLayerTotals(allocRes);
+                    appendMinorProgressMetric(card, 'courses', 'Courses', layers, 'courses', req.minCourses);
+                    appendMinorProgressMetric(card, 'su', 'SU Credits', layers, 'credits', req.minSU);
+
+                    const categorySummary = document.createElement('div');
+                    categorySummary.className = 'summary_minor_categories';
+                    const categoryOrder = ['required', 'core', 'area', 'free'];
+                    categoryOrder.forEach((category) => {
+                        const cfg = req.categories && req.categories[category];
+                        if (!cfg) return;
+                        const needCourses = Number(cfg.minCourses) || 0;
+                        const needCredits = Number(cfg.minSU) || 0;
+                        if (!needCourses && !needCredits) return;
+                        const have = allocRes.totals && allocRes.totals[category]
+                            ? allocRes.totals[category] : { courses: 0, credits: 0 };
+                        const item = document.createElement('div');
+                        item.className = `summary_minor_category ${allocRes.perCatOk && allocRes.perCatOk[category] ? 'is-met' : 'is-unmet'}`;
+                        item.dataset.category = category;
+                        const label = document.createElement('span');
+                        label.textContent = category.charAt(0).toUpperCase() + category.slice(1);
+                        const value = document.createElement('strong');
+                        const coursePart = needCourses ? `${formatMinorValue(have.courses)}/${formatMinorValue(needCourses)} courses` : '';
+                        const creditPart = needCredits ? `${formatMinorValue(have.credits)}/${formatMinorValue(needCredits)} SU` : '';
+                        value.textContent = [coursePart, creditPart].filter(Boolean).join(' • ');
+                        item.appendChild(label);
+                        item.appendChild(value);
+                        categorySummary.appendChild(item);
+                    });
+                    if (categorySummary.children.length) card.appendChild(categorySummary);
+
+                    const footer = document.createElement('div');
+                    footer.className = 'summary_program_card_footer';
+                    const detailsBtn = document.createElement('button');
+                    detailsBtn.className = 'btn btn-secondary summary_detail_btn';
+                    detailsBtn.type = 'button';
+                    detailsBtn.textContent = 'View requirement details';
+                    detailsBtn.setAttribute('aria-label', `View ${title} detailed summary`);
+                    detailsBtn.addEventListener('click', (event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        showMinorSummary(minorCode);
+                    });
+                    footer.appendChild(detailsBtn);
+                    card.appendChild(footer);
+                    organizeProgramOverviewCard(card, { kind: 'minor' });
+                    minorGridEl.appendChild(card);
+                }
+                if (minorGridEl.children.length) minorSectionEl.classList.remove('is-hidden');
             };
 
             for (const minorCode of minors) {
@@ -1281,6 +2051,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
             ? curriculum.getGraduationProgress(view) : null;
         const allocRes = computeMajorAllocation(view, majorProgress);
         const majorCode = allocRes.majorCode;
+        activateProgramCard(view, majorCode);
         if (!majorCode) return;
 
         const reqRec = lookupReq(majorCode, allocRes.entryTerm) || {};
@@ -1451,7 +2222,8 @@ function displaySummary(curriculum, major_chosen_by_user) {
                 const available = result && result.resolved !== false
                     && Number(result.credits) > 0 && isFinite(value);
                 const met = available && value >= threshold;
-                return `<div class="ms-average ${met ? 'is-met' : 'is-unmet'}"><span>${esc(label)}</span><strong>${available ? value.toFixed(3) : 'N/A'}</strong><small>required ≥ ${threshold.toFixed(2)}</small></div>`;
+                const state = !available ? 'is-unavailable' : met ? 'is-met' : 'is-unmet';
+                return `<div class="ms-average ${state}"><span>${esc(label)}</span><strong>${available ? value.toFixed(3) : '—'}</strong><small>${available ? '' : 'No graded courses • '}required ≥ ${threshold.toFixed(2)}</small></div>`;
             };
             body += `<div class="ms-average-grid">`;
             body += averageRow('CGPA', majorProgress.gpa);
@@ -1615,6 +2387,9 @@ function displaySummary(curriculum, major_chosen_by_user) {
           </div>
           <div class="summary_minor_panel_body">${body}</div>
         `;
+        // Major and double-major details share this panel, so never carry a prior
+        // program/section scroll position into the freshly rendered view.
+        majorPanelEl.scrollTop = 0;
 
         try {
             const backBtn = majorPanelEl.querySelector('.summary_back_btn');
@@ -1622,7 +2397,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
                 backBtn.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    showOverview();
+                    showOverview({ focusTab: true });
                 });
             }
             majorPanelEl.querySelectorAll('.summary_minor_switch_btn').forEach(btn => {
@@ -1646,13 +2421,20 @@ function displaySummary(curriculum, major_chosen_by_user) {
                     btn.textContent = willShow ? `Hide untaken (${count})` : `Show untaken (${count})`;
                 });
             });
+            wireDetailSectionNavigation(majorPanelEl);
         } catch (_) {}
 
         try {
+            contentEl.dataset.summaryView = 'detail';
+            contentEl.dataset.detailProgramKind = view;
+            contentEl.dataset.detailProgramCode = String(majorCode || '').toUpperCase();
             majorPanelEl.classList.remove('is-hidden');
             minorPanelEl.classList.add('is-hidden');
             cardsRowEl.classList.add('is-hidden');
-            headerRowEl.classList.add('is-hidden');
+            resetVisibleDetailPosition(majorPanelEl);
+            connectActiveTabToDetail(majorPanelEl);
+            focusDetailBackButton(majorPanelEl);
+            overviewSubtitleEl.textContent = `${majorCode} degree-program details`;
         } catch (_) {}
     };
 
@@ -1664,16 +2446,36 @@ function displaySummary(curriculum, major_chosen_by_user) {
             return Math.abs(n - Math.round(n)) < 1e-9 ? String(Math.round(n)) : n.toFixed(1);
         };
         const modal = document.createElement('div');
-        modal.classList.add('summary_modal');
-        cardsRowEl.appendChild(modal);
+        modal.classList.add('summary_modal', 'summary_degree_overview_card');
+        degreeGridEl.appendChild(modal);
         if (majorCode) {
-            const header = document.createElement('div');
-            header.classList.add('summary_modal_title');
-            header.textContent = majorNames[majorCode] || majorCode;
-            modal.appendChild(header);
+            appendProgramCardHeading(modal, view, majorCode, majorNames[majorCode] || majorCode);
         }
+        const progressStatus = !requirementsAvailable || (progress && progress.available === false)
+            ? 'unavailable' : progress && progress.status === 'complete'
+                ? 'complete' : progress && progress.status === 'projected'
+                    ? 'projected' : 'in-progress';
+        modal.dataset.summaryStatus = progressStatus;
+        const context = document.createElement('div');
+        context.className = 'summary_program_card_context';
+        const status = document.createElement('span');
+        status.className = `summary_program_status ${progressStatus === 'in-progress' ? 'is-progress' : `is-${progressStatus}`}`;
+        status.textContent = progressStatus === 'complete' ? 'Requirements met'
+            : progressStatus === 'projected' ? 'Projected complete'
+                : progressStatus === 'unavailable' ? 'Requirements unavailable' : 'In progress';
+        const admitTermCode = view === 'dm' ? curriculum.entryTermDM : curriculum.entryTerm;
+        const admitTerm = document.createElement('span');
+        admitTerm.className = 'summary_program_term';
+        const admitTermLabel = (() => {
+            try { return termNameFromCode(admitTermCode) || String(admitTermCode || 'Unknown term'); } catch (_) {}
+            return String(admitTermCode || 'Unknown term');
+        })();
+        admitTerm.textContent = `Admit term: ${admitTermLabel}`;
+        context.appendChild(status);
+        context.appendChild(admitTerm);
+        modal.appendChild(context);
         const standing = progress && progress.estimatedClassLevel;
-        if (view === 'main' && standing && standing.label) {
+        if ((view === 'main' || view === 'dm') && standing && standing.label) {
             const standingRow = document.createElement('div');
             standingRow.className = 'summary_modal_child summary_class_level';
             standingRow.dataset.estimatedClassLevel = String(standing.label);
@@ -1690,7 +2492,10 @@ function displaySummary(curriculum, major_chosen_by_user) {
 
             const explanation = document.createElement('div');
             explanation.className = 'summary_metric_equation';
-            explanation.textContent = `Based on ${formatValue(standing.earnedCredits)} earned SU credits overall and the undergraduate 34/64/94-credit thresholds. Unfinished current-term, future, needs-grade, and unsuccessful courses are excluded.`;
+            explanation.textContent = standing.nextLabel && Number(standing.creditsToNext) > 0
+                ? `${formatValue(standing.earnedCredits)} earned SU • ${formatValue(standing.creditsToNext)} SU to ${standing.nextLabel}`
+                : `${formatValue(standing.earnedCredits)} earned SU • Highest standing band`;
+            explanation.title = 'Estimated from earned SU only. Current-term, future, needs-grade, and unsuccessful courses are excluded.';
             standingRow.appendChild(head);
             standingRow.appendChild(explanation);
             modal.appendChild(standingRow);
@@ -1700,6 +2505,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
             unavailable.classList.add('summary_modal_child');
             unavailable.textContent = 'Graduation requirements are unavailable for this program and admit term. No completion result was calculated.';
             modal.appendChild(unavailable);
+            organizeProgramOverviewCard(modal, { kind: view });
             return modal;
         }
         // Build content. Each metric keeps a machine-readable projected total
@@ -1778,6 +2584,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
             child.dataset.unverified = String(unverified);
             child.dataset.projected = String(projected);
             child.dataset.limit = String(limit);
+            child.classList.toggle('summary_metric_hero', metric === 'total');
             const label = labels[i].replace(/:\s*$/, '');
             const parts = [
                 `<span class="summary_part is-earned"><strong>${formatValue(earned)}</strong> earned</span>`,
@@ -1792,18 +2599,19 @@ function displaySummary(curriculum, major_chosen_by_user) {
                 <p class="summary_metric_legacy" aria-hidden="true">${label}: ${formatValue(projected)} / ${formatValue(limit)}</p>
                 <div class="summary_metric_head"><span>${label}</span><strong>${formatValue(projected)} / ${formatValue(limit)}</strong></div>
                 <div class="summary_metric_equation">${parts.join(' ')}</div>
-                <div class="summary_segment_track" aria-hidden="true">
+                <div class="summary_segment_track" role="progressbar" aria-label="${esc(label)} progress" aria-valuemin="0" aria-valuemax="${Math.max(1, limit, projected)}" aria-valuenow="${Math.max(0, projected)}">
                     ${segment('earned', earned)}${segment('current', current)}${segment('future', future)}${segment('unverified', unverified)}
                 </div>`;
             modal.appendChild(child);
         }
         if (view === 'main' || view === 'dm') {
             const btnWrap = document.createElement('div');
-            btnWrap.style.marginTop = '6px';
+            btnWrap.className = 'summary_program_card_footer';
             const detailsBtn = document.createElement('button');
             detailsBtn.className = 'btn btn-secondary summary_detail_btn';
             detailsBtn.type = 'button';
-            detailsBtn.textContent = 'View detailed summary';
+            detailsBtn.textContent = 'View requirement details';
+            detailsBtn.setAttribute('aria-label', `View ${majorNames[majorCode] || majorCode} detailed summary`);
             detailsBtn.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -1812,6 +2620,7 @@ function displaySummary(curriculum, major_chosen_by_user) {
             btnWrap.appendChild(detailsBtn);
             modal.appendChild(btnWrap);
         }
+        organizeProgramOverviewCard(modal, { kind: view });
         return modal;
     }
     const formatActualGpa = (progress, legacyPoints, legacyCredits) => {
@@ -1955,6 +2764,28 @@ function displaySummary(curriculum, major_chosen_by_user) {
             String(safeDmReq.engineering || 0)
         ];
         buildSummaryModal(totalsDM, limitsDM, gpaDM, curriculum.doubleMajor, 'dm', dmReqAvailable, progressDM);
+    }
+    try { appendMinorOverviewCards(); } catch (error) {
+        try { console.error('Could not build minor overview cards:', error); } catch (_) {}
+    }
+    updateProgramSurfaceState();
+    if (!isMobileSummaryAdapter) {
+        summaryResizeHandler = () => {
+            programTabsEl.setAttribute('aria-orientation',
+                contentEl.classList.contains('is-multiple')
+                    && window.matchMedia('(min-width: 1180px) and (min-height: 620px)').matches
+                    ? 'vertical' : 'horizontal');
+            const compact = !!(document.body && document.body.classList.contains('is-mobile'));
+            contentEl.classList.toggle('is-mobile-viewport', compact);
+            // A focused desktop program tab becomes hidden in the mobile
+            // layout. Keep keyboard focus inside the still-open dialog without
+            // changing the active program or the current overview/detail view.
+            if (compact && programTabsEl.contains(document.activeElement)) {
+                try { closeButtonEl.focus({ preventScroll: true }); } catch (_) {}
+            }
+        };
+        window.addEventListener('resize', summaryResizeHandler, { passive: true });
+        summaryResizeHandler();
     }
 }
 

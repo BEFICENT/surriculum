@@ -112,6 +112,206 @@ test.describe('major and entry-term switching', () => {
     expect(dmEff, 'CS204 is core under ME as the double major').toBe('core');
   });
 
+  test('adding a double major reviews only genuine custom courses, not ordinary N/A courses', async ({ page }) => {
+    const customCode = 'ZZZ626';
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: TERM_NAME,
+      globalCourseMetadata: [{
+        code: 'HIST484',
+        title: 'Peripheral Populations in the Ottoman Empire (1300-1914)',
+        suCredits: 3,
+        ects: 6,
+      }],
+      customCourses: {
+        CS: [{
+          Major: 'ZZZ',
+          Code: '626',
+          Course_Name: 'Primary custom elective',
+          ECTS: '6',
+          Engineering: 0,
+          Basic_Science: 0,
+          SU_credit: '3',
+          Faculty: 'FENS',
+          Faculty_Course: 'No',
+          EL_Type: 'free',
+        }],
+      },
+      // HIST484 is restored from the global course index; CS395 is an
+      // ordinary CS/202401 catalog row that is absent from DSA/202401.
+      // Neither provenance makes the course a user-owned custom definition.
+      curriculum: [['HIST484', 'CS395', customCode]],
+      grades: [['B', 'A', 'A']],
+      dates: [TERM_NAME],
+    });
+    await page.waitForFunction(() => window.curriculum
+      && window.curriculum.semesters.some((semester) => semester.courses
+        .some((course) => course.code === 'HIST484'))
+      && course_data.some((course) => course.__globalCourseDefinition
+        && `${course.Major}${course.Code}` === 'HIST484'));
+
+    await page.locator('#addDoubleMajorBtn').click();
+    await switchSelect(
+      page,
+      '.doubleMajor',
+      'DSA',
+      () => window.curriculum && window.curriculum.doubleMajor === 'DSA',
+    );
+
+    const review = page.locator('.double_major_modal');
+    await expect(review).toBeVisible({ timeout: 15000 });
+    await expect(review.getByRole('heading', { name: 'Set DSA Category', exact: true }))
+      .toBeVisible();
+    await expect(review).toContainText('ZZZ626 - Primary custom elective');
+    await expect(review).not.toContainText('HIST484');
+    await expect(review).not.toContainText('CS395');
+    const category = review.getByRole('combobox', { name: 'DSA Category:', exact: true });
+    await category.selectOption('area');
+    await review.getByRole('button', { name: 'Save', exact: true }).click();
+
+    // A second modal here would mean the globally restored HIST484 fallback
+    // was incorrectly queued as if it were another user-created course.
+    await expect(page.locator('.double_major_modal')).toHaveCount(0);
+    await page.waitForFunction((code) => {
+      const rows = JSON.parse(window.planStorage.getItem('customCourses_DSA') || '[]');
+      return rows.some((course) => `${course.Major}${course.Code}` === code);
+    }, customCode);
+
+    const state = await page.evaluate((code) => {
+      const occurrence = (target) => window.curriculum.semesters
+        .flatMap((semester) => semester.courses)
+        .find((course) => course.code === target);
+      const normalize = (course) => `${course.Major || ''}${course.Code || ''}`;
+      return {
+        dmStored: JSON.parse(window.planStorage.getItem('customCourses_DSA') || '[]')
+          .map((course) => ({
+            code: normalize(course),
+            type: course.EL_Type,
+            faculty: course.Faculty,
+          })),
+        dmRuntime: window.curriculum.doubleMajorCourseData
+          .map((course) => ({ code: normalize(course), faculty: course.Faculty })),
+        primaryStoredCodes: JSON.parse(window.planStorage.getItem('customCourses_CS') || '[]')
+          .map(normalize),
+        hist: {
+          main: occurrence('HIST484').effective_type,
+          dm: occurrence('HIST484').effective_type_dm,
+          global: Boolean(course_data.find((course) => normalize(course) === 'HIST484')
+            ?.__globalCourseDefinition),
+        },
+        cs395: {
+          main: occurrence('CS395').effective_type,
+          dm: occurrence('CS395').effective_type_dm,
+          global: Boolean(course_data.find((course) => normalize(course) === 'CS395')
+            ?.__globalCourseDefinition),
+        },
+        custom: {
+          main: occurrence(code).effective_type,
+          dm: occurrence(code).effective_type_dm,
+        },
+      };
+    }, customCode);
+    expect(state.dmStored).toEqual([{ code: customCode, type: 'area', faculty: 'FENS' }]);
+    expect(state.dmRuntime).toContainEqual({ code: customCode, faculty: 'FENS' });
+    expect(state.dmRuntime.map((course) => course.code)).not.toContain('HIST484');
+    expect(state.dmRuntime.map((course) => course.code)).not.toContain('CS395');
+    expect(state.primaryStoredCodes).toEqual([customCode]);
+    expect(state.hist).toEqual({ main: 'none', dm: 'none', global: true });
+    expect(state.cs395).toEqual({ main: 'required', dm: 'none', global: false });
+    expect(state.custom).toEqual({ main: 'free', dm: 'area' });
+
+    await page.reload();
+    await page.waitForFunction((code) => window.curriculum
+      && window.curriculum.doubleMajor === 'DSA'
+      && window.curriculum.semesters.some((semester) => semester.courses
+        .some((course) => course.code === code)), customCode);
+    await expect(page.locator('.double_major_modal')).toHaveCount(0);
+    expect(await page.evaluate(() => {
+      const stored = JSON.parse(window.planStorage.getItem('customCourses_DSA') || '[]');
+      const runtime = window.curriculum.doubleMajorCourseData
+        .find((course) => `${course.Major}${course.Code}` === 'ZZZ626');
+      return {
+        stored: stored.map((course) => ({
+          code: `${course.Major}${course.Code}`,
+          faculty: course.Faculty,
+        })),
+        runtimeFaculty: runtime && runtime.Faculty,
+      };
+    })).toEqual({
+      stored: [{ code: customCode, faculty: 'FENS' }],
+      runtimeFaculty: 'FENS',
+    });
+  });
+
+  test('a legacy CS210 custom alias does not prompt over target catalog DSA210', async ({ page }) => {
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: TERM_NAME,
+      customCourses: {
+        CS: [{
+          Major: 'CS',
+          Code: '210',
+          Course_Name: 'Legacy Introduction to Data Science override',
+          ECTS: '6',
+          Engineering: 0,
+          Basic_Science: 0,
+          SU_credit: '3',
+          Faculty: 'FENS',
+          Faculty_Course: 'No',
+          EL_Type: 'free',
+        }],
+      },
+      curriculum: [['CS204']],
+      grades: [['A']],
+      dates: [TERM_NAME],
+    });
+    await page.waitForFunction(() => JSON.parse(
+      window.planStorage.getItem('customCourses_CS') || '[]',
+    ).some((course) => `${course.Major}${course.Code}` === 'CS210'));
+
+    await page.locator('#addDoubleMajorBtn').click();
+    await switchSelect(
+      page,
+      '.doubleMajor',
+      'DSA',
+      () => window.curriculum && window.curriculum.doubleMajor === 'DSA',
+    );
+    await page.waitForFunction(() => window.curriculum
+      && Array.isArray(window.curriculum.doubleMajorCourseData)
+      && window.curriculum.doubleMajorCourseData.some((course) => (
+        typeof window.canonicalCourseCode === 'function'
+          ? window.canonicalCourseCode(`${course.Major}${course.Code}`)
+          : `${course.Major}${course.Code}`
+      ) === 'DSA210'));
+
+    await expect(page.locator('.double_major_modal')).toHaveCount(0);
+    expect(await page.evaluate(() => {
+      const combined = (course) => `${course.Major || ''}${course.Code || ''}`;
+      const canonical = (course) => (
+        typeof window.canonicalCourseCode === 'function'
+          ? window.canonicalCourseCode(combined(course))
+          : combined(course)
+      );
+      return {
+        primaryStored: JSON.parse(window.planStorage.getItem('customCourses_CS') || '[]')
+          .map(combined),
+        dmStored: JSON.parse(window.planStorage.getItem('customCourses_DSA') || '[]')
+          .map(combined),
+        primaryAliasRows: course_data
+          .filter((course) => canonical(course) === 'DSA210')
+          .map((course) => ({ code: combined(course), type: course.EL_Type })),
+        targetAliasRows: window.curriculum.doubleMajorCourseData
+          .filter((course) => canonical(course) === 'DSA210')
+          .map((course) => ({ code: combined(course), type: course.EL_Type })),
+      };
+    })).toEqual({
+      primaryStored: ['CS210'],
+      dmStored: [],
+      primaryAliasRows: [{ code: 'DSA210', type: 'core' }],
+      targetAliasRows: [{ code: 'DSA210', type: 'required' }],
+    });
+  });
+
   test('clearing the double major back to None removes it', async ({ page }) => {
     await seedPlan(page, {
       major: 'CS',

@@ -38,7 +38,9 @@ jobs:
           exit 1
 
       - name: Verify the checked-in data manifest
-        run: python tests/manifest_integrity_test.py
+        run: |
+          python tests/coursepage_requirements_data_test.py
+          python tests/manifest_integrity_test.py
 
       - name: Build and smoke-test the allowlisted Pages artifact
         run: python scripts/build_pages_artifact.py --output "${{ runner.temp }}/surriculum-pages"

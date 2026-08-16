@@ -19,6 +19,7 @@ npm run test:e2e       # full Chromium Playwright suite
 npm run test:e2e:cross-browser  # one critical flow in Firefox + WebKit
 python tests/scrape_groups_test.py
 python tests/scrape_coursepages_fallback_test.py
+python tests/coursepage_requirements_data_test.py
 python tests/requirements_validation_test.py
 python tests/scraper_term_identity_test.py
 python tests/manifest_integrity_test.py
@@ -26,7 +27,7 @@ python tests/pages_artifact_test.py
 npm run test:e2e:ui    # Playwright interactive UI mode
 ```
 
-The six Python checks are included in `npm test`; their direct commands remain
+The seven Python checks are included in `npm test`; their direct commands remain
 available for focused runs. Python dependencies are installed separately from
 the JavaScript dev tooling. The cross-browser command is intentionally separate
 from `npm test`: it repeats one release-critical planner flow, not the complete
@@ -45,6 +46,7 @@ tests/
     cross-browser/*.spec.js focused Firefox/WebKit release-critical flow
     desktop/*.spec.js      desktop-viewport flows
     mobile/*.spec.js       phone-viewport flows (body.is-mobile layer)
+  coursepage_requirements_data_test.py  reviewed General Requirements schema/data
   pages_artifact_test.py   release allowlist + mounted-subpath smoke
 ```
 
@@ -77,9 +79,11 @@ internal restructuring. Unit tests are a second layer for pure logic only.
 - `.github/workflows/ci.yml` runs unit/Python checks, the full Chromium suite,
   and the focused Firefox/WebKit flow with read-only repository permissions.
   Data-only refresh pushes and pull requests from `bot/daily-data-refresh` skip
-  that heavier workflow; the refresh job still runs the fast requirements and
-  manifest validators before it opens a pull request.
+  that heavier workflow; the refresh job still runs the fast course-page rule,
+  requirements, term-identity, and manifest validators before it opens a pull
+  request.
 - `.github/workflows/pages-release.yml` is manual and build-only by default. A
-  build-only run uploads the allowlisted bundle for review. Deployment requires
+  build-only run first validates the reviewed course-page rules and data
+  manifest, then uploads the allowlisted bundle for review. Deployment requires
   both the explicit `deploy` input and `refs/heads/main`; ordinary pushes and
   merges cannot publish it.

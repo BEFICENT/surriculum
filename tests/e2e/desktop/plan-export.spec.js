@@ -101,9 +101,10 @@ test.describe('plan export / import round-trip (desktop)', () => {
 
     // The export uses the versioned envelope and carries the plan state.
     expect(obj.type).toBe('surriculum_plan');
-    expect(obj.version).toBe(3);
+    expect(obj.version).toBe(4);
     expect(obj.plan.state.major).toBe('CS');
     expect(obj.plan.state.gradingBases).toEqual([['letter', 'letter', 'letter', 'letter']]);
+    expect(obj.plan.state.termCodes).toEqual(['202401']);
     expect(obj.plan.state.globalCourseMetadata).toEqual(PLAN.globalCourseMetadata);
     expect(obj.plan.state.schedulerStates['202403'].blocked).toEqual(PLAN.schedulerStates['202403'].blocked);
 

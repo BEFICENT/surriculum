@@ -160,10 +160,8 @@ body.is-mobile[data-mobile-tab="planner"] .container_semester {
     height: auto;
     overflow: visible;
     margin: 0;
-    /* Visual-only reversal: recent terms on top. mobile.js sets --m-order
-       to the negated DOM index; the DOM order itself is never changed, so
-       drag-drop / iteration / ids are unaffected. Scoped to mobile planner
-       only, so desktop ordering is untouched. */
+    /* mobile.js negates the persisted/desktop index so the latest semester is
+       presented first on the vertical planner without mutating saved order. */
     order: var(--m-order, 0);
 }
 body.is-mobile[data-mobile-tab="planner"] .add-semester-ghost {
@@ -172,8 +170,8 @@ body.is-mobile[data-mobile-tab="planner"] .add-semester-ghost {
     height: auto;
     min-height: 56px;
     margin: 0;
-    /* Terms are reversed (newest on top), and new terms land at the top, so
-       the "add semester" affordance belongs above the stack. */
+    /* Adding a semester is the first planner action on mobile, immediately
+       above the newest-first card stack. */
     order: -9999;
 }
 
@@ -198,13 +196,39 @@ body.is-mobile .subcontainer_semester .date p {
     font-size: 0.95rem;
 }
 
-/* Semester reorder-by-drag is impractical on touch; hide that handle. */
+/* Semester cards already expose explicit up/down actions on mobile. The drag
+   grip belongs to the horizontal desktop board and only crowds the accordion
+   header when it is shown on a phone. */
 body.is-mobile .subcontainer_semester .semester_drag {
-    display: none;
+    display: none !important;
+}
+
+body.is-mobile .course_drag,
+body.is-mobile .course-drop-placeholder {
+    display: none !important;
+}
+
+body.is-mobile .course.course-dragging,
+body.is-mobile .container_semester.course-drop-target,
+body.is-mobile .container_semester.semester-dragging,
+body.is-mobile .container_semester.semester-drop-target {
+    opacity: 1;
+    box-shadow: var(--shadow-sm);
+}
+
+body.is-mobile .container_semester.semester-drop-target::before,
+body.is-mobile .container_semester.semester-drop-target::after {
+    display: none !important;
 }
 
 /* Chevron affordance (injected into .icons by mobile.js). */
 .m-sem-chevron {
+    display: none;
+}
+/* Font Awesome is loaded after this stylesheet and gives every `.fa-solid`
+   icon an inline display value. Use a mode-qualified selector so its generic
+   rule cannot expose this mobile-only accordion affordance on desktop. */
+body:not(.is-mobile) .m-sem-chevron {
     display: none;
 }
 body.is-mobile .m-sem-chevron {
@@ -213,8 +237,18 @@ body.is-mobile .m-sem-chevron {
     justify-content: center;
     width: 20px;
     height: 20px;
+    padding: 0;
+    border: 0;
+    background: transparent;
     color: var(--text-muted);
+    font: inherit;
+    cursor: pointer;
     transition: transform 0.2s ease;
+}
+body.is-mobile .m-sem-chevron:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
 }
 body.is-mobile .container_semester:not(.m-collapsed) .m-sem-chevron {
     transform: rotate(180deg);
@@ -312,7 +346,7 @@ body.is-mobile[data-mobile-tab="planner"] .container_semester .total_credit_text
     white-space: nowrap;
 }
 body.is-mobile[data-mobile-tab="planner"] .container_semester.current-term .total_credit_text {
-    color: #fff;
+    color: var(--color-white);
     background: var(--accent);
     border-color: transparent;
 }
@@ -334,6 +368,73 @@ body.is-mobile[data-mobile-tab="planner"] .container_semester:not(.m-collapsed) 
 /* Reserve room on the name row for the pill (and the icons when expanded). */
 body.is-mobile[data-mobile-tab="planner"] .subcontainer_semester .date {
     padding-right: var(--m-semester-credit-reserve);
+}
+
+/* Expanded cards keep their identity, actions and workload on one compact
+   line. Scale only this dense header chrome with the available phone width;
+   the collapsed header retains the roomier typography and fixed credit
+   reserve above. The explicit up/down controls make the hidden drag grip
+   unnecessary here. */
+body.is-mobile[data-mobile-tab="planner"]
+    .container_semester:not(.m-collapsed) {
+    --m-semester-expanded-credit-reserve: clamp(80px, 22vw, 92px);
+    --m-semester-action-width: 24px;
+}
+
+body.is-mobile[data-mobile-tab="planner"]
+    .container_semester:not(.m-collapsed)
+    .date:not(:has(.select-control)) {
+    align-items: center;
+    gap: 3px;
+    margin-inline: -4px;
+    padding-left: 22px;
+    padding-right: var(--m-semester-expanded-credit-reserve);
+}
+
+body.is-mobile[data-mobile-tab="planner"]
+    .container_semester:not(.m-collapsed)
+    .date:not(:has(.select-control)) > p {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    font-size: clamp(0.66rem, 2.9vw, 0.78rem);
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+body.is-mobile[data-mobile-tab="planner"]
+    .container_semester:not(.m-collapsed)
+    .date:not(:has(.select-control)) > .icons {
+    flex: 0 0 auto;
+    min-width: 0;
+    align-items: center;
+    gap: 3px;
+}
+
+body.is-mobile[data-mobile-tab="planner"]
+    .container_semester:not(.m-collapsed)
+    .date:not(:has(.select-control)) .semester-move-controls {
+    gap: 2px;
+}
+
+body.is-mobile[data-mobile-tab="planner"]
+    .container_semester:not(.m-collapsed)
+    .date:not(:has(.select-control)) .semester_date_edit,
+body.is-mobile[data-mobile-tab="planner"]
+    .container_semester:not(.m-collapsed)
+    .date:not(:has(.select-control)) .semester_move,
+body.is-mobile[data-mobile-tab="planner"]
+    .container_semester:not(.m-collapsed)
+    .date:not(:has(.select-control)) .delete_semester {
+    width: var(--m-semester-action-width);
+    height: 24px;
+    flex: 0 0 var(--m-semester-action-width);
+}
+
+body.is-mobile[data-mobile-tab="planner"]
+    .container_semester:not(.m-collapsed) .total_credit_text {
+    padding: 2px 3px;
+    font-size: clamp(0.56rem, 2.4vw, 0.63rem);
 }
 
 /* The current term is signalled by its green credits pill + green card border
@@ -358,66 +459,77 @@ body.is-mobile[data-mobile-tab="planner"] .date .tick {
     flex-shrink: 0;
 }
 
-/* Very narrow screens cannot fit the term, credit pill, and four semester
-   actions on one line. Keep the term and credit total together, then move the
-   actions to a dedicated row instead of squeezing the term into a few
-   characters. Date-edit mode retains its single-row select treatment above. */
-@media (max-width: 380px) {
-    /* Give the wider workload/N/A pill its own compact row while expanded.
-       It remains absolutely positioned in collapsed cards, where the shared
-       reserve above keeps the one-line header clear. This is content-width
-       based, so fractional and multi-digit loads cannot collide with the term
-       or action controls. */
-    body.is-mobile[data-mobile-tab="planner"]
-        .container_semester:not(.m-collapsed) .total_credit {
-        position: static;
-        width: max-content;
-        max-width: calc(100% - 24px);
-        margin: 10px 12px 0 auto;
-        transform: none;
-    }
-
-    body.is-mobile[data-mobile-tab="planner"]
-        .container_semester:not(.m-collapsed)
-        .subcontainer_semester
-        .date:not(:has(.select-control)) {
-        flex-wrap: wrap;
-        align-items: flex-start;
-        padding-right: 0;
-        row-gap: 6px;
-    }
-
+/* At 320px there is not enough horizontal room for the longest term, the
+   N/A workload pill and four actions without making the controls illegible.
+   Keep every control on the same row and allow only the term label to use a
+   second line; 360px and wider remain strictly single-line. */
+@media (max-width: 340px) {
     body.is-mobile[data-mobile-tab="planner"]
         .container_semester:not(.m-collapsed)
         .date:not(:has(.select-control)) > p {
-        flex: 1 1 100%;
-        max-width: 100%;
-        min-width: 0;
-        box-sizing: border-box;
-        overflow-wrap: anywhere;
+        font-size: 0.6rem;
+        line-height: 1.1;
+        white-space: normal;
+    }
+}
+
+/* Planner course filters use the same fixed portal as desktop so a semester's
+   scroll area cannot crop them.  On phones the panel becomes a viewport-width
+   sheet-like popover with touch-sized fields and its own scrolling. */
+body.is-mobile .planner-course-filter-menu {
+    left: 8px !important;
+    right: 8px !important;
+    width: auto !important;
+    max-width: none;
+    max-height: min(72dvh, 560px);
+    padding: 12px;
+}
+
+body.is-mobile .planner-course-filter-btn {
+    min-width: 42px;
+    height: 40px;
+    padding-inline: 9px;
+}
+
+body.is-mobile .input_container input,
+body.is-mobile .planner-filter-control .select-control {
+    min-height: 36px;
+}
+
+body.is-mobile .planner-filter-toggle {
+    min-height: 40px;
+}
+
+body.is-mobile .planner-filter-toggle input {
+    width: 20px;
+    height: 20px;
+}
+
+body.is-mobile .planner-course-filter-footer {
+    position: sticky;
+    bottom: -12px;
+    margin-inline: -12px;
+    padding: 10px 12px 12px;
+    background: var(--bg-card);
+}
+
+body.is-mobile .planner-filter-reset {
+    min-height: 36px;
+}
+
+@media (max-width: 350px) {
+    body.is-mobile .planner-filter-grid {
+        grid-template-columns: minmax(0, 1fr);
     }
 
-    body.is-mobile[data-mobile-tab="planner"]
-        .container_semester:not(.m-collapsed)
-        .date:not(:has(.select-control)) > .icons {
-        flex: 1 0 100%;
-        justify-content: flex-end;
-        gap: 6px;
-    }
-
-    body.is-mobile[data-mobile-tab="planner"]
-        .container_semester:not(.m-collapsed)
-        .date:not(:has(.select-control)) .m-sem-chevron {
-        top: 2px;
-        transform: rotate(180deg);
+    body.is-mobile .planner-filter-control.is-wide {
+        grid-column: auto;
     }
 }
 
 /* ============================================================
- * CONTROLS — the sidebar reorganized into mobile sections.
- * NOTE: keyed on the fixed order of the 8 .control-group blocks in the
- * frozen index.html (1 Programs, 2 nav-dupes, 3-6 toggles, 7 Courses,
- * 8 Danger). If that markup ever changes, revisit these nth-child rules.
+ * CONTROLS — the sidebar reorganized into mobile sections. Semantic group
+ * classes keep these cards stable when another action is added to Controls.
  * ============================================================ */
 
 body.is-mobile[data-mobile-tab="controls"] .sidebar-header {
@@ -426,15 +538,14 @@ body.is-mobile[data-mobile-tab="controls"] .sidebar-header {
 body.is-mobile[data-mobile-tab="controls"] .sidebar-content {
     padding: 12px 14px 14px;
 }
-/* The last card (Danger zone) doesn't need its inter-card margin — it left a
-   ~40px dead strip above the bottom nav. */
+/* The last card doesn't need an inter-card margin above the bottom nav. */
 body.is-mobile[data-mobile-tab="controls"] .sidebar-content > .control-group:last-child {
     margin-bottom: 0;
 }
 
 /* Hide the nav-duplicate group (New Semester / Check Graduation / Summary /
    Scheduler) — those live on the Planner, Progress, and Scheduler tabs. */
-body.is-mobile[data-mobile-tab="controls"] .sidebar-content > .control-group:nth-child(2) {
+body.is-mobile[data-mobile-tab="controls"] .sidebar-content > .control-group-navigation {
     display: none;
 }
 
@@ -448,10 +559,8 @@ body.is-mobile[data-mobile-tab="controls"] .control-group {
 }
 
 /* Section headers. */
-body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(1)::before,
-body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(3)::before,
-body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(7)::before,
-body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(8)::before {
+body.is-mobile[data-mobile-tab="controls"] .control-group-courses::before,
+body.is-mobile[data-mobile-tab="controls"] .control-group-danger::before {
     display: block;
     font-size: 0.68rem;
     font-weight: 700;
@@ -460,29 +569,44 @@ body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(8)::before {
     color: var(--text-muted);
     margin-bottom: 10px;
 }
-body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(1)::before { content: "Programs"; }
-body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(3)::before { content: "Options"; }
-body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(7)::before { content: "Courses"; }
-body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(8)::before { content: "Danger zone"; }
+body.is-mobile[data-mobile-tab="controls"] .control-group-courses::before { content: "Courses"; }
+body.is-mobile[data-mobile-tab="controls"] .control-group-danger::before { content: "Danger zone"; }
 
-/* Merge the four single-toggle groups (3-6) into one "Options" card. */
-body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(3),
-body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(4),
-body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(5),
-body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(6) {
+body.is-mobile[data-mobile-tab="controls"] .program-controls-heading {
+    margin-bottom: 10px;
+}
+
+body.is-mobile[data-mobile-tab="controls"] .program-controls-heading .sidebar-section-heading {
+    font-size: 0.68rem;
+}
+
+body.is-mobile[data-mobile-tab="controls"] .admit-term-help-button {
+    width: 44px;
+    height: 44px;
+    font-size: 1rem;
+}
+
+body.is-mobile[data-mobile-tab="controls"] .sidebar-options-heading {
+    margin: 0 0 6px;
+}
+
+body.is-mobile[data-mobile-tab="controls"] .sidebar-section-description {
+    margin: 0 0 8px;
+}
+
+/* Merge the four single-toggle groups into one picker-defaults card. */
+body.is-mobile[data-mobile-tab="controls"] .control-group-option {
     border-radius: 0;
     margin-bottom: 0;
 }
-body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(3),
-body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(4),
-body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(5) {
+body.is-mobile[data-mobile-tab="controls"] .control-group-option:not(.control-group-options-end) {
     border-bottom: none;
 }
-body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(3) {
+body.is-mobile[data-mobile-tab="controls"] .control-group-options-start {
     border-top-left-radius: var(--radius-md);
     border-top-right-radius: var(--radius-md);
 }
-body.is-mobile[data-mobile-tab="controls"] .control-group:nth-child(6) {
+body.is-mobile[data-mobile-tab="controls"] .control-group-options-end {
     border-bottom-left-radius: var(--radius-md);
     border-bottom-right-radius: var(--radius-md);
     margin-bottom: 12px;
@@ -503,6 +627,100 @@ body.is-mobile[data-mobile-tab="controls"] .control-row .select-control {
     flex: none;
 }
 body.is-mobile[data-mobile-tab="controls"] .control-group .btn {
+    width: 100%;
+}
+
+/* The long guide takes over the available phone viewport while keeping its
+   header and Close action fixed around a single scrollable body. */
+body.is-mobile .help-info-overlay {
+    align-items: stretch;
+    padding: 8px;
+}
+
+body.is-mobile .help-info-modal {
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    padding: 14px 12px 12px;
+}
+
+body.is-mobile .help-info-modal-body {
+    padding-right: 2px;
+}
+
+body.is-mobile .help-info-disclaimer {
+    padding: 10px 11px;
+}
+
+body.is-mobile .help-info-layout {
+    display: block;
+}
+
+body.is-mobile .help-info-nav {
+    position: static;
+    flex-direction: row;
+    gap: 6px;
+    margin-bottom: 12px;
+    padding: 6px;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: thin;
+}
+
+body.is-mobile .help-info-nav-link {
+    flex: 0 0 auto;
+    padding: 8px 9px;
+    white-space: nowrap;
+}
+
+body.is-mobile .help-info-section {
+    padding: 13px;
+}
+
+body.is-mobile .help-info-modal .app-modal-footer .btn {
+    width: 100%;
+}
+
+body.is-mobile .admit-term-help-overlay {
+    align-items: center;
+    padding: 12px;
+}
+
+body.is-mobile .admit-term-help-modal {
+    width: 100%;
+    max-width: none;
+    max-height: calc(100dvh - 24px);
+    padding: 14px 12px 12px;
+}
+
+body.is-mobile .admit-term-help-modal .app-modal-footer .btn {
+    width: 100%;
+    min-height: 44px;
+}
+
+body.is-mobile .release-update-overlay {
+    align-items: center;
+    padding: 12px;
+}
+
+body.is-mobile .release-update-modal {
+    width: 100%;
+    max-width: none;
+    max-height: calc(100dvh - 24px);
+    padding: 14px 12px 12px;
+}
+
+body.is-mobile .release-update-modal-body {
+    padding-right: 2px;
+}
+
+body.is-mobile .release-update-modal .app-modal-footer {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body.is-mobile .release-update-modal .app-modal-footer .btn {
     width: 100%;
 }
 
@@ -572,6 +790,10 @@ body.is-mobile[data-mobile-tab="progress"] .m-progress {
     border-radius: 4px;
     background: var(--primary);
 }
+.m-progress .m-prog-dot:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 3px;
+}
 
 /* Detail accordion: the relocated .major-summary / .minor-summary, with each
    .ms-section header toggling its course list. */
@@ -586,8 +808,21 @@ body.is-mobile[data-mobile-tab="progress"] .m-progress {
 .m-progress .m-prog-detail .ms-header {
     display: flex;
     align-items: center;
+    width: 100%;
+    margin: 0 0 6px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
     cursor: pointer;
     gap: 8px;
+}
+.m-progress .m-prog-detail .ms-header:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 4px;
+    border-radius: var(--radius-sm);
 }
 /* Fixed-width title column so the "N courses • X/Y SU" info lines up across
    sections regardless of the category name's length. */
@@ -614,6 +849,204 @@ body.is-mobile[data-mobile-tab="progress"] .m-progress {
 .m-progress .m-prog-detail .ms-section.m-sec-collapsed > .ms-group-list,
 .m-progress .m-prog-detail .ms-section.m-sec-collapsed > .ms-untaken-toggle {
     display: none;
+}
+/* A desktop Summary that remains open while the viewport crosses into the
+   mobile shell must become a contained, single-column surface. This preserves
+   the selected program/detail view instead of closing and rebuilding it. */
+body.is-mobile .summary_modal_overlay {
+    inset: 0;
+    width: auto;
+    height: auto;
+    align-items: stretch;
+    justify-content: stretch;
+    overflow: hidden;
+    padding: 8px;
+    box-sizing: border-box;
+}
+
+body.is-mobile .summary_overlay_content {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    height: 100%;
+    max-height: none;
+    overflow: hidden;
+    border-radius: var(--radius-md);
+}
+
+body.is-mobile .summary_header_row {
+    flex: 0 0 auto;
+    min-width: 0;
+    padding: 10px 12px;
+}
+
+body.is-mobile .summary_surface_header_copy,
+body.is-mobile .summary_cards_row,
+body.is-mobile .summary_program_section,
+body.is-mobile .summary_program_grid,
+body.is-mobile .summary_program_card,
+body.is-mobile .summary_major_panel,
+body.is-mobile .summary_minor_panel,
+body.is-mobile .summary_minor_panel_body,
+body.is-mobile .summary_overview_identity,
+body.is-mobile .summary_program_identity_copy,
+body.is-mobile .summary_overview_hero,
+body.is-mobile .summary_overview_snapshot,
+body.is-mobile .summary_overview_requirements,
+body.is-mobile .summary_overview_requirements_grid,
+body.is-mobile .summary_overview_snapshot_grid {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+body.is-mobile .summary_cards_row,
+body.is-mobile .summary_major_panel,
+body.is-mobile .summary_minor_panel {
+    flex: 1 1 auto;
+    width: 100%;
+    max-height: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: 12px;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    overscroll-behavior: contain;
+}
+
+body.is-mobile .summary_program_card {
+    display: none;
+    width: 100%;
+    margin: 0;
+    padding: 12px;
+    overflow: visible;
+    font-size: 0.95rem;
+}
+
+body.is-mobile .summary_program_card.is-active {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+}
+
+body.is-mobile .summary_overview_identity,
+body.is-mobile .summary_overview_hero,
+body.is-mobile .summary_overview_snapshot,
+body.is-mobile .summary_overview_requirements,
+body.is-mobile .summary_overview_notice {
+    grid-column: 1;
+}
+
+body.is-mobile .summary_overview_identity {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+}
+
+body.is-mobile .summary_program_card_heading {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+body.is-mobile .summary_overview_identity .summary_program_card_footer {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: stretch;
+}
+
+body.is-mobile .summary_overview_requirements_grid,
+body.is-mobile .summary_overview_snapshot_grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+}
+
+body.is-mobile .summary_overview_section_copy {
+    display: grid;
+    gap: 3px;
+}
+
+body.is-mobile .summary_overview_section_copy p {
+    max-width: 100%;
+    text-align: left;
+    overflow-wrap: anywhere;
+}
+
+body.is-mobile .summary_program_card_footer .summary_detail_btn,
+body.is-mobile .summary_back_btn {
+    width: 100%;
+    min-width: 0;
+}
+
+body.is-mobile .summary_minor_panel_header,
+body.is-mobile .summary_detail_section_nav,
+body.is-mobile .minor-summary,
+body.is-mobile .major-summary {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+body.is-mobile .summary_overlay_content .ms-header {
+    flex-wrap: wrap;
+    align-items: flex-start;
+}
+
+body.is-mobile .summary_overlay_content .ms-title,
+body.is-mobile .summary_overlay_content .ms-req {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+body.is-mobile .summary_overlay_content .ms-course {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 6px;
+}
+
+body.is-mobile .summary_overlay_content .ms-course-left {
+    display: flex;
+    align-items: flex-start;
+    width: 100%;
+    min-width: 0;
+}
+
+body.is-mobile .summary_overlay_content .ms-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+}
+
+body.is-mobile .summary_overlay_content .ms-meta {
+    display: flex;
+    align-items: center;
+    align-content: flex-start;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+    width: 100%;
+    min-width: 0;
+    padding-left: 16px;
+    white-space: normal;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+body.is-mobile .summary_overlay_content .ms-group-top,
+body.is-mobile .summary_overlay_content .ms-group-count {
+    flex-wrap: wrap;
+    white-space: normal;
+}
+
+body.is-mobile .summary_overlay_content .ms-group-labels,
+body.is-mobile .summary_overlay_content .ms-group-count {
+    flex: 1 0 100%;
+    width: 100%;
+    min-width: 0;
 }
 
 /* A detailed course can carry progress state, BS, engineering and SU chips,
@@ -825,7 +1258,8 @@ body.is-mobile .scheduler-modal.m-scheduler {
     width: 100%;
     max-width: none;
     height: 100%;
-    max-height: none;
+    height: 100dvh;
+    max-height: 100dvh;
     border-radius: 0;
     margin: 0;
     display: flex;
@@ -852,7 +1286,7 @@ body.is-mobile .scheduler-modal.m-scheduler .scheduler-header-actions .scheduler
 body.is-mobile .scheduler-modal.m-scheduler .scheduler-header-actions .scheduler-block-mode.is-active {
     background: var(--primary);
     border-color: var(--primary);
-    color: #fff;
+    color: var(--color-white);
 }
 /* Landscape-only compact/tall toggle (injected by mobile.js). Hidden by default;
    the landscape block below opts it in. Highlights while tall is active. */
@@ -862,7 +1296,7 @@ body.is-mobile .scheduler-modal.m-scheduler .scheduler-header-actions .m-sched-t
 body.is-mobile .scheduler-modal.m-scheduler .scheduler-header-actions .m-sched-tall-toggle.is-active {
     background: var(--primary);
     border-color: var(--primary);
-    color: #fff;
+    color: var(--color-white);
 }
 
 /* Drop the "Course color" legend entry (always the first item) in the mobile
@@ -877,6 +1311,7 @@ body.is-mobile .scheduler-modal.m-scheduler .scheduler-legend-item:first-child {
 .m-sched-day {
     position: relative;
     flex: 1;
+    min-height: 44px;
     padding: 10px 0;
     background: none;
     border: none;
@@ -968,6 +1403,8 @@ body.is-mobile .scheduler-details-disclosure-body {
        three full-width rows (~149px). Put the title and ⋮/× actions on one row,
        and collapse the wrapping legend into a single compact scrollable line. */
     body.is-mobile .scheduler-modal.m-scheduler .scheduler-header {
+        flex-wrap: wrap;
+        justify-content: flex-start;
         padding: 10px 12px;
         row-gap: 4px;
     }
@@ -1060,11 +1497,11 @@ body.is-mobile .scheduler-details-disclosure-body {
         border: none;
         border-radius: 999px;
         background: var(--primary);
-        color: #fff;
+        color: var(--color-white);
         font-family: inherit;
         font-size: 0.85rem;
         font-weight: 600;
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 4px 14px var(--alpha-black-30);
         cursor: pointer;
     }
     /* While the sheet is open, the "Done" floater replaces the "Add courses"
@@ -1082,11 +1519,11 @@ body.is-mobile .scheduler-details-disclosure-body {
         border: none;
         border-radius: 999px;
         background: var(--primary);
-        color: #fff;
+        color: var(--color-white);
         font-family: inherit;
         font-size: 0.85rem;
         font-weight: 600;
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 4px 14px var(--alpha-black-30);
         cursor: pointer;
     }
 
@@ -1133,7 +1570,7 @@ body.is-mobile .scheduler-details-disclosure-body {
     }
     body.is-mobile .scheduler-modal.m-scheduler.m-preview .m-prev-add {
         background: var(--primary);
-        color: #fff;
+        color: var(--color-white);
     }
     body.is-mobile .scheduler-modal.m-scheduler .scheduler-grid-wrap {
         width: 100%;
@@ -1168,19 +1605,34 @@ body.is-mobile .scheduler-details-disclosure-body {
        shared rules above) so the week grid gets the whole width; slim the
        header to a single row (title + legend + actions inline). */
     body.is-mobile .scheduler-modal.m-scheduler .scheduler-header {
-        padding: 8px 14px;
+        flex-wrap: nowrap;
+        justify-content: space-between;
+        gap: clamp(4px, 1.2vw, 12px);
+        padding: clamp(4px, 1.4dvh, 8px) 10px;
     }
     body.is-mobile .scheduler-modal.m-scheduler .scheduler-title {
         flex: 0 1 auto;
+        width: auto;
+        order: initial;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
     }
     body.is-mobile .scheduler-modal.m-scheduler .scheduler-legend {
+        width: auto;
+        order: initial;
         flex-wrap: nowrap;
+        justify-content: flex-start;
         overflow-x: auto;
-        gap: 12px;
+        gap: clamp(6px, 1.4vw, 12px);
+        margin-top: 0;
         scrollbar-width: none;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-header-actions {
+        width: auto;
+        order: initial;
+        flex: 0 0 auto;
+        justify-content: flex-end;
     }
     body.is-mobile .scheduler-modal.m-scheduler .scheduler-legend::-webkit-scrollbar {
         display: none;
@@ -1195,6 +1647,8 @@ body.is-mobile .scheduler-details-disclosure-body {
        labels in the gutter (they hugged the right edge). */
     body.is-mobile .scheduler-modal .scheduler-grid {
         --scheduler-minute: var(--m-fit-ppm, 0.42px);
+        --scheduler-top-gap: 8px;
+        --scheduler-block-gap: 2px;
     }
     body.is-mobile .scheduler-modal .scheduler-time-row {
         justify-content: center;
@@ -1207,10 +1661,11 @@ body.is-mobile .scheduler-details-disclosure-body {
        closed by the × in its header — so the bottom FAB/Done floaters are hidden. */
     body.is-mobile .scheduler-modal.m-scheduler .scheduler-sidebar {
         inset: 0 auto 0 0;
-        width: min(380px, 62%);
+        width: clamp(300px, 46vw, 420px);
+        max-width: calc(100vw - 80px);
         transform: translateX(-100%);
         border-right: 1px solid var(--border);
-        box-shadow: 4px 0 18px rgba(0, 0, 0, 0.28);
+        box-shadow: 4px 0 18px var(--alpha-black-28);
         padding-bottom: 0;
     }
     body.is-mobile .scheduler-modal.m-scheduler.m-sheet-open .scheduler-sidebar {
@@ -1229,30 +1684,43 @@ body.is-mobile .scheduler-details-disclosure-body {
         height: 100%;
         border: none;
         background: var(--primary);
-        color: #fff;
-        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 72%, #fff);
+        color: var(--color-white);
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 72%, var(--color-white));
         cursor: pointer;
         font-size: 0.95rem;
         transition: background 0.15s ease, box-shadow 0.15s ease;
     }
     body.is-mobile .scheduler-modal.m-scheduler .m-sched-corner-search:hover {
         background: var(--primary-hover);
-        color: #fff;
+        color: var(--color-white);
     }
     body.is-mobile .scheduler-modal.m-scheduler .m-sched-corner-search:active {
         background: var(--primary-active);
-        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 62%, #fff);
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 62%, var(--color-white));
     }
     body.is-mobile .scheduler-modal.m-scheduler .m-sched-sheet-close {
         display: inline-flex;
         align-items: center;
         justify-content: center;
+        width: 44px;
+        height: 44px;
         border: none;
         background: none;
         color: var(--text-secondary);
         font-size: 1rem;
         cursor: pointer;
-        padding: 4px 8px;
+        padding: 0;
+    }
+
+    /* Scale fixed chrome with the short side of the phone. The grid and header
+       use the same gutter so their day columns remain perfectly aligned. */
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-grid-header,
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-grid {
+        grid-template-columns: clamp(42px, 7vw, 56px) repeat(var(--scheduler-day-count, 5), minmax(0, 1fr));
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-grid-corner,
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-grid-day {
+        height: clamp(34px, 10dvh, 44px);
     }
 
     /* Compressed week → tiny blocks. Give the course name the room: tighten the
@@ -1260,7 +1728,8 @@ body.is-mobile .scheduler-details-disclosure-body {
        lines, and add a shadow so the name reads on any block colour / under the
        red conflict outline. */
     body.is-mobile .scheduler-modal.m-scheduler .scheduler-block {
-        padding: 2px 4px;
+        padding: 1px 4px;
+        border-radius: 6px;
     }
     body.is-mobile .scheduler-modal.m-scheduler .scheduler-block-time {
         display: none;
@@ -1268,7 +1737,7 @@ body.is-mobile .scheduler-details-disclosure-body {
     body.is-mobile .scheduler-modal.m-scheduler .scheduler-block-title {
         font-size: 0.66rem;
         font-weight: 600; /* 800 is too wide for the compressed blocks */
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+        text-shadow: 0 1px 2px var(--alpha-black-60);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -1284,6 +1753,7 @@ body.is-mobile .scheduler-details-disclosure-body {
        shrink — restore padding, the bigger title, and the meeting time. */
     body.is-mobile .scheduler-modal.m-scheduler.m-sched-tall .scheduler-block {
         padding: 6px 8px;
+        border-radius: 10px;
     }
     body.is-mobile .scheduler-modal.m-scheduler.m-sched-tall .scheduler-block-title {
         font-size: 0.78rem;
@@ -1303,6 +1773,16 @@ body.is-mobile .scheduler-details-disclosure-body {
         padding-bottom: 48px;
     }
 }
+
+/* On the shortest landscape phones, one pixel of vertical separation keeps a
+   50-minute class tall enough to show its single compact title line. This must
+   stay a resolved px value because scheduler.js reads it with parseFloat(). */
+@media (orientation: landscape) and (max-height: 380px) {
+    body.is-mobile .scheduler-modal .scheduler-grid {
+        --scheduler-block-gap: 1px;
+    }
+}
+
 .m-progress .m-prog-title {
     font-size: 0.95rem;
     font-weight: 600;
@@ -1323,6 +1803,7 @@ body.is-mobile .scheduler-details-disclosure-body {
     overflow: hidden;
     margin-bottom: 12px;
 }
+
 .m-progress .m-prog-bar.is-segmented {
     display: flex;
 }
@@ -1330,10 +1811,10 @@ body.is-mobile .scheduler-details-disclosure-body {
     height: 100%;
     background: var(--primary);
 }
-.m-progress .m-prog-fill.is-earned { background: #16A34A; }
-.m-progress .m-prog-fill.is-current { background: #2563EB; }
-.m-progress .m-prog-fill.is-future { background: #7C3AED; }
-.m-progress .m-prog-fill.is-unverified { background: #D97706; }
+.m-progress .m-prog-fill.is-earned { background: var(--state-complete); }
+.m-progress .m-prog-fill.is-current { background: var(--state-current); }
+.m-progress .m-prog-fill.is-future { background: var(--state-projected); }
+.m-progress .m-prog-fill.is-unverified { background: var(--state-unverified); }
 .m-progress .m-prog-breakdown {
     display: flex;
     flex-wrap: wrap;
@@ -1343,9 +1824,9 @@ body.is-mobile .scheduler-details-disclosure-body {
     color: var(--text-secondary);
 }
 .m-progress .m-prog-breakdown .is-earned { color: var(--text-primary); }
-.m-progress .m-prog-breakdown .is-current { color: #2563EB; }
-.m-progress .m-prog-breakdown .is-future { color: #7C3AED; }
-.m-progress .m-prog-breakdown .is-unverified { color: #B45309; }
+.m-progress .m-prog-breakdown .is-current { color: var(--state-current-text); }
+.m-progress .m-prog-breakdown .is-future { color: var(--state-projected-text); }
+.m-progress .m-prog-breakdown .is-unverified { color: var(--state-unverified-text); }
 .m-progress .m-prog-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1371,12 +1852,8 @@ body.is-mobile .scheduler-details-disclosure-body {
 .m-progress .m-prog-stat.is-met .m-prog-val {
     color: var(--accent);
 }
-.m-progress .m-prog-stat.is-projected-met .m-prog-val { color: #7C3AED; }
+.m-progress .m-prog-stat.is-projected-met .m-prog-val { color: var(--state-projected-text); }
 .m-progress .m-prog-stat .m-prog-val .is-earned { color: var(--text-primary); }
-.dark-theme .m-progress .m-prog-breakdown .is-current { color: #60A5FA; }
-.dark-theme .m-progress .m-prog-breakdown .is-future,
-.dark-theme .m-progress .m-prog-stat.is-projected-met .m-prog-val { color: #C4B5FD; }
-.dark-theme .m-progress .m-prog-breakdown .is-unverified { color: #FBBF24; }
 .m-progress .m-prog-empty {
     padding: 28px 16px;
     text-align: center;

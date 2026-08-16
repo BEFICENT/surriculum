@@ -1,6 +1,6 @@
 # SUrriculum 3.1 release-readiness tracker
 
-Last updated: 2026-08-09
+Last updated: 2026-08-16
 
 This is the working backlog for the 3.1 release. Items should be handled one at
 a time and checked off only after the fix and its verification are complete.
@@ -24,21 +24,21 @@ a time and checked off only after the fix and its verification are complete.
 - Preserve the individual 3.1 commits. Do not squash or rebase the branch merely
   to simplify GitHub's ahead/behind display; the intended history edits are only
   the removal of Claude trailers from commit messages.
+- In-place switching for main-major, double-major, minor, and admit-term changes
+  is explicitly deferred until after 3.1. Version 3.1 keeps the existing
+  save-and-reload boundary. The follow-up should introduce one transactional
+  program-configuration path that preloads and validates new catalogs and
+  requirements, swaps state atomically, rerenders all dependent views, and
+  rolls back on failure. Whole-plan switching/import/reset/deletion may remain
+  reload boundaries because they replace the active plan identity.
 
 ## Verified baseline
 
-- [x] JavaScript/static unit gate passes: 240/240 tests.
-- [ ] The current Chromium Playwright inventory is 471 tests (453 desktop and
-  18 mobile). On 2026-08-08, the then-current 451-test local run plus a
-  failed-case rerun cleared 448 scenarios; the three remaining cases are the
-  mounted GitHub-Pages/offline service-worker checks, which were blocked by
-  repeated Windows localhost `ERR_NETWORK_ACCESS_DENIED`/`WinError 10053`
-  failures before their app assertions could run. The three new narrow-mobile
-  layout regressions pass at 320, 360, and default mobile widths. Rerun the full
-  471-test gate in a stable environment before release. The new language-course
-  focused browser suites pass 31/31, and the program-scoped custom-category
-  behavioral baseline passes 9/9. Its three new category-help regressions pass
-  3/3, including the 320 px layout and legacy double-major prompt.
+- [x] JavaScript/static unit gate passes: 288/288 tests.
+- [x] The current Chromium Playwright inventory is 592 tests (547 desktop and
+  45 mobile), verified with `npx playwright test --list` on 2026-08-16. The
+  complete release-candidate gate passed 592/592 with zero retries after the
+  startup Help and returning-user update flow settled.
 - [x] Focused cross-browser gate passes: 2/2 critical flows (Firefox and
   WebKit), also with zero retries.
 - [x] `python tests/scrape_groups_test.py` passes when run directly.
@@ -208,13 +208,15 @@ a time and checked off only after the fix and its verification are complete.
   21 for `202501`-`202503`. Those values sum exactly to the independent 131-SU
   Total, have remained stable across repeated live scraper refreshes, and are
   now pinned for all three terms plus the 20/21-SU graduation boundary.
-- [ ] Decide the rare pre-2025 EE/ME mathematics edge policy when a student has
-  all three of MATH 201, MATH 202, and MATH 212. Ordinary valid routes are now
-  correct; no extra course is excluded in the all-three case until repeat/order
-  semantics are specified. Also revisit whether a failed low-credit named
-  requirement such as EE 200 should ever be enforced beyond credit minima; the
-  planner now warns about its EE 202 corequisite, but graduation remains purely
-  credit/rule based as intended for this release.
+- [x] Document the rare pre-2025 EE/ME mathematics edge as a small accepted
+  implementation gap. When a synthetic plan contains MATH 201, MATH 202, and
+  MATH 212 together, no surplus course is excluded because the available data
+  does not specify repeat/order semantics. Real historical course lists use
+  their matching older catalog configuration, so ordinary plans should not
+  encounter this mixed case. The allocation behavior is intentionally unchanged.
+  A failed low-credit named course such as EE 200 likewise remains governed by
+  the documented credit/rule audit; prerequisite and corequisite warnings do
+  not become additional graduation requirements in 3.1.
 - [x] Remove the synthetic `requirements/default.jsonl`. It matched no actual
   admit term and mixed incompatible curriculum snapshots. Requirements now
   start explicitly unavailable on the supported HTTP/GitHub Pages path, accept
@@ -242,7 +244,18 @@ a time and checked off only after the fix and its verification are complete.
   planner checks also respect the catalog's minimum-S prerequisites. Completed
   transcript courses can satisfy later prerequisites but do not receive planning
   warnings themselves. Warnings remain completely outside graduation and
-  allocation logic.
+  allocation logic. Extended on 2026-08-13 to scrape the separate SUIS General
+  Requirements block, preserve its raw normalized text, and structure its
+  minimum-prior-SU and non-self course clauses. This recovers HUM 201/202/207's
+  23-SU plus SPS 101/SPS 102 conditions and SPS 303's 58-SU condition while
+  leaving TLL 001's self-reference visible but unevaluated. Planner and
+  scheduler checks count positive SU from eligible planned/completed courses in
+  strictly earlier semesters; failed, withdrawn, grade NA, unsupported-grade,
+  same-term, and later courses are excluded. The UI deliberately says
+  `planned/completed`, remains advisory, and displays the original General
+  Requirements text in course details. A program-category N/A course still
+  counts with a successful or pending grade because the check is overall SU;
+  the distinct transcript grade `NA` (Not Attended) does not.
 - [x] Apply term-specific advisory semester loads. Completed on 2026-08-08 and
   refined on 2026-08-09: semester headers sum every positive-SU course card,
   including courses which are N/A for the primary program, and show that
@@ -345,13 +358,17 @@ a time and checked off only after the fix and its verification are complete.
   from the Add Course/manual course choices. A retained course already in the
   plan can still be scheduled when it appears in the selected term's live
   offerings.
-- [ ] Support repeated attempts and retake planning. The model globally rejects
-  a second canonical course code, so a retained failed attempt blocks adding a
-  future retake. Official GPA calculation uses the latest repeated-course grade
-  while the transcript retains all attempts. Preserve attempts, derive the
-  active/latest one by term and attempt order, and make every import path use the
-  same reconciliation. Importing a completed attempt should replace an existing
-  planned placeholder rather than reporting success while leaving it unchanged.
+- [x] Add a conservative same-code retake-planning workflow. Completed on
+  2026-08-13: a duplicate add in a strictly later term now checks the stored
+  final grade and Sabancı's repeat window, asks explicit permission, removes the
+  earlier planner card, and creates a new ungraded attempt. `F/U/NA/W` have no
+  modeled deadline; passing `A-D` and `S` use three regular semesters while
+  Summer consumes no step. Future source terms, blank/P/I/T/unknown grades,
+  invalid terms, multiple occurrences, and different-code substitutions fail
+  closed. The scheduler uses the same policy and its existing model/DOM/storage
+  rollback. This is a one-occurrence planner replacement, not official attempt
+  history: the transcript retains all attempts and the latest repeated grade is
+  used officially even when it is lower.
 
   Interim import reconciliation completed on 2026-08-01: HTML, PDF, and YÖK
   imports now select the latest record chronologically instead of trusting
@@ -359,7 +376,8 @@ a time and checked off only after the fix and its verification are complete.
   occurrences update in place; empty/phantom imports are avoided; and added,
   updated, already-present, superseded, invalid-grade, skipped, and not-found
   records are reported truthfully. This does not yet preserve multiple attempts
-  or allow a failed/withdrawn occurrence and a later retake to coexist.
+  concurrently; the later retake workflow deliberately replaces the earlier
+  planner occurrence.
 
   Deferred design note (2026-08-04): Sabancı transcripts use the status
   `Repeated` for both same-code retakes and cross-code substitutions, without a
@@ -416,10 +434,27 @@ a time and checked off only after the fix and its verification are complete.
   rows receive their own red state, text label, data attribute, and legend entry;
   genuinely not-taken rows remain separate and behind the existing pool toggle.
   This display-only split does not change GPA, earned credit, or allocation.
-- [x] Keep planner and scheduler offered-course data aligned. The planner now
-  uses the exact current-term schedule when it is available, schedule scrapes
-  reconcile offerings back into the course-page dataset, and the weekly full
-  course-page refresh preserves valid schedule-derived offerings.
+- [x] Keep planner and scheduler offered-course data aligned. Each Planner
+  picker now uses the exact destination-term schedule when it is available and
+  fails open when that schedule is unavailable. Schedule scrapes reconcile
+  offerings back into the course-page dataset, and the weekly full course-page
+  refresh preserves valid schedule-derived offerings.
+- [x] Add conservative planner offering-history advisories. Completed on
+  2026-08-15: picker results and unfinished planned cards derive contextual
+  no-Fall/no-Spring/no-Summer and irregular-year tags from deduplicated positive
+  history. A Summer negative requires zero recorded Summer terms plus at least
+  three distinct academic years of recent Fall/Spring evidence.
+  Failed, empty, sparse, and conflicting-term inputs fail open without a tag;
+  CS210/DSA210 history is merged by canonical identity; current/future academic
+  years never create negative cadence evidence; and an exact target-term
+  offering suppresses every historical warning. The tags are advisory
+  text only and never hide a course or alter graduation, prerequisites, or
+  allocation.
+- [x] Let the planner course list use the selected semester's available space.
+  Completed on 2026-08-15: the fixed 320 px ceiling was replaced by adaptive
+  course-pane, board, and visual-viewport bounds. Tall cards show more results;
+  short screens contract safely; and a cramped upper side falls back below the
+  search row without causing document overflow.
 - [x] Make the daily refresh regenerate and verify `data/manifest.json` before
   opening its update PR.
 - [x] Make the data manifest cover every checked-in deterministic runtime JSON
@@ -492,6 +527,13 @@ a time and checked off only after the fix and its verification are complete.
   Unit and browser checks cover copy-only migration,
   storage failure, reload persistence, scheduler mirroring, and multi-tab
   sharing without crossing plan-scoped state.
+- [x] Separate contextual Planner and Scheduler filter defaults while retaining
+  the intentionally shared detail, hide-planned, and Smart Sort controls.
+  Completed on 2026-08-16: those three controls plus offered-only are presented
+  as Course picker defaults. Offered-only is copied into a newly opened picker, then stays
+  local to its destination semester instead of changing the default or another
+  open picker. Planner credit and requirement values migrate once from the old
+  Scheduler-shared keys and no longer cross-write them.
 - [x] Accept the ambiguous pre-multi-plan raw plan keys for 3.1. The maintainer
   explicitly chose not to add migration provenance or a reset tombstone for
   generic legacy names such as `major`, `grades`, and `dates`. Current 3.1 plan
@@ -567,6 +609,12 @@ a time and checked off only after the fix and its verification are complete.
 
 ## Test-suite work
 
+- [x] Make semester chronology independent of card order. Canonical term codes
+  are persisted in the v4 plan schema, academic consumers sort by those codes,
+  interactive duplicate terms are rejected, transcript imports reuse a matching
+  card, touch/pointer/keyboard reordering moves complete nodes, and a visible
+  chronological-sort action restores oldest-to-newest display order. Focused
+  tests cover rule invariance, parallel-array persistence and legacy hydration.
 - [x] Integrate `tests/scrape_groups_test.py` and
   `tests/scrape_coursepages_fallback_test.py` into the normal test command. They
   remain standalone Python assertion scripts, but `npm test` now runs them
@@ -585,10 +633,11 @@ a time and checked off only after the fix and its verification are complete.
   cover A-F/S/P/I/U/T/NA/W/blank/unsupported outcomes, letter-vs-S/U NA, actual
   versus future GPA, failed degree allocation, grading-basis persistence and
   legacy migration, grade-picker/autosave behavior, and fail-closed warnings.
-- [ ] Add the remaining repeat-attempt matrix: retained multi-attempt history,
-  cross-term retake planning, scheduler prerequisites after a retake, and
-  replacement/movement of a planned placeholder when the imported attempt is
-  in a different term.
+- [ ] Add the remaining first-class attempt matrix: retained multi-attempt
+  history, scheduler prerequisites across coexisting attempts, and
+  replacement/movement of a planned placeholder when the imported attempt is in
+  a different term. Cross-term exact-code retake replacement now has focused
+  policy and browser coverage, but coexisting official history remains deferred.
 - [x] Add focused Firefox and WebKit projects for critical planner, requirement,
   persistence, and graduation flows. The final local gate passed 2/2 with zero
   retries; CI installs and runs the same browser versions.
@@ -619,8 +668,13 @@ a time and checked off only after the fix and its verification are complete.
 - [x] Fix README quick-start instructions: it now serves the static app over
   HTTP and explains why direct `file://` loading is unreliable.
 - [x] Update user-facing README v3.0 references to 3.1 and correct its planner
-  drag claims: saved plans and semesters can be reordered, but course cards are
-  removed and re-added rather than dragged between terms.
+  drag claims: saved plans, semesters, and desktop course cards can be moved;
+  mobile course moves continue through remove/add or Scheduler replacement.
+- [x] Add mutually exclusive startup guidance: first-time users receive the
+  full Help & information guide once, while users returning from the previous
+  live storage schema receive a concise one-time 3.1 update summary with an
+  optional path into Help. The app-global markers are separate from saved plans
+  and future release versions can reuse the same flow.
 - [x] Add concise privacy copy for local transcript processing, browser
   persistence/cache behavior, backups, absent analytics/uploads, consented
   public fixtures, and locally hosted PDF/font/icon assets.

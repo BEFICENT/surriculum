@@ -11,11 +11,11 @@
   // (version.js — code/UI). Was misleadingly named APP_DATA_VERSION. The
   // persisted key STRING is kept as-is so existing installs aren't mistaken for
   // a fresh run.
-  const STORAGE_SCHEMA_VERSION = 3;
+  const STORAGE_SCHEMA_VERSION = 4;
   const STORAGE_SCHEMA_KEY = 'surriculum.appDataVersion';
   const MAX_PLANS = 10;
   const DEFAULT_PLAN_NAME = 'Default Plan';
-  const PLAN_EXPORT_VERSION = 3;
+  const PLAN_EXPORT_VERSION = 4;
   let modalSequence = 0;
   // Bound once during boot. The shared index's activeId may be changed by a
   // different tab, but code running in this page must keep reading and writing
@@ -27,7 +27,7 @@
     // Minor terms: `entryTermMinor` is legacy (single term); keep for migration.
     'entryTermMinor', 'entryTermMinor1', 'entryTermMinor2', 'entryTermMinor3',
     'minor1', 'minor2', 'minor3',
-    'curriculum', 'grades', 'gradingBases', 'dates'
+    'curriculum', 'grades', 'gradingBases', 'dates', 'termCodes'
   ];
   const APP_GLOBAL_STORAGE_KEYS = new Set([
     ...LEGACY_KEYS,
@@ -123,7 +123,7 @@
         const variant = b.variant || (b.action === 'cancel' ? 'secondary' : 'primary');
         btn.className = `btn btn-${variant} btn-sm`;
         btn.textContent = b.label || b.action;
-        if (b.danger) btn.style.backgroundColor = '#DC2626';
+        if (b.danger) btn.classList.add('btn-danger');
         btn.addEventListener('click', () => {
           try {
             if (typeof b.onClick === 'function') b.onClick({ overlay, modal, body, button: btn });
@@ -545,7 +545,14 @@
     }
   }
 
-  const SNAPSHOT_KEYS = ['curriculum', 'grades', 'gradingBases', 'dates'];
+  const SNAPSHOT_KEYS = ['curriculum', 'grades', 'gradingBases', 'dates', 'termCodes'];
+
+  function canonicalTermCodeFromLabel(value) {
+    const match = String(value || '').trim().match(/^(Fall|Spring|Summer)\s+(\d{4})-(\d{4})$/);
+    if (!match || Number(match[3]) !== Number(match[2]) + 1) return '';
+    const suffix = { Fall: '01', Spring: '02', Summer: '03' }[match[1]];
+    return match[2] + suffix;
+  }
 
   function setPlanSnapshot(snapshot, planId) {
     const pid = planId || getActivePlanId();
@@ -556,6 +563,18 @@
       throw new Error('Invalid planner snapshot.');
     }
 
+    const normalizedSnapshot = Object.assign({}, snapshot);
+    if (typeof normalizedSnapshot.termCodes !== 'string') {
+      // Backward-compatible bridge for a page/save hook loaded before schema
+      // v4. New snapshots always gain the stable parallel identity array.
+      let labels = [];
+      try {
+        const parsed = JSON.parse(String(normalizedSnapshot.dates || '[]'));
+        if (Array.isArray(parsed)) labels = parsed;
+      } catch (_) {}
+      normalizedSnapshot.termCodes = JSON.stringify(labels.map(canonicalTermCodeFromLabel));
+    }
+
     const previous = new Map();
     SNAPSHOT_KEYS.forEach((key) => {
       previous.set(key, localStorage.getItem(planKey(pid, key)));
@@ -563,10 +582,10 @@
 
     try {
       SNAPSHOT_KEYS.forEach((key) => {
-        if (typeof snapshot[key] !== 'string') {
+        if (typeof normalizedSnapshot[key] !== 'string') {
           throw new Error(`Invalid planner snapshot field: ${key}`);
         }
-        localStorage.setItem(planKey(pid, key), snapshot[key]);
+        localStorage.setItem(planKey(pid, key), normalizedSnapshot[key]);
       });
       touchUpdated(pid);
       return true;
@@ -582,6 +601,49 @@
       });
       throw err;
     }
+  }
+
+  function capturePlanCheckpoint(planId) {
+    const pid = planId || sessionPlanId || getActivePlanId();
+    if (!hasPlanWithoutCreating(pid)) throw new Error('The plan is no longer available.');
+    const prefix = planKey(pid, '');
+    const values = {};
+    listLocalStorageKeys().forEach((key) => {
+      if (!key.startsWith(prefix)) return;
+      const value = localStorage.getItem(key);
+      if (value != null) values[key.slice(prefix.length)] = value;
+    });
+    return { planId: pid, values };
+  }
+
+  function restorePlanCheckpoint(checkpoint) {
+    if (!checkpoint || typeof checkpoint !== 'object'
+        || typeof checkpoint.planId !== 'string'
+        || !checkpoint.values || typeof checkpoint.values !== 'object'
+        || Array.isArray(checkpoint.values)) {
+      throw new Error('Invalid plan checkpoint.');
+    }
+    const pid = checkpoint.planId;
+    if (!hasPlanWithoutCreating(pid)) throw new Error('The plan is no longer available.');
+    const prefix = planKey(pid, '');
+    const values = checkpoint.values;
+    const suffixes = Object.keys(values);
+    if (suffixes.some((suffix) => !suffix || typeof values[suffix] !== 'string')) {
+      throw new Error('Invalid plan checkpoint.');
+    }
+
+    // Remove newly-created entries first. This releases quota before restoring
+    // any prior value and makes transcript-import rollback reliable even when
+    // the failed save was caused by a full storage area.
+    listLocalStorageKeys().forEach((key) => {
+      if (!key.startsWith(prefix)) return;
+      const suffix = key.slice(prefix.length);
+      if (!Object.prototype.hasOwnProperty.call(values, suffix)) {
+        localStorage.removeItem(key);
+      }
+    });
+    suffixes.forEach((suffix) => localStorage.setItem(prefix + suffix, values[suffix]));
+    return true;
   }
 
   function normalizePlanName(name) {
@@ -623,7 +685,7 @@
     'entryTermMinor', 'entryTermMinor1', 'entryTermMinor2', 'entryTermMinor3',
     'minor1', 'minor2', 'minor3',
     'schedulerSelectedTerm',
-    'curriculum', 'grades', 'gradingBases', 'dates', 'customCourses', 'schedulerStates',
+    'curriculum', 'grades', 'gradingBases', 'dates', 'termCodes', 'customCourses', 'schedulerStates',
     'globalCourseMetadata',
   ]);
 
@@ -703,7 +765,7 @@
 
   function normalizeTermCode(value, path) {
     const normalized = normalizeImportedText(value, path, { maxLength: 6 });
-    if (!/^\d{6}$/.test(normalized)) importError(path, 'has an invalid term code');
+    if (!/^\d{4}(01|02|03)$/.test(normalized)) importError(path, 'has an invalid term code');
     return normalized;
   }
 
@@ -849,6 +911,22 @@
       maxLength: 80,
       collapseWhitespace: true,
     }));
+  }
+
+  function validateTermCodes(value, curriculum, path) {
+    if (value === null) return null;
+    if (!Array.isArray(value)) importError(path, 'expected an array of semester term codes');
+    if (!Array.isArray(curriculum)) {
+      if (value.length === 0) return [];
+      importError(path, 'requires curriculum data');
+    }
+    if (value.length !== curriculum.length) importError(path, 'must have one code per curriculum semester');
+    return value.map((code, index) => {
+      if (typeof code !== 'string') importError(`${path}[${index}]`, 'expected a term code');
+      const normalized = code.trim();
+      if (!normalized) return '';
+      return normalizeTermCode(normalized, `${path}[${index}]`);
+    });
   }
 
   function validateGlobalCourseMetadataItem(raw, itemPath) {
@@ -1214,6 +1292,7 @@
     const allowedFields = new Set(Array.from(IMPORT_STATE_FIELDS).filter((field) => {
       if (field === 'gradingBases') return fileVersion >= 2;
       if (field === 'globalCourseMetadata') return fileVersion >= 3;
+      if (field === 'termCodes') return fileVersion >= 4;
       return true;
     }));
     requireKnownFields(state, allowedFields, path);
@@ -1252,6 +1331,19 @@
       out.gradingBases = synthesizeGradingBases(curriculum, out.grades);
     }
     if (hasOwn(state, 'dates')) out.dates = validateDates(state.dates, curriculum, `${path}.dates`);
+    if (fileVersion >= 4 && hasOwn(state, 'termCodes')) {
+      out.termCodes = validateTermCodes(state.termCodes, curriculum, `${path}.termCodes`);
+      if (Array.isArray(out.dates)) {
+        out.termCodes.forEach((code, index) => {
+          const derived = canonicalTermCodeFromLabel(out.dates[index]);
+          if (code && derived && code !== derived) {
+            importError(`${path}.termCodes[${index}]`, 'conflicts with the semester label');
+          }
+        });
+      }
+    } else if (Array.isArray(curriculum) && Array.isArray(out.dates)) {
+      out.termCodes = out.dates.map(canonicalTermCodeFromLabel);
+    }
     if (hasOwn(state, 'customCourses')) out.customCourses = validateCustomCourses(state.customCourses, `${path}.customCourses`);
     if (hasOwn(state, 'schedulerStates')) out.schedulerStates = validateSchedulerStates(state.schedulerStates, `${path}.schedulerStates`);
     if (fileVersion >= 3 && hasOwn(state, 'globalCourseMetadata')) {
@@ -1266,7 +1358,7 @@
   function validateImportObject(obj) {
     const root = requirePlainObject(obj, 'file');
     requireKnownFields(root, new Set(['type', 'version', 'exportedAt', 'plan']), 'file');
-    if (root.type !== 'surriculum_plan' || ![1, 2, PLAN_EXPORT_VERSION].includes(root.version)) {
+    if (root.type !== 'surriculum_plan' || ![1, 2, 3, PLAN_EXPORT_VERSION].includes(root.version)) {
       throw new Error('Unsupported file');
     }
     if (hasOwn(root, 'exportedAt') && root.exportedAt !== null) normalizeIsoTimestamp(root.exportedAt, 'file.exportedAt');
@@ -1329,6 +1421,7 @@
       grades: safeJsonParse(get('grades') || 'null', null),
       gradingBases: safeJsonParse(get('gradingBases') || 'null', null),
       dates: safeJsonParse(get('dates') || 'null', null),
+      termCodes: safeJsonParse(get('termCodes') || 'null', null),
       globalCourseMetadata: safeJsonParse(get('globalCourseMetadata') || '[]', []),
       customCourses: {},
       schedulerStates: {},
@@ -1379,6 +1472,18 @@
         state.grades,
         state.gradingBases,
       );
+      if (!Array.isArray(state.termCodes) || state.termCodes.length !== state.curriculum.length) {
+        state.termCodes = Array.isArray(state.dates)
+          ? state.dates.map(canonicalTermCodeFromLabel)
+          : state.curriculum.map(() => '');
+      }
+      state.termCodes = state.termCodes.map((code, index) => {
+        const stored = String(code || '').trim();
+        const fromDate = Array.isArray(state.dates)
+          ? canonicalTermCodeFromLabel(state.dates[index]) : '';
+        return /^\d{4}(01|02|03)$/.test(stored) && (!fromDate || fromDate === stored)
+          ? stored : fromDate;
+      });
     }
 
     return state;
@@ -1407,6 +1512,7 @@
     if (state.grades != null) setJson('grades', state.grades);
     if (state.gradingBases != null) setJson('gradingBases', state.gradingBases);
     if (state.dates != null) setJson('dates', state.dates);
+    if (state.termCodes != null) setJson('termCodes', state.termCodes);
     if (state.globalCourseMetadata != null) {
       setJson('globalCourseMetadata', validateGlobalCourseMetadata(
         state.globalCourseMetadata,
@@ -1755,7 +1861,10 @@
               }
             }
           })
-          .catch(() => {});
+          .catch((err) => uiModal.alert(
+            'Could not create plan',
+            `<p>${escapeHtml(err && err.message ? err.message : 'The new plan could not be created.')}</p>`
+          ));
       });
     }
 
@@ -1800,6 +1909,12 @@
       if (!dropdown.classList.contains('active')) return;
       if (dropdown.contains(e.target) || toggle.contains(e.target)) return;
       closeDropdown();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !dropdown.classList.contains('active')) return;
+      e.preventDefault();
+      closeDropdown();
+      try { toggle.focus({ preventScroll: true }); } catch (_) {}
     });
 
     render();
@@ -1862,6 +1977,8 @@
     requestSave,
     flushSaves,
     suspendSaves,
+    captureCheckpoint: capturePlanCheckpoint,
+    restoreCheckpoint: restorePlanCheckpoint,
     hasPlan(id) {
       return hasPlanWithoutCreating(id);
     },
@@ -1933,18 +2050,33 @@
       const src = sourceId || idx.activeId;
       const n = normalizePlanName(name) || 'Copy of Plan';
       const id = createId();
-      idx.plans.push({ id, name: n, createdAt: nowIso(), updatedAt: nowIso() });
-      saveIndex(idx);
       const srcPrefix = planKey(src, '');
       const dstPrefix = planKey(id, '');
       const keys = listLocalStorageKeys();
-      for (const k of keys) {
-        if (!k.startsWith(srcPrefix)) continue;
-        const rest = k.slice(srcPrefix.length);
-        const val = localStorage.getItem(k);
-        if (val != null) localStorage.setItem(dstPrefix + rest, val);
+      const createdAt = nowIso();
+      try {
+        // Copy the complete namespace before publishing the new plan in the
+        // shared index. localStorage has no transaction primitive, so keeping
+        // the destination unindexed until the final write is the only way to
+        // prevent a quota failure from exposing a partial plan.
+        for (const k of keys) {
+          if (!k.startsWith(srcPrefix)) continue;
+          const rest = k.slice(srcPrefix.length);
+          const val = localStorage.getItem(k);
+          if (val != null) localStorage.setItem(dstPrefix + rest, val);
+        }
+        idx.plans.push({ id, name: n, createdAt, updatedAt: createdAt });
+        saveIndex(idx);
+      } catch (err) {
+        // Best-effort rollback covers both a failed data copy and a failed
+        // index write. The pre-existing source namespace is never touched.
+        try {
+          listLocalStorageKeys().forEach((key) => {
+            if (key.startsWith(dstPrefix)) localStorage.removeItem(key);
+          });
+        } catch (_) {}
+        throw err;
       }
-      touchUpdated(id);
       return id;
     },
     renamePlan(id, name) {

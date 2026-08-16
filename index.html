@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-FpFfnuFzeGRvsKJPshLnhpnaaCbi5jzcAL6SM170xm4='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
@@ -62,7 +62,9 @@
     <script src="scripts/preferences.js"></script>
     <script src="scripts/plan_manager.js"></script>
     <script src="scripts/helper_functions.js"></script>
+    <script src="scripts/course_retakes.js"></script>
     <script src="scripts/course_requisites.js"></script>
+    <script src="scripts/course_filters.js"></script>
     <script src="scripts/scheduler.js"></script>
     <script src="scripts/mouse_and_drag.js"></script>
     <script src="scripts/s_semester.js"></script>
@@ -177,7 +179,19 @@
             </div>
 
             <div class="sidebar-content">
-                <div class="control-group">
+                <div class="control-group control-group-programs">
+                    <div class="program-controls-heading">
+                        <h3 class="sidebar-section-heading">Programs &amp; admit terms</h3>
+                        <button
+                            class="admit-term-help-button"
+                            id="openAdmitTermHelpButton"
+                            type="button"
+                            aria-label="What does admit term mean?"
+                            aria-haspopup="dialog"
+                            title="What does admit term mean?">
+                            <span aria-hidden="true">?</span>
+                        </button>
+                    </div>
                     <div class="control-row control-row-labels" aria-hidden="true">
                         <div class="control-col-label">Program</div>
                         <div class="control-col-label">Admit Term</div>
@@ -218,7 +232,7 @@
                     </div>
                 </div>
 
-                <div class="control-group">
+                <div class="control-group control-group-navigation">
                     <button class="btn btn-primary addSemester" style="width: 100%; margin-bottom: 12px;">
                         <i class="fa-solid fa-plus"></i>&nbsp;New Semester
                     </button>
@@ -239,9 +253,14 @@
                     </div>
                 </div>
 
-                <div class="control-group">
+                <section class="sidebar-picker-defaults" aria-labelledby="coursePickerDefaultsTitle"
+                    aria-describedby="coursePickerDefaultsDescription">
+                <h3 class="sidebar-section-heading sidebar-options-heading" id="coursePickerDefaultsTitle">Course picker defaults</h3>
+                <p class="sidebar-section-description" id="coursePickerDefaultsDescription">Applied when a course picker opens. Offered-only changes stay local to that picker.</p>
+
+                <div class="control-group control-group-option control-group-options-start">
                     <div class="control-row toggle-row">
-                        <span class="toggle-text" id="courseDetailsToggleLabel">Show Course Details</span>
+                        <span class="toggle-text" id="courseDetailsToggleLabel">Show course details</span>
                         <label class="toggle-switch">
                             <input type="checkbox" id="courseDetailsToggle" aria-labelledby="courseDetailsToggleLabel" checked>
                             <span class="toggle-slider"></span>
@@ -249,9 +268,9 @@
                     </div>
                 </div>
 
-                <div class="control-group">
+                <div class="control-group control-group-option">
                     <div class="control-row toggle-row">
-                        <span class="toggle-text" id="hideTakenCoursesToggleLabel">Hide Taken Courses</span>
+                        <span class="toggle-text" id="hideTakenCoursesToggleLabel">Hide courses planned by this term</span>
                         <label class="toggle-switch">
                             <input type="checkbox" id="hideTakenCoursesToggle" aria-labelledby="hideTakenCoursesToggleLabel" checked>
                             <span class="toggle-slider"></span>
@@ -259,17 +278,17 @@
                     </div>
                 </div>
 
-                <div class="control-group">
+                <div class="control-group control-group-option">
                     <div class="control-row toggle-row">
-                        <span class="toggle-text" id="offeredThisTermLabel">Only show offered courses for this term</span>
+                        <span class="toggle-text" id="plannerOfferedOnlyLabel">Only show courses offered in the semester</span>
                         <label class="toggle-switch">
-                            <input type="checkbox" id="offeredThisTermToggle" aria-labelledby="offeredThisTermLabel" checked>
+                            <input type="checkbox" id="plannerOfferedOnlyToggle" aria-labelledby="plannerOfferedOnlyLabel" checked>
                             <span class="toggle-slider"></span>
                         </label>
                     </div>
                 </div>
 
-                <div class="control-group">
+                <div class="control-group control-group-option control-group-options-end">
                     <div class="control-row toggle-row">
                         <span class="toggle-text" id="sortByScoreLabel">Smart Sort</span>
                         <label class="toggle-switch">
@@ -278,10 +297,15 @@
                         </label>
                     </div>
                 </div>
+                </section>
 
-                <div class="control-group">
+                <div class="control-group control-group-courses">
                     <button class="btn btn-secondary autoAdd" style="width: 100%; margin-bottom: 12px;">
                         <i class="fa-solid fa-graduation-cap"></i>&nbsp;Add First Year Courses
+                    </button>
+                    <button class="btn btn-secondary" id="sortSemestersChronologically" type="button"
+                        aria-label="Sort semesters chronologically" style="width: 100%; margin-bottom: 12px;">
+                        <i class="fa-solid fa-arrow-down-short-wide" aria-hidden="true"></i>&nbsp;Sort Semesters
                     </button>
                     <button class="btn btn-secondary customCourse" style="width: 100%; margin-bottom: 12px;">
                         <i class="fa-solid fa-plus"></i>&nbsp;Add Custom Course
@@ -291,12 +315,18 @@
                     </button>
                 </div>
 
-                <div class="control-group">
-                    <button class="btn btn-secondary deleteCustom" style="width: 100%; margin-bottom: 12px; background-color: #DC2626;">
+                <div class="control-group control-group-danger">
+                    <button class="btn btn-danger deleteCustom" style="width: 100%; margin-bottom: 12px;">
                         <i class="fa-solid fa-trash"></i>&nbsp;Delete Custom Courses
                     </button>
-                    <button class="btn btn-secondary resetLocal" style="width: 100%; background-color: #DC2626;">
+                    <button class="btn btn-danger resetLocal" style="width: 100%;">
                         <i class="fa-solid fa-rotate-right"></i>&nbsp;Reset Local Data
+                    </button>
+                </div>
+
+                <div class="control-group control-group-help">
+                    <button class="btn btn-secondary" id="openHelpInfoButton" type="button" style="width: 100%;">
+                        <i class="fa-solid fa-circle-info" aria-hidden="true"></i>&nbsp;Help &amp; information
                     </button>
                 </div>
             </div>
@@ -318,7 +348,7 @@
 
     <!-- Footer -->
     <footer class="footer">
-        <p>Always verify the graduation requirements yourself. Do not forget to enter your admit term. For any issues you spot, send an e-mail to: bilal.gebenoglu@sabanciuniv.edu</p>
+        <p>Always verify the graduation requirements yourself. Verify your admit term in SUIS → Student Records → General Student Information. For any issues you spot, send an e-mail to: bilal.gebenoglu@sabanciuniv.edu</p>
     </footer>
 </div>
 

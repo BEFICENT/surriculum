@@ -47,9 +47,22 @@ test.describe('mobile screens', () => {
     const collapsed = page.locator('.container_semester.m-collapsed');
     await expect(collapsed).toHaveCount(1);
 
-    // Tapping the collapsed semester's header expands it.
-    await collapsed.locator('.date').click();
+    const term = await collapsed.locator('.date p').textContent();
+    const collapsedCard = page.locator('.container_semester').filter({ hasText: term.trim() });
+    const disclosure = page.getByRole('button', { name: `Expand ${term.trim()}` });
+    await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+    await expect(disclosure).toHaveAttribute('aria-controls', /s\d+/);
+    await disclosure.focus();
+    await page.keyboard.press('Enter');
     await expect(page.locator('.container_semester.m-collapsed')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: `Collapse ${term.trim()}` }))
+      .toHaveAttribute('aria-expanded', 'true');
+
+    // The larger header remains a touch/click target as well as the keyboard button.
+    await collapsedCard.locator('.date p').click();
+    await expect(collapsedCard).toHaveClass(/m-collapsed/);
+    await collapsedCard.locator('.date p').click();
+    await expect(collapsedCard).not.toHaveClass(/m-collapsed/);
   });
 
   test('semester move controls stay out of collapsed headers and do not toggle the card', async ({ page }) => {
@@ -61,7 +74,10 @@ test.describe('mobile screens', () => {
 
     await collapsed.locator('.date').click();
     await expect(page.locator('.container_semester.m-collapsed')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Move Spring 2024-2025 up' }).click();
+    // Spring is visually first in the newest-first mobile stack, so moving it
+    // toward the second row is a Down action even though it enters the previous
+    // slot in the persisted oldest-to-newest sequence.
+    await page.getByRole('button', { name: 'Move Spring 2024-2025 down' }).click();
 
     await expect(page.locator('.container_semester.m-collapsed')).toHaveCount(0);
     await expect(page.locator('.container_semester .date p')).toHaveText([
@@ -92,7 +108,10 @@ test.describe('mobile screens', () => {
     });
     expect(contained).toBe(true);
 
-    await semester.locator('.date').click();
+    // The compact one-row header's geometric centre can legitimately be an
+    // action button. Activate the term label, which is the disclosure target a
+    // user taps when they intend to collapse the semester.
+    await semester.locator('.date p').click();
     await expect(semester).toHaveClass(/m-collapsed/);
     await expect(warning).toBeHidden();
   });
@@ -130,7 +149,7 @@ test.describe('mobile screens', () => {
       const chevron = date && date.querySelector('.m-sem-chevron');
       const credit = card.querySelector('.total_credit');
       const board = card.closest('.board');
-      const visibleButtons = icons ? Array.from(icons.querySelectorAll('button')).filter((button) => {
+      const visibleButtons = icons ? Array.from(icons.querySelectorAll('button:not(.m-sem-chevron)')).filter((button) => {
         const style = getComputedStyle(button);
         const box = button.getBoundingClientRect();
         return style.display !== 'none' && style.visibility !== 'hidden' && box.width > 0 && box.height > 0;
@@ -194,7 +213,7 @@ test.describe('mobile screens', () => {
     expect(layout.dateOverflow).toBeLessThanOrEqual(1);
     expect(layout.boardOverflow).toBeLessThanOrEqual(1);
 
-    await semester.locator('.date').click();
+    await semester.locator('.date p').click();
     await expect(semester).toHaveClass(/m-collapsed/);
     await expect(semester.locator('.total_credit_text')).toContainText('5.5 SU (2.5 N/A)');
     await semester.locator('.m-sem-chevron').evaluate(async (element) => {
@@ -244,7 +263,8 @@ test.describe('mobile screens', () => {
     expect(collapsedLayout.boardOverflow).toBeLessThanOrEqual(1);
   });
 
-  test('progress screen renders a program card with a completion bar', async ({ page }) => {
+  test('progress adapter preserves the desktop overview data and detail CTA on mobile', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 800 });
     await seedPlan(page, PLAN);
 
     await page.locator('.m-nav-item[data-mtab="progress"]').click();
@@ -252,8 +272,33 @@ test.describe('mobile screens', () => {
 
     const card = page.locator('#mProgress .m-prog-card').first();
     await expect(card).toBeVisible({ timeout: 10000 });
-    await expect(card.locator('.m-prog-title')).not.toBeEmpty();
+    await expect(card.locator('.m-prog-title')).toHaveText('Computer Science and Engineering');
+    await expect(card.locator('.m-prog-barrow')).toContainText('SU credits');
+    await expect(card.locator('.m-prog-lbl').filter({ hasText: /^CGPA \(min\)$/ })).toHaveCount(1);
+    await expect(card.locator('.m-prog-lbl').filter({ hasText: /^ECTS$/ })).toHaveCount(1);
     await expect(card.locator('.m-prog-bar')).toBeVisible();
+    await expect(page.locator('#mProgress .m-prog-detail .major-summary'),
+      'mobile detail extraction still reaches the CTA nested in the reorganized header')
+      .toBeVisible({ timeout: 10000 });
+    await expect(page.locator('.summary_modal_overlay'),
+      'the off-screen desktop Summary adapter must clean up after extraction').toHaveCount(0);
+
+    const dot = page.locator('#mProgress .m-prog-dot').first();
+    await expect(dot).toHaveAttribute('aria-current', 'true');
+    await expect(dot).toHaveAttribute('aria-controls', 'm-progress-program-0');
+
+    const section = page.locator('#mProgress .m-prog-detail .ms-section').first();
+    const header = section.locator(':scope > .ms-header');
+    await expect(header).toHaveJSProperty('tagName', 'BUTTON');
+    await expect(header).toHaveAttribute('aria-expanded', 'true');
+    await expect(header).toHaveAttribute('aria-controls', /m-progress-section-0-content-/);
+    await header.focus();
+    await page.keyboard.press(' ');
+    await expect(section).toHaveClass(/m-sec-collapsed/);
+    await expect(header).toHaveAttribute('aria-expanded', 'false');
+    await page.keyboard.press('Enter');
+    await expect(section).not.toHaveClass(/m-sec-collapsed/);
+    await expect(header).toHaveAttribute('aria-expanded', 'true');
   });
 
   test('tag-dense progress course cards wrap without clipping or horizontal overlap', async ({ page }, testInfo) => {
@@ -367,6 +412,13 @@ test.describe('mobile screens', () => {
     await page.locator('.m-nav-item[data-mtab="progress"]').click();
     const cards = page.locator('#mProgress .m-prog-card');
     await expect(cards).toHaveCount(2);
+    const dots = page.locator('#mProgress .m-prog-dot');
+    await expect(dots).toHaveCount(2);
+    await expect(dots.first()).toHaveAttribute('aria-current', 'true');
+    await expect(dots.nth(1)).not.toHaveAttribute('aria-current', /.+/);
+    await dots.nth(1).click();
+    await expect(dots.nth(1)).toHaveAttribute('aria-current', 'true');
+    await expect(dots.first()).not.toHaveAttribute('aria-current', /.+/);
     const statWithLabel = (card, label) => card.locator('.m-prog-stat').filter({
       has: page.locator('.m-prog-lbl', { hasText: new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`) }),
     });

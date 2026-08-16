@@ -125,6 +125,80 @@ function termCodeToName(code) {
     return term + ' ' + year + '-' + nextYear;
 }
 
+// Canonical academic-term identity for semester models and raw term values.
+// `termIndex` and DOM position are deliberately excluded: both are presentation
+// details that can change when a semester card is moved. If a model carries two
+// valid but conflicting identities, fail closed instead of guessing which one
+// should control prerequisites or allocation order.
+function semesterTermCode(value) {
+    const normalize = (candidate) => {
+        const raw = String(candidate || '').trim();
+        if (/^\d{4}(01|02|03)$/.test(raw)) return raw;
+        const match = raw.match(/^(Fall|Spring|Summer)\s+(\d{4})-(\d{4})$/i);
+        if (!match || Number(match[3]) !== Number(match[2]) + 1) return '';
+        const suffix = { fall: '01', spring: '02', summer: '03' }[match[1].toLowerCase()];
+        return match[2] + suffix;
+    };
+
+    if (!value || typeof value !== 'object') return normalize(value);
+    const candidates = [value.termCode, value.termName, value.date, value.term]
+        .map(normalize)
+        .filter(Boolean);
+    if (!candidates.length) return '';
+    const first = candidates[0];
+    return candidates.every((code) => code === first) ? first : '';
+}
+
+function semesterAcademicTieKey(semester) {
+    const courses = semester && Array.isArray(semester.courses) ? semester.courses : [];
+    const courseSignature = courses.map((course) => {
+        const code = String(course && course.code !== undefined ? course.code : course)
+            .toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const grade = String((course && course.grade) || '').trim().toUpperCase();
+        const basis = String((course && course.gradingBasis) || '').trim().toLowerCase();
+        return [code, grade, basis].join('|');
+    })
+        .filter((value) => value.replace(/\|/g, ''))
+        .sort()
+        .join('\u0001');
+    const storedIdentity = ['termCode', 'termName', 'date', 'term']
+        .map((field) => String((semester && semester[field]) || '').trim().toUpperCase())
+        .join('|');
+    return [courseSignature, storedIdentity].join('\u0000');
+}
+
+// Oldest-to-newest academic order. Duplicate valid terms and invalid/legacy
+// rows receive a semantic tie-breaker so array/visual order never decides which
+// course claims a limited curriculum pool first. Invalid terms sort last and do
+// not establish chronology.
+function compareSemesterTerms(left, right) {
+    const leftCode = semesterTermCode(left);
+    const rightCode = semesterTermCode(right);
+    if (leftCode && rightCode && leftCode !== rightCode) {
+        return Number(leftCode) - Number(rightCode);
+    }
+    if (leftCode && !rightCode) return -1;
+    if (!leftCode && rightCode) return 1;
+    const leftTie = semesterAcademicTieKey(left);
+    const rightTie = semesterAcademicTieKey(right);
+    return leftTie < rightTie ? -1 : (leftTie > rightTie ? 1 : 0);
+}
+
+function hasDuplicateSemesterTerm(curriculumOrSemesters, candidate, options) {
+    const semesters = Array.isArray(curriculumOrSemesters)
+        ? curriculumOrSemesters
+        : (curriculumOrSemesters && Array.isArray(curriculumOrSemesters.semesters)
+            ? curriculumOrSemesters.semesters : []);
+    const candidateCode = semesterTermCode(candidate);
+    if (!candidateCode) return false;
+    const excludedId = String((options && options.excludeSemesterId) || '');
+    return semesters.some((semester) => {
+        if (!semester || semester === candidate) return false;
+        if (excludedId && String(semester.id || '') === excludedId) return false;
+        return semesterTermCode(semester) === candidateCode;
+    });
+}
+
 function normalizeTermIdentifier(term) {
     const raw = String(term || '').trim();
     if (!raw) return '';
@@ -489,6 +563,9 @@ if (typeof window !== 'undefined') {
     window.updateCurrentTermHighlights = updateCurrentTermHighlights;
     window.termNameToCode = termNameToCode;
     window.termCodeToName = termCodeToName;
+    window.semesterTermCode = semesterTermCode;
+    window.compareSemesterTerms = compareSemesterTerms;
+    window.hasDuplicateSemesterTerm = hasDuplicateSemesterTerm;
     window.normalizeTermIdentifier = normalizeTermIdentifier;
     window.displayTermIdentifier = displayTermIdentifier;
     window.buildCourseHistoryTableElement = buildCourseHistoryTableElement;
@@ -732,15 +809,11 @@ function computeCourseSuggestionScore(courseCode, opts) {
             const map = new Map();
             try {
                 if (!previousOnly || !currentTermCode) return map;
-                const containers = document.querySelectorAll('.container_semester');
-                for (let i = 0; i < containers.length; i++) {
-                    const c = containers[i];
-                    const p = c ? c.querySelector('.date p') : null;
-                    const name = p ? String(p.textContent || '').trim() : '';
-                    const code = window.termNameToCode ? window.termNameToCode(name) : '';
-                    const codeN = parseInt(String(code || ''), 10) || 0;
-                    const semEl = c ? c.querySelector('.semester') : null;
-                    const id = semEl ? String(semEl.id || '') : '';
+                const semesters = cur && Array.isArray(cur.semesters) ? cur.semesters : [];
+                for (let i = 0; i < semesters.length; i++) {
+                    const semester = semesters[i];
+                    const codeN = parseInt(String(semesterTermCode(semester) || ''), 10) || 0;
+                    const id = String((semester && semester.id) || '');
                     if (id && codeN) map.set(id, codeN);
                 }
             } catch (_) {}
@@ -751,7 +824,7 @@ function computeCourseSuggestionScore(courseCode, opts) {
                 if (!previousOnly || !currentTermCode) return true;
                 const id = sem && sem.id ? String(sem.id) : '';
                 const code = id && semesterIdToTermCode.has(id) ? semesterIdToTermCode.get(id) : 0;
-                if (!code) return true; // if unknown, don't undercount
+                if (!code) return false;
                 return code < currentTermCode;
             } catch (_) {
                 return true;
@@ -1733,9 +1806,23 @@ function dates_serializator(curriculum)
     return JSON.stringify(dates);
 }
 
+function term_codes_serializator(curriculum)
+{
+    const semesters = curriculum && Array.isArray(curriculum.semesters)
+        ? curriculum.semesters : [];
+    return JSON.stringify(semesters.map((semester) => {
+        // Preserve a valid stored code even when it conflicts with the label.
+        // Keeping both fields is what lets semesterTermCode fail closed after a
+        // reload instead of silently choosing one side of corrupted metadata.
+        const stored = String((semester && semester.termCode) || '').trim();
+        if (/^\d{4}(01|02|03)$/.test(stored)) return stored;
+        return semesterTermCode(semester && (semester.termName || semester.date || semester.term));
+    }));
+}
+
 function reload(curriculum, course_data)
 {
-    let data, grades, gradingBases, dates;
+    let data, grades, gradingBases, dates, termCodes;
     const ps = (typeof window !== 'undefined') ? window.planStorage : null;
     const planId = getPlanStorageSessionId(ps);
     const get = (k) => {
@@ -1750,22 +1837,44 @@ function reload(curriculum, course_data)
     try{grades = JSON.parse(get("grades"));}   catch{}
     try{gradingBases = JSON.parse(get("gradingBases"));} catch{}
     try{dates = JSON.parse(get("dates"))}      catch{}
+    try{termCodes = JSON.parse(get("termCodes"))} catch{}
     if(data)
     {
         for(let i = 0; i < data.length; i++)
         {
+            const persistedTermCode = Array.isArray(termCodes) && typeof termCodes[i] === 'string'
+                && /^\d{4}(01|02|03)$/.test(String(termCodes[i]).trim())
+                ? String(termCodes[i]).trim() : '';
+            const persistedTermName = dates && typeof dates[i] === 'string'
+                ? dates[i]
+                : (persistedTermCode ? termCodeToName(persistedTermCode) : '');
             // Each persisted field is optional in imported/legacy plans. Keep
             // fields that are present instead of dropping grades merely because
             // the plan did not include custom semester labels.
-            createSemeter(
+            const created = createSemeter(
                 true,
                 data[i],
                 curriculum,
                 course_data,
                 grades && Array.isArray(grades[i]) ? grades[i] : [],
-                dates && typeof dates[i] === 'string' ? dates[i] : '',
+                persistedTermName,
                 gradingBases && Array.isArray(gradingBases[i]) ? gradingBases[i] : [],
             );
+
+            // Dates remain the human-readable label. The optional parallel
+            // termCodes array is the stable identity boundary introduced after
+            // legacy plans had already been saved, so its absence is expected.
+            if (created && Array.isArray(termCodes) && typeof termCodes[i] === 'string') {
+                try {
+                    const semesterElement = created.querySelector('.semester');
+                    const semester = semesterElement && curriculum
+                        && typeof curriculum.getSemester === 'function'
+                        ? curriculum.getSemester(semesterElement.id) : null;
+                    if (semester) {
+                        semester.termCode = persistedTermCode;
+                    }
+                } catch (_) {}
+            }
 
         }
     }

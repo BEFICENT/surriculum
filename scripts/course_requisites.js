@@ -155,6 +155,118 @@
     return out;
   }
 
+  function positiveSuCredit(value) {
+    try {
+      const raw = String(value == null ? '' : value).trim().replace(',', '.');
+      if (!raw) return 0;
+      const parsed = Number.parseFloat(raw);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  // Credit-based prerequisites use the same planning semantics as course-code
+  // prerequisites: an eligible course in a strictly earlier term contributes,
+  // even when its final grade has not been announced yet. Same-term/future,
+  // failed, withdrawn, and term-unverified rows do not. Keep one maximum credit
+  // value per normalized course code so a corrupt/legacy repeated attempt cannot
+  // satisfy a threshold twice.
+  function priorEligibleSuCredits(semesters, targetTerm, isEligible) {
+    const target = (targetTerm && typeof targetTerm === 'object')
+      ? termNumber(targetTerm)
+      : termNumber({ termCode: targetTerm, termName: targetTerm });
+    if (!Number.isFinite(target) || target <= 0) return 0;
+    const creditByCode = new Map();
+    const rows = Array.isArray(semesters) ? semesters : [];
+    for (let i = 0; i < rows.length; i++) {
+      const semester = rows[i];
+      const term = termNumber(semester);
+      if (!term || term >= target) continue;
+      const courses = semester && Array.isArray(semester.courses) ? semester.courses : [];
+      for (let j = 0; j < courses.length; j++) {
+        const course = courses[j];
+        const code = normalizeCourseCode(course && course.code);
+        if (!course || !code) continue;
+        let eligible = true;
+        try {
+          if (typeof isEligible === 'function') eligible = !!isEligible(course, semester);
+        } catch (_) {
+          eligible = false;
+        }
+        if (!eligible) continue;
+        const credit = positiveSuCredit(course.SU_credit);
+        if (!credit) continue;
+        creditByCode.set(code, Math.max(creditByCode.get(code) || 0, credit));
+      }
+    }
+    let total = 0;
+    creditByCode.forEach((credit) => { total += credit; });
+    return total;
+  }
+
+  function mergePrerequisiteResults(results) {
+    const unmet = (Array.isArray(results) ? results : []).filter(Boolean);
+    if (!unmet.length) return null;
+    const required = new Set();
+    const concurrent = new Set();
+    const oneOf = [];
+    const oneOfConcurrent = [];
+    for (let i = 0; i < unmet.length; i++) {
+      const result = unmet[i];
+      (Array.isArray(result.required) ? result.required : []).forEach((code) => {
+        const normalized = normalizeCourseCode(code);
+        if (normalized) required.add(normalized);
+      });
+      (Array.isArray(result.concurrent) ? result.concurrent : []).forEach((code) => {
+        const normalized = normalizeCourseCode(code);
+        if (normalized) concurrent.add(normalized);
+      });
+      const groups = Array.isArray(result.oneOf) ? result.oneOf : [];
+      const flags = Array.isArray(result.oneOfConcurrent) ? result.oneOfConcurrent : [];
+      for (let j = 0; j < groups.length; j++) {
+        oneOf.push(Array.isArray(groups[j]) ? groups[j].slice() : []);
+        oneOfConcurrent.push(Array.isArray(flags[j]) ? flags[j].slice() : []);
+      }
+    }
+    return {
+      mode: 'expr',
+      required: Array.from(required),
+      concurrent: Array.from(concurrent),
+      oneOf,
+      oneOfConcurrent,
+    };
+  }
+
+  // Banner exposes some mandatory course clauses under General Requirements
+  // rather than Prerequisites. Treat both expressions as independent AND
+  // requirements while keeping the old single-field data fully compatible.
+  function evaluateCoursePrerequisites(info, availableCodes, options) {
+    if (!info || typeof info !== 'object') return null;
+    const results = [];
+    if (info.prerequisites) {
+      results.push(evaluatePrerequisites(String(info.prerequisites), availableCodes, options));
+    }
+    if (info.general_requirement_prerequisites) {
+      results.push(evaluatePrerequisites(
+        String(info.general_requirement_prerequisites),
+        availableCodes,
+        options,
+      ));
+    }
+    return mergePrerequisiteResults(results);
+  }
+
+  function minimumPriorSuRequirement(info, actualPriorSu) {
+    if (!info || typeof info !== 'object') return null;
+    const minimum = positiveSuCredit(info.minimum_earned_su_credits);
+    if (!minimum) return null;
+    const parsedActual = Number(actualPriorSu);
+    const actual = Number.isFinite(parsedActual) && parsedActual > 0 ? parsedActual : 0;
+    if (actual >= minimum) return null;
+    return { minimum, actual, missing: minimum - actual };
+  }
+
   function evaluatePrerequisites(value, availableCodes, options) {
     const ast = parsePrerequisiteExpression(value);
     if (!ast) return null;
@@ -243,13 +355,21 @@
   }
 
   function termNumber(semester) {
+    try {
+      const canonical = (typeof window !== 'undefined') ? window.semesterTermCode : null;
+      const code = typeof canonical === 'function' ? String(canonical(semester) || '') : '';
+      if (/^\d{4}(01|02|03)$/.test(code)) return Number(code);
+      if (typeof canonical === 'function') return 0;
+    } catch (_) {
+      return 0;
+    }
     const direct = String((semester && semester.termCode) || '').trim();
-    if (/^\d{6}$/.test(direct)) return Number(direct);
+    if (/^\d{4}(01|02|03)$/.test(direct)) return Number(direct);
     try {
       const label = String((semester && (semester.termName || semester.date)) || '').trim();
       const convert = (typeof window !== 'undefined') ? window.termNameToCode : null;
       const converted = typeof convert === 'function' ? String(convert(label) || '') : '';
-      return /^\d{6}$/.test(converted) ? Number(converted) : 0;
+      return /^\d{4}(01|02|03)$/.test(converted) ? Number(converted) : 0;
     } catch (_) {
       return 0;
     }
@@ -282,6 +402,143 @@
     // terminal result; T is accepted transferred credit. A letter grade does
     // not prove the S/U prerequisite and therefore receives an advisory.
     return ['', 'P', 'I', 'S', 'T'].includes(grade);
+  }
+
+  // Build the occurrence-aware prerequisite context for one academic term.
+  // Academic chronology is derived exclusively from canonical term identity;
+  // neither the curriculum array order nor the visual card order participates.
+  // The returned Sets are intentionally read-only-by-convention so callers can
+  // reuse one context while evaluating every candidate in a picker.
+  function buildTermRequirementContext(semesters, targetSemester, isEligible) {
+    const targetTerm = (targetSemester && typeof targetSemester === 'object')
+      ? termNumber(targetSemester)
+      : termNumber({ termCode: targetSemester, termName: targetSemester });
+    const source = Array.isArray(semesters) ? semesters : [];
+    const occurrences = [];
+
+    for (let i = 0; i < source.length; i++) {
+      const semester = source[i];
+      const term = termNumber(semester);
+      const courses = semester && Array.isArray(semester.courses) ? semester.courses : [];
+      for (let j = 0; j < courses.length; j++) {
+        const course = courses[j];
+        const code = normalizeCourseCode(course && course.code);
+        if (!course || !code) continue;
+        let eligible = true;
+        try {
+          if (typeof isEligible === 'function') eligible = !!isEligible(course, semester);
+        } catch (_) {
+          eligible = false;
+        }
+        occurrences.push({ course, semester, code, term, eligible });
+      }
+    }
+
+    const known = Number.isFinite(targetTerm) && targetTerm > 0;
+    const earlierCodes = new Set();
+    const throughCodes = new Set();
+    if (known) {
+      for (let i = 0; i < occurrences.length; i++) {
+        const occurrence = occurrences[i];
+        if (!occurrence.term || !occurrence.eligible) continue;
+        if (occurrence.term < targetTerm) earlierCodes.add(occurrence.code);
+        if (occurrence.term <= targetTerm) throughCodes.add(occurrence.code);
+      }
+    }
+
+    return {
+      known,
+      targetSemester: targetSemester || null,
+      targetTerm: known ? targetTerm : 0,
+      occurrences,
+      earlierCodes,
+      throughCodes,
+      priorEligibleSu: known
+        ? priorEligibleSuCredits(source, targetTerm, isEligible)
+        : 0,
+    };
+  }
+
+  function unknownCandidateRequirementResult(courseCode, reason) {
+    return {
+      known: false,
+      status: 'unknown',
+      reason: String(reason || 'requirements-unavailable'),
+      courseCode: normalizeCourseCode(courseCode),
+      hasRequirements: false,
+      prerequisite: null,
+      priorSuRequirement: null,
+      corequisites: [],
+      missingCorequisites: [],
+    };
+  }
+
+  // Evaluate one not-yet-added course against a prebuilt target-term context.
+  // Ordinary prerequisites must be in a strictly earlier term. Only a clause
+  // explicitly marked "can be taken concurrently" may use the target term.
+  // Corequisites are advisory and may appear in the same term or an earlier
+  // one. Missing/invalid source data is an unknown, fail-open state rather than
+  // a false assertion that the candidate has met every requirement.
+  function evaluateCandidateForTerm(info, courseCode, context) {
+    const code = normalizeCourseCode(courseCode);
+    if (!context || context.known !== true || !context.targetTerm) {
+      return unknownCandidateRequirementResult(code, 'unknown-target-term');
+    }
+    if (!info || typeof info !== 'object') {
+      return unknownCandidateRequirementResult(code, 'missing-course-info');
+    }
+
+    const occurrences = Array.isArray(context.occurrences) ? context.occurrences : [];
+    const targetTerm = Number(context.targetTerm) || 0;
+    const prerequisite = evaluateCoursePrerequisites(info, [], {
+      courseAvailable: (requiredCode, qualifier) => {
+        const required = normalizeCourseCode(requiredCode);
+        if (!required) return false;
+        const concurrent = !!(qualifier && qualifier.concurrent === true);
+        const minGrade = qualifier && qualifier.minGrade ? qualifier.minGrade : '';
+        return occurrences.some((occurrence) => (
+          occurrence
+          && occurrence.code === required
+          && occurrence.eligible
+          && occurrence.term
+          && (
+            occurrence.term < targetTerm
+            || (concurrent && occurrence.term === targetTerm)
+          )
+          && courseMeetsMinimumGrade(occurrence.course, minGrade)
+        ));
+      },
+    });
+    const priorSuRequirement = minimumPriorSuRequirement(info, context.priorEligibleSu);
+
+    const throughCodes = context.throughCodes && typeof context.throughCodes.has === 'function'
+      ? context.throughCodes
+      : new Set(occurrences.filter((occurrence) => (
+        occurrence && occurrence.eligible && occurrence.term && occurrence.term <= targetTerm
+      )).map((occurrence) => occurrence.code));
+    const declaredCorequisites = extractCourseCodes(info.corequisites)
+      .filter((requiredCode) => requiredCode !== code && !isPlannerComponentCode(requiredCode));
+    const missingCorequisites = Array.from(new Set(declaredCorequisites))
+      .filter((requiredCode) => !throughCodes.has(requiredCode));
+    const hasRequirements = !!(
+      info.prerequisites
+      || info.general_requirement_prerequisites
+      || positiveSuCredit(info.minimum_earned_su_credits)
+      || declaredCorequisites.length
+    );
+    const unmet = !!(prerequisite || priorSuRequirement || missingCorequisites.length);
+
+    return {
+      known: true,
+      status: unmet ? 'unmet' : 'met',
+      reason: '',
+      courseCode: code,
+      hasRequirements,
+      prerequisite,
+      priorSuRequirement,
+      corequisites: missingCorequisites,
+      missingCorequisites,
+    };
   }
 
   function plannerWarningsForSemesters(
@@ -321,35 +578,18 @@
       const info = courseInfoFor(infoByCode, target.code);
       if (!info) continue;
 
-      const throughTarget = new Set();
-      for (let j = 0; j < rows.length; j++) {
-        const candidate = rows[j];
-        if (!candidate.term || !candidate.eligible) continue;
-        if (candidate.term <= target.term) throughTarget.add(candidate.code);
-      }
-
-      const prerequisite = info.prerequisites
-        ? evaluatePrerequisites(String(info.prerequisites), [], {
-          courseAvailable: (code, qualifier) => rows.some((candidate) => (
-            candidate.code === code
-            && candidate.eligible
-            && (
-              candidate.term < target.term
-              || (qualifier.concurrent === true && candidate.term === target.term)
-            )
-            && courseMeetsMinimumGrade(candidate.course, qualifier.minGrade)
-          )),
-        }) : null;
-      const corequisites = extractCourseCodes(info.corequisites)
-        .filter((code) => code !== target.code && !isPlannerComponentCode(code));
-      const missingCorequisites = Array.from(new Set(corequisites))
-        .filter((code) => !throughTarget.has(code));
-      if (!prerequisite && !missingCorequisites.length) continue;
+      const requirement = evaluateCandidateForTerm(
+        info,
+        target.code,
+        buildTermRequirementContext(source, target.semester, isEligible),
+      );
+      if (!requirement.known || requirement.status !== 'unmet') continue;
       warnings.push({
         courseId: String(target.course.id || ''),
         courseCode: target.code,
-        prerequisite,
-        corequisites: missingCorequisites,
+        prerequisite: requirement.prerequisite,
+        priorSuRequirement: requirement.priorSuRequirement,
+        corequisites: requirement.corequisites,
       });
     }
     return warnings;
@@ -361,6 +601,148 @@
       document.querySelectorAll('.course.has-requisite-warning')
         .forEach((node) => node.classList.remove('has-requisite-warning'));
     } catch (_) {}
+  }
+
+  function clearPlannerOfferingTagElements() {
+    try {
+      document.querySelectorAll('.planner-course-offering-tags').forEach((node) => node.remove());
+      document.querySelectorAll('.course.has-offering-advisory')
+        .forEach((node) => node.classList.remove('has-offering-advisory'));
+    } catch (_) {}
+  }
+
+  const plannerOfferingSchedulePromises = new Map();
+
+  function plannerOfferingScheduleCodes(termCode, historyApi) {
+    const normalizedTerm = historyApi && typeof historyApi.normalizeOfferingTermCode === 'function'
+      ? historyApi.normalizeOfferingTermCode(termCode) : String(termCode || '').trim();
+    if (!normalizedTerm) return Promise.resolve(null);
+    if (plannerOfferingSchedulePromises.has(normalizedTerm)) {
+      return plannerOfferingSchedulePromises.get(normalizedTerm);
+    }
+    const promise = (async () => {
+      try {
+        const loader = (typeof window !== 'undefined') ? window.loadTermScheduleIndex : null;
+        if (typeof loader !== 'function') return null;
+        const index = await loader(normalizedTerm);
+        if (!index || typeof index.keys !== 'function') return null;
+        const normalize = historyApi && typeof historyApi.normalizeCourseCode === 'function'
+          ? historyApi.normalizeCourseCode : normalizeCourseCode;
+        return new Set(Array.from(index.keys()).map(normalize).filter(Boolean));
+      } catch (_) {
+        return null;
+      }
+    })();
+    plannerOfferingSchedulePromises.set(normalizedTerm, promise);
+    return promise;
+  }
+
+  async function renderPlannerOfferingTags(semesters, infoByCode, isTagTarget) {
+    clearPlannerOfferingTagElements();
+    try {
+      const historyApi = (typeof window !== 'undefined') ? window.courseFilters : null;
+      if (!historyApi
+        || typeof historyApi.offeringHistoryForCandidate !== 'function'
+        || typeof historyApi.contextualOfferingAdvisories !== 'function') return;
+      const source = Array.isArray(semesters) ? semesters : [];
+      const referenceTermCode = (typeof window !== 'undefined')
+        ? String(window.currentTermCode || '') : '';
+      const pending = [];
+      for (let semesterIndex = 0; semesterIndex < source.length; semesterIndex++) {
+        const semester = source[semesterIndex];
+        const courses = semester && Array.isArray(semester.courses) ? semester.courses : [];
+        for (let courseIndex = 0; courseIndex < courses.length; courseIndex++) {
+          const course = courses[courseIndex];
+          const code = normalizeCourseCode(course && course.code);
+          if (!course || !code) continue;
+          let shouldTag = true;
+          try {
+            if (typeof isTagTarget === 'function') shouldTag = !!isTagTarget(course, semester);
+          } catch (_) {}
+          if (!shouldTag) continue;
+          const targetTermCode = (() => {
+            try {
+              const resolve = (typeof window !== 'undefined') ? window.semesterTermCode : null;
+              return typeof resolve === 'function' ? String(resolve(semester) || '') : '';
+            } catch (_) {
+              return '';
+            }
+          })();
+          // A missing or conflicting persisted term identity is not evidence
+          // for a particular season. Fail open instead of guessing from either
+          // the visual label or one side of a code/label conflict.
+          if (!targetTermCode) continue;
+          const pattern = historyApi.offeringHistoryForCandidate(
+            { code },
+            infoByCode,
+            { referenceTermCode },
+          );
+          const initialAdvisories = historyApi.contextualOfferingAdvisories(
+            pattern,
+            targetTermCode,
+            'unknown',
+          );
+          if (!Array.isArray(initialAdvisories) || !initialAdvisories.length) continue;
+          const card = course.id ? document.getElementById(String(course.id)) : null;
+          const info = card ? card.querySelector('.course_info') : null;
+          if (!card || !info) continue;
+          pending.push({
+            code,
+            termCode: targetTermCode,
+            pattern,
+            card,
+            info,
+            // Every historical advisory, including irregular cadence, yields
+            // to a known offering in the selected semester.
+            needsExactOffering: true,
+          });
+        }
+      }
+
+      const exactByTerm = new Map();
+      const terms = Array.from(new Set(
+        pending.filter((item) => item.needsExactOffering).map((item) => item.termCode),
+      ));
+      await Promise.all(terms.map(async (termCode) => {
+        exactByTerm.set(termCode, await plannerOfferingScheduleCodes(termCode, historyApi));
+      }));
+
+      for (let itemIndex = 0; itemIndex < pending.length; itemIndex++) {
+          const item = pending[itemIndex];
+          const exactCodes = item.needsExactOffering ? exactByTerm.get(item.termCode) : null;
+          const exactOffering = typeof historyApi.offeringState === 'function'
+            ? historyApi.offeringState({ code: item.code }, exactCodes) : 'unknown';
+          const advisories = historyApi.contextualOfferingAdvisories(
+            item.pattern,
+            item.termCode,
+            exactOffering,
+          );
+          if (!Array.isArray(advisories) || !advisories.length) continue;
+          const wrapper = document.createElement('div');
+          wrapper.className = 'planner-course-offering-tags';
+          wrapper.setAttribute(
+            'aria-label',
+            'Offering history advisory. Based on recorded history; future availability can change.',
+          );
+          wrapper.dataset.offeringHistoryState = item.pattern && item.pattern.status
+            ? String(item.pattern.status) : 'unknown';
+          advisories.forEach((advisory) => {
+            if (!advisory || !advisory.label) return;
+            const tag = document.createElement('span');
+            tag.className = 'planner-course-offering-tag';
+            tag.dataset.offeringAdvisory = String(advisory.key || 'history');
+            tag.textContent = String(advisory.label);
+            tag.title = String(advisory.description || advisory.title
+              || 'Based on recorded course history; future availability can change.');
+            wrapper.appendChild(tag);
+          });
+          if (!wrapper.children.length) continue;
+          item.card.classList.add('has-offering-advisory');
+          item.info.appendChild(wrapper);
+      }
+    } catch (_) {
+      clearPlannerOfferingTagElements();
+    }
   }
 
   function appendPlannerWarning(wrapper, kind, message) {
@@ -412,6 +794,16 @@
           }
         }
       }
+      if (item.priorSuRequirement) {
+        const minimum = Number(item.priorSuRequirement.minimum) || 0;
+        const actual = Number(item.priorSuRequirement.actual) || 0;
+        const format = (value) => {
+          const rounded = Math.round(Number(value || 0) * 100) / 100;
+          return String(rounded);
+        };
+        appendPlannerWarning(wrapper, 'prior-credits',
+          `Prior SU requirement: ${format(actual)} of ${format(minimum)} SU planned/completed in earlier terms.`);
+      }
       if (Array.isArray(item.corequisites) && item.corequisites.length) {
         appendPlannerWarning(wrapper, 'corequisite',
           `Corequisite: add ${item.corequisites.join(', ')} in this term or an earlier term.`);
@@ -428,6 +820,7 @@
       const loadInfo = (typeof window !== 'undefined') ? window.loadCoursePageInfoIndex : null;
       if (!curriculum || !Array.isArray(curriculum.semesters) || typeof loadInfo !== 'function') {
         clearPlannerWarningElements();
+        clearPlannerOfferingTagElements();
         return [];
       }
       const eligible = (course) => (
@@ -446,9 +839,11 @@
       ));
       if (!hasWarningTargets) {
         clearPlannerWarningElements();
+        clearPlannerOfferingTagElements();
         return [];
       }
       const infoByCode = await loadInfo();
+      await renderPlannerOfferingTags(curriculum.semesters, infoByCode, warningTarget);
       const warnings = plannerWarningsForSemesters(
         curriculum.semesters,
         infoByCode,
@@ -459,6 +854,7 @@
       return warnings;
     } catch (_) {
       clearPlannerWarningElements();
+      clearPlannerOfferingTagElements();
       return [];
     }
   }
@@ -485,8 +881,14 @@
     extractCourseCodes,
     parsePrerequisiteExpression,
     evaluatePrerequisites,
+    evaluateCoursePrerequisites,
+    mergePrerequisiteResults,
+    priorEligibleSuCredits,
+    minimumPriorSuRequirement,
     isPlannerComponentCode,
     courseMeetsMinimumGrade,
+    buildTermRequirementContext,
+    evaluateCandidateForTerm,
     plannerWarningsForSemesters,
     refreshPlannerWarnings,
     queuePlannerWarningRefresh,

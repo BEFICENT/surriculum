@@ -237,6 +237,20 @@ function escapeHtml(value) {
         .replace(/'/g, '&#39;');
 }
 
+// Keep the user-facing admit-term policy in one place so the sidebar help,
+// transcript reminder, and full Help guide cannot drift apart.
+const admitTermPolicyListHtml =
+    '<ul class="admit-term-policy-list">' +
+    '<li><strong>Main major / minor:</strong> usually use your <strong>first term at Sabancı</strong> (your initial university entry term), even if you declared the program later or completed a prep/English year first. For most students, this means every minor uses the same admit term as the main major.</li>' +
+    '<li><strong>Double major:</strong> if it started <strong>before Fall 2026-2027</strong>, use the <strong>first term after</strong> your double-major application was accepted. If it started in <strong>Fall 2026-2027 or later</strong>, use your <strong>initial university entry term</strong>.</li>' +
+    '</ul>';
+const admitTermVerificationHtml =
+    '<p class="admit-term-verification"><strong>Verify the relevant dates in SUIS → Student Records → General Student Information</strong> before relying on the planner.</p>';
+const admitTermGuidanceHtml =
+    '<p>Your <strong>admit term</strong> tells SUrriculum which catalog and graduation requirements to use for each selected program. It is not necessarily the term when you declared that program.</p>' +
+    admitTermPolicyListHtml +
+    admitTermVerificationHtml;
+
 function normalizeCustomCourseForStorage(course) {
     const storage = (typeof window !== 'undefined') ? window.planStorage : null;
     if (!storage || typeof storage.normalizeCustomCourse !== 'function') {
@@ -274,6 +288,103 @@ async function uiConfirm(title, bodyHtml, options) {
     } catch (_) {}
     try { console.warn('[uiConfirm]', title, bodyHtml); } catch (_) {}
     return false;
+}
+
+let _appDialogSequence = 0;
+function activateAccessibleDialog(overlay, modal, titleElement, options) {
+    const opts = options || {};
+    const previouslyFocused = document.activeElement instanceof HTMLElement
+        ? document.activeElement : null;
+    const dialogId = `surriculum-dialog-${++_appDialogSequence}`;
+    if (titleElement) {
+        titleElement.id = `${dialogId}-title`;
+        overlay.setAttribute('aria-labelledby', titleElement.id);
+    } else {
+        overlay.setAttribute('aria-label', String(opts.label || 'Dialog'));
+    }
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    modal.id = dialogId;
+    modal.tabIndex = -1;
+
+    let closed = false;
+    const getFocusable = () => Array.from(modal.querySelectorAll(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), ' +
+        'textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )).filter((element) => (
+        element.getAttribute('aria-hidden') !== 'true'
+        && !element.closest('[hidden], .is-hidden')
+    ));
+    const isTopmost = () => {
+        const dialogs = Array.from(document.querySelectorAll('[role="dialog"][aria-modal="true"]'))
+            .filter((dialog) => dialog.isConnected);
+        return dialogs[dialogs.length - 1] === overlay;
+    };
+    const close = (closeOptions) => {
+        if (closed) return;
+        closed = true;
+        document.removeEventListener('keydown', onKeyDown, true);
+        try { overlay.remove(); } catch (_) {}
+        if (!closeOptions || closeOptions.restoreFocus !== false) {
+            // A parent dialog may rerender its action row in the close
+            // callback. Restore on the next task so a disconnected opener can
+            // fall back to the first control in that still-open parent.
+            setTimeout(() => {
+                try {
+                    if (previouslyFocused && previouslyFocused.isConnected) {
+                        previouslyFocused.focus({ preventScroll: true });
+                        return;
+                    }
+                    const remaining = Array.from(document.querySelectorAll(
+                        '[role="dialog"][aria-modal="true"]'
+                    )).filter((dialog) => dialog.isConnected);
+                    const parent = remaining[remaining.length - 1];
+                    if (!parent) return;
+                    const fallback = parent.querySelector(
+                        'button:not([disabled]), input:not([disabled]), select:not([disabled]), ' +
+                        'a[href], textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+                    ) || parent;
+                    fallback.focus({ preventScroll: true });
+                } catch (_) {}
+            }, 0);
+        }
+    };
+    const onKeyDown = (event) => {
+        if (!isTopmost()) return;
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            if (typeof opts.onEscape === 'function') opts.onEscape();
+            else close();
+            return;
+        }
+        if (event.key !== 'Tab') return;
+        const focusable = getFocusable();
+        if (!focusable.length) {
+            event.preventDefault();
+            modal.focus({ preventScroll: true });
+            return;
+        }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        const active = document.activeElement;
+        if (event.shiftKey && (active === first || !modal.contains(active))) {
+            event.preventDefault();
+            last.focus({ preventScroll: true });
+        } else if (!event.shiftKey && (active === last || !modal.contains(active))) {
+            event.preventDefault();
+            first.focus({ preventScroll: true });
+        }
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+    setTimeout(() => {
+        if (closed) return;
+        const initial = typeof opts.initialFocus === 'function'
+            ? opts.initialFocus() : opts.initialFocus;
+        const target = initial && initial.isConnected ? initial : (getFocusable()[0] || modal);
+        try { target.focus({ preventScroll: true }); } catch (_) {}
+    }, 0);
+    return { close, dialogId };
 }
 
 if ('serviceWorker' in navigator) {
@@ -901,6 +1012,7 @@ function SUrriculum(major_chosen_by_user) {
     }).map(function(code) {
         return code.toUpperCase().replace(/\s+/g, '');
     }).filter(Boolean));
+    const primaryCatalogIdentitySet = _customClassificationIdentitySet(primaryCatalogCodeSet);
     let primaryCustomCourseRecords = [];
     course_data = primaryProgramCatalogData;
 
@@ -918,10 +1030,10 @@ function SUrriculum(major_chosen_by_user) {
         if (stored) {
             const parsed = JSON.parse(stored);
             if (Array.isArray(parsed)) {
-                primaryCustomCourseRecords = normalizeCustomCourseListForStorage(major_chosen_by_user, parsed)
-                    .filter(function(record) {
-                        return !primaryCatalogCodeSet.has(getCombinedCodeFromCourseObj(record));
-                    });
+                primaryCustomCourseRecords = _activeCustomCourseRecords(
+                    normalizeCustomCourseListForStorage(major_chosen_by_user, parsed),
+                    primaryCatalogCodeSet
+                );
                 course_data = course_data.concat(primaryCustomCourseRecords);
             }
         }
@@ -953,10 +1065,10 @@ function SUrriculum(major_chosen_by_user) {
             if (storedDM) {
                 const parsedDM = JSON.parse(storedDM);
                 if (Array.isArray(parsedDM)) {
-                    doubleMajorCustomCourseRecords = normalizeCustomCourseListForStorage(savedDMPref, parsedDM)
-                        .filter(function(record) {
-                            return !doubleMajorCatalogCodeSet.has(getCombinedCodeFromCourseObj(record));
-                        });
+                    doubleMajorCustomCourseRecords = _activeCustomCourseRecords(
+                        normalizeCustomCourseListForStorage(savedDMPref, parsedDM),
+                        doubleMajorCatalogCodeSet
+                    );
                     doubleMajorCourseData = doubleMajorCourseData.concat(doubleMajorCustomCourseRecords);
                 }
             }
@@ -1039,10 +1151,7 @@ function SUrriculum(major_chosen_by_user) {
             // append an overlay that collides with an official catalog row: the
             // university's classification remains authoritative.
             const storedCustom = loadCustomCoursesForMajor(mp);
-            const runtimeCustom = storedCustom.filter(function(record) {
-                const code = String((record && record.Major) || '') + String((record && record.Code) || '');
-                return !catalogCodes.has(code.toUpperCase().replace(/\s+/g, ''));
-            });
+            const runtimeCustom = _activeCustomCourseRecords(storedCustom, catalogCodes);
             minorCustomCourseRecordsByCode[mp] = runtimeCustom;
             minorCourseDataByCode[mp] = catalog.concat(runtimeCustom);
         }
@@ -1080,13 +1189,19 @@ function SUrriculum(major_chosen_by_user) {
         window.curriculum = curriculum;
     }
 
-    // A saved transcript can contain a real university course that is absent
-    // from the currently selected program/admit-term catalogs. Those course
-    // codes are still persisted in `curriculum`; load only their global
-    // definitions before rendering so createSemeter can restore them as
-    // unallocated (effective N/A) instead of silently dropping them. The full
-    // global index is never merged into the planner's Add Course choices.
-    async function restoreGlobalDefinitionsForSavedCourses() {
+    // A saved transcript or scheduler selection can contain a real university
+    // course that is absent from the selected program/admit-term catalogs.
+    // Restore a small plan-scoped definition synchronously so one unresolved
+    // code can never hold every semester behind the cumulative-index request.
+    // These internal definitions stay out of Add Course and remain N/A until a
+    // selected catalog supplies an authoritative program classification.
+    const savedGlobalRecordCode = (record) => String(
+        record && record.code
+            ? record.code
+            : String((record && record.Major) || '') + String((record && record.Code) || '')
+    ).toUpperCase().replace(/\s+/g, '');
+
+    function restoreGlobalDefinitionsForSavedCourses() {
         let saved = null;
         try {
             saved = JSON.parse(planGetItem('curriculum') || 'null');
@@ -1108,11 +1223,6 @@ function SUrriculum(major_chosen_by_user) {
         });
         if (!normalizedCodes.length) return { added: [], missing: [] };
 
-        const recordCode = (record) => String(
-            record && record.code
-                ? record.code
-                : String((record && record.Major) || '') + String((record && record.Code) || '')
-        ).toUpperCase().replace(/\s+/g, '');
         const selectedLists = [course_data, doubleMajorCourseData];
         try {
             if (curriculum.minorCourseDataByCode) {
@@ -1123,37 +1233,18 @@ function SUrriculum(major_chosen_by_user) {
         selectedLists.forEach((list) => {
             if (!Array.isArray(list)) return;
             list.forEach((record) => {
-                if (record && !record.__globalCourseDefinition) selectedCodes.add(recordCode(record));
+                if (record && !record.__globalCourseDefinition) selectedCodes.add(savedGlobalRecordCode(record));
             });
         });
         const unresolved = normalizedCodes.filter((code) => !selectedCodes.has(code));
         if (!unresolved.length) return { added: [], missing: [] };
 
-        let restored = { added: [], missing: unresolved.slice() };
-        try {
-            if (typeof window !== 'undefined'
-                && typeof window.appendGlobalCourseDefinitions === 'function') {
-                const storedMetadata = typeof window.getStoredGlobalCourseMetadata === 'function'
-                    ? window.getStoredGlobalCourseMetadata() : new Map();
-                restored = await window.appendGlobalCourseDefinitions(course_data, unresolved, storedMetadata);
-                if (typeof window.rememberGlobalCourseDefinition === 'function') {
-                    restored.added.forEach((record) => window.rememberGlobalCourseDefinition(record));
-                }
-            }
-        } catch (error) {
-            console.warn('Unable to restore global transcript course definitions:', error);
-        }
-
-        // Never let a temporary index failure erase saved transcript data. A
-        // marker-only placeholder preserves the code/grade/term and any
-        // plan-scoped metadata snapshot; a later successful reload replaces it
-        // with the current global or selected-catalog definition.
         const storedMetadata = (typeof window !== 'undefined'
             && typeof window.getStoredGlobalCourseMetadata === 'function')
             ? window.getStoredGlobalCourseMetadata() : new Map();
         const preserved = [];
-        (Array.isArray(restored.missing) ? restored.missing : []).forEach((code) => {
-            if (course_data.some((record) => recordCode(record) === code)) return;
+        unresolved.forEach((code) => {
+            if (course_data.some((record) => savedGlobalRecordCode(record) === code)) return;
             const match = code.match(/^([A-Z]{1,12})(\d[A-Z0-9]*)$/);
             if (!match) return;
             const metadata = storedMetadata.get(code) || {};
@@ -1174,10 +1265,82 @@ function SUrriculum(major_chosen_by_user) {
             course_data.push(placeholder);
             preserved.push(placeholder);
         });
-        if (preserved.length) {
-            console.warn(`Preserved ${preserved.length} saved course definition(s) while the global index was unavailable.`);
+        return { added: [], missing: unresolved.slice(), preserved };
+    }
+
+    // The stored snapshot is sufficient for immediate rendering. In the
+    // background, let the shipped university index enrich older plan records
+    // that predate metadata persistence. This must never gate planner startup.
+    async function enrichRestoredGlobalDefinitions(restoration) {
+        const pending = restoration && Array.isArray(restoration.preserved)
+            ? restoration.preserved.slice() : [];
+        if (!pending.length || typeof window === 'undefined'
+            || typeof window.loadCoursePageInfoIndex !== 'function'
+            || typeof window.resolveGlobalCourseDefinition !== 'function') return;
+
+        try {
+            await window.loadCoursePageInfoIndex();
+        } catch (_) {
+            return;
         }
-        return { added: restored.added || [], missing: restored.missing || [], preserved };
+
+        const storedMetadata = typeof window.getStoredGlobalCourseMetadata === 'function'
+            ? window.getStoredGlobalCourseMetadata() : new Map();
+        const resolvedByCode = new Map();
+        pending.forEach((placeholder) => {
+            const code = savedGlobalRecordCode(placeholder);
+            if (!code) return;
+            let resolved = null;
+            try {
+                resolved = window.resolveGlobalCourseDefinition(code, storedMetadata.get(code) || {});
+            } catch (_) {}
+            if (!resolved) return;
+            const index = course_data.findIndex((record) => savedGlobalRecordCode(record) === code);
+            if (index < 0 || (course_data[index] && !course_data[index].__globalCourseDefinition)) return;
+            course_data[index] = resolved;
+            resolvedByCode.set(code, resolved);
+            try {
+                if (typeof window.rememberGlobalCourseDefinition === 'function') {
+                    window.rememberGlobalCourseDefinition(resolved);
+                }
+            } catch (_) {}
+        });
+        if (!resolvedByCode.size) return;
+
+        (Array.isArray(curriculum.semesters) ? curriculum.semesters : []).forEach((semester) => {
+            semester.totalGPA = 0;
+            semester.totalGPACredits = 0;
+            (Array.isArray(semester.courses) ? semester.courses : []).forEach((course) => {
+                const definition = resolvedByCode.get(savedGlobalRecordCode(course));
+                if (definition) {
+                    course.SU_credit = parseCreditValue(definition.SU_credit || 0);
+                    course.Basic_Science = Number(definition.Basic_Science || 0) || 0;
+                    course.Engineering = Number(definition.Engineering || 0) || 0;
+                    course.ECTS = Number(definition.ECTS || 0) || 0;
+                    course.Faculty_Course = definition.Faculty_Course || 'No';
+                    course.Faculty = definition.Faculty || '';
+                    const node = course.id ? document.getElementById(course.id) : null;
+                    const nameNode = node && node.querySelector('.course_name');
+                    const creditNode = node && node.querySelector('.course_credit');
+                    const scienceNode = node && node.querySelector('.course_bs_credit');
+                    if (nameNode) nameNode.textContent = String(definition.Course_Name || course.code || '');
+                    if (creditNode) creditNode.textContent = formatCreditValue(course.SU_credit) + ' credits';
+                    if (scienceNode) scienceNode.textContent = 'BS: ' + course.Basic_Science + ' credits';
+                }
+                const outcome = typeof evaluateGradeForLegacyTotals === 'function'
+                    ? evaluateGradeForLegacyTotals(course.grade, course.gradingBasis) : null;
+                if (outcome && outcome.countsInGpa) {
+                    const credit = Number(course.SU_credit || 0) || 0;
+                    semester.totalGPA += credit * outcome.gpaPoints;
+                    semester.totalGPACredits += credit;
+                }
+            });
+        });
+        try {
+            if (typeof curriculum.recalcEffectiveTypes === 'function') {
+                curriculum.recalcEffectiveTypes(course_data);
+            }
+        } catch (_) {}
     }
     // Initialize course details toggle state and event
     let showDetails = true;
@@ -1205,6 +1368,7 @@ function SUrriculum(major_chosen_by_user) {
 
     const updateCourseDetailVisibility = () => {
         const show = window.showCourseDetails;
+        if (detailsToggle) detailsToggle.checked = show !== false;
         document.querySelectorAll('.course_bs_credit').forEach(el => {
             el.style.display = show ? '' : 'none';
         });
@@ -1234,36 +1398,35 @@ function SUrriculum(major_chosen_by_user) {
             document.dispatchEvent(new Event('hideTakenCoursesToggleChanged'));
         });
     }
+    document.addEventListener('hideTakenCoursesToggleChanged', () => {
+        if (hideToggle && typeof window.hideTakenCourses === 'boolean') {
+            hideToggle.checked = window.hideTakenCourses;
+        }
+    });
 
-    let offeredOnly = true;
+    // Course-offering filtering is a picker default evaluated against each
+    // semester's own canonical term, not against one global "current term".
+    let plannerOfferedOnly = true;
     try {
-        const stored = preferenceGetItem('offeredThisTermOnly');
+        const stored = preferenceGetItem('plannerFilterOfferedOnly');
         if (stored !== null) {
-            offeredOnly = stored === 'true';
+            plannerOfferedOnly = stored === 'true';
         }
     } catch (_) {}
     if (typeof window !== 'undefined') {
-        window.offeredThisTermOnly = offeredOnly;
+        window.plannerFilterOfferedOnly = plannerOfferedOnly;
     }
-    const offeredToggle = document.getElementById('offeredThisTermToggle');
+    const offeredToggle = document.getElementById('plannerOfferedOnlyToggle');
     if (offeredToggle) {
-        offeredToggle.checked = offeredOnly;
+        offeredToggle.checked = plannerOfferedOnly;
         offeredToggle.addEventListener('change', function(e) {
             const enabled = e.target.checked;
             if (typeof window !== 'undefined') {
-                window.offeredThisTermOnly = enabled;
+                window.plannerFilterOfferedOnly = enabled;
             }
-            preferenceSetItem('offeredThisTermOnly', enabled ? 'true' : 'false');
-            document.dispatchEvent(new Event('offeredThisTermToggleChanged'));
+            preferenceSetItem('plannerFilterOfferedOnly', enabled ? 'true' : 'false');
         });
     }
-    try {
-        const label = document.getElementById('offeredThisTermLabel');
-        const ctName = (typeof window !== 'undefined' && window.currentTermName) ? window.currentTermName : '';
-        if (label && ctName) {
-            label.textContent = `Only show offered courses for ${ctName} term`;
-        }
-    } catch (_) {}
 
     let sortByScore = true;
     try {
@@ -1287,6 +1450,11 @@ function SUrriculum(major_chosen_by_user) {
             document.dispatchEvent(new Event('sortByScoreToggleChanged'));
         });
     }
+    document.addEventListener('sortByScoreToggleChanged', () => {
+        if (sortToggle && typeof window.sortBasedOnScore === 'boolean') {
+            sortToggle.checked = window.sortBasedOnScore;
+        }
+    });
 
     //************************************************
 
@@ -1298,12 +1466,18 @@ function SUrriculum(major_chosen_by_user) {
             if (e.target && typeof e.target.closest === 'function') {
                 const summaryOverlay = e.target.closest('.summary_modal_overlay');
                 if (summaryOverlay) {
-                    const insideCard = e.target.closest('.summary_modal');
-                    const insideMinorPanel = e.target.closest('.summary_minor_panel');
-                    const insideMajorPanel = e.target.closest('.summary_major_panel');
-                    if (!insideCard && !insideMinorPanel && !insideMajorPanel) {
-                        try { document.querySelectorAll('.summary_modal').forEach(function(mod){ mod.remove(); }); } catch {}
-                        try { document.querySelectorAll('.summary_modal_overlay').forEach(function(ov){ ov.remove(); }); } catch {}
+                    // The content wrapper is the Summary surface. In compact
+                    // view its cards row owns scrolling, so clicks on its blank
+                    // space or scrollbar must not be mistaken for backdrop
+                    // clicks. Only the actual dimmed backdrop dismisses it.
+                    const insideSummarySurface = e.target.closest('.summary_overlay_content');
+                    if (!insideSummarySurface) {
+                        try {
+                            document.querySelectorAll('.summary_modal_overlay').forEach(function(ov){
+                                if (typeof ov._closeSummary === 'function') ov._closeSummary();
+                                else ov.remove();
+                            });
+                        } catch {}
                     }
                     return;
                 }
@@ -1324,8 +1498,12 @@ function SUrriculum(major_chosen_by_user) {
         const summaryModal = clickTarget && typeof clickTarget.closest === 'function'
             ? clickTarget.closest('.summary_modal') : null;
         if (!summaryModal && !summaryTrigger) {
-            try { document.querySelectorAll('.summary_modal').forEach(function(mod){ mod.remove(); }); } catch {}
-            try { document.querySelectorAll('.summary_modal_overlay').forEach(function(ov){ ov.remove(); }); } catch {}
+            try {
+                document.querySelectorAll('.summary_modal_overlay').forEach(function(ov){
+                    if (typeof ov._closeSummary === 'function') ov._closeSummary();
+                    else ov.remove();
+                });
+            } catch {}
         }
         const graduationTrigger = clickTarget && typeof clickTarget.closest === 'function'
             ? clickTarget.closest('.check') : null;
@@ -1360,19 +1538,80 @@ function SUrriculum(major_chosen_by_user) {
     } catch (_) {}
 
     let dragged_item = null;
+    let dragged_course = null;
+    let course_drop_preview = null;
     document.addEventListener('dragstart', function(e){
-        if(e.target.classList.contains("container_semester"))
-        {dragged_item = e.target;}
+        if(e.target.classList.contains("container_semester")) {
+            dragged_item = e.target;
+            dragged_course = null;
+            e.target.classList.add('semester-dragging');
+            try {
+                if (e.dataTransfer) {
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', semesterTermLabel(e.target));
+                }
+            } catch (_) {}
+        } else if ((e.target.classList.contains('course')
+            || (e.target.closest && e.target.closest('.course_drag')))
+            && typeof isDesktopPlannerDrag === 'function' && isDesktopPlannerDrag()) {
+            dragged_course = e.target.classList.contains('course')
+                ? e.target : e.target.closest('.course');
+            dragged_item = null;
+            dragged_course.classList.add('course-dragging');
+            try {
+                if (e.dataTransfer) {
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', courseCodeLabel(dragged_course));
+                }
+            } catch (_) {}
+        }
+    })
+    document.addEventListener('dragend', function(e){
+        try {
+            if (dragged_course) {
+                dragged_course.setAttribute('draggable', 'false');
+            }
+        } catch (_) {}
+        dragged_item = null;
+        dragged_course = null;
+        course_drop_preview = null;
+        try { clearPlannerDragPreview(); } catch (_) {}
     })
     document.addEventListener('dragover', function(e){
+        if (dragged_course) {
+            if (typeof isDesktopPlannerDrag !== 'function' || !isDesktopPlannerDrag()) return;
+            const preview = plannerCourseInsertionPreview(e, dragged_course);
+            if (!preview) {
+                course_drop_preview = null;
+                return;
+            }
+            course_drop_preview = preview;
+            e.preventDefault();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+            return;
+        }
+        if (!dragged_item) return;
+        plannerSemesterInsertionPreview(e, dragged_item);
         e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
     })
 
     document.addEventListener('drop', function(e){
-        // Pass course_data to the drop handler so that it can invoke
-        // curriculum.recalcEffectiveTypes() when semesters are reordered.
+        if (dragged_course) {
+            e.preventDefault();
+            try {
+                commitPlannerCourseMove(curriculum, course_data, dragged_course, course_drop_preview);
+            } finally {
+                try { dragged_course.setAttribute('draggable', 'false'); } catch (_) {}
+                dragged_course = null;
+                course_drop_preview = null;
+                clearPlannerDragPreview();
+            }
+            return;
+        }
         drop(e, curriculum, dragged_item, course_data);
+        dragged_item = null;
+        clearPlannerDragPreview();
     })
 
     // Touch-based dragging support mirrors the desktop drag events so that
@@ -1381,9 +1620,13 @@ function SUrriculum(major_chosen_by_user) {
     // page from scrolling while a semester is being dragged.
     document.addEventListener('touchstart', function(e){
         // Only begin dragging if the user taps the dedicated drag handle.
-        const handle = getAncestor(e.target, 'semester_drag');
+        const handle = e.target && e.target.closest
+            ? e.target.closest('.semester_drag')
+            : getAncestor(e.target, 'semester_drag');
         if(handle){
-            dragged_item = getAncestor(handle, 'container_semester');
+            dragged_item = handle.closest
+                ? handle.closest('.container_semester')
+                : getAncestor(handle, 'container_semester');
         }
     })
     document.addEventListener('touchmove', function(e){
@@ -1394,10 +1637,15 @@ function SUrriculum(major_chosen_by_user) {
     }, {passive:false})
     document.addEventListener('touchend', function(e){
         if(dragged_item){
-            const touch = e.changedTouches[0];
-            drop(e, curriculum, dragged_item, course_data, {x: touch.clientX, y: touch.clientY});
+            const touch = e.changedTouches && e.changedTouches[0];
+            if (touch) {
+                drop(e, curriculum, dragged_item, course_data, {x: touch.clientX, y: touch.clientY});
+            }
             dragged_item = null;
         }
+    })
+    document.addEventListener('touchcancel', function(){
+        dragged_item = null;
     })
     /*
     document.addEventListener("input", function(e){
@@ -1411,6 +1659,7 @@ function SUrriculum(major_chosen_by_user) {
     addSemester.addEventListener('click', function(){
         const board = document.querySelector('.board');
         const newContainer = createSemeter(true, [], curriculum, course_data);
+        if (!newContainer) return;
         const ghost = document.querySelector('.add-semester-ghost');
         if (ghost && board) {
             board.insertBefore(newContainer, ghost);
@@ -1430,6 +1679,7 @@ function SUrriculum(major_chosen_by_user) {
             ghost.textContent = '+ New Semester';
             ghost.addEventListener('click', function() {
                 const newContainer = createSemeter(true, [], curriculum, course_data);
+                if (!newContainer) return;
                 const style = getComputedStyle(newContainer);
                 const width = newContainer.offsetWidth + parseInt(style.marginLeft) + parseInt(style.marginRight);
                 board.insertBefore(newContainer, ghost);
@@ -1594,27 +1844,27 @@ function SUrriculum(major_chosen_by_user) {
         }
 
         function findCustomCourseStorageIndex(list, combinedCode, preferredIndex) {
-            const target = normalizeCombinedCourseCode(combinedCode);
+            const target = _customClassificationIdentity(combinedCode);
             if (Number.isInteger(preferredIndex) && preferredIndex >= 0 && preferredIndex < list.length
-                && getCombinedCodeFromCourseObj(list[preferredIndex]) === target) {
+                && _customClassificationIdentity(getCombinedCodeFromCourseObj(list[preferredIndex])) === target) {
                 return preferredIndex;
             }
             const matches = [];
             for (let i = 0; i < list.length; i++) {
-                if (getCombinedCodeFromCourseObj(list[i]) === target) matches.push(i);
+                if (_customClassificationIdentity(getCombinedCodeFromCourseObj(list[i])) === target) matches.push(i);
             }
             return matches.length === 1 ? matches[0] : -1;
         }
 
         function customCourseIdentityConflict(list, combinedCode, excludedIndex) {
-            const target = normalizeCombinedCourseCode(combinedCode);
+            const target = _customClassificationIdentity(combinedCode);
             const editingSameDormantOverlay = Number.isInteger(excludedIndex)
                 && excludedIndex >= 0 && excludedIndex < list.length
-                && getCombinedCodeFromCourseObj(list[excludedIndex]) === target;
-            if (primaryCatalogCodeSet.has(target) && !editingSameDormantOverlay) return 'catalog';
+                && _customClassificationIdentity(getCombinedCodeFromCourseObj(list[excludedIndex])) === target;
+            if (primaryCatalogIdentitySet.has(target) && !editingSameDormantOverlay) return 'catalog';
             for (let i = 0; i < list.length; i++) {
                 if (i === excludedIndex) continue;
-                if (getCombinedCodeFromCourseObj(list[i]) === target) return 'custom';
+                if (_customClassificationIdentity(getCombinedCodeFromCourseObj(list[i])) === target) return 'custom';
             }
             return '';
         }
@@ -1802,11 +2052,13 @@ function SUrriculum(major_chosen_by_user) {
         }
 
         function findOfficialContextCourse(programCode, combinedCode) {
-            const target = normalizeCombinedCourseCode(combinedCode);
-            if (!target || !getContextCatalogCodeSet(programCode).has(target)) return null;
+            const target = _customClassificationIdentity(combinedCode);
+            const catalogIdentities = _customClassificationIdentitySet(getContextCatalogCodeSet(programCode));
+            if (!target || !catalogIdentities.has(target)) return null;
             const data = getContextCourseData(programCode);
             for (let i = 0; i < data.length; i++) {
-                if (getCombinedCodeFromCourseObj(data[i]) === target) return data[i];
+                if (_customClassificationIdentity(getCombinedCodeFromCourseObj(data[i])) === target
+                    && !data[i].__globalCourseDefinition) return data[i];
             }
             return null;
         }
@@ -1817,9 +2069,7 @@ function SUrriculum(major_chosen_by_user) {
             const normalized = normalizeCustomCourseListForStorage(program, Array.isArray(storedList) ? storedList : []);
             // A stale imported overlay may collide with an official row. Keep it
             // durable until the user edits that course, but never activate it.
-            const runtimeList = normalized.filter(function(record) {
-                return !catalogCodes.has(getCombinedCodeFromCourseObj(record));
-            });
+            const runtimeList = _activeCustomCourseRecords(normalized, catalogCodes);
 
             if (program && program === String((curriculum && curriculum.doubleMajor) || '').toUpperCase()) {
                 const previous = new Set(doubleMajorCustomCourseRecords);
@@ -1843,6 +2093,20 @@ function SUrriculum(major_chosen_by_user) {
             if (curriculum && curriculum.minorCourseDataByCode) {
                 curriculum.minorCourseDataByCode[program] = data;
             }
+        }
+
+        function replacePrimaryRuntimeCustomCourses(storedList) {
+            const normalized = normalizeCustomCourseListForStorage(
+                String((curriculum && curriculum.major) || major_chosen_by_user || '').toUpperCase(),
+                Array.isArray(storedList) ? storedList : []
+            );
+            const runtimeList = _activeCustomCourseRecords(normalized, primaryCatalogCodeSet);
+            const previous = new Set(primaryCustomCourseRecords);
+            for (let i = course_data.length - 1; i >= 0; i--) {
+                if (previous.has(course_data[i])) course_data.splice(i, 1);
+            }
+            primaryCustomCourseRecords = runtimeList;
+            runtimeList.forEach(function(record) { course_data.push(record); });
         }
 
         function restoreStoredValue(key, rawValue) {
@@ -1886,6 +2150,7 @@ function SUrriculum(major_chosen_by_user) {
 
         async function removeCustomCourseByCodeFromCurrentMajor(combinedCode, preferredIndex) {
             const target = normalizeCombinedCourseCode(combinedCode);
+            const targetIdentity = _customClassificationIdentity(target);
             if (!target) return false;
             const majorKey = String(major_chosen_by_user || '').toUpperCase();
             const existing = loadCustomCoursesForMajor(majorKey);
@@ -1899,13 +2164,18 @@ function SUrriculum(major_chosen_by_user) {
             const previousRaw = planGetItem(key);
             const next = existing.slice();
             next.splice(storageIndex, 1);
+            const targetIdentityRemains = next.some(function(course) {
+                return _customClassificationIdentity(getCombinedCodeFromCourseObj(course)) === targetIdentity;
+            });
             const contextPlans = [];
             getActiveContextProgramCodes().forEach(function(programCode) {
                 const contextKey = 'customCourses_' + programCode;
                 const contextExisting = loadCustomCoursesForMajor(programCode);
-                const contextNext = contextExisting.filter(function(course) {
-                    return getCombinedCodeFromCourseObj(course) !== target;
-                });
+                const contextNext = targetIdentityRemains
+                    ? contextExisting.slice()
+                    : contextExisting.filter(function(course) {
+                        return _customClassificationIdentity(getCombinedCodeFromCourseObj(course)) !== targetIdentity;
+                    });
                 if (contextNext.length !== contextExisting.length) {
                     contextPlans.push({
                         programCode,
@@ -1941,18 +2211,11 @@ function SUrriculum(major_chosen_by_user) {
                 return false;
             }
 
-            const record = primaryCustomCourseRecords.find(function(course) {
-                return getCombinedCodeFromCourseObj(course) === target;
-            }) || null;
-            if (!primaryCatalogCodeSet.has(target)
-                && !next.some(function(course) { return getCombinedCodeFromCourseObj(course) === target; })) {
+            if (!primaryCatalogIdentitySet.has(targetIdentity)
+                && !targetIdentityRemains) {
                 removeSemesterOccurrencesByCode(target);
             }
-            if (record && !primaryCatalogCodeSet.has(target)) {
-                const runtimeIndex = primaryCustomCourseRecords.indexOf(record);
-                if (runtimeIndex >= 0) primaryCustomCourseRecords.splice(runtimeIndex, 1);
-                removeCourseDataRecord(record, target);
-            }
+            replacePrimaryRuntimeCustomCourses(next);
             contextPlans.forEach(function(plan) {
                 replaceContextRuntimeCustomCourses(plan.programCode, plan.nextList);
             });
@@ -1984,6 +2247,7 @@ function SUrriculum(major_chosen_by_user) {
 
             const modal = document.createElement('div');
             modal.className = 'custom_course_manage_modal';
+            let manageDialog = null;
 
             const title = document.createElement('h3');
             title.innerText = 'Manage Custom Courses';
@@ -2005,7 +2269,7 @@ function SUrriculum(major_chosen_by_user) {
             closeBtn.innerText = 'Close';
             closeBtn.addEventListener('click', function(e) {
                 e.stopPropagation();
-                overlay.remove();
+                if (manageDialog) manageDialog.close();
             });
             footer.appendChild(closeBtn);
             modal.appendChild(footer);
@@ -2013,7 +2277,7 @@ function SUrriculum(major_chosen_by_user) {
             const renderList = () => {
                 const courses = readList();
                 if (!courses.length) {
-                    overlay.remove();
+                    if (manageDialog) manageDialog.close();
                     uiAlert('No custom courses', '<p>There are no custom courses left to manage.</p>');
                     return;
                 }
@@ -2049,6 +2313,7 @@ function SUrriculum(major_chosen_by_user) {
                     const editBtn = document.createElement('button');
                     editBtn.className = 'btn btn-secondary btn-sm';
                     editBtn.innerHTML = '<i class="fa-solid fa-pen"></i>&nbsp;Edit';
+                    editBtn.setAttribute('aria-label', `Edit ${combined}`);
                     editBtn.addEventListener('click', function(e) {
                         e.stopPropagation();
                         showCustomCourseForm(null, course, function() {
@@ -2060,6 +2325,7 @@ function SUrriculum(major_chosen_by_user) {
                     const deleteBtn = document.createElement('button');
                     deleteBtn.className = 'btn btn-danger btn-sm';
                     deleteBtn.innerHTML = '<i class="fa-solid fa-trash"></i>&nbsp;Delete';
+                    deleteBtn.setAttribute('aria-label', `Delete ${combined}`);
                     deleteBtn.addEventListener('click', async function(e) {
                         e.stopPropagation();
                         const ok = await uiConfirm(
@@ -2086,6 +2352,9 @@ function SUrriculum(major_chosen_by_user) {
             overlay.addEventListener('click', function(e) { e.stopPropagation(); });
             overlay.appendChild(modal);
             boardDom.appendChild(overlay);
+            manageDialog = activateAccessibleDialog(overlay, modal, title, {
+                initialFocus: closeBtn,
+            });
         }
 
         let programCategoryHelpSequence = 0;
@@ -2188,6 +2457,8 @@ function SUrriculum(major_chosen_by_user) {
         // Create modal container
         const modal = document.createElement('div');
         modal.classList.add('custom_course_modal');
+        let customCourseDialog = null;
+        let customCourseFieldSequence = 0;
 
         // Title
         const title = document.createElement('h3');
@@ -2214,6 +2485,8 @@ function SUrriculum(major_chosen_by_user) {
             row.appendChild(label);
 
             const input = document.createElement('input');
+            input.id = `custom-course-field-${++customCourseFieldSequence}`;
+            label.htmlFor = input.id;
             input.type = inputType;
             input.placeholder = placeholder;
             input.value = defaultValue;
@@ -2301,19 +2574,20 @@ function SUrriculum(major_chosen_by_user) {
             let primaryCategoryTouched = false;
             let primaryLastSyncedCode = null;
             const findPrimaryCustomType = function(combinedCode) {
-                const target = normalizeCombinedCourseCode(combinedCode);
+                const target = _customClassificationIdentity(combinedCode);
                 if (!target) return '';
                 const stored = loadCustomCoursesForMajor(primaryProgramCode);
-                const match = stored.find(function(record) {
-                    return getCombinedCodeFromCourseObj(record) === target;
+                const matches = stored.filter(function(record) {
+                    return _customClassificationIdentity(getCombinedCodeFromCourseObj(record)) === target;
                 });
+                const match = matches.length === 1 ? matches[0] : null;
                 return match ? String(match.EL_Type || '').toLowerCase() : '';
             };
             const findOfficialPrimaryCourse = function(combinedCode) {
-                const target = normalizeCombinedCourseCode(combinedCode);
-                if (!target || !primaryCatalogCodeSet.has(target)) return null;
+                const target = _customClassificationIdentity(combinedCode);
+                if (!target || !primaryCatalogIdentitySet.has(target)) return null;
                 return primaryProgramCatalogData.find(function(record) {
-                    return getCombinedCodeFromCourseObj(record) === target;
+                    return _customClassificationIdentity(getCombinedCodeFromCourseObj(record)) === target;
                 }) || null;
             };
             const normalizePrimaryType = function(value) {
@@ -2367,10 +2641,15 @@ function SUrriculum(major_chosen_by_user) {
             facultyHelpBtn.textContent = '?';
             facultyHelpBtn.setAttribute('aria-label', 'What is Faculty, and when should I set it?');
             facultyHelpBtn.setAttribute('aria-expanded', 'false');
-            facultyLabel.appendChild(facultyHelpBtn);
-            facultyRow.appendChild(facultyLabel);
+            const facultyLabelLine = document.createElement('div');
+            facultyLabelLine.className = 'program-category-label-line';
+            facultyLabelLine.appendChild(facultyLabel);
+            facultyLabelLine.appendChild(facultyHelpBtn);
+            facultyRow.appendChild(facultyLabelLine);
 
             const facultySelect = document.createElement('select');
+            facultySelect.id = 'cc-faculty';
+            facultyLabel.htmlFor = facultySelect.id;
             facultySelect.className = 'cc-faculty';
             [
                 ['', 'None / not applicable'],
@@ -2387,6 +2666,7 @@ function SUrriculum(major_chosen_by_user) {
             facultyRow.appendChild(facultySelect);
 
             const facultyHelp = document.createElement('p');
+            facultyHelp.id = 'cc-faculty-help';
             facultyHelp.className = 'cc-help-text is-hidden';
             facultyHelp.innerText = [
                 'The faculty that offers the course. Some graduation rules count courses by faculty '
@@ -2397,6 +2677,7 @@ function SUrriculum(major_chosen_by_user) {
                 + 'will not count toward these faculty-specific rules.',
             ].join('\n\n');
             facultyRow.appendChild(facultyHelp);
+            facultyHelpBtn.setAttribute('aria-controls', facultyHelp.id);
 
             facultyHelpBtn.addEventListener('click', function(e) {
                 e.preventDefault();
@@ -2504,13 +2785,15 @@ function SUrriculum(major_chosen_by_user) {
                 try {
                     if (!programCode || !combinedCode) return '';
                     const existing = loadCustomCoursesForMajor(programCode);
-                    const target = String(combinedCode).toUpperCase();
+                    const target = _customClassificationIdentity(combinedCode);
+                    const matches = [];
                     for (let i = 0; i < existing.length; i++) {
                         const rec = existing[i];
                         if (!rec) continue;
-                        const code = getCombinedCodeFromCourseObj(rec);
-                        if (code === target) return String(rec.EL_Type || '').toLowerCase();
+                        const code = _customClassificationIdentity(getCombinedCodeFromCourseObj(rec));
+                        if (code === target) matches.push(rec);
                     }
+                    if (matches.length === 1) return String(matches[0].EL_Type || '').toLowerCase();
                 } catch (_) {}
                 return '';
             };
@@ -2689,7 +2972,7 @@ function SUrriculum(major_chosen_by_user) {
                 if (typeof onCancelCallback === 'function' && onCancelCallback() === false) {
                     return;
                 }
-                overlay.remove();
+                if (customCourseDialog) customCourseDialog.close();
                 // Normal edit cancellation preserves its historical callback
                 // behavior; transcript cancellation reaches here only after a
                 // successful rollback.
@@ -2720,7 +3003,9 @@ function SUrriculum(major_chosen_by_user) {
                 const originalCombinedCode = courseObj ? getCombinedCodeFromCourseObj(courseObj) : '';
                 const combinedCodeNow = parsedIdentity.combined;
                 const editingDormantPrimaryOverlay = !!originalCombinedCode
-                    && primaryCatalogCodeSet.has(originalCombinedCode);
+                    && primaryCatalogIdentitySet.has(
+                        _customClassificationIdentity(originalCombinedCode)
+                    );
                 if (editingDormantPrimaryOverlay && originalCombinedCode !== combinedCodeNow) {
                     await uiAlert(
                         'Official catalog course code',
@@ -2801,10 +3086,12 @@ function SUrriculum(major_chosen_by_user) {
                         const contextExisting = loadCustomCoursesForMajor(programCode);
                         const originalMatches = [];
                         const targetMatches = [];
+                        const originalIdentity = _customClassificationIdentity(originalCombinedCode);
+                        const targetIdentity = _customClassificationIdentity(combinedCodeNow);
                         contextExisting.forEach(function(record, index) {
-                            const recordCode = getCombinedCodeFromCourseObj(record);
-                            if (originalCombinedCode && recordCode === originalCombinedCode) originalMatches.push(index);
-                            if (recordCode === combinedCodeNow) targetMatches.push(index);
+                            const recordIdentity = _customClassificationIdentity(getCombinedCodeFromCourseObj(record));
+                            if (originalIdentity && recordIdentity === originalIdentity) originalMatches.push(index);
+                            if (recordIdentity === targetIdentity) targetMatches.push(index);
                         });
                         if (originalMatches.length > 1 || targetMatches.length > 1) {
                             contextPreparationError = `${programCode} has duplicate saved definitions for this course.`;
@@ -2984,7 +3271,7 @@ function SUrriculum(major_chosen_by_user) {
                     return;
                 }
                 // Remove modal
-                overlay.remove();
+                if (customCourseDialog) customCourseDialog.close();
                 // Invoke callback to process next pending custom course
                 if (typeof onSaveCallback === 'function') {
                     onSaveCallback();
@@ -3006,6 +3293,10 @@ function SUrriculum(major_chosen_by_user) {
             e.stopPropagation();
         });
         boardDom.appendChild(overlay);
+        customCourseDialog = activateAccessibleDialog(overlay, modal, title, {
+            initialFocus: codeInput,
+            onEscape: function() { cancelBtn.click(); },
+        });
     }
 
     // Bind custom course button click
@@ -3068,13 +3359,16 @@ function SUrriculum(major_chosen_by_user) {
 
     //************************************************************** 
 
-    // Restore catalog-independent definitions before reloading. This await is
-    // inside the async course-data bootstrap and runs only when saved codes are
-    // unresolved by the selected program catalogs.
-    await restoreGlobalDefinitionsForSavedCourses();
+    // Restore catalog-independent definitions synchronously before reloading.
+    // The optional cumulative-index enrichment starts only after the semester
+    // cards have been rebuilt below.
+    const restoredGlobalDefinitions = restoreGlobalDefinitionsForSavedCourses();
 
     //Reload items from local storage:
     reload(curriculum, course_data);
+    // Enrichment is deliberately detached from startup. Saved metadata (or a
+    // marker fallback for legacy plans) has already made every course renderable.
+    void enrichRestoredGlobalDefinitions(restoredGlobalDefinitions);
     // After reloading existing semesters, recalculate effective categories
     // so that the allocation respects chronological order. Guard against
     // missing recalc function.
@@ -3098,6 +3392,7 @@ function SUrriculum(major_chosen_by_user) {
                 grades: grades_serializator(curriculum),
                 gradingBases: grading_bases_serializator(curriculum),
                 dates: dates_serializator(curriculum),
+                termCodes: term_codes_serializator(curriculum),
             };
         } catch (err) {
             try { console.error('Failed to serialize planner state:', err); } catch (_) {}
@@ -3117,6 +3412,7 @@ function SUrriculum(major_chosen_by_user) {
             planSetItem('grades', snapshot.grades),
             planSetItem('gradingBases', snapshot.gradingBases),
             planSetItem('dates', snapshot.dates),
+            planSetItem('termCodes', snapshot.termCodes),
         ].every(Boolean);
     };
 
@@ -3464,6 +3760,110 @@ function SUrriculum(major_chosen_by_user) {
             return changedCount;
         }
 
+        function _customClassificationIdentity(combinedCode) {
+            const normalized = normalizeCombinedCourseCode(combinedCode);
+            if (!normalized) return '';
+            try {
+                if (typeof canonicalCourseCode === 'function') {
+                    return normalizeCombinedCourseCode(canonicalCourseCode(normalized)) || normalized;
+                }
+            } catch (_) {}
+            return normalized;
+        }
+
+        function _customClassificationIdentitySet(codes) {
+            const identities = new Set();
+            if (!codes || typeof codes.forEach !== 'function') return identities;
+            codes.forEach(function(code) {
+                const identity = _customClassificationIdentity(code);
+                if (identity) identities.add(identity);
+            });
+            return identities;
+        }
+
+        function _activeCustomCourseRecords(records, officialCodes) {
+            const source = Array.isArray(records) ? records : [];
+            const officialIdentities = _customClassificationIdentitySet(officialCodes);
+            const counts = new Map();
+            source.forEach(function(record) {
+                const identity = _customClassificationIdentity(getCombinedCodeFromCourseObj(record));
+                if (!identity) return;
+                counts.set(identity, (counts.get(identity) || 0) + 1);
+            });
+            // Official rows are authoritative. Canonical duplicates from old
+            // or hand-edited imports are ambiguous, so neither copy is allowed
+            // into the live catalog until the user repairs storage.
+            return source.filter(function(record) {
+                const identity = _customClassificationIdentity(getCombinedCodeFromCourseObj(record));
+                return !!identity
+                    && !officialIdentities.has(identity)
+                    && counts.get(identity) === 1;
+            });
+        }
+
+        function _activePrimaryCustomCourseByCode(combinedCode, records) {
+            const target = _customClassificationIdentity(combinedCode);
+            if (!target) return null;
+            const sourceRecords = Array.isArray(records) ? records : primaryCustomCourseRecords;
+            const activeRecords = _activeCustomCourseRecords(sourceRecords, primaryCatalogCodeSet);
+            const matches = activeRecords.filter(function(record) {
+                return _customClassificationIdentity(getCombinedCodeFromCourseObj(record)) === target;
+            });
+            // Duplicate custom definitions are ambiguous. The custom-course
+            // manager already asks the user to repair them, so this automatic
+            // classification path must not silently pick one.
+            return matches.length === 1 ? matches[0] : null;
+        }
+
+        function _storedActivePrimaryCustomCourseByCode(combinedCode) {
+            const primaryProgram = String((curriculum && curriculum.major) || '').toUpperCase();
+            if (!primaryProgram) return null;
+            const parsed = JSON.parse(planGetItem('customCourses_' + primaryProgram) || '[]');
+            if (!Array.isArray(parsed)) return null;
+            const normalized = normalizeCustomCourseListForStorage(primaryProgram, parsed);
+            return _activePrimaryCustomCourseByCode(combinedCode, normalized);
+        }
+
+        /**
+         * Return active primary custom definitions that still need a category
+         * for the selected double-major program.
+         *
+         * `course_data` is deliberately not consulted here. It is a runtime
+         * catalog that also contains official primary rows and restored global
+         * transcript definitions (which correctly remain N/A when absent from
+         * the target catalog). Custom-course ownership comes only from the
+         * validated, program-scoped primary custom records.
+         */
+        function _pendingDoubleMajorCustomCourses() {
+            const targetCodes = new Set(doubleMajorCourseData.map(function(record) {
+                return _customClassificationIdentity(getCombinedCodeFromCourseObj(record));
+            }).filter(Boolean));
+            try {
+                loadCustomCoursesForMajor(curriculum && curriculum.doubleMajor).forEach(function(record) {
+                    const identity = _customClassificationIdentity(getCombinedCodeFromCourseObj(record));
+                    if (identity) targetCodes.add(identity);
+                });
+            } catch (_) {}
+            const seen = new Set();
+            const pending = [];
+
+            primaryCustomCourseRecords.forEach(function(record) {
+                const code = getCombinedCodeFromCourseObj(record);
+                const identity = _customClassificationIdentity(code);
+                if (!code || !identity || seen.has(identity) || targetCodes.has(identity)) return;
+                seen.add(identity);
+
+                // Fail closed when old/imported storage contains duplicate
+                // definitions for the same custom code.
+                if (!_activePrimaryCustomCourseByCode(code)) return;
+                pending.push({
+                    code,
+                    title: record.Course_Name || code,
+                });
+            });
+            return pending;
+        }
+
         /**
          * Process a queue of courses that are missing a double major category.
          * For each course code in the list, we prompt the user to select
@@ -3473,8 +3873,9 @@ function SUrriculum(major_chosen_by_user) {
          * localStorage.  After all items have been processed, we
          * recalculate effective types for the double major.
          * @param {Array} list - Array of objects { code, title }
+         * @param {function} [onComplete] - Called after every review dialog settles
          */
-        function processPendingDoubleMajor(list) {
+        function processPendingDoubleMajor(list, onComplete) {
             if (!Array.isArray(list) || list.length === 0) {
                 // After processing all, recalc double major categories and
                 // update the datalist to include any courses defined via
@@ -3485,24 +3886,63 @@ function SUrriculum(major_chosen_by_user) {
                 } catch (ex) {}
                 // Refresh datalist with DM uniques
                 updateDatalistForDoubleMajor();
+                if (typeof onComplete === 'function') onComplete();
                 return;
             }
              const item = list.shift();
+             const sourceCustomCourse = _activePrimaryCustomCourseByCode(item && item.code);
+             const targetDoubleMajor = String((curriculum && curriculum.doubleMajor) || '').toUpperCase();
+             let alreadyStoredForDoubleMajor = false;
+             try {
+                 const itemIdentity = _customClassificationIdentity(item && item.code);
+                 alreadyStoredForDoubleMajor = loadCustomCoursesForMajor(targetDoubleMajor).some(function(record) {
+                     return _customClassificationIdentity(getCombinedCodeFromCourseObj(record)) === itemIdentity;
+                 });
+             } catch (_) {}
+             const alreadyDefinedForDoubleMajor = !!sourceCustomCourse
+                 && doubleMajorCourseData.some(function(record) {
+                     return _customClassificationIdentity(getCombinedCodeFromCourseObj(record))
+                         === _customClassificationIdentity(item.code);
+                 });
+             // Revalidate provenance at the mutation boundary. This keeps an
+             // ordinary catalog/global N/A row (or a stale queued item) from
+             // ever becoming a customCourses_<DM> overlay.
+             if (!sourceCustomCourse || alreadyDefinedForDoubleMajor || alreadyStoredForDoubleMajor) {
+                 processPendingDoubleMajor(list, onComplete);
+                 return;
+             }
+             if (!targetDoubleMajor) {
+                 processPendingDoubleMajor(list, onComplete);
+                 return;
+             }
              showCourseTypeFormDM(item.code, item.title, async function(selectedType) {
                  if (selectedType) {
-                    const identity = splitCombinedCourseCode(item.code);
+                    let source = null;
+                    try { source = _storedActivePrimaryCustomCourseByCode(item.code); } catch (_) {}
+                    if (!source) {
+                        await uiAlert(
+                            'Custom course changed',
+                            `<p><strong>${escapeHtml(item.code)}</strong> is no longer an active custom course for the primary program. No ${escapeHtml(targetDoubleMajor)} category was saved.</p>`
+                        );
+                        processPendingDoubleMajor(list, onComplete);
+                        return;
+                    }
+                    const sourceCode = getCombinedCodeFromCourseObj(source) || normalizeCombinedCourseCode(item.code);
+                    const identity = splitCombinedCourseCode(sourceCode);
                     const maj = identity ? identity.major : '';
                     const num = identity ? identity.code : '';
-                    const source = _findCourseCreditsSourceByCombinedCode(item.code, doubleMajorCourseData);
                     const newCourseDM = {
                         Major: maj,
                         Code: num,
-                        Course_Name: item.title || item.code,
+                        Course_Name: source.Course_Name || item.title || sourceCode,
                         ECTS: source ? String(source.ECTS ?? '0') : '0',
                         Engineering: source ? _creditNumber(source.Engineering) : 0,
                         Basic_Science: source ? _creditNumber(source.Basic_Science) : 0,
                         SU_credit: source ? String(source.SU_credit ?? '0') : '0',
-                        Faculty: '',
+                        // Program category is independent, but inherent course
+                        // metadata must stay identical across program-scoped
+                        // definitions. Faculty is used by requirement groups.
+                        Faculty: source && source.Faculty ? String(source.Faculty) : '',
                         EL_Type: selectedType,
                         Faculty_Course: 'No'
                     };
@@ -3511,23 +3951,59 @@ function SUrriculum(major_chosen_by_user) {
                     }
                     // Persist the definition before changing the live DM model.
                     let persisted = false;
+                    let persistedCourse = null;
                     try {
-                        const keyDM = 'customCourses_' + curriculum.doubleMajor;
-                        const existingDM = JSON.parse(planGetItem(keyDM) || '[]');
-                        existingDM.push(newCourseDM);
-                        persisted = planSetItem(keyDM, JSON.stringify(existingDM));
+                        // If the selected program changed while this modal was
+                        // open, discard the stale queue rather than writing its
+                        // category under a different program key.
+                        if (String((curriculum && curriculum.doubleMajor) || '').toUpperCase() !== targetDoubleMajor) {
+                            throw new Error('Double-major selection changed');
+                        }
+                        const keyDM = 'customCourses_' + targetDoubleMajor;
+                        const parsedDM = JSON.parse(planGetItem(keyDM) || '[]');
+                        if (!Array.isArray(parsedDM)) throw new Error('Invalid double-major custom-course storage');
+                        const existingDM = normalizeCustomCourseListForStorage(targetDoubleMajor, parsedDM);
+                        const targetCode = _customClassificationIdentity(item.code);
+                        const targetMatches = existingDM.filter(function(record) {
+                            return _customClassificationIdentity(getCombinedCodeFromCourseObj(record)) === targetCode;
+                        });
+                        if (targetMatches.length > 1) {
+                            throw new Error('Ambiguous double-major custom-course definitions');
+                        }
+                        persistedCourse = targetMatches.length === 1 ? targetMatches[0] : null;
+
+                        // A concurrently created definition wins. Otherwise,
+                        // validate the full next list before performing the one
+                        // durable write, so corrupt legacy storage is never
+                        // overwritten or partially repaired by this prompt.
+                        if (persistedCourse) {
+                            persisted = true;
+                        } else {
+                            const nextDM = normalizeCustomCourseListForStorage(
+                                targetDoubleMajor,
+                                existingDM.concat([newCourseDM])
+                            );
+                            persistedCourse = nextDM.find(function(record) {
+                                return _customClassificationIdentity(getCombinedCodeFromCourseObj(record)) === targetCode;
+                            }) || null;
+                            persisted = !!persistedCourse && planSetItem(keyDM, JSON.stringify(nextDM));
+                        }
                     } catch (_) {}
                     if (!persisted) {
-                        const dmCode = String((curriculum && curriculum.doubleMajor) || 'double major').toUpperCase();
-                        await uiAlert(`Could not save ${escapeHtml(dmCode)} category`, `<p>The category for <strong>${escapeHtml(item.code)}</strong> was not applied because browser storage rejected the update.</p>`);
-                        processPendingDoubleMajor(list);
+                        await uiAlert(`Could not save ${escapeHtml(targetDoubleMajor)} category`, `<p>The category for <strong>${escapeHtml(item.code)}</strong> was not applied because browser storage rejected the update.</p>`);
+                        processPendingDoubleMajor(list, onComplete);
                         return;
                     }
-                    doubleMajorCourseData.push(newCourseDM);
-                    doubleMajorCustomCourseRecords.push(newCourseDM);
+                    if (!doubleMajorCourseData.some(function(record) {
+                        return _customClassificationIdentity(getCombinedCodeFromCourseObj(record))
+                            === _customClassificationIdentity(getCombinedCodeFromCourseObj(persistedCourse));
+                    })) {
+                        doubleMajorCourseData.push(persistedCourse);
+                        doubleMajorCustomCourseRecords.push(persistedCourse);
+                    }
                 }
                 // Process next
-                processPendingDoubleMajor(list);
+                processPendingDoubleMajor(list, onComplete);
             });
         }
 
@@ -3549,6 +4025,7 @@ function SUrriculum(major_chosen_by_user) {
             overlay.classList.add('double_major_overlay');
             const modal = document.createElement('div');
             modal.classList.add('double_major_modal');
+            let doubleMajorDialog = null;
             // Title
             const h = document.createElement('h3');
             h.innerText = `Set ${dmCode} Category`;
@@ -3583,13 +4060,24 @@ function SUrriculum(major_chosen_by_user) {
             // Buttons
             const buttons = document.createElement('div');
             buttons.classList.add('dm-buttons');
+            const cancel = document.createElement('button');
+            cancel.type = 'button';
+            cancel.innerText = 'Cancel';
+            cancel.classList.add('btn', 'btn-secondary', 'btn-sm');
+            cancel.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (doubleMajorDialog) doubleMajorDialog.close();
+                if (callback) callback(null);
+            });
+            buttons.appendChild(cancel);
             const save = document.createElement('button');
+            save.type = 'button';
             save.innerText = 'Save';
             save.classList.add('btn', 'btn-primary', 'btn-sm');
             save.onclick = function(e) {
                 e.stopPropagation();
                 const chosen = select.value;
-                overlay.remove();
+                if (doubleMajorDialog) doubleMajorDialog.close();
                 if (callback) callback(chosen);
             };
             buttons.appendChild(save);
@@ -3600,6 +4088,10 @@ function SUrriculum(major_chosen_by_user) {
                 e.stopPropagation();
             });
             document.body.appendChild(overlay);
+            doubleMajorDialog = activateAccessibleDialog(overlay, modal, h, {
+                initialFocus: select,
+                onEscape: function() { cancel.click(); },
+            });
         }
 
         /**
@@ -3617,9 +4109,9 @@ function SUrriculum(major_chosen_by_user) {
             // Attach the loaded DM course data to the curriculum so
             // recalcEffectiveTypes() can trigger DM recalculation automatically.
             // Fetch course data for second major
-            fetchCourseData(dm, entryTermDMCode).then(function(jsonDM) {
+            return fetchCourseData(dm, entryTermDMCode).then(async function(jsonDM) {
                 if (!jsonDM || jsonDM.length === 0) {
-                    uiAlert(
+                    await uiAlert(
                         'No course data',
                         `<p>No course data available for <strong>${escapeHtml(dm)}</strong> in <strong>${escapeHtml(termCodeToName(entryTermDMCode))}</strong>.</p>`
                     );
@@ -3657,16 +4149,17 @@ function SUrriculum(major_chosen_by_user) {
                         const shownKey = 'dmCustomCoursesCreditsRepairShown_' + dm;
                         if (!planGetItem(shownKey)) {
                             planSetItem(shownKey, '1');
-                            uiAlert(
+                            await uiAlert(
                                 'Repaired double major credits',
                                 `<p>Fixed missing credit values for <strong>${repaired}</strong> saved double major course${repaired === 1 ? '' : 's'} (ECTS / SU / ENG / BS).</p>`
                             );
                         }
                     } catch (_) {}
                 }
-                const dmCustomCourses = dmStoredCustomCourses.filter(function(record) {
-                    return !doubleMajorCatalogCodeSet.has(getCombinedCodeFromCourseObj(record));
-                });
+                const dmCustomCourses = _activeCustomCourseRecords(
+                    dmStoredCustomCourses,
+                    doubleMajorCatalogCodeSet
+                );
                 if (dmCustomCourses && dmCustomCourses.length) {
                     doubleMajorCustomCourseRecords = dmCustomCourses;
                     for (let i = 0; i < dmCustomCourses.length; i++) {
@@ -3675,51 +4168,15 @@ function SUrriculum(major_chosen_by_user) {
                 }
                 // Recalc categories for DM
                 curriculum.recalcEffectiveTypesDouble(doubleMajorCourseData);
-                // Determine pending courses that need classification for DM
-                const pending = [];
-                const pendingSet = new Set();
-                // Build a set of existing DM course codes for quick lookup
-                const dmSet = new Set(doubleMajorCourseData.map(c => c.Major + c.Code));
-                // Iterate all courses currently known (main + custom)
-                course_data.forEach(function(c) {
-                    const combined = (c.Major + c.Code);
-                    if (!dmSet.has(combined)) {
-                        let appears = false;
-                        for (let si = 0; si < curriculum.semesters.length && !appears; si++) {
-                            const sem = curriculum.semesters[si];
-                            for (let ci = 0; ci < sem.courses.length; ci++) {
-                                const sc = sem.courses[ci];
-                                if (getSemesterOccurrenceCode(sc) === normalizeCombinedCourseCode(combined)) {
-                                    appears = true;
-                                    break;
-                                }
-                            }
-                        }
-                        if (appears && !pendingSet.has(combined)) {
-                            pending.push({ code: combined, title: c.Course_Name });
-                            pendingSet.add(combined);
-                        }
-                    }
-                });
-                // Also include custom courses defined for the primary major even if not in semesters
-                try {
-                    const keyMain = 'customCourses_' + curriculum.major;
-                    const storedMain = planGetItem(keyMain);
-                    if (storedMain) {
-                        const parsedMain = JSON.parse(storedMain);
-                        if (Array.isArray(parsedMain)) {
-                            parsedMain.forEach(function(cc){
-                                const comb = cc.Major + cc.Code;
-                                if (!dmSet.has(comb) && !pendingSet.has(comb)) {
-                                    pending.push({ code: comb, title: cc.Course_Name });
-                                    pendingSet.add(comb);
-                                }
-                            });
-                        }
-                    }
-                } catch(_){}
+                // Only genuine, active primary custom definitions need a
+                // program-specific planning classification. Ordinary catalog
+                // courses and restored global transcript rows remain N/A when
+                // they are absent from the target program catalog.
+                const pending = _pendingDoubleMajorCustomCourses();
                 if (pending.length > 0) {
-                    processPendingDoubleMajor(pending);
+                    await new Promise(function(resolve) {
+                        processPendingDoubleMajor(pending, resolve);
+                    });
                 }
 
                 // After loading the double major data, update the course
@@ -3758,12 +4215,12 @@ function SUrriculum(major_chosen_by_user) {
                 }
                 // Build a set of main course codes for quick lookup
                 const mainSet = new Set(course_data.map(function(c) {
-                    return (c.Major + c.Code);
-                }));
+                    return _customClassificationIdentity((c.Major || '') + (c.Code || ''));
+                }).filter(Boolean));
                 // Collect unique double major courses
                 const dmUnique = [];
                 doubleMajorCourseData.forEach(function(dm) {
-                    const key = dm.Major + dm.Code;
+                    const key = _customClassificationIdentity((dm.Major || '') + (dm.Code || ''));
                     if (!mainSet.has(key)) dmUnique.push(dm);
                 });
                 // Combine arrays
@@ -3799,7 +4256,9 @@ function SUrriculum(major_chosen_by_user) {
                 await uiAlert('No custom courses', '<p>There are no primary-program custom courses to delete for this plan.</p>');
                 return;
             }
-            const deletedCodes = new Set(primaryList.map(getCombinedCodeFromCourseObj).filter(Boolean));
+            const deletedCodes = new Set(primaryList.map(function(record) {
+                return _customClassificationIdentity(getCombinedCodeFromCourseObj(record));
+            }).filter(Boolean));
             const primaryPlan = {
                 programCode: primaryProgram,
                 key: primaryKey,
@@ -3811,7 +4270,9 @@ function SUrriculum(major_chosen_by_user) {
                 const key = 'customCourses_' + programCode;
                 const previousList = loadCustomCoursesForMajor(programCode);
                 const nextList = previousList.filter(function(record) {
-                    return !deletedCodes.has(getCombinedCodeFromCourseObj(record));
+                    return !deletedCodes.has(
+                        _customClassificationIdentity(getCombinedCodeFromCourseObj(record))
+                    );
                 });
                 return {
                     programCode,
@@ -3862,7 +4323,7 @@ function SUrriculum(major_chosen_by_user) {
             // overlay that collides with the official catalog does not own the
             // official course occurrence either.
             primaryPlan.previousList.map(getCombinedCodeFromCourseObj).filter(function(code) {
-                return code && !primaryCatalogCodeSet.has(code);
+                return code && !primaryCatalogIdentitySet.has(_customClassificationIdentity(code));
             }).forEach(removeSemesterOccurrencesByCode);
             primaryCustomCourseRecords.forEach(function(record) {
                 removeCourseDataRecord(record, getCombinedCodeFromCourseObj(record));
@@ -4261,6 +4722,32 @@ function SUrriculum(major_chosen_by_user) {
                     await window.loadCoursePageInfoIndex();
                 }
             } catch (_) {}
+            const importStorage = (typeof window !== 'undefined') ? window.planStorage : null;
+            let importCheckpoint = null;
+            try {
+                if (!importStorage
+                    || typeof importStorage.captureCheckpoint !== 'function'
+                    || typeof importStorage.restoreCheckpoint !== 'function'
+                    || typeof importStorage.flushSaves !== 'function') {
+                    throw new Error('Plan checkpoint storage is unavailable.');
+                }
+                // A transcript parse can begin while a grade/course/term edit
+                // is still inside the autosave debounce. Make that live state
+                // durable before capturing the rollback point; otherwise a
+                // later import-save failure could restore an older snapshot
+                // and silently discard the edit made just before importing.
+                if (importStorage.flushSaves({ onlyIfPending: true }) === false) {
+                    throw new Error('Pending planner changes could not be saved.');
+                }
+                importCheckpoint = importStorage.captureCheckpoint(_planIdForSession || undefined);
+            } catch (checkpointError) {
+                await uiAlert(
+                    'Import could not start',
+                    '<p>SUrriculum could not save and checkpoint your current plan. Nothing was imported.</p>'
+                );
+                return;
+            }
+
             const importResult = window.academicRecordsParser.importParsedCourses(
                 parsedData.courses,
                 course_data,
@@ -4301,13 +4788,49 @@ function SUrriculum(major_chosen_by_user) {
             const issueSections = renderImportIssueSections(importStats);
             const alreadyPresentCount = Array.isArray(importStats.alreadyPresentCourses)
                 ? importStats.alreadyPresentCourses.length : 0;
+
+            if (changedCourses > 0) {
+                let saved = false;
+                try {
+                    const requested = typeof importStorage.requestSave === 'function'
+                        && importStorage.requestSave();
+                    saved = !!requested
+                        && typeof importStorage.flushSaves === 'function'
+                        && importStorage.flushSaves() !== false;
+                } catch (_) {
+                    saved = false;
+                }
+                if (!saved) {
+                    let restored = false;
+                    try {
+                        // Prevent pagehide/visibility handlers from retrying a
+                        // failed live snapshot after the known-good checkpoint
+                        // has been put back.
+                        if (typeof importStorage.suspendSaves === 'function') {
+                            importStorage.suspendSaves();
+                        }
+                        restored = importStorage.restoreCheckpoint(importCheckpoint) !== false;
+                    } catch (_) {
+                        restored = false;
+                    }
+                    await uiAlert(
+                        'Import was not saved',
+                        restored
+                            ? '<p>Browser storage rejected the imported changes. Your previous plan was restored and will now be reloaded.</p>'
+                            : '<p>Browser storage rejected the imported changes and the previous checkpoint could not be fully restored. Reload the page before making more changes, then restore a recent plan export if anything is missing.</p>'
+                    );
+                    location.reload();
+                    return;
+                }
+            }
+
             if (changedCourses === 0) {
                 const body = (
                     `<p>${alreadyPresentCount ? 'No plan changes were needed.' : 'No courses were added or updated.'}</p>` +
                     `<p>Detected <strong>${importStats.totalRecords || importStats.totalCourses || 0}</strong> transcript record(s).</p>` +
                     issueSections +
                     (!alreadyPresentCount
-                        ? '<p>Check that the selected major/double major and admit terms match this transcript.</p>'
+                        ? '<p>Check that the selected major/double major and admit terms match this transcript. Verify the relevant dates in <strong>SUIS → Student Records → General Student Information</strong>.</p>'
                         : '')
                 );
                 const title = alreadyPresentCount ? 'Import complete' : 'No courses imported';
@@ -4327,10 +4850,8 @@ function SUrriculum(major_chosen_by_user) {
                 const reminderBody =
                     '<p>SUrriculum does <strong>not</strong> automatically detect your <strong>major</strong>, <strong>double major</strong>, <strong>minor(s)</strong>, or their <strong>admit terms</strong> from the imported file.</p>' +
                     '<p>Please double-check the sidebar selections so the requirements match your catalog:</p>' +
-                    '<ul>' +
-                    '<li><strong>Major / Minor admit term:</strong> usually your <strong>first term at Sabancı</strong> (your initial entry term), even if you declared the major later or had a prep/English year.</li>' +
-                    '<li><strong>Double Major admit term:</strong> if you started your double major in <strong>Fall 2026-2027 or later</strong>, use your <strong>initial university entry term</strong>. For double majors started <strong>before Fall 2026-2027</strong>, use the <strong>first term after</strong> your double major application was accepted.</li>' +
-                    '</ul>' +
+                    admitTermPolicyListHtml +
+                    admitTermVerificationHtml +
                     '<p>If these are wrong, your graduation/summary results can look incorrect.</p>';
                 if (ui && typeof ui.alert === 'function') await ui.alert(reminderTitle, reminderBody);
                 else await uiAlert(reminderTitle, reminderBody);
@@ -4409,6 +4930,15 @@ function SUrriculum(major_chosen_by_user) {
             dropdown.classList.remove('active');
         }
     });
+    document.addEventListener('keydown', function(e) {
+        const dropdown = document.getElementById('importDropdown');
+        const toggle = document.querySelector('.import-toggle');
+        if (!dropdown || !toggle || e.key !== 'Escape'
+            || !dropdown.classList.contains('active')) return;
+        e.preventDefault();
+        dropdown.classList.remove('active');
+        try { toggle.focus({ preventScroll: true }); } catch (_) {}
+    });
 
 
     // At the end of initialization, if there is a saved double major in
@@ -4424,11 +4954,19 @@ function SUrriculum(major_chosen_by_user) {
         }
         if (savedDMInit) {
             // setDoubleMajor expects uppercase codes
-            setDoubleMajor(savedDMInit.toUpperCase());
+            await setDoubleMajor(savedDMInit.toUpperCase());
         }
     } catch (e) {
         // ignore
     }
+
+    // Startup guidance waits for the visible plan and its program context to
+    // finish loading. Consumers use a sticky flag as well as the event so a
+    // listener registered late in this same script cannot miss readiness.
+    try {
+        window.__surriculumReady = true;
+        document.dispatchEvent(new CustomEvent('surriculum:ready'));
+    } catch (_) {}
 
     //END OF PROGRAM
     })
@@ -4440,6 +4978,365 @@ function SUrriculum(major_chosen_by_user) {
 let major_existing = planGetItem("major");
 if (major_existing) {SUrriculum(major_existing);}
 else {SUrriculum(initial_major_chosen);}
+
+// User-facing guide. This is initialized outside the curriculum data-loading
+// promise so help remains available even if a catalog request fails.
+(() => {
+    const opener = document.getElementById('openHelpInfoButton');
+    const admitTermOpener = document.getElementById('openAdmitTermHelpButton');
+    if (!opener && !admitTermOpener) return;
+
+    const releaseVersion = String(
+        (typeof window !== 'undefined' && window.APP_VERSION) || '3.1'
+    ).trim() || '3.1';
+    const onboardingKeys = Object.freeze({
+        cohort: 'onboardingCohort',
+        helpSeen: 'onboardingHelpSeen',
+        lastSeenRelease: 'onboardingLastSeenRelease',
+    });
+    const sessionPrefix = 'surriculum.session.';
+    let startupPromptHandled = false;
+
+    const readOnboardingValue = (key) => {
+        const stored = preferenceGetItem(key);
+        if (stored !== null) return stored;
+        try { return sessionStorage.getItem(sessionPrefix + key); } catch (_) {}
+        return null;
+    };
+
+    const writeOnboardingValue = (key, value) => {
+        if (preferenceSetItem(key, value)) {
+            try { sessionStorage.removeItem(sessionPrefix + key); } catch (_) {}
+            return true;
+        }
+        try {
+            sessionStorage.setItem(sessionPrefix + key, String(value));
+            return true;
+        } catch (_) {}
+        return false;
+    };
+
+    const parseReleaseVersion = (value) => {
+        const match = String(value || '').trim().match(/^(\d+)\.(\d+)(?:\.(\d+))?$/);
+        if (!match) return null;
+        return [Number(match[1]), Number(match[2]), Number(match[3] || 0)];
+    };
+
+    const compareReleaseVersions = (left, right) => {
+        const a = parseReleaseVersion(left);
+        const b = parseReleaseVersion(right);
+        if (!a || !b) return null;
+        for (let index = 0; index < 3; index++) {
+            if (a[index] > b[index]) return 1;
+            if (a[index] < b[index]) return -1;
+        }
+        return 0;
+    };
+
+    const initializeOnboardingCohort = () => {
+        const existing = String(readOnboardingValue(onboardingKeys.cohort) || '').trim();
+        if (/^(?:pre-)?\d+\.\d+(?:\.\d+)?$/.test(existing)) return existing;
+
+        let firstRunEver = false;
+        try {
+            firstRunEver = !!(
+                window.storageSchemaInfo && window.storageSchemaInfo.firstRunEver === true
+            );
+        } catch (_) {}
+        const cohort = firstRunEver ? releaseVersion : `pre-${releaseVersion}`;
+        writeOnboardingValue(onboardingKeys.cohort, cohort);
+        return cohort;
+    };
+
+    const onboardingCohort = initializeOnboardingCohort();
+    const releaseAlreadySeen = () => {
+        const comparison = compareReleaseVersions(
+            readOnboardingValue(onboardingKeys.lastSeenRelease),
+            releaseVersion,
+        );
+        return comparison !== null && comparison >= 0;
+    };
+    const acknowledgeRelease = () => {
+        // A cached older app can run after a newer tab has already recorded a
+        // later release. Never let that older build move the shared marker
+        // backwards (and repair malformed markers with the current version).
+        if (!parseReleaseVersion(releaseVersion)) return false;
+        const comparison = compareReleaseVersions(
+            readOnboardingValue(onboardingKeys.lastSeenRelease),
+            releaseVersion,
+        );
+        if (comparison !== null && comparison >= 0) return true;
+        return writeOnboardingValue(onboardingKeys.lastSeenRelease, releaseVersion);
+    };
+    const acknowledgeHelp = () => {
+        writeOnboardingValue(onboardingKeys.helpSeen, 'true');
+        acknowledgeRelease();
+    };
+
+    const helpGuideHtml = `
+        <div class="help-info-guide" id="helpInfoGuide">
+            <div class="help-info-disclaimer" id="helpInfoDisclaimer" role="note" aria-label="Important disclaimer">
+                <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+                <div>
+                    <strong>Always verify the graduation requirements yourself using official sources.</strong>
+                    SUrriculum is a planning aid, not an official university record or a guarantee of
+                    course eligibility, availability, substitution approval, or graduation. Confirm your
+                    program and admit-term requirements in official sources and verify the relevant dates in
+                    SUIS → Student Records → General Student Information. Verify the final result in SUIS as well.
+                </div>
+            </div>
+
+            <div class="help-info-layout">
+                <nav class="help-info-nav" aria-label="Help topics">
+                    <a class="help-info-nav-link" href="#help-getting-started">Getting started</a>
+                    <a class="help-info-nav-link" href="#help-planner">Using the planner</a>
+                    <a class="help-info-nav-link" href="#help-scheduler">Building a schedule</a>
+                    <a class="help-info-nav-link" href="#help-progress">Progress &amp; credits</a>
+                    <a class="help-info-nav-link" href="#help-data">Plans, imports &amp; privacy</a>
+                    <a class="help-info-nav-link" href="#help-about">Contact &amp; credits</a>
+                </nav>
+
+                <div class="help-info-content">
+                    <section class="help-info-section" id="help-getting-started" aria-labelledby="help-getting-started-title">
+                        <h4 id="help-getting-started-title" tabindex="-1">Getting started</h4>
+                        <ol>
+                            <li><strong>Choose your programs and admit terms</strong> in Controls. Select a main major, then add a double major or up to three minors if needed. Each program has its own admit term because its catalog rules can differ.</li>
+                            <li><strong>Add your academic record.</strong> You can import an Academic Records Summary from the header, or create semesters and add courses manually. Review imported courses, grades, terms, and any requested custom classifications.</li>
+                            <li><strong>Build the rest of your plan.</strong> Add a semester, choose its academic term, and use Add course on that semester. Open Progress or Summary as you make changes.</li>
+                            <li><strong>Back up the plan.</strong> Use the plan menu's Export action after important edits, especially before clearing browser data or moving to another device.</li>
+                        </ol>
+                        <div class="help-info-tip admit-term-help-summary">
+                            <strong>Admit-term reminder</strong>
+                            ${admitTermGuidanceHtml}
+                        </div>
+                        <h5>Mobile use</h5>
+                        <p>Use the bottom Planner, Scheduler, Progress, and Controls tabs. The Planner shows the newest term first and keeps New Semester at the top. It works best in portrait, while the weekly Scheduler has more room in landscape. Course drag and move actions are desktop-only; on mobile, remove and re-add a course in its destination term or replace that term from the Scheduler.</p>
+                    </section>
+
+                    <section class="help-info-section" id="help-planner" aria-labelledby="help-planner-title">
+                        <h4 id="help-planner-title" tabindex="-1">Using the planner</h4>
+                        <h5>Add and find courses</h5>
+                        <p>Use Add course inside the destination semester and search by code or title. Open Filters beside the search field to narrow by program, category, level, credits, exact-semester offering, already-planned status, or course requirements. Controls → Course picker defaults sets the initial detail, planned-course, offered-only, and sorting choices for newly opened pickers. Offered-only can then be changed for one semester without changing the default or another open picker. “The semester” means the destination card's saved academic term, not the current date or visual card order.</p>
+
+                        <h5>Understand chronology</h5>
+                        <p>A semester's saved academic term code is the source of truth for prerequisite checks, retakes, current-term state, and progress calculations. Dragging semester cards only changes their visual order. Sort Semesters restores chronological display.</p>
+
+                        <h5>Read planning warnings</h5>
+                        <p>Prerequisite and prior-SU checks look at academically earlier semesters, with same-term work used only when a rule explicitly allows concurrency. Offering-history labels such as No Fall offerings found or Not offered every year describe recorded history. Workload, prerequisite, and offering warnings are advisory: they do not block an approved exception and do not prove future availability or enrollment eligibility.</p>
+
+                        <h5>Move, retake, and classify courses</h5>
+                        <p>On desktop, drag courses between semesters or use the move action. On mobile, remove the course and add it to the destination term, or replace that term from the Scheduler. If you add an existing course to a later eligible term, the planner can ask whether you are planning a retake before replacing its earlier planned entry. This is a simplified plan representation: it removes the earlier planner card, while an official transcript continues to retain recorded attempts. Use a custom course only for a missing course or placeholder. Any category you assign to a custom course is a planning assumption and should match an approved substitution or official classification.</p>
+                    </section>
+
+                    <section class="help-info-section" id="help-scheduler" aria-labelledby="help-scheduler-title">
+                        <h4 id="help-scheduler-title" tabindex="-1">Building a schedule</h4>
+                        <ol>
+                            <li>Open Scheduler and choose the academic term you want to arrange.</li>
+                            <li>Search for courses, expand a course, and select a section bundle. Labs and recitations stay bundled with their main course where the schedule data identifies that relationship.</li>
+                            <li>Use prerequisite and taken-course filters, Smart Sort, availability highlighting, and blocked-hour controls as needed. Inspect the weekly grid for highlighted conflicts.</li>
+                            <li>Copy CRNs when you are ready to register. The scheduler does not register courses for you.</li>
+                            <li><strong>Update planner semester replaces the matching term's planned main courses</strong> with the scheduler selection. Lab and recitation rows are not added as separate planner courses, so review the confirmation before applying it.</li>
+                        </ol>
+                        <p>A scheduler course that is not listed in your selected undergraduate catalogs is kept in the plan as unallocated N/A. It remains visible and contributes to semester workload, but it does not satisfy a graduation category. Any approved substitution must be represented and verified separately.</p>
+                    </section>
+
+                    <section class="help-info-section" id="help-progress" aria-labelledby="help-progress-title">
+                        <h4 id="help-progress-title" tabindex="-1">Progress &amp; credits</h4>
+                        <h5>Check versus Summary</h5>
+                        <p>Check Graduation gives a high-level result. Summary shows how each selected major or minor is calculated, including earned work, the current term, future plans, courses needing a grade, unsuccessful attempts, and unmet requirements. Planned courses can make a program Projected complete; only earned results can be Complete.</p>
+
+                        <h5>SU, ECTS, and requirement credits</h5>
+                        <p><strong>SU credits</strong> drive semester workload and the SU-credit requirements named by a curriculum. <strong>ECTS</strong> is tracked separately for requirements and mobility contexts that use it. Basic Science and Engineering values describe how part of a course can count toward those requirement pools; they are not extra SU credits. A course marked N/A can still appear in overall workload and, with a valid letter grade, overall CGPA, while contributing nothing to that program's graduation categories or PGPA.</p>
+
+                        <h5>How allocation works</h5>
+                        <p>Courses are allocated using the selected program, its admit-term catalog, requirement groups, grades, and the course's effective category. Main-major, double-major, and minor summaries can therefore count the same course differently. Estimated class level uses earned SU credits only. Treat every result as an explanation of the current plan—not an official degree evaluation.</p>
+                    </section>
+
+                    <section class="help-info-section" id="help-data" aria-labelledby="help-data-title">
+                        <h4 id="help-data-title" tabindex="-1">Plans, imports &amp; privacy</h4>
+                        <h5>Saved plans</h5>
+                        <p>The plan menu supports multiple named plans and their Export and Import actions. Exported plan files are the portable backup: data does not automatically sync between browsers or devices.</p>
+
+                        <h5>Transcript imports</h5>
+                        <p>For the most reliable import, open SUIS Academic Records Summary and save it as Webpage, Complete; a readable browser-generated PDF is also supported. A YÖK transcript is available as a less-preferred alternative. Always review the detected terms, grades, and unresolved courses before relying on the result.</p>
+
+                        <h5>Where your data lives</h5>
+                        <p>Transcript files are parsed in your browser and are not uploaded by SUrriculum. Plans, grades, custom courses, preferences, and scheduler selections are stored in this site's browser storage. SUrriculum has no account, runtime analytics, telemetry, or server-side plan storage. The service worker may cache the application and public catalog data for offline use.</p>
+                        <p class="help-info-tip"><strong>Before resetting:</strong> export every plan you need. Reset Local Data removes SUrriculum's saved plans and settings from this browser and cannot sync them back from another device.</p>
+                    </section>
+
+                    <section class="help-info-section" id="help-about" aria-labelledby="help-about-title">
+                        <h4 id="help-about-title" tabindex="-1">Contact &amp; project credits</h4>
+                        <p>For issues you spot, send an e-mail to <a href="mailto:bilal.gebenoglu@sabanciuniv.edu">bilal.gebenoglu@sabanciuniv.edu</a>.</p>
+                        <p>This repository started as a fork of the <a href="https://github.com/melih-kiziltoprak/surriculum" target="_blank" rel="noopener noreferrer">original Surriculum project<span class="sr-only"> (opens in a new tab)</span></a>.</p>
+                        <p>Maintained by <strong>BEFICENT (Bilal M. G.)</strong> with major additions including double major support, Data Science and Analytics and several FASS programs, a large UI overhaul, updated course lists, improved requirement checks, multi-plan support, minor support, and the term-selectable scheduler.</p>
+                        <p>View the <a href="https://github.com/BEFICENT/surriculum" target="_blank" rel="noopener noreferrer">current source code<span class="sr-only"> (opens in a new tab)</span></a>. SUrriculum is licensed under the <a href="https://github.com/BEFICENT/surriculum/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">GNU General Public License v3.0<span class="sr-only"> (opens in a new tab)</span></a>.</p>
+                    </section>
+                </div>
+            </div>
+        </div>`;
+
+    const openHelpInformation = (options) => {
+        const opts = options || {};
+        const ui = (typeof window !== 'undefined') ? window.uiModal : null;
+        if (!ui || typeof ui.alert !== 'function') return Promise.resolve(null);
+
+        startupPromptHandled = true;
+        acknowledgeHelp();
+
+        return ui.alert('Help & information', helpGuideHtml, {
+            buttons: [{ action: 'close', label: 'Close', variant: 'primary' }],
+            onMount: ({ overlay, modal, body }) => {
+                overlay.classList.add('help-info-overlay');
+                modal.classList.add('help-info-modal');
+                body.classList.add('help-info-modal-body');
+                if (opts.firstRun === true) {
+                    overlay.classList.add('help-info-first-run');
+                    modal.classList.add('help-info-first-run');
+                }
+                // Describing a dialog with this entire long guide would make
+                // screen readers announce every section as soon as it opens.
+                if (opts.firstRun === true) {
+                    overlay.setAttribute('aria-describedby', 'helpInfoDisclaimer');
+                } else {
+                    overlay.removeAttribute('aria-describedby');
+                }
+
+                body.querySelectorAll('.help-info-nav-link').forEach((link) => {
+                    link.addEventListener('click', (event) => {
+                        const targetId = link.getAttribute('href');
+                        const target = targetId ? body.querySelector(targetId) : null;
+                        if (!target) return;
+                        event.preventDefault();
+                        const heading = target.querySelector('h4');
+                        let behavior = 'smooth';
+                        try {
+                            if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) behavior = 'auto';
+                        } catch (_) {}
+                        target.scrollIntoView({ behavior, block: 'start' });
+                        try { if (heading) heading.focus({ preventScroll: true }); } catch (_) {}
+                    });
+                });
+            }
+        });
+    };
+
+    const openAdmitTermInformation = () => {
+        const ui = (typeof window !== 'undefined') ? window.uiModal : null;
+        if (!ui || typeof ui.alert !== 'function') return Promise.resolve(null);
+        return ui.alert(
+            'What is an admit term?',
+            `<div class="admit-term-help-guide" id="admitTermHelpGuide">${admitTermGuidanceHtml}</div>`,
+            {
+                buttons: [{ action: 'close', label: 'Close', variant: 'primary' }],
+                onMount: ({ overlay, modal, body }) => {
+                    overlay.classList.add('admit-term-help-overlay');
+                    modal.classList.add('admit-term-help-modal');
+                    body.classList.add('admit-term-help-modal-body');
+                },
+            }
+        );
+    };
+
+    if (opener) opener.addEventListener('click', () => { openHelpInformation(); });
+    if (admitTermOpener) {
+        admitTermOpener.addEventListener('click', () => { openAdmitTermInformation(); });
+    }
+    window.openHelpInformation = openHelpInformation;
+    window.openAdmitTermInformation = openAdmitTermInformation;
+
+    // Release copy is deliberately registered by its exact app version. A
+    // version bump without a matching entry must stay quiet instead of putting
+    // the previous release's notes under a new, misleading heading.
+    const releaseAnnouncements = Object.freeze({
+        '3.1': Object.freeze({
+            title: 'What’s new in SUrriculum 3.1',
+            html: `
+                <div class="release-update-guide">
+                    <p class="release-update-lead">Version 3.1 focuses on clearer progress and safer planning.</p>
+                    <ul class="release-update-list">
+                        <li><strong>Progress and Summary are clearer.</strong> Earned, current, and future work are separated, with better degree, CGPA/PGPA, and class-level explanations.</li>
+                        <li><strong>Planner and Scheduler checks are term-aware.</strong> Offerings, prerequisites, prior-credit guidance, filters, and warnings follow each semester's saved academic term.</li>
+                        <li><strong>Everyday planning is more reliable.</strong> Imports, custom and external courses, retakes, saved plans, offline use, and course or semester movement have stronger safeguards.</li>
+                    </ul>
+                    <p class="release-update-note"><strong>Reminder:</strong> SUrriculum remains a planning aid. Verify requirements, eligibility, substitutions, and course availability in official sources.</p>
+                </div>`,
+        }),
+    });
+    const releaseAnnouncement = Object.prototype.hasOwnProperty.call(
+        releaseAnnouncements,
+        releaseVersion,
+    ) ? releaseAnnouncements[releaseVersion] : null;
+
+    const openReleaseUpdate = async () => {
+        const ui = (typeof window !== 'undefined') ? window.uiModal : null;
+        if (!releaseAnnouncement || !ui || typeof ui.alert !== 'function') return;
+
+        startupPromptHandled = true;
+        // Showing the dialog counts as delivery even when it is dismissed with
+        // Escape, the close button, or the backdrop. This prevents a startup
+        // notice from becoming a recurring obstacle.
+        acknowledgeRelease();
+        const result = await ui.alert(releaseAnnouncement.title, releaseAnnouncement.html, {
+            buttons: [
+                { action: 'help', label: 'Open Help', variant: 'secondary' },
+                { action: 'continue', label: 'Continue', variant: 'primary' },
+            ],
+            onMount: ({ overlay, modal, body }) => {
+                overlay.classList.add('release-update-overlay');
+                modal.classList.add('release-update-modal');
+                body.classList.add('release-update-modal-body');
+            },
+        });
+        if (result && result.action === 'help') {
+            setTimeout(() => { openHelpInformation(); }, 0);
+        }
+    };
+
+    const showStartupInformation = () => {
+        if (startupPromptHandled) return;
+        if (releaseAlreadySeen()) {
+            startupPromptHandled = true;
+            return;
+        }
+
+        const isFreshCohort = onboardingCohort === releaseVersion;
+        const helpSeen = readOnboardingValue(onboardingKeys.helpSeen) === 'true';
+        if (isFreshCohort) {
+            if (!helpSeen) {
+                openHelpInformation({ firstRun: true });
+            } else {
+                // A partially written first-run acknowledgement should not turn
+                // into a misleading upgrade announcement on the next load.
+                startupPromptHandled = true;
+                acknowledgeRelease();
+            }
+            return;
+        }
+        if (!releaseAnnouncement) {
+            startupPromptHandled = true;
+            return;
+        }
+        openReleaseUpdate();
+    };
+
+    const queueStartupInformation = () => {
+        const tryOpen = () => {
+            if (startupPromptHandled) return;
+            // A migration, custom-course review, or critical error dialog gets
+            // priority. The startup message waits until the modal stack clears.
+            if (document.querySelector('[role="dialog"][aria-modal="true"]')) {
+                setTimeout(tryOpen, 250);
+                return;
+            }
+            showStartupInformation();
+        };
+        setTimeout(tryOpen, 0);
+    };
+
+    document.addEventListener('surriculum:ready', queueStartupInformation, { once: true });
+    if (window.__surriculumReady === true) queueStartupInformation();
+})();
 
 // Mobile UX helper: show a small banner in portrait mode on small screens.
 (() => {

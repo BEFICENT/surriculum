@@ -72,4 +72,66 @@ test.describe('scheduler (desktop)', () => {
     await expect(course).toHaveClass(/is-unmet-prereq/);
     await expect(course).toContainText(/Prereq.*MATH101/s);
   });
+
+  test('SPS303 scheduler card shows the unmet 58 prior-SU General Requirement', async ({ page }) => {
+    const prior56 = [
+      'IF100', 'MATH101', 'SPS101', 'AL102', 'MATH102', 'SPS102',
+      'HUM201', 'HUM202', 'HUM207', 'HUM311', 'HUM312', 'HUM317',
+      'CS201', 'CS204', 'CS300', 'CS301', 'CS302', 'CS305', 'TLL101',
+    ];
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: 'Fall 2024-2025',
+      curriculum: [prior56, []],
+      grades: [prior56.map(() => ''), []],
+      dates: ['Fall 2024-2025', 'Spring 2024-2025'],
+      schedulerSelectedTerm: '202402',
+    });
+
+    await page.evaluate(() => {
+      window.preferenceStorage.setItem('schedulerCheckPrereqs', 'true');
+      window.preferenceStorage.setItem('schedulerShowUnmetPrereqs', 'true');
+      window.openSchedulerModal();
+    });
+    const modal = page.locator('.scheduler-modal');
+    await expect(modal).toBeVisible({ timeout: 15000 });
+    await modal.locator('.scheduler-search').fill('SPS303');
+
+    const course = modal.locator('.scheduler-course[data-course="SPS303"]');
+    await expect(course).toBeVisible({ timeout: 15000 });
+    await expect(course).toHaveClass(/is-unmet-prereq/);
+    await expect(course).toContainText(/Prereq.*Prior SU: 56 of 58 planned\/completed/s);
+
+    await course.locator('.scheduler-course-actions > .scheduler-details').click();
+    const details = page.locator('.scheduler-details-modal');
+    await expect(details).toBeVisible();
+    await expect(details).toContainText('General requirements');
+    await expect(details).toContainText('58.000 credits');
+  });
+
+  test('HUM201 scheduler prerequisite combines the SPS clauses and 23 prior SU', async ({ page }) => {
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: 'Fall 2024-2025',
+      curriculum: [['SPS101', 'IF100', 'MATH101'], []],
+      grades: [['A', '', 'A'], []],
+      dates: ['Fall 2024-2025', 'Spring 2024-2025'],
+      schedulerSelectedTerm: '202402',
+    });
+
+    await page.evaluate(() => {
+      window.preferenceStorage.setItem('schedulerCheckPrereqs', 'true');
+      window.preferenceStorage.setItem('schedulerShowUnmetPrereqs', 'true');
+      window.openSchedulerModal();
+    });
+    const modal = page.locator('.scheduler-modal');
+    await expect(modal).toBeVisible({ timeout: 15000 });
+    await modal.locator('.scheduler-search').fill('HUM201');
+
+    const course = modal.locator('.scheduler-course[data-course="HUM201"]');
+    await expect(course).toBeVisible({ timeout: 15000 });
+    await expect(course).toHaveClass(/is-unmet-prereq/);
+    await expect(course).toContainText(/Prereq.*SPS102/s);
+    await expect(course).toContainText(/Prereq.*Prior SU: 9 of 23 planned\/completed/s);
+  });
 });

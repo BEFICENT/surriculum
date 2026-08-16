@@ -1,5 +1,84 @@
 function createSemeter(aslastelement=true, courseList=[], curriculum, course_data, grade_list=[], date_custom="", grading_basis_list=[])
 {
+    const interactiveDefault = !date_custom && arguments.length <= 4;
+    if (interactiveDefault) {
+        const canonicalCode = (term) => {
+            try {
+                const fn = (typeof semesterTermCode === 'function')
+                    ? semesterTermCode
+                    : ((typeof window !== 'undefined' && typeof window.semesterTermCode === 'function')
+                        ? window.semesterTermCode : null);
+                if (fn) return String(fn(term) || '');
+            } catch (_) {}
+            try {
+                return typeof termNameToCode === 'function' ? String(termNameToCode(term) || '') : '';
+            } catch (_) {
+                return '';
+            }
+        };
+        const existing = curriculum && Array.isArray(curriculum.semesters)
+            ? curriculum.semesters : [];
+        const usedCodes = new Set(existing.map(canonicalCode).filter(Boolean));
+        const isUnused = (termName) => {
+            const code = canonicalCode(termName);
+            return !!code && !usedCodes.has(code);
+        };
+
+        let startIndex = -1;
+        existing.forEach((semester) => {
+            const code = canonicalCode(semester);
+            const label = code && typeof termCodeToName === 'function'
+                ? termCodeToName(code) : '';
+            const index = terms.indexOf(label);
+            if (index >= 0 && (startIndex < 0 || index < startIndex)) startIndex = index;
+        });
+
+        if (startIndex < 0) {
+            let entryTerm = '';
+            try {
+                const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+                const planId = storage && typeof storage.getSessionPlanId === 'function'
+                    ? storage.getSessionPlanId() : null;
+                entryTerm = storage && planId && typeof storage.getItem === 'function'
+                    ? String(storage.getItem('entryTerm', planId) || '') : '';
+            } catch (_) {}
+            if (!entryTerm && typeof window !== 'undefined') entryTerm = window.currentTermName || '';
+            startIndex = terms.indexOf(entryTerm);
+            if (startIndex < 0) startIndex = 0;
+        }
+
+        let chosenIndex = -1;
+        if (!existing.length && isUnused(terms[startIndex])) {
+            chosenIndex = startIndex;
+        } else {
+            // Search every generated term across the wrap boundary. Summer is
+            // still opt-in through the term editor; automatic additions retain
+            // the established Fall/Spring behavior.
+            for (let distance = 1; distance <= terms.length; distance++) {
+                const index = (startIndex - distance + terms.length) % terms.length;
+                const candidate = terms[index];
+                if (!String(candidate || '').includes('Summer') && isUnused(candidate)) {
+                    chosenIndex = index;
+                    break;
+                }
+            }
+        }
+
+        if (chosenIndex < 0) {
+            try {
+                const ui = (typeof window !== 'undefined') ? window.uiModal : null;
+                if (ui && typeof ui.alert === 'function') {
+                    ui.alert(
+                        'No semester term available',
+                        '<p>Every available Fall and Spring term is already in this plan. Edit an existing semester or remove one before adding another.</p>',
+                    );
+                }
+            } catch (_) {}
+            return null;
+        }
+        date_custom = String(terms[chosenIndex] || '');
+    }
+
     const board = document.querySelector(".board");
 
     let container = document.createElement("div");
@@ -159,9 +238,8 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
     else{
         curriculum.semesters.unshift(newsem);
     }
-    // Record the term index for chronological ordering. The date element
-    // contains a <p> with the term string. Use it to compute the index
-    // within the global `terms` array (defined in helper_functions.js).
+    // Retain the generated-list index for legacy UI compatibility, while the
+    // canonical termCode below is the sole academic chronology identity.
     try {
         const dateTextElem = date.querySelector('p');
         const semesterLabel = dateTextElem ? dateTextElem.textContent : '';
@@ -257,16 +335,17 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
             const detailsButton = document.createElement('button');
             detailsButton.className = 'details_course';
             detailsButton.type = 'button';
-            detailsButton.title = 'Details';
-            detailsButton.setAttribute('aria-label', 'Course details');
+            detailsButton.title = `Details for ${courseCode}`;
+            detailsButton.setAttribute('aria-label', `Details for ${courseCode}`);
             const detailsIcon = document.createElement('i');
             detailsIcon.className = 'fa-solid fa-circle-info';
+            detailsIcon.setAttribute('aria-hidden', 'true');
             detailsButton.appendChild(detailsIcon);
             const deleteButton = document.createElement('button');
             deleteButton.className = 'delete_course';
             deleteButton.type = 'button';
-            deleteButton.title = 'Delete';
-            deleteButton.setAttribute('aria-label', 'Delete course');
+            deleteButton.title = `Delete ${courseCode}`;
+            deleteButton.setAttribute('aria-label', `Delete ${courseCode}`);
             actionsDiv.appendChild(detailsButton);
             actionsDiv.appendChild(deleteButton);
             c_label.appendChild(codeDiv);
@@ -301,8 +380,11 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
             c_info.appendChild(bsDiv);
             //gr_container.innerHTML += '<div class="grade">Add grade</div>';
             //c_info.appendChild(gr_container);
-            var grade = document.createElement('div');
+            var grade = document.createElement('button');
             grade.classList.add('grade');
+            grade.type = 'button';
+            grade.setAttribute('aria-haspopup', 'listbox');
+            grade.setAttribute('aria-expanded', 'false');
             if(!myCourse.grade)
             {
                 grade.textContent = 'Add grade';
@@ -328,6 +410,10 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
                     }
                 }
             }
+            grade.setAttribute(
+                'aria-label',
+                `Grade for ${courseCode}: ${myCourse.grade || 'not entered'}`,
+            );
             c_container.appendChild(c_label)
             c_container.appendChild(c_info);
             c_container.appendChild(grade);

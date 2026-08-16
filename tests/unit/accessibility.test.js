@@ -24,11 +24,13 @@ test('static planner controls expose durable accessible names', () => {
   for (const labelledBy of [
     'courseDetailsToggleLabel',
     'hideTakenCoursesToggleLabel',
-    'offeredThisTermLabel',
+    'plannerOfferedOnlyLabel',
     'sortByScoreLabel',
   ]) {
     assert.match(HTML, new RegExp(`aria-labelledby=["']${labelledBy}["']`));
   }
+  assert.match(HTML, /<section[^>]*aria-labelledby=["']coursePickerDefaultsTitle["']/);
+  assert.match(HTML, /aria-describedby=["']coursePickerDefaultsDescription["']/);
   assert.match(HTML, /id=["']a11yStatus["'][^>]*role=["']status["']/);
 });
 
@@ -57,7 +59,10 @@ test('focus visibility and reduced-motion rules are pinned', () => {
   assert.match(CSS, /@media \(prefers-reduced-motion: reduce\)/);
   assert.match(CSS, /animation-duration:\s*0\.01ms\s*!important/);
   assert.match(CSS, /transition-duration:\s*0\.01ms\s*!important/);
-  assert.match(CSS, /--text-secondary:\s*#475569/);
-  assert.match(CSS, /--text-muted:\s*#64748B/);
-  assert.match(CSS, /--accent:\s*#2E7D32/);
+  assert.match(CSS, /--tone-slate-700:\s*#475569/);
+  assert.match(CSS, /--text-secondary:\s*var\(--tone-slate-700\)/);
+  assert.match(CSS, /--tone-slate-600:\s*#64748B/);
+  assert.match(CSS, /--text-muted:\s*var\(--tone-slate-600\)/);
+  assert.match(CSS, /--tone-green-brand:\s*#2E7D32/);
+  assert.match(CSS, /--accent:\s*var\(--tone-green-brand\)/);
 });

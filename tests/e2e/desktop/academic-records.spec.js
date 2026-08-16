@@ -53,6 +53,8 @@ const importTranscriptCustomCourseForReview = async (page, code, options = {}) =
     hasText: /Reminder: choose your programs & admit terms/i,
   });
   await expect(reminderModal).toBeVisible();
+  await expect(reminderModal)
+    .toContainText('SUIS → Student Records → General Student Information');
   await reminderModal.getByRole('button', { name: 'OK', exact: true }).click();
 
   const review = page.locator('.custom_course_modal');
@@ -129,6 +131,71 @@ const readImportedCourseProgress = (page, code) => page.evaluate((courseCode) =>
 }, code);
 
 test.describe('academic records parsing (desktop)', () => {
+  test('a failed import save preserves a live edit flushed into the pre-import checkpoint', async ({ page }) => {
+    await seedPlan(page, {
+      major: 'CS', entryTerm: 'Fall 2024-2025',
+      curriculum: [['MATH101']], grades: [['']], dates: ['Fall 2024-2025'],
+    });
+    await page.waitForFunction(() => Array.isArray(window.course_data || course_data)
+      && course_data.length > 0 && window.curriculum);
+
+    const beforePlanCount = await page.evaluate(() => window.planStorage.getPlans().length);
+    const oneCourseTranscript = `
+      <table class="courseTable">
+        <thead><tr><th><b>Fall 2024-2025</b></th></tr></thead>
+        <tbody><tr><td>CS201</td><td>Introduction to Computing</td><td>1</td><td>A</td><td>3</td><td>6</td><td>Completed</td></tr></tbody>
+      </table>`;
+    await page.locator('#academicRecordsInput').setInputFiles({
+      name: 'synthetic-save-failure.html',
+      mimeType: 'text/html',
+      buffer: Buffer.from(oneCourseTranscript),
+    });
+    await page.evaluate(() => {
+      // Keep the grade edit and import launch in one browser task so the edit
+      // is still inside the 250 ms autosave debounce when import begins.
+      document.querySelector('.course .grade').click();
+      document.querySelector('.grade-option[data-value="B"]').click();
+
+      const storage = window.planStorage;
+      const realFlush = storage.flushSaves.bind(storage);
+      storage.flushSaves = (options) => {
+        // The preflight must persist the pending B. Reject only the later flush
+        // of the imported CS201 snapshot.
+        if (options && options.onlyIfPending) return realFlush(options);
+        return false;
+      };
+      document.getElementById('importAcademicRecords').click();
+    });
+
+    const failure = page.locator('.modal-overlay').filter({ hasText: /Import was not saved/i });
+    await expect(failure).toBeVisible();
+    await expect(page.locator('.modal-overlay').filter({ hasText: /Import complete/i })).toHaveCount(0);
+    const during = await page.evaluate(() => ({
+      curriculum: JSON.parse(window.planStorage.getItem('curriculum') || '[]'),
+      grades: JSON.parse(window.planStorage.getItem('grades') || '[]'),
+    }));
+    expect(during, 'rollback keeps the pending edit that preflight made durable').toEqual({
+      curriculum: [['MATH101']],
+      grades: [['B']],
+    });
+
+    await Promise.all([
+      page.waitForNavigation(),
+      failure.getByRole('button', { name: 'OK', exact: true }).click(),
+    ]);
+    await page.waitForFunction(() => window.curriculum && Array.isArray(window.curriculum.semesters));
+    const afterReload = await page.evaluate(() => ({
+      importedOccurrences: (window.curriculum.semesters || []).flatMap((semester) =>
+        (semester.courses || []).filter((course) => course.code === 'CS201')),
+      mathGrade: (window.curriculum.semesters || []).flatMap((semester) => semester.courses || [])
+        .find((course) => course.code === 'MATH101')?.grade || '',
+      planCount: window.planStorage.getPlans().length,
+    }));
+    expect(afterReload.importedOccurrences).toEqual([]);
+    expect(afterReload.mathGrade).toBe('B');
+    expect(afterReload.planCount).toBe(beforePlanCount);
+  });
+
   test('skipping transcript custom-course review rolls back the placeholder and stays removed after reload', async ({ page }) => {
     const code = 'FEL98765';
     await seedPlan(page, {
@@ -860,6 +927,79 @@ test.describe('academic records parsing (desktop)', () => {
     expect(result.stats.importedCourses).toBe(0);
     expect(result.stats.updatedCourseCount).toBe(1);
     expect(result.stats.addedCourses).toEqual([]);
+  });
+
+  test('importing a new course reuses the matching term card and preserves its existing row', async ({ page }) => {
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: 'Fall 2024-2025',
+      curriculum: [['MATH101']],
+      grades: [['A']],
+      gradingBases: [['letter']],
+      dates: ['Fall 2024-2025'],
+    });
+    const beforeId = await page.evaluate(() => window.curriculum.semesters[0].courses[0].id);
+
+    const stats = await page.evaluate(async () => {
+      const imported = await window.academicRecordsParser.importParsedCourses([{
+        code: 'NS101',
+        title: 'Science of Nature',
+        semester: 'Fall 2024-2025',
+        grade: 'B+',
+        suCredits: 4,
+        ects: 8,
+      }], course_data, window.curriculum);
+      window.planStorage.flushSaves();
+      return imported.stats;
+    });
+
+    const state = await page.evaluate(() => ({
+      semesters: window.curriculum.semesters.map((semester) => ({
+        name: semester.termName,
+        code: window.semesterTermCode(semester),
+        courses: semester.courses.map((course) => ({
+          code: course.code,
+          id: course.id,
+          grade: course.grade,
+          gradingBasis: course.gradingBasis,
+        })),
+      })),
+      cards: [...document.querySelectorAll('.container_semester')].map((container) => ({
+        term: String((container.querySelector('.date p') || {}).textContent || '').trim(),
+        codes: [...container.querySelectorAll('.course_code')]
+          .map((element) => String(element.textContent || '').trim()),
+      })),
+      stored: {
+        curriculum: JSON.parse(window.planStorage.getItem('curriculum')),
+        grades: JSON.parse(window.planStorage.getItem('grades')),
+        gradingBases: JSON.parse(window.planStorage.getItem('gradingBases')),
+        dates: JSON.parse(window.planStorage.getItem('dates')),
+        termCodes: JSON.parse(window.planStorage.getItem('termCodes')),
+      },
+    }));
+
+    expect(stats.importedCourses).toBe(1);
+    expect(stats.addedCourses).toEqual([{
+      code: 'NS101', semester: 'Fall 2024-2025', grade: 'B+',
+    }]);
+    expect(state.semesters).toEqual([{
+      name: 'Fall 2024-2025',
+      code: '202401',
+      courses: [
+        { code: 'MATH101', id: beforeId, grade: 'A', gradingBasis: 'letter' },
+        expect.objectContaining({ code: 'NS101', grade: 'B+', gradingBasis: 'letter' }),
+      ],
+    }]);
+    expect(state.cards).toEqual([{
+      term: 'Fall 2024-2025', codes: ['MATH101', 'NS101'],
+    }]);
+    expect(state.stored).toEqual({
+      curriculum: [['MATH101', 'NS101']],
+      grades: [['A', 'B+']],
+      gradingBases: [['letter', 'letter']],
+      dates: ['Fall 2024-2025'],
+      termCodes: ['202401'],
+    });
   });
 
   test('only a selected minor catalog confers membership on a synthetic course', async ({ page }) => {

@@ -147,10 +147,12 @@ test.describe('scheduler drag-to-block', () => {
     const modal = await openGrid(page);
     await enableBlockMode(page, modal);
 
-    await dragBlock(page, 'T', DAY_START_MIN, DAY_START_MIN + 120);
-    // Must START outside the existing block (see the test above), so drag
-    // upward from below it: 700 -> 580 overlaps 520-640 and should merge.
-    await dragBlock(page, 'T', DAY_START_MIN + 180, DAY_START_MIN + 60);
+    await dragBlock(page, 'T', DAY_START_MIN + 20, DAY_START_MIN + 100);
+    // Start inside the next cell rather than on its rendered boundary. Browser
+    // subpixel rounding can put an exact edge coordinate on the existing block,
+    // where starting a new drag is intentionally ignored. This interior drag
+    // still snaps to 580-700 and overlaps the existing 520-640 range.
+    await dragBlock(page, 'T', DAY_START_MIN + 200, DAY_START_MIN + 80);
 
     expect(await readBlocked(page), 'the two overlapping ranges should merge').toEqual([
       { dayKey: 'T', start: DAY_START_MIN, end: DAY_START_MIN + 180 },
@@ -224,7 +226,9 @@ test.describe('scheduler drag-to-block', () => {
       const grid = document.querySelector('.scheduler-grid');
       if (grid) grid.scrollTop = grid.scrollHeight;
     });
-    await dragBlock(page, 'T', 19 * 60 + 40, 20 * 60 + 40);
+    // Keep both pointer coordinates inside the intended cell. Exact rendered
+    // hour edges can round into the preceding cell after the grid is scrolled.
+    await dragBlock(page, 'T', 20 * 60, 20 * 60 + 20);
 
     expect(await readBlocked(page, lateTerm)).toEqual([
       { dayKey: 'T', start: 19 * 60 + 40, end: 20 * 60 + 40 },

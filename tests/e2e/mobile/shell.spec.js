@@ -15,13 +15,22 @@ test.describe('mobile shell', () => {
 
     // Default screen is the planner.
     await expect(page.locator('body')).toHaveAttribute('data-mobile-tab', 'planner');
+    await expect(nav.locator('.m-nav-item[data-mtab="planner"]'))
+      .toHaveAttribute('aria-current', 'page');
+    await expect(nav.locator('.m-nav-item[aria-current="page"]')).toHaveCount(1);
   });
 
   test('bottom-nav tabs switch the active screen', async ({ page }) => {
     await page.goto('/');
     await page.locator('.m-nav-item[data-mtab="controls"]').click();
     await expect(page.locator('body')).toHaveAttribute('data-mobile-tab', 'controls');
+    await expect(page.locator('.m-nav-item[data-mtab="controls"]'))
+      .toHaveAttribute('aria-current', 'page');
+    await expect(page.locator('.m-nav-item[data-mtab="planner"]'))
+      .not.toHaveAttribute('aria-current', /.+/);
     await page.locator('.m-nav-item[data-mtab="planner"]').click();
     await expect(page.locator('body')).toHaveAttribute('data-mobile-tab', 'planner');
+    await expect(page.locator('.m-nav-item[data-mtab="planner"]'))
+      .toHaveAttribute('aria-current', 'page');
   });
 });

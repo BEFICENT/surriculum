@@ -20,10 +20,8 @@ const path = require('node:path');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 
-function loadScriptGlobals(relPath) {
-  const abs = path.isAbsolute(relPath) ? relPath : path.join(REPO_ROOT, relPath);
-  const src = fs.readFileSync(abs, 'utf8');
-
+function loadScriptsGlobals(relPaths) {
+  const paths = Array.isArray(relPaths) ? relPaths : [relPaths];
   const REAL = globalThis;
   const g = {};
   g.window = g;
@@ -42,8 +40,16 @@ function loadScriptGlobals(relPath) {
   });
 
   vm.createContext(sandbox);
-  vm.runInContext(src, sandbox, { filename: relPath });
+  for (const relPath of paths) {
+    const abs = path.isAbsolute(relPath) ? relPath : path.join(REPO_ROOT, relPath);
+    const src = fs.readFileSync(abs, 'utf8');
+    vm.runInContext(src, sandbox, { filename: relPath });
+  }
   return g;
 }
 
-module.exports = { loadScriptGlobals, REPO_ROOT };
+function loadScriptGlobals(relPath) {
+  return loadScriptsGlobals([relPath]);
+}
+
+module.exports = { loadScriptGlobals, loadScriptsGlobals, REPO_ROOT };

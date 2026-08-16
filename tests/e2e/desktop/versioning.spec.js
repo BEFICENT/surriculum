@@ -43,13 +43,13 @@ test.describe('data version lives in data/manifest.json', () => {
 });
 
 test.describe('plan storage schema is versioned independently', () => {
-  test('global transcript metadata persistence uses schema version 3', async ({ page }) => {
+  test('canonical semester identity persistence uses schema version 4', async ({ page }) => {
     await page.goto('/');
     const version = await page.evaluate(() => ({
       api: window.storageSchema && window.storageSchema.getCurrentSchemaVersion(),
       stored: Number(localStorage.getItem('surriculum.appDataVersion')),
     }));
-    expect(version).toEqual({ api: 3, stored: 3 });
+    expect(version).toEqual({ api: 4, stored: 4 });
   });
 
   test('schema-1 stored plans load with synthesized grading bases', async ({ page }) => {
@@ -67,11 +67,22 @@ test.describe('plan storage schema is versioned independently', () => {
     await page.waitForFunction(() => !!(window.curriculum && window.curriculum.semesters
       && window.curriculum.semesters[0] && window.curriculum.semesters[0].courses.length === 2));
 
-    const result = await page.evaluate(() => ({
-      schema: Number(localStorage.getItem('surriculum.appDataVersion')),
-      bases: window.curriculum.semesters[0].courses.map((course) => course.gradingBasis),
-    }));
-    expect(result).toEqual({ schema: 3, bases: ['letter', 'satisfactory'] });
+    const result = await page.evaluate(() => {
+      window.planStorage.requestSave();
+      window.planStorage.flushSaves();
+      return {
+        schema: Number(localStorage.getItem('surriculum.appDataVersion')),
+        bases: window.curriculum.semesters[0].courses.map((course) => course.gradingBasis),
+        termCode: window.curriculum.semesters[0].termCode,
+        storedTermCodes: JSON.parse(window.planStorage.getItem('termCodes')),
+      };
+    });
+    expect(result).toEqual({
+      schema: 4,
+      bases: ['letter', 'satisfactory'],
+      termCode: '202401',
+      storedTermCodes: ['202401'],
+    });
   });
 
   test('schema-2 stored plans preserve explicit grading bases', async ({ page }) => {
@@ -89,11 +100,23 @@ test.describe('plan storage schema is versioned independently', () => {
     await page.waitForFunction(() => window.curriculum && window.curriculum.semesters
       && window.curriculum.semesters[0] && window.curriculum.semesters[0].courses.length === 1);
 
-    const result = await page.evaluate(() => ({
-      schema: Number(localStorage.getItem('surriculum.appDataVersion')),
-      grade: window.curriculum.semesters[0].courses[0].grade,
-      basis: window.curriculum.semesters[0].courses[0].gradingBasis,
-    }));
-    expect(result).toEqual({ schema: 3, grade: 'NA', basis: 'satisfactory' });
+    const result = await page.evaluate(() => {
+      window.planStorage.requestSave();
+      window.planStorage.flushSaves();
+      return {
+        schema: Number(localStorage.getItem('surriculum.appDataVersion')),
+        grade: window.curriculum.semesters[0].courses[0].grade,
+        basis: window.curriculum.semesters[0].courses[0].gradingBasis,
+        termCode: window.curriculum.semesters[0].termCode,
+        storedTermCodes: JSON.parse(window.planStorage.getItem('termCodes')),
+      };
+    });
+    expect(result).toEqual({
+      schema: 4,
+      grade: 'NA',
+      basis: 'satisfactory',
+      termCode: '202401',
+      storedTermCodes: ['202401'],
+    });
   });
 });

@@ -298,6 +298,31 @@ test.describe('editing a custom course', () => {
     return form;
   };
 
+  test('manage and edit dialogs are named, keyboard-contained, and restore focus in stack order', async ({ page }) => {
+    await seedWithFass(page);
+    const manageOpener = page.getByRole('button', { name: /Manage Custom Courses/i });
+    await manageOpener.click();
+    const manage = page.getByRole('dialog', { name: 'Manage Custom Courses' });
+    await expect(manage).toBeVisible();
+    await expect(manage).toHaveAttribute('aria-modal', 'true');
+    const close = manage.getByRole('button', { name: 'Close', exact: true });
+    await expect(close).toBeFocused();
+
+    const edit = manage.getByRole('button', { name: /edit/i });
+    await edit.click();
+    const editDialog = page.getByRole('dialog', { name: 'Edit Custom Course' });
+    await expect(editDialog).toBeVisible();
+    await expect(editDialog.getByRole('textbox', { name: 'Course Code:' })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(editDialog).toHaveCount(0);
+    await expect(manage).toBeVisible();
+    await expect(edit).toBeFocused();
+
+    await page.keyboard.press('Escape');
+    await expect(manage).toHaveCount(0);
+    await expect(manageOpener).toBeFocused();
+  });
+
   test('the edit form prefills the existing faculty', async ({ page }) => {
     await seedWithFass(page);
     const form = await openEditForm(page);
@@ -552,6 +577,12 @@ test.describe('custom course identity and destructive changes', () => {
     await form.locator('.cc-row').nth(0).locator('input').fill('CS201');
     await form.getByRole('button', { name: 'Save', exact: true }).click();
     await dismissAlert(page, 'Course code already exists');
+
+    // CS210 is the legacy identity of the catalog's DSA210 row. It must
+    // not bypass the official-course collision check under its old code.
+    await form.locator('.cc-row').nth(0).locator('input').fill('CS210');
+    await form.getByRole('button', { name: 'Save', exact: true }).click();
+    await dismissAlert(page, 'Course code already exists');
     await expect(form).toBeVisible();
 
     expect(await page.evaluate(() => ({
@@ -603,7 +634,7 @@ test.describe('custom course identity and destructive changes', () => {
     }))).toEqual({ occurrence: true, stored: ['QQQ450'], rendered: true });
   });
 
-  test('bulk deletion removes DM classification overlays without deleting real planner courses', async ({ page }) => {
+  test('bulk deletion preserves secondary-only overlays and real planner courses', async ({ page }) => {
     await seedPlan(page, {
       major: 'CS',
       entryTerm: TERM_NAME,
@@ -621,19 +652,86 @@ test.describe('custom course identity and destructive changes', () => {
     }
 
     await page.locator('.deleteCustom').click();
-    const confirm = page.locator('.modal-overlay').filter({ hasText: /Delete custom courses/i });
-    await expect(confirm).toBeVisible();
-    await Promise.all([
-      page.waitForNavigation(),
-      confirm.getByRole('button', { name: 'Delete', exact: true }).click(),
-    ]);
-    await page.waitForFunction(() => window.curriculum && window.curriculum.hasCourse('CS201'));
+    const notice = page.locator('.modal-overlay').filter({ hasText: /No custom courses/i });
+    await expect(notice).toBeVisible();
+    await notice.getByRole('button', { name: 'OK', exact: true }).click();
 
     expect(await page.evaluate(() => ({
       hasCourse: window.curriculum.hasCourse('CS201'),
-      dmCustom: window.planStorage.getItem('customCourses_DSA'),
+      dmCustom: JSON.parse(window.planStorage.getItem('customCourses_DSA') || '[]')
+        .map((course) => `${course.Major}${course.Code}`),
       rendered: Array.from(document.querySelectorAll('.course_code')).some((node) => node.textContent === 'CS201'),
-    }))).toEqual({ hasCourse: true, dmCustom: null, rendered: true });
+    }))).toEqual({ hasCourse: true, dmCustom: ['CS201'], rendered: true });
+  });
+
+  test('deleting one canonical alias repairs primary runtime without deleting program categories', async ({ page }) => {
+    // Use a primary catalog without the official alias so the surviving
+    // definition should become live immediately after the ambiguity is fixed.
+    await page.route('**/courses/202401/BIO.jsonl', async (route) => {
+      const response = await route.fetch();
+      const body = (await response.text()).split(/\r?\n/).filter((line) => {
+        if (!line.trim()) return false;
+        const row = JSON.parse(line);
+        return !['CS210', 'DSA210'].includes(`${row.Major || ''}${row.Code || ''}`);
+      }).join('\n');
+      await route.fulfill({ response, body: `${body}\n` });
+    });
+    await seedPlan(page, {
+      major: 'BIO',
+      entryTerm: TERM_NAME,
+      doubleMajor: 'CS',
+      entryTermDM: TERM_NAME,
+      customCourses: {
+        BIO: [custom('CS210', 'free'), custom('DSA210', 'area')],
+        CS: [custom('CS210', 'core')],
+      },
+      curriculum: [[]],
+      grades: [[]],
+      dates: [TERM_NAME],
+    });
+
+    const manage = await openManage(page);
+    await manage.locator('.custom_course_manage_item', { hasText: 'CS210' })
+      .getByRole('button', { name: /delete/i }).click();
+    const confirm = page.locator('.modal-overlay').filter({ hasText: /Delete custom course/i });
+    await confirm.getByRole('button', { name: 'Delete', exact: true }).click();
+
+    const readAliasState = () => page.evaluate(() => {
+      const combined = (course) => `${course.Major || ''}${course.Code || ''}`;
+      const canonical = (course) => window.canonicalCourseCode(combined(course));
+      return {
+        primaryStored: JSON.parse(window.planStorage.getItem('customCourses_BIO') || '[]')
+          .map(combined),
+        contextStored: JSON.parse(window.planStorage.getItem('customCourses_CS') || '[]')
+          .map(combined),
+        primaryRuntime: course_data
+          .filter((course) => canonical(course) === 'DSA210')
+          .map((course) => ({
+            code: combined(course),
+            name: course.Course_Name,
+            type: course.EL_Type,
+            facultyCourse: course.Faculty_Course,
+          })),
+      };
+    });
+    await expect.poll(readAliasState).toEqual({
+      primaryStored: ['DSA210'],
+      contextStored: ['CS210'],
+      primaryRuntime: [{
+        code: 'DSA210', name: 'Custom DSA210', type: 'area', facultyCourse: 'No',
+      }],
+    });
+
+    await page.reload();
+    await page.waitForFunction(() => window.curriculum
+      && typeof course_data !== 'undefined' && Array.isArray(course_data));
+    expect(await readAliasState()).toEqual({
+      primaryStored: ['DSA210'],
+      contextStored: ['CS210'],
+      primaryRuntime: [{
+        code: 'DSA210', name: 'Custom DSA210', type: 'area', facultyCourse: 'No',
+      }],
+    });
   });
 
   test('singular delete removes the mirrored DM category without touching DM catalog data', async ({ page }) => {

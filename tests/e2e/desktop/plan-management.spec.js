@@ -1,6 +1,11 @@
 'use strict';
 
-const { test, expect } = require('../fixtures');
+const {
+  test,
+  expect,
+  ONBOARDING_KEYS,
+  ONBOARDING_RELEASE,
+} = require('../fixtures');
 
 // Plan management CRUD against the real planStorage API (scripts/plan_manager.js).
 // Plans are localStorage-backed and key-prefixed per plan id; these tests pin the
@@ -11,7 +16,14 @@ const { test, expect } = require('../fixtures');
 
 async function freshApp(page) {
   await page.goto('/');
-  await page.evaluate(() => localStorage.clear());
+  await page.evaluate(({ keys, release }) => {
+    localStorage.clear();
+    // Onboarding preferences are app-global rather than plan state. Preserve
+    // the normal post-onboarding test baseline while rebuilding a clean plan.
+    localStorage.setItem(keys.cohort, release);
+    localStorage.setItem(keys.helpSeen, 'true');
+    localStorage.setItem(keys.lastSeenRelease, release);
+  }, { keys: ONBOARDING_KEYS, release: ONBOARDING_RELEASE });
   await page.reload();
   await page.waitForFunction(() => !!(window.planStorage && window.planStorage.getPlans));
 }
@@ -92,6 +104,70 @@ test.describe('plan management', () => {
     expect(r.copyEntryTerm, 'plan-scoped data should be copied').toBe('Fall 2024-2025');
     expect(r.copyMajor).toBe('ME');
     expect(r.srcMajor, 'editing the copy must not affect the source').toBe('CS');
+  });
+
+  test('duplicatePlan rolls back an unindexed destination when storage rejects a copied key', async ({ page }) => {
+    const r = await page.evaluate(() => {
+      const src = window.planStorage.getActivePlanId();
+      window.planStorage.setItem('major', 'CS', src);
+      window.planStorage.setItem('entryTerm', 'Fall 2024-2025', src);
+      const beforeIds = window.planStorage.getPlans().map((plan) => plan.id);
+      const nativeSetItem = Storage.prototype.setItem;
+      let message = '';
+      Storage.prototype.setItem = function injectedQuotaFailure(key, value) {
+        const destinationKey = String(key).startsWith('surriculum.plan.')
+          && !String(key).startsWith(`surriculum.plan.${src}.`)
+          && String(key).endsWith('.entryTerm');
+        if (destinationKey) throw new DOMException('Injected quota failure', 'QuotaExceededError');
+        return nativeSetItem.call(this, key, value);
+      };
+      try {
+        window.planStorage.duplicatePlan(src, 'Broken copy');
+      } catch (error) {
+        message = String(error && (error.name || error.message) || error);
+      } finally {
+        Storage.prototype.setItem = nativeSetItem;
+      }
+      const afterIds = window.planStorage.getPlans().map((plan) => plan.id);
+      const orphanKeys = Object.keys(localStorage).filter((key) => {
+        if (!key.startsWith('surriculum.plan.')) return false;
+        return !key.startsWith(`surriculum.plan.${src}.`);
+      });
+      return {
+        message,
+        beforeIds,
+        afterIds,
+        orphanKeys,
+        sourceMajor: window.planStorage.getItem('major', src),
+        sourceEntryTerm: window.planStorage.getItem('entryTerm', src),
+      };
+    });
+
+    expect(r.message).toContain('QuotaExceededError');
+    expect(r.afterIds, 'a failed copy must not enter the visible plan index').toEqual(r.beforeIds);
+    expect(r.orphanKeys, 'a failed copy must leave no destination namespace').toEqual([]);
+    expect(r.sourceMajor, 'the source plan remains intact').toBe('CS');
+    expect(r.sourceEntryTerm).toBe('Fall 2024-2025');
+  });
+
+  test('the plan menu explains a duplicate storage failure instead of swallowing it', async ({ page }) => {
+    await page.evaluate(() => {
+      window.planStorage.duplicatePlan = () => {
+        throw new DOMException('Browser storage is full', 'QuotaExceededError');
+      };
+    });
+    await page.getByRole('button', { name: /Default Plan/ }).click();
+    await page.getByRole('button', { name: 'New plan' }).click();
+    const nameDialog = page.getByRole('dialog', { name: 'New plan' });
+    await nameDialog.getByRole('textbox', { name: 'New plan' }).fill('Unsaveable copy');
+    await nameDialog.getByRole('button', { name: 'Continue' }).click();
+
+    const copyDialog = page.getByRole('dialog', { name: 'Copy semesters?' });
+    await copyDialog.getByRole('button', { name: 'Copy', exact: true }).click();
+    const errorDialog = page.getByRole('dialog', { name: 'Could not create plan' });
+    await expect(errorDialog).toBeVisible();
+    await expect(errorDialog).toContainText(/QuotaExceededError|Browser storage is full/i);
+    expect(await page.evaluate(() => window.planStorage.getPlans().length)).toBe(1);
   });
 
   test('deletePlan removes a plan and its scoped data, but never the last one', async ({ page }) => {

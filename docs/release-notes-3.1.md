@@ -38,6 +38,12 @@ When an import needs a custom-course definition, its review form now offers
 occurrence and stored custom definition together. Image-only PDFs still require
 a browser **Save as PDF** export, complete HTML, or OCR.
 
+An import is now called complete only after its planner snapshot has been
+written successfully. If browser storage rejects that write, SUrriculum restores
+the checkpoint from immediately before the import, explains the failure, and
+reloads the known-good plan. Plan duplication follows the same publish-last
+rule: a copy is not added to the plan menu until every scoped value is durable.
+
 Custom-course categories are now tied to program codes rather than to the
 temporary main/double-major role. The form labels them explicitly, such as
 **CS Category**, **IE Category**, and **FIN-MINOR Category**, and supports every
@@ -60,9 +66,53 @@ Higher-level language courses do not use that allowance.
 
 ### Planner and scheduler reliability
 
+Semester-card order is now explicitly presentation-only. Academic allocation,
+progress, prerequisites, prior-credit requirements, scheduler filters, and
+retakes all use a persisted canonical term code. Dragging moves the complete
+card—so its current-term and disclosure state travel with it—and **Sort
+Semesters** restores an oldest-to-newest view. New or edited cards cannot reuse
+an existing term; transcript imports add courses to the matching card. Legacy
+duplicate-term plans remain lossless, while ambiguous scheduler updates fail
+closed instead of choosing a card by visual position.
+
 The planner gives yellow, non-blocking prerequisite warnings and checks only
-genuinely separate corequisite codes. These warnings support planning and do not
-change graduation eligibility, so special approvals remain possible.
+genuinely separate corequisite codes. It also reads SUIS **General
+Requirements**: the HUM 201/202/207 SPS-course clauses and minimum prior-credit
+rules such as 23 SU for those HUM courses and 58 SU for SPS 303 are no longer
+lost outside the ordinary prerequisite field. The scheduler uses the same
+checks, and both course-details views preserve the complete source text.
+
+Prior-SU guidance counts positive credit from eligible courses in strictly
+earlier planner semesters. It includes successful and still-planned courses,
+just like ordinary prerequisite planning, while excluding failed, withdrawn,
+grade NA, unsupported-grade, same-term, and later work. A course categorized
+N/A for the selected program can still contribute when its grade is successful
+or pending, because this is an overall prior-SU rule rather than program
+allocation. Its copy reports prior SU
+**planned/completed** rather than claiming the planner knows the university's
+official earned-credit total. All prerequisite warnings support planning and do
+not change graduation eligibility, so special approvals remain possible.
+
+The planner course picker now combines search with program/category, level,
+credit, already-planned, exact-term offering, and prerequisite controls. Its
+term-aware checks use canonical semester codes rather than visual card order.
+The result list now grows with the selected semester's visible course area,
+shrinks safely on shorter screens, and can open below the search row when that
+is the better contained placement.
+The four common picker choices are grouped in Controls as **Course picker
+defaults** and seed each newly opened picker. Offered-only filtering is local to
+that picker and follows its destination semester, so changing one semester does
+not affect another picker or the sidebar default. The former current-term-only
+wording and state are retired. Existing planner credit and requirement preferences are
+migrated once from the previously shared Scheduler values, then remain
+independent.
+It also derives cautious offering-history tags—**No Fall offerings found**,
+**No Spring offerings found**, **No Summer offerings found**, and **Not offered
+every year**—from recorded
+course-page history. Duplicate observations are collapsed, failed or sparse
+histories stay untagged, and an exact published schedule for the target term
+suppresses every historical warning. The same advisory tags appear on
+unfinished planned course cards without changing filtering or eligibility.
 
 Semester headers show the full positive-SU course load represented in that
 term. Credit not allocated to a primary-program category is called out in the
@@ -95,6 +145,15 @@ owns only `surriculum-*` caches, and can warm the active plan's public data for
 offline use. It does not delete planner `localStorage` or unrelated same-origin
 caches during an upgrade.
 
+### Easier first use and release discovery
+
+People opening SUrriculum for the first time now receive the existing **Help &
+information** guide as a one-time introduction. People returning from the
+previous live release instead receive a short **What's new in SUrriculum 3.1**
+summary, with an optional path into the full guide. The two dialogs are mutually
+exclusive, accessible by keyboard, responsive on mobile, and acknowledged for
+the whole browser installation rather than for only one saved plan.
+
 ## Privacy
 
 Transcript files are parsed inside the user's browser and are not uploaded.
@@ -115,20 +174,42 @@ and Safari 18+ (mostly), with corresponding Chromium-based Edge support. The
 complete application suite remains Chromium-focused, with a smaller
 critical-flow gate for Firefox and WebKit.
 
-## Known limitation: repeated attempts
+## Retake planning and its attempt-history limitation
 
-Version 3.1 does not introduce the planned first-class attempt model. The
-planner still stores at most one occurrence of a canonical course code, so a
-retained failed or withdrawn occurrence can block a future same-code retake.
-Import reconciliation selects the latest chronological record and reports
-superseded or `Repeated` rows, but does not preserve every attempt.
+Version 3.1 adds a conservative exact-code retake replacement. When a supported
+final attempt appears in an earlier term, both the planner picker and scheduler
+can ask permission to remove that planner entry and create a new ungraded one
+in the later term. `F/U/NA/W` are accepted without a deadline. Passing `A-D`
+and `S` use the three-regular-semester window; Summer does not consume a step.
+Future source terms, unfinished/unknown grades, `T`, multiple existing attempts,
+and different-code replacements fail closed. Cancel leaves the plan unchanged,
+and scheduler persistence failures restore the previous plan.
+Approved leave also does not consume the official window, but SUrriculum has no
+leave-semester marker; it therefore applies the calendar window conservatively
+and may require manual verification after leave.
+
+This remains a lossy planning simplification rather than the planned
+first-class attempt model. The university transcript retains every registered
+attempt and the latest repeat result replaces the earlier CGPA result even when
+it is lower; SUrriculum temporarily removes the earlier credit/GPA until the new
+grade is entered, so its planner prerequisite effect is temporarily removed as
+well. Import reconciliation selects the latest chronological record
+and reports superseded or `Repeated` rows, but does not preserve every attempt.
 
 Sabancı's `Repeated` status can describe either a same-code retake or a
-cross-code substitution without a reliable replacement link. SUrriculum
-therefore reports the ambiguity rather than guessing. Users must verify official
-retake GPA replacement and substitutions in university records.
+cross-code substitution without a reliable replacement link. SUrriculum only
+offers the planner workflow for an exact same code and reports the remaining
+ambiguity rather than guessing. Users must verify official retake GPA
+replacement and substitutions in university records.
 
 ## Release status
+
+One small, accepted implementation gap remains for a synthetic pre-2025 EE/ME
+plan containing MATH 201, MATH 202, and MATH 212 together: SUrriculum does not
+guess which surplus mathematics course to exclude. Real historical course
+lists use their matching older catalog configuration, so this should not affect
+ordinary plans; the all-three mixed case remains documented rather than given
+an invented repeat/order rule.
 
 Test results and remaining blockers are maintained in
 [release-readiness-3.1.md](release-readiness-3.1.md) rather than duplicated here.

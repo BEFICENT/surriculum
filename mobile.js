@@ -22,13 +22,24 @@
     var query = '(max-width: ' + MOBILE_MAX_WIDTH + 'px), ' +
         '((max-height: ' + MOBILE_MAX_HEIGHT + 'px) and (pointer: coarse))';
     var mq = window.matchMedia ? window.matchMedia(query) : null;
+    var lastMobileMode = null;
 
     function apply() {
         var isMobile = mq
             ? mq.matches
             : ((window.innerWidth || 9999) <= MOBILE_MAX_WIDTH);
         try {
+            var modeChanged = lastMobileMode !== null && lastMobileMode !== isMobile;
             document.body.classList.toggle('is-mobile', isMobile);
+            lastMobileMode = isMobile;
+            // An already-open scheduler was built for the previous layout mode.
+            // Let its adapter rebuild it when a resize crosses the mobile boundary;
+            // CSS alone cannot add/remove the injected day picker and course sheet.
+            if (modeChanged) {
+                document.dispatchEvent(new CustomEvent('mobileModeChanged', {
+                    detail: { isMobile: isMobile }
+                }));
+            }
         } catch (e) {
             // body not ready yet; DOMContentLoaded will re-run apply().
         }
@@ -42,26 +53,9 @@
     window.addEventListener('resize', apply, { passive: true });
     window.addEventListener('orientationchange', apply, { passive: true });
 
-    // theme.js assigns document.body.className wholesale, which drops the
-    // is-mobile class. It dispatches 'themeChanged' after every change
-    // (initial apply and manual toggles), so re-assert on that. Also
-    // re-assert once the DOM is ready and on load, for ordering safety.
-    window.addEventListener('themeChanged', apply);
+    // Re-assert once the DOM is ready and on load, for ordering safety.
     document.addEventListener('DOMContentLoaded', apply);
     window.addEventListener('load', apply);
-
-    // theme.js's toggle checks `document.body.className === 'light-theme'`
-    // exactly, which our added is-mobile class breaks (it becomes a no-op).
-    // Strip is-mobile in the capture phase — before theme.js's click handler
-    // (bubble) reads className — so its comparison is correct; the resulting
-    // themeChanged re-adds is-mobile synchronously, so nothing repaints.
-    document.addEventListener('click', function (e) {
-        try {
-            if (e.target && e.target.closest && e.target.closest('#themeToggle')) {
-                document.body.classList.remove('is-mobile');
-            }
-        } catch (_) {}
-    }, true);
 
     // Run as soon as the body exists.
     if (document.body) apply();
@@ -91,7 +85,10 @@
         try { sessionStorage.setItem('m-tab', tab); } catch (e) {}
         var items = document.querySelectorAll('.m-nav-item');
         for (var i = 0; i < items.length; i++) {
-            items[i].classList.toggle('active', items[i].getAttribute('data-mtab') === tab);
+            var active = items[i].getAttribute('data-mtab') === tab;
+            items[i].classList.toggle('active', active);
+            if (active) items[i].setAttribute('aria-current', 'page');
+            else items[i].removeAttribute('aria-current');
         }
         if (tab === 'progress') { try { buildProgress(); } catch (e) {} }
     }
@@ -273,7 +270,8 @@
         for (var c = 0; c < cards.length; c++) {
             var card = cards[c];
             var pct = (card.bar && card.bar.limit) ? Math.min(100, Math.round(card.bar.value / card.bar.limit * 100)) : 0;
-            html += '<div class="m-prog-card">';
+            html += '<div class="m-prog-card" id="m-progress-program-' + c
+                + '" role="region" aria-label="' + esc(card.title) + '">';
             html += '<div class="m-prog-title">' + esc(card.title) + '</div>';
             if (card.bar) {
                 html += '<div class="m-prog-barrow"><span>' + fmt(card.bar.value) + ' / ' + fmt(card.bar.limit) + ' ' + esc(card.bar.label) + '</span><span>' + pct + '%</span></div>';
@@ -308,7 +306,10 @@
         var multi = cards.length > 1;
         var dots = '';
         for (var d = 0; d < cards.length; d++) {
-            dots += '<button class="m-prog-dot' + (d === 0 ? ' active' : '') + '" type="button" data-i="' + d + '" aria-label="Program ' + (d + 1) + '"></button>';
+            dots += '<button class="m-prog-dot' + (d === 0 ? ' active' : '')
+                + '" type="button" data-i="' + d + '" aria-label="Show ' + esc(cards[d].title)
+                + '" aria-controls="m-progress-program-' + d + '"'
+                + (d === 0 ? ' aria-current="true"' : '') + '></button>';
         }
         screen.innerHTML =
             '<div class="m-prog-carousel' + (multi ? ' is-multi' : '') + '">' + html + '</div>' +
@@ -378,10 +379,44 @@
         var sections = area.querySelectorAll('.ms-section');
         for (var i = 0; i < sections.length; i++) {
             (function (sec, idx) {
-                var header = sec.querySelector('.ms-header');
-                if (!header) return;
+                var sourceHeader = sec.querySelector(':scope > .ms-header');
+                if (!sourceHeader) return;
+                var header = sourceHeader;
+                if (sourceHeader.tagName !== 'BUTTON') {
+                    header = document.createElement('button');
+                    header.type = 'button';
+                    header.className = sourceHeader.className;
+                    while (sourceHeader.firstChild) {
+                        var child = sourceHeader.firstChild;
+                        if (child.nodeType === 1 && child.tagName === 'DIV') {
+                            var span = document.createElement('span');
+                            span.className = child.className;
+                            while (child.firstChild) span.appendChild(child.firstChild);
+                            sourceHeader.removeChild(child);
+                            header.appendChild(span);
+                        } else {
+                            header.appendChild(child);
+                        }
+                    }
+                    sourceHeader.parentNode.replaceChild(header, sourceHeader);
+                }
+                var controlledIds = [];
+                var contentIndex = 0;
+                for (var content = header.nextElementSibling; content; content = content.nextElementSibling) {
+                    if (!content.id) content.id = 'm-progress-section-' + idx + '-content-' + (++contentIndex);
+                    controlledIds.push(content.id);
+                }
+                if (controlledIds.length) header.setAttribute('aria-controls', controlledIds.join(' '));
                 if (idx > 0) sec.classList.add('m-sec-collapsed');
-                header.addEventListener('click', function () { sec.classList.toggle('m-sec-collapsed'); });
+                else sec.classList.remove('m-sec-collapsed');
+                var syncExpanded = function () {
+                    header.setAttribute('aria-expanded', sec.classList.contains('m-sec-collapsed') ? 'false' : 'true');
+                };
+                syncExpanded();
+                header.addEventListener('click', function () {
+                    sec.classList.toggle('m-sec-collapsed');
+                    syncExpanded();
+                });
             })(sections[i], i);
         }
     }
@@ -404,7 +439,12 @@
         var detailTimer = null, lastDetailIdx = 0;
         function syncDots() {
             var idx = activeIndex();
-            for (var j = 0; j < dots.length; j++) dots[j].classList.toggle('active', j === idx);
+            for (var j = 0; j < dots.length; j++) {
+                var active = j === idx;
+                dots[j].classList.toggle('active', active);
+                if (active) dots[j].setAttribute('aria-current', 'true');
+                else dots[j].removeAttribute('aria-current');
+            }
             if (idx !== lastDetailIdx) {
                 clearTimeout(detailTimer);
                 detailTimer = setTimeout(function () {
@@ -462,11 +502,12 @@
     function initShell() {
         buildNav();
         buildProgressScreen();
-        if (!document.body.getAttribute('data-mobile-tab')) {
-            var saved = null;
-            try { saved = sessionStorage.getItem('m-tab'); } catch (e) {}
-            setTab((saved === 'controls' || saved === 'progress') ? saved : 'planner');
-        }
+        var current = document.body.getAttribute('data-mobile-tab');
+        var saved = null;
+        try { saved = sessionStorage.getItem('m-tab'); } catch (e) {}
+        var initial = (current === 'controls' || current === 'progress' || current === 'planner')
+            ? current : ((saved === 'controls' || saved === 'progress') ? saved : 'planner');
+        setTab(initial);
     }
 
     // Exposed for debugging / future in-app navigation.
@@ -489,12 +530,30 @@
 
     function ensureChevron(cont) {
         var icons = cont.querySelector('.subcontainer_semester .date .icons');
-        if (icons && !icons.querySelector('.m-sem-chevron')) {
-            var chev = document.createElement('i');
-            chev.className = 'fa-solid fa-chevron-down m-sem-chevron';
-            chev.setAttribute('aria-hidden', 'true');
-            icons.appendChild(chev);
+        if (!icons) return null;
+        var chev = icons.querySelector('.m-sem-chevron');
+        if (!chev || chev.tagName !== 'BUTTON') {
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'm-sem-chevron';
+            button.innerHTML = '<i class="fa-solid fa-chevron-down" aria-hidden="true"></i>';
+            if (chev) chev.parentNode.replaceChild(button, chev);
+            else icons.appendChild(button);
+            chev = button;
         }
+        return chev;
+    }
+
+    function syncDisclosure(cont) {
+        var toggle = ensureChevron(cont);
+        if (!toggle) return;
+        var semester = cont.querySelector('.semester');
+        var term = String(((cont.querySelector('.date p') || {}).textContent) || 'semester').trim();
+        var expanded = !cont.classList.contains('m-collapsed');
+        if (semester && semester.id) toggle.setAttribute('aria-controls', semester.id);
+        toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        toggle.setAttribute('aria-label', (expanded ? 'Collapse ' : 'Expand ') + term);
+        toggle.title = (expanded ? 'Collapse ' : 'Expand ') + term;
     }
 
     function syncSemesters() {
@@ -502,8 +561,11 @@
         for (var i = 0; i < conts.length; i++) {
             var c = conts[i];
             ensureChevron(c);
-            // Visual-only reversal (recent terms on top). Negated DOM index;
-            // consumed by `order: var(--m-order)` in mobile.css, mobile-only.
+            // The persisted/desktop presentation runs oldest-to-newest from
+            // left to right. Mobile reads the same sequence vertically in the
+            // opposite direction so the newest semester is nearest the top.
+            // This is presentation-only: DOM/model alignment and term-code
+            // based academic calculations stay untouched.
             c.style.setProperty('--m-order', String(-i));
             if (!c.hasAttribute('data-m-init')) {
                 c.setAttribute('data-m-init', '1');
@@ -513,8 +575,29 @@
         }
         // Guarantee at least one open semester when there's no current term.
         if (conts.length && !document.querySelector('.board .container_semester:not(.m-collapsed)')) {
-            conts[0].classList.remove('m-collapsed');
+            var latest = conts[0];
+            var latestCode = '';
+            for (var j = 0; j < conts.length; j++) {
+                var semesterEl = conts[j].querySelector('.semester');
+                var semesterObj = null;
+                try {
+                    semesterObj = window.curriculum && semesterEl
+                        && typeof window.curriculum.getSemester === 'function'
+                        ? window.curriculum.getSemester(semesterEl.id) : null;
+                } catch (e) {}
+                var code = '';
+                try {
+                    code = typeof window.semesterTermCode === 'function'
+                        ? String(window.semesterTermCode(semesterObj) || '') : '';
+                } catch (e) {}
+                if (code && (!latestCode || code > latestCode)) {
+                    latest = conts[j];
+                    latestCode = code;
+                }
+            }
+            latest.classList.remove('m-collapsed');
         }
+        for (var k = 0; k < conts.length; k++) syncDisclosure(conts[k]);
     }
 
     function onBoardClick(e) {
@@ -527,7 +610,10 @@
         var header = e.target.closest('.date') || e.target.closest('.total_credit');
         if (!header) return;
         var cont = header.closest('.container_semester');
-        if (cont) cont.classList.toggle('m-collapsed');
+        if (cont) {
+            cont.classList.toggle('m-collapsed');
+            syncDisclosure(cont);
+        }
     }
 
     function init() {
@@ -663,8 +749,14 @@
             }
             if (firstDay) setDay(modal, firstDay);
         } catch (e2) {}
-        modal.classList.remove('m-sheet-open');
+        setCourseSheetOpen(modal, false);
         modal.classList.add('m-preview');
+        try {
+            requestAnimationFrame(function () {
+                var back = modal.querySelector('.m-prev-back');
+                if (back) back.focus({ preventScroll: true });
+            });
+        } catch (e3) {}
     }
     function clearAffectedDays(modal) {
         var marks = modal.querySelectorAll('.m-sched-day.m-day-affected');
@@ -682,6 +774,69 @@
         modal.classList.remove('m-preview');
         modal.__mPreviewCard = null;
         modal.__mPreviewSectionRow = null;
+    }
+
+    // The course browser is visually off-canvas while closed, so its interactive
+    // descendants must leave the accessibility tree and tab order at the same
+    // time. This is the single state transition for every sheet entry/exit path.
+    function setCourseSheetOpen(modal, open, opener) {
+        if (!modal) return;
+        var sidebar = modal.querySelector('.scheduler-sidebar');
+        if (!sidebar) return;
+        var nextOpen = !!open;
+        var wasOpen = modal.classList.contains('m-sheet-open');
+
+        if (nextOpen && opener && opener.nodeType === 1) modal.__mSheetOpener = opener;
+        modal.__mSheetFocusToken = (modal.__mSheetFocusToken || 0) + 1;
+        var focusToken = modal.__mSheetFocusToken;
+        modal.classList.toggle('m-sheet-open', nextOpen);
+
+        try {
+            sidebar.inert = !nextOpen;
+            if (nextOpen) sidebar.removeAttribute('inert');
+            else sidebar.setAttribute('inert', '');
+        } catch (e) {
+            if (nextOpen) sidebar.removeAttribute('inert');
+            else sidebar.setAttribute('inert', '');
+        }
+        sidebar.setAttribute('aria-hidden', nextOpen ? 'false' : 'true');
+
+        if (!nextOpen) {
+            var restore = (opener && opener.nodeType === 1) ? opener : modal.__mSheetOpener;
+            if ((wasOpen || !!opener) && restore && restore.isConnected && typeof restore.focus === 'function') {
+                try { restore.focus({ preventScroll: true }); } catch (e2) {}
+            }
+            return;
+        }
+
+        // Landscape uses a side panel whose close control is the safest first
+        // target. Portrait lands directly in course search, matching the action
+        // the user requested. Wait until the transform has been applied.
+        try {
+            requestAnimationFrame(function () {
+                requestAnimationFrame(function () {
+                    if (modal.__mSheetFocusToken !== focusToken || !modal.classList.contains('m-sheet-open')) return;
+                    var landscape = window.matchMedia('(orientation: landscape)').matches;
+                    var initial = landscape
+                        ? sidebar.querySelector('.m-sched-sheet-close')
+                        : sidebar.querySelector('.scheduler-search');
+                    if (!initial) initial = sidebar.querySelector('.m-sched-sheet-close, .scheduler-search, button, input, select');
+                    try { if (initial) initial.focus({ preventScroll: landscape }); } catch (e3) {}
+
+                    // The landscape search row follows saved-selection panels in
+                    // DOM order. Keep it near the top while the sticky close bar
+                    // remains available and focused.
+                    if (!landscape) return;
+                    var resultsHead = sidebar.querySelector('.scheduler-results-head');
+                    var sheetBar = sidebar.querySelector('.m-sched-sheet-bar');
+                    if (!resultsHead) return;
+                    var panelRect = sidebar.getBoundingClientRect();
+                    var headRect = resultsHead.getBoundingClientRect();
+                    var stickyClearance = sheetBar ? sheetBar.offsetHeight : 0;
+                    sidebar.scrollTop += headRect.top - panelRect.top - stickyClearance - 8;
+                });
+            });
+        } catch (e4) {}
     }
     // First visible day that a committed (non-preview) course block sits on.
     function firstDayForCourse(modal, courseId) {
@@ -795,7 +950,7 @@
             fab.type = 'button';
             fab.className = 'm-sched-fab';
             fab.innerHTML = '<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><span>Add courses</span>';
-            fab.addEventListener('click', function () { modal.classList.add('m-sheet-open'); });
+            fab.addEventListener('click', function () { setCourseSheetOpen(modal, true, fab); });
             modal.appendChild(fab);
         }
         if (!modal.querySelector('.m-sched-done-fab')) {
@@ -803,7 +958,7 @@
             doneFab.type = 'button';
             doneFab.className = 'm-sched-done-fab';
             doneFab.innerHTML = '<i class="fa-solid fa-check" aria-hidden="true"></i><span>Done</span>';
-            doneFab.addEventListener('click', function () { modal.classList.remove('m-sheet-open'); });
+            doneFab.addEventListener('click', function () { setCourseSheetOpen(modal, false); });
             modal.appendChild(doneFab);
         }
 
@@ -821,7 +976,7 @@
             cSearch.className = 'm-sched-corner-search';
             cSearch.setAttribute('aria-label', 'Add courses');
             cSearch.innerHTML = '<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>';
-            cSearch.addEventListener('click', function () { modal.classList.add('m-sheet-open'); });
+            cSearch.addEventListener('click', function () { setCourseSheetOpen(modal, true, cSearch); });
             corner.appendChild(cSearch);
         }
         var sBar = modal.querySelector('.m-sched-sheet-bar');
@@ -831,7 +986,7 @@
             sClose.className = 'm-sched-sheet-close';
             sClose.setAttribute('aria-label', 'Close');
             sClose.innerHTML = '<i class="fa-solid fa-xmark" aria-hidden="true"></i>';
-            sClose.addEventListener('click', function () { modal.classList.remove('m-sheet-open'); });
+            sClose.addEventListener('click', function () { setCourseSheetOpen(modal, false); });
             sBar.appendChild(sClose);
         }
 
@@ -905,7 +1060,7 @@
             modal.appendChild(pbar);
             pbar.querySelector('.m-prev-back').addEventListener('click', function () {
                 endPreview(modal);
-                modal.classList.add('m-sheet-open');
+                setCourseSheetOpen(modal, true);
             });
             pbar.querySelector('.m-prev-add').addEventListener('click', function () {
                 // Add the exact previewed section when a section row was tapped,
@@ -915,6 +1070,10 @@
                 var pick = row ? row.querySelector('.scheduler-section-pick')
                     : (card ? card.querySelector('.scheduler-pick') : null);
                 endPreview(modal);
+                // The preview controls are hidden by endPreview(). Put focus on
+                // the original sheet trigger before the section picker captures
+                // its opener, so closing that picker never returns to hidden UI.
+                setCourseSheetOpen(modal, false, modal.__mSheetOpener);
                 if (pick) pick.click();
             });
         }
@@ -964,6 +1123,10 @@
                 }
             }, true);
         }
+        modal.__setCourseSheetOpen = function (open, opener) {
+            setCourseSheetOpen(modal, open, opener);
+        };
+        setCourseSheetOpen(modal, false);
     }
 
     // Landscape "whole visible schedule fits": seed the standard 660-minute
@@ -973,10 +1136,10 @@
         try {
             if (document.body.classList.contains('is-mobile') && window.matchMedia('(orientation: landscape)').matches) {
                 // Pre-render estimate for the first paint (no grid to measure yet):
-                // overhead ≈ modal header + week header (~93) + topGap (14); 660 =
+                // overhead ≈ compact modal header + week header + top gap (~90); 660 =
                 // day length. refitLandscapeInPlace() corrects this exactly from the
                 // real grid height once it exists.
-                var ppm = (window.innerHeight - 107) / 660;
+                var ppm = (window.innerHeight - 90) / 660;
                 ppm = Math.max(0.26, Math.min(1.0, ppm));
                 document.documentElement.style.setProperty('--m-fit-ppm', ppm.toFixed(3) + 'px');
             } else {
@@ -991,6 +1154,9 @@
     function reRenderOpenScheduler() {
         var modal = document.querySelector('.scheduler-modal');
         if (!modal) return;
+        try {
+            if (typeof modal.__setCourseSheetOpen === 'function') modal.__setCourseSheetOpen(false);
+        } catch (e0) {}
         var closeBtn = modal.querySelector('.scheduler-close');
         try { if (closeBtn) closeBtn.click(); } catch (e) {}
         setTimeout(function () {
@@ -1082,6 +1248,12 @@
         try { window.addEventListener('DOMContentLoaded', updateFitPpm); } catch (e) {}
         try { window.addEventListener('load', updateFitPpm); } catch (e) {}
         try { document.addEventListener('themeChanged', updateFitPpm); } catch (e) {}
+        try {
+            document.addEventListener('mobileModeChanged', function () {
+                updateFitPpm();
+                reRenderOpenScheduler();
+            });
+        } catch (e) {}
         try {
             var mq = window.matchMedia('(orientation: landscape)');
             var onOrient = function () {

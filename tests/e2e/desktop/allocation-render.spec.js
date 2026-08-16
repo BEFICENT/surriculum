@@ -42,6 +42,14 @@ const seedCreditPlan = (page, term, courses) => seedPlan(page, {
 });
 
 const addCourseThroughPicker = async (page, code) => {
+  // These assertions exercise workload/allocation rendering, not whether the
+  // course appears in the destination term's exact schedule.
+  const offeredOnly = page.locator('#plannerOfferedOnlyToggle');
+  if (await offeredOnly.isChecked()) {
+    await page.locator('.toggle-switch:has(#plannerOfferedOnlyToggle)').click();
+    await expect(offeredOnly).not.toBeChecked();
+  }
+
   const semester = page.locator('.container_semester').first();
   await semester.locator('.addCourse').click();
   await semester.locator('.course_select').fill(code);
