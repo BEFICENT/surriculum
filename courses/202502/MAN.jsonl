@@ -138,7 +138,6 @@
 {"Major": "BIO", "Code": "423", "Course_Name": "Neurobiology", "ECTS": "6", "Engineering": 2.0, "Basic_Science": 4.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "436", "Course_Name": "Cancer Biology", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "444", "Course_Name": "Bioengineering", "ECTS": "6", "Engineering": 4.0, "Basic_Science": 2.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "BIO", "Code": "445", "Course_Name": "Plant Tissue Culture Techniques", "ECTS": "7", "Engineering": 3.0, "Basic_Science": 4.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "446", "Course_Name": "Biology of Aging", "ECTS": "6", "Engineering": 1.0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "452", "Course_Name": "Immunology", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "BIO", "Code": "460", "Course_Name": "Evolution", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
@@ -303,7 +302,6 @@
 {"Major": "ENS", "Code": "410", "Course_Name": "Advanced Solid Modeling Techniques", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ENS", "Code": "413", "Course_Name": "Experimental Methods in Nanoscience I", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ENS", "Code": "414", "Course_Name": "Experimental Methods in Nanoscience II", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "ENS", "Code": "4803", "Course_Name": "Special Topics in FENS: Nanobiotechnology", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ENT", "Code": "201", "Course_Name": "The Foundations of Entrepreneurship", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "FRE", "Code": "110", "Course_Name": "Basic French I", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "FRE", "Code": "120", "Course_Name": "Basic French II", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SL", "EL_Type": "free", "Faculty_Course": "No"}
@@ -452,7 +450,6 @@
 {"Major": "NS", "Code": "209", "Course_Name": "What is there in the Universe: \"Beyond the Milky Way\"", "ECTS": "5", "Engineering": 0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "NS", "Code": "216", "Course_Name": "Life on Earth", "ECTS": "6", "Engineering": 1.0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "FENS"}
 {"Major": "NS", "Code": "218", "Course_Name": "Fundamentals of Nanoscience", "ECTS": "6", "Engineering": 2.0, "Basic_Science": 4.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "FENS"}
-{"Major": "NS", "Code": "222", "Course_Name": "Planetary Systems and Extrasolar Planets", "ECTS": "5", "Engineering": 0, "Basic_Science": 5.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "PHIL", "Code": "202", "Course_Name": "Problems of Philosophy", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "FASS"}
 {"Major": "PHIL", "Code": "300", "Course_Name": "Philosophy of Science", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "PHIL", "Code": "301", "Course_Name": "Philosophy of Social Sciences", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
