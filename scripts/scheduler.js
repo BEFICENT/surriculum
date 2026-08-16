@@ -1211,6 +1211,39 @@
         const pi = (() => {
           try { return coursePageInfoMap && typeof coursePageInfoMap.get === 'function' ? coursePageInfoMap.get(cid) : null; } catch (_) { return null; }
         })();
+        const registrationDescription = (() => {
+          try {
+            const registry = (typeof window !== 'undefined') ? window.registrationRules : null;
+            return registry && typeof registry.describeRule === 'function'
+              ? registry.describeRule(cid) : null;
+          } catch (_) {
+            return null;
+          }
+        })();
+        const registrationEvaluation = (() => {
+          try {
+            const shared = (typeof window !== 'undefined') ? window.courseRequisites : null;
+            const context = buildSchedulerRequirementContext();
+            if (!pi || !shared || typeof shared.evaluateCandidateForTerm !== 'function') return null;
+            const result = shared.evaluateCandidateForTerm(pi, cid, context);
+            return result && result.supplemental ? result.supplemental : null;
+          } catch (_) {
+            return null;
+          }
+        })();
+        const supplementalGuidance = registrationEvaluation || registrationDescription;
+        const hasSupplementalGuidance = !!(
+          supplementalGuidance
+          && (
+            supplementalGuidance.hasRule
+            || supplementalGuidance.ruleId
+            || (Array.isArray(supplementalGuidance.guidance)
+              && supplementalGuidance.guidance.length)
+          )
+        );
+        const supplementalSource = hasSupplementalGuidance
+          && supplementalGuidance.source && typeof supplementalGuidance.source === 'object'
+          ? supplementalGuidance.source : {};
         const instructorHistoryInfo = (() => {
           try {
             return courseInstructorHistoryMap && typeof courseInstructorHistoryMap.get === 'function'
@@ -1466,7 +1499,7 @@
           }));
 
           const formattedDesc = formatDescription(desc);
-          const descHtml = formattedDesc
+          const descHtml = formattedDesc && supplementalSource.supersedesDescription !== true
             ? (
               `<div class="scheduler-details-subsection">` +
               `<div class="scheduler-details-subtitle">Description</div>` +
@@ -1474,7 +1507,7 @@
               `</div>`
             )
             : '';
-          const prereqHtml = prereq || !generalPrereq
+          const prereqHtml = prereq || (!generalPrereq && !hasSupplementalGuidance)
             ? (
               `<div class="scheduler-details-subsection">` +
               `<div class="scheduler-details-subtitle">Prerequisites</div>` +
@@ -1492,6 +1525,54 @@
               `</div>`
             )
             : '';
+          const supplementalGuidanceHtml = (() => {
+            if (!hasSupplementalGuidance) return '';
+            const guidanceApi = (typeof window !== 'undefined')
+              ? window.courseFilters : null;
+            const guidance = guidanceApi
+              && typeof guidanceApi.supplementalGuidanceItems === 'function'
+              ? guidanceApi.supplementalGuidanceItems(supplementalGuidance, {
+                includeMet: true,
+                includeComponents: true,
+                includeAllBranches: !registrationEvaluation,
+              })
+              : (Array.isArray(supplementalGuidance.guidance)
+                ? supplementalGuidance.guidance : []);
+            const seen = new Set();
+            const items = guidance.map((item) => (
+              String(item && item.text ? item.text : item || '').trim()
+            )).filter((text) => {
+              if (!text || seen.has(text)) return false;
+              seen.add(text);
+              return true;
+            });
+            if (!items.length && supplementalSource.summary) {
+              items.push(String(supplementalSource.summary));
+            }
+            const state = String(supplementalGuidance.status || 'review').toLowerCase();
+            const stateLabel = state === 'met' ? 'Met'
+              : (state === 'unmet' ? 'Needs attention' : 'Review');
+            const sourceUrl = supplementalSource.url || coursePageUrl;
+            const authority = supplementalSource.authority || 'SUIS';
+            const reviewedAt = supplementalSource.reviewedAt
+              ? `, reviewed ${String(supplementalSource.reviewedAt)}` : '';
+            const sourceLine = sourceUrl
+              ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(authority)} course page</a>${escapeHtml(reviewedAt)}`
+              : `${escapeHtml(authority)}${escapeHtml(reviewedAt)}`;
+            return '<div class="scheduler-details-subsection scheduler-registration-guidance">'
+              + '<div class="scheduler-registration-guidance-heading">'
+              + '<div class="scheduler-details-subtitle">Registration guidance</div>'
+              + `<span class="course-registration-state is-${escapeHtml(state)}">${escapeHtml(stateLabel)}</span>`
+              + '</div>'
+              + (items.length
+                ? '<ul class="scheduler-details-list">'
+                  + items.map((text) => `<li>${escapeHtml(text)}</li>`).join('')
+                  + '</ul>'
+                : '<div class="scheduler-details-paragraph">Review the linked course page before registration.</div>')
+              + `<div class="course-registration-source">Source: ${sourceLine}.</div>`
+              + '<div class="course-registration-advisory">Advisory only—confirm eligibility and any exceptions in SUIS or with your advisor.</div>'
+              + '</div>';
+          })();
 
           return (
             `<div class="scheduler-details-card">` +
@@ -1499,6 +1580,7 @@
             (metaParts.length ? `<div class="scheduler-details-meta">${metaParts.join('')}</div>` : '') +
             prereqHtml +
             generalRequirementsHtml +
+            supplementalGuidanceHtml +
             `<div class="scheduler-details-subsection">` +
             `<div class="scheduler-details-subtitle">Corequisites</div>` +
             `<div class="scheduler-details-paragraph">${coreq ? escapeHtml(coreq) : 'None'}</div>` +
@@ -2318,6 +2400,59 @@
     let orphanByCourse = {};  // course_id -> [base course_ids that require this course as coreq]
     let reverseCoreqIndex = null; // Map(coreq -> Set(baseCourse))
 
+    const buildSchedulerRequirementContext = () => {
+      try {
+        const cur = (typeof window !== 'undefined') ? window.curriculum : null;
+        const filters = (typeof window !== 'undefined') ? window.courseFilters : null;
+        const shared = (typeof window !== 'undefined') ? window.courseRequisites : null;
+        if (!cur) return null;
+        let context = filters && typeof filters.buildTargetContext === 'function'
+          ? filters.buildTargetContext(cur, termCode) : null;
+        if (!context && shared && typeof shared.buildTermRequirementContext === 'function') {
+          context = shared.buildTermRequirementContext(
+            cur.semesters,
+            termCode,
+            (course) => (
+              typeof cur.isDegreeEligibleCourse !== 'function'
+              || cur.isDegreeEligibleCourse(course)
+            ),
+          );
+          if (context && filters && typeof filters.buildProgramProfiles === 'function') {
+            context.programProfiles = filters.buildProgramProfiles(cur);
+          }
+        }
+        if (!context || typeof context !== 'object') return null;
+
+        // A Scheduler selection is a same-term occurrence.  This preserves
+        // explicit concurrent-prerequisite behavior without allowing it to
+        // contribute to strictly-prior course or SU requirements.
+        const targetTerm = Number(context.targetTerm) || Number(termCode) || 0;
+        const occurrences = Array.isArray(context.occurrences)
+          ? context.occurrences.slice() : [];
+        const throughCodes = context.throughCodes && typeof context.throughCodes.has === 'function'
+          ? new Set(context.throughCodes) : new Set();
+        const present = new Set(occurrences.map((occurrence) => (
+          normalizeCourseId(occurrence && occurrence.code)
+        )).filter(Boolean));
+        Object.keys(selected || {}).forEach((rawCode) => {
+          const code = normalizeCourseId(rawCode);
+          if (!code) return;
+          throughCodes.add(code);
+          if (present.has(code)) return;
+          occurrences.push({
+            code,
+            term: targetTerm,
+            eligible: true,
+            course: { code, grade: '' },
+            semester: { termCode },
+          });
+        });
+        return Object.assign({}, context, { occurrences, throughCodes });
+      } catch (_) {
+        return null;
+      }
+    };
+
     const scheduleBtn = body.querySelector('.scheduler-schedule-toggle');
     const scheduleNameEl = body.querySelector('.scheduler-schedule-name');
     const termSelectEl = body.querySelector('.scheduler-term-select');
@@ -2744,9 +2879,7 @@
         for (const entry of idx.values()) {
           const courseId = entry && entry.course_id ? normalizeCourseId(entry.course_id) : '';
           if (!courseId) continue;
-          const info = coursePageInfoMap.get(courseId);
-          if (!info || !info.corequisites) continue;
-          const coreqs = extractCoreqCourseIdsFromCoursePageInfoField(info.corequisites)
+          const coreqs = getCoreqsFor(courseId)
             .map(c => normalizeCourseId(c))
             .filter(Boolean)
             .filter(c => idx.get(c));
@@ -2764,12 +2897,36 @@
     const getCoreqsFor = (courseId) => {
       try {
         const cid = normalizeCourseId(courseId);
-        if (!cid || !coursePageInfoMap) return [];
-        const info = coursePageInfoMap.get(cid);
-        if (!info || !info.corequisites) return [];
-        return extractCoreqCourseIdsFromCoursePageInfoField(info.corequisites)
-          .map(c => normalizeCourseId(c))
-          .filter(Boolean);
+        if (!cid) return [];
+        const registry = (typeof window !== 'undefined') ? window.registrationRules : null;
+        const componentMetadata = registry && typeof registry.getComponentMetadata === 'function'
+          ? registry.getComponentMetadata(cid) : null;
+        // Child records such as ENS491R often contain the reverse corequisite
+        // text.  Treating that as another forward edge creates a parent/child
+        // cycle, so the reviewed component metadata is authoritative here.
+        if (componentMetadata && componentMetadata.plannerCourse === false) return [];
+
+        const out = new Set();
+        const info = coursePageInfoMap && typeof coursePageInfoMap.get === 'function'
+          ? coursePageInfoMap.get(cid) : null;
+        if (info && info.corequisites) {
+          extractCoreqCourseIdsFromCoursePageInfoField(info.corequisites)
+            .map(c => normalizeCourseId(c))
+            .filter(Boolean)
+            .forEach((code) => out.add(code));
+        }
+        if (registry && typeof registry.describeRule === 'function') {
+          const described = registry.describeRule(cid);
+          const components = described && Array.isArray(described.components)
+            ? described.components : [];
+          components.forEach((component) => {
+            const code = normalizeCourseId(
+              component && (component.courseCode || component.course || component.code || component.id),
+            );
+            if (code && code !== cid) out.add(code);
+          });
+        }
+        return Array.from(out);
       } catch (_) {
         return [];
       }
@@ -4467,6 +4624,7 @@
       const checkPrereqs = !!(prereqToggle && prereqToggle.checked);
       const showUnmetPrereqs = checkPrereqs && !!(showUnmetPrereqToggle && showUnmetPrereqToggle.checked);
       const unmetPrereqById = new Map(); // course_id -> { mode, missing }
+      const requirementEvaluationById = new Map(); // course_id -> shared evaluator result
       const takenBeforeSet = checkPrereqs ? (computeTakenBeforeCurrentTermSet() || new Set()) : null;
       const priorEligibleSu = (() => {
         if (!checkPrereqs) return 0;
@@ -4495,12 +4653,21 @@
         } catch (_) {}
         return out;
       })();
+      const schedulerRequirementContext = checkPrereqs
+        ? buildSchedulerRequirementContext() : null;
       const takenBeforeSig = (() => {
         try {
           if (!checkPrereqs || !takenBeforeSet || !(takenBeforeSet instanceof Set)) return '';
           return Array.from(takenBeforeSet).sort().join('|')
             + '::' + Array.from(concurrentPrereqSet).sort().join('|')
-            + '::su=' + String(priorEligibleSu);
+            + '::su=' + String(priorEligibleSu)
+            + '::profiles=' + (
+              schedulerRequirementContext
+              && Array.isArray(schedulerRequirementContext.programProfiles)
+                ? schedulerRequirementContext.programProfiles.map((profile) => (
+                  `${profile.role || ''}:${profile.program || ''}:${profile.admitTermCode || ''}:${profile.universityAdmitTermCode || ''}`
+                )).join('|') : ''
+            );
         } catch (_) {
           return '';
         }
@@ -4530,7 +4697,11 @@
           if (!cid) return null;
           try {
             if (prereqCheckCache && prereqCheckCache.map && prereqCheckCache.map.has(cid)) {
-              return prereqCheckCache.map.get(cid);
+              const cached = prereqCheckCache.map.get(cid);
+              if (cached && cached.evaluation) {
+                requirementEvaluationById.set(cid, cached.evaluation);
+              }
+              return cached;
             }
           } catch (_) {}
           const info = coursePageInfoMap.get(cid);
@@ -4541,22 +4712,33 @@
           // below only as a defensive fallback for a partially cached shell.
           try {
             const shared = (typeof window !== 'undefined') ? window.courseRequisites : null;
-            if (shared && typeof shared.evaluatePrerequisites === 'function') {
-              const sharedResult = typeof shared.evaluateCoursePrerequisites === 'function'
-                ? shared.evaluateCoursePrerequisites(info, takenBeforeSet, {
-                  concurrentAvailableCodes: concurrentPrereqSet,
-                })
-                : (text ? shared.evaluatePrerequisites(text, takenBeforeSet, {
-                  concurrentAvailableCodes: concurrentPrereqSet,
-                }) : null);
-              const priorSuRequirement = typeof shared.minimumPriorSuRequirement === 'function'
-                ? shared.minimumPriorSuRequirement(info, priorEligibleSu) : null;
-              const result = sharedResult || priorSuRequirement
+            if (shared && typeof shared.evaluateCandidateForTerm === 'function'
+              && schedulerRequirementContext) {
+              const evaluation = shared.evaluateCandidateForTerm(
+                info,
+                cid,
+                schedulerRequirementContext,
+              );
+              if (evaluation) requirementEvaluationById.set(cid, evaluation);
+              const sharedResult = evaluation && evaluation.prerequisite
+                ? evaluation.prerequisite : null;
+              const priorSuRequirement = evaluation && evaluation.priorSuRequirement
+                ? evaluation.priorSuRequirement : null;
+              const result = evaluation && (
+                evaluation.status === 'unmet'
+                || evaluation.status === 'review'
+                || (evaluation.supplemental && evaluation.supplemental.hasRule)
+              )
                 ? {
                   ...(sharedResult || {
                     mode: 'expr', required: [], concurrent: [], oneOf: [], oneOfConcurrent: [],
                   }),
                   priorSuRequirement,
+                  status: evaluation.status,
+                  supplemental: evaluation.supplemental || null,
+                  legacy: evaluation.legacy || null,
+                  filterBlocking: evaluation.filterBlocking === true,
+                  evaluation,
                 }
                 : null;
               try {
@@ -4783,6 +4965,17 @@
         // course card(s) so they can pick/change the linked section there.
         try {
           const cid = normalizeCourseId(id);
+          const registry = (typeof window !== 'undefined') ? window.registrationRules : null;
+          const componentMetadata = registry && typeof registry.getComponentMetadata === 'function'
+            ? registry.getComponentMetadata(cid) : null;
+          if (componentMetadata && componentMetadata.plannerCourse === false) {
+            const parentId = normalizeCourseId(componentMetadata.parentCourseCode);
+            if (q && parentId) {
+              const parentEntry = scheduleIndex.get(parentId);
+              if (parentEntry) addEntry(parentEntry);
+            }
+            continue;
+          }
           const parents = reverseCoreqIndex ? reverseCoreqIndex.get(cid) : null;
           const isCoreqOnly = !!(parents && parents.size);
           if (isCoreqOnly) {
@@ -4864,6 +5057,10 @@
               const hasUnmet = (() => {
                 try {
                   if (!unmet) return false;
+                  if (unmet.supplemental && unmet.supplemental.hasRule) {
+                    return unmet.filterBlocking === true
+                      || unmet.supplemental.definitiveUnmet === true;
+                  }
                   if (unmet.mode === 'expr') {
                     const req = Array.isArray(unmet.required) ? unmet.required.length : 0;
                     const groups = Array.isArray(unmet.oneOf) ? unmet.oneOf.length : 0;
@@ -4930,16 +5127,44 @@
               return null;
             }
           })();
-          const unmetRequired = (unmetPrereq && unmetPrereq.mode === 'expr' && Array.isArray(unmetPrereq.required)) ? unmetPrereq.required.slice() : [];
-          const unmetOneOf = (unmetPrereq && unmetPrereq.mode === 'expr' && Array.isArray(unmetPrereq.oneOf)) ? unmetPrereq.oneOf.slice() : [];
-          const unmetList = (unmetPrereq && Array.isArray(unmetPrereq.missing)) ? unmetPrereq.missing.slice() : [];
-          const priorSuRequirement = unmetPrereq && unmetPrereq.priorSuRequirement
-            ? unmetPrereq.priorSuRequirement : null;
-          const hasUnmetPrereq = !!(
-            (unmetPrereq && unmetPrereq.mode === 'expr' && (unmetRequired.length || unmetOneOf.length)) ||
-            (unmetList && unmetList.length) ||
-            priorSuRequirement
+          const requirementEvaluation = (() => {
+            try {
+              const cid = normalizeCourseId(e.course_id);
+              return cid ? requirementEvaluationById.get(cid) || null : null;
+            } catch (_) {
+              return null;
+            }
+          })();
+          const supplemental = requirementEvaluation && requirementEvaluation.supplemental
+            ? requirementEvaluation.supplemental
+            : (unmetPrereq && unmetPrereq.supplemental ? unmetPrereq.supplemental : null);
+          const hasSupplemental = !!(supplemental && supplemental.hasRule);
+          const legacyEvaluation = hasSupplemental && requirementEvaluation
+            && requirementEvaluation.legacy ? requirementEvaluation.legacy : null;
+          const ordinaryUnmetPrereq = hasSupplemental
+            ? (legacyEvaluation && legacyEvaluation.status === 'unmet'
+              ? Object.assign(
+                {
+                  mode: 'expr', required: [], concurrent: [], oneOf: [], oneOfConcurrent: [],
+                },
+                legacyEvaluation.prerequisite || {},
+                { priorSuRequirement: legacyEvaluation.priorSuRequirement || null },
+              )
+              : null)
+            : unmetPrereq;
+          const unmetRequired = (ordinaryUnmetPrereq && ordinaryUnmetPrereq.mode === 'expr' && Array.isArray(ordinaryUnmetPrereq.required)) ? ordinaryUnmetPrereq.required.slice() : [];
+          const unmetOneOf = (ordinaryUnmetPrereq && ordinaryUnmetPrereq.mode === 'expr' && Array.isArray(ordinaryUnmetPrereq.oneOf)) ? ordinaryUnmetPrereq.oneOf.slice() : [];
+          const unmetList = (ordinaryUnmetPrereq && Array.isArray(ordinaryUnmetPrereq.missing)) ? ordinaryUnmetPrereq.missing.slice() : [];
+          const priorSuRequirement = ordinaryUnmetPrereq && ordinaryUnmetPrereq.priorSuRequirement
+            ? ordinaryUnmetPrereq.priorSuRequirement : null;
+          const hasOrdinaryUnmetPrereq = !!(
+            (ordinaryUnmetPrereq && ordinaryUnmetPrereq.mode === 'expr'
+              && (unmetRequired.length || unmetOneOf.length))
+            || (unmetList && unmetList.length)
+            || priorSuRequirement
           );
+          const hasUnmetPrereq = hasOrdinaryUnmetPrereq
+            || !!(hasSupplemental && supplemental.status === 'unmet');
           const typeParts = [];
           try {
             if (d && d.mainType) typeParts.push(`Major: ${String(d.mainType).toUpperCase()}`);
@@ -5081,9 +5306,9 @@
               } catch (_) {}
               const prereqHtml = (() => {
                 try {
-                  if (!hasUnmetPrereq) return '';
+                  if (!hasOrdinaryUnmetPrereq) return '';
                   const lines = [];
-                  if (unmetPrereq && unmetPrereq.mode === 'expr') {
+                  if (ordinaryUnmetPrereq && ordinaryUnmetPrereq.mode === 'expr') {
                     if (unmetRequired.length) {
                       const missing = unmetRequired.slice(0, 6).join(', ') + (unmetRequired.length > 6 ? '…' : '');
                       lines.push(`<div class="scheduler-course-meta"><span class="scheduler-badge-prereq">Prereq</span> Missing: ${escapeHtml(missing)}</div>`);
@@ -5104,10 +5329,53 @@
                     return lines.join('');
                   }
 
-                  const mode = unmetPrereq && unmetPrereq.mode ? String(unmetPrereq.mode) : 'and';
+                  const mode = ordinaryUnmetPrereq && ordinaryUnmetPrereq.mode
+                    ? String(ordinaryUnmetPrereq.mode) : 'and';
                   const label = mode === 'or' ? 'Needs one of:' : 'Missing:';
                   const missing = unmetList.slice(0, 6).join(', ') + (unmetList.length > 6 ? '…' : '');
                   return `<div class="scheduler-course-meta"><span class="scheduler-badge-prereq">Prereq</span> ${escapeHtml(label)} ${escapeHtml(missing)}</div>`;
+                } catch (_) {
+                  return '';
+                }
+              })();
+              const registrationGuidanceHtml = (() => {
+                try {
+                  if (!hasSupplemental) return '';
+                  const state = String(
+                    supplemental.status
+                    || (requirementEvaluation && requirementEvaluation.status)
+                    || 'review',
+                  ).toLowerCase();
+                  const label = state === 'met' ? 'Registration guidance met'
+                    : (state === 'unmet'
+                      ? 'Unmet registration guidance'
+                      : 'Review registration guidance');
+                  const seen = new Set();
+                  const guidanceApi = (typeof window !== 'undefined')
+                    ? window.courseFilters : null;
+                  const guidance = guidanceApi
+                    && typeof guidanceApi.supplementalGuidanceItems === 'function'
+                    ? guidanceApi.supplementalGuidanceItems(supplemental, {
+                      includeMet: false,
+                      includeComponents: false,
+                    })
+                    : (Array.isArray(supplemental.guidance) ? supplemental.guidance : []);
+                  const lines = state === 'met' ? [] : guidance.map((item) => (
+                    String(item && item.text ? item.text : item || '').trim()
+                  )).filter((text) => {
+                    if (!text || seen.has(text)) return false;
+                    seen.add(text);
+                    return true;
+                  });
+                  return `<div class="scheduler-course-registration is-${escapeHtml(state)}">`
+                    + `<div class="scheduler-course-meta"><span class="scheduler-badge-registration">${escapeHtml(label)}</span></div>`
+                    + lines.map((text) => (
+                      `<div class="scheduler-course-meta scheduler-registration-line">${escapeHtml(text)}</div>`
+                    )).join('')
+                    + (state === 'review'
+                      ? '<div class="scheduler-course-meta scheduler-registration-line">This course remains available; confirm the rule before registration.</div>'
+                      : '')
+                    + '</div>';
                 } catch (_) {
                   return '';
                 }
@@ -5119,6 +5387,7 @@
             `<div class="scheduler-course-title">${escapeHtml(e.title || '')}</div>` +
             `</div>` +
             prereqHtml +
+            registrationGuidanceHtml +
             (classes.includes('is-blocked-hours') ? `<div class="scheduler-course-meta"><span class="scheduler-badge-blocked">Blocked hours</span> No section combination fits your blocked time.</div>` : '') +
             (instr ? `<div class="scheduler-course-meta"><span class="muted">Instructor:</span> ${escapeHtml(instr)}</div>` : '') +
             (showDetails && d
@@ -5195,9 +5464,7 @@
         const selectedKeys = Object.keys(selected);
         for (let i = 0; i < selectedKeys.length; i++) {
           const courseId = selectedKeys[i];
-          const info = coursePageInfoMap.get(courseId);
-          if (!info || !info.corequisites) continue;
-          const coreqs = extractCoreqCourseIdsFromCoursePageInfoField(info.corequisites);
+          const coreqs = getCoreqsFor(courseId);
           if (!coreqs.length) continue;
           const missing = coreqs
             .map(c => normalizeCourseId(c))
@@ -5231,9 +5498,7 @@
         if (typeof loadInfo !== 'function') return;
         const map = await loadInfo();
         coursePageInfoMap = map;
-        const info = map && typeof map.get === 'function' ? map.get(baseCourseId) : null;
-        if (!info) return;
-        const coreqs = extractCoreqCourseIdsFromCoursePageInfoField(info.corequisites);
+        const coreqs = getCoreqsFor(baseCourseId);
         for (let i = 0; i < coreqs.length; i++) {
           const cid = normalizeCourseId(coreqs[i]);
           if (!cid) continue;

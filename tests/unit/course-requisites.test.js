@@ -2,9 +2,12 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadScriptGlobals } = require('./helpers/load-script');
+const { loadScriptsGlobals } = require('./helpers/load-script');
 
-const { courseRequisites: req } = loadScriptGlobals('scripts/course_requisites.js');
+const { courseRequisites: req } = loadScriptsGlobals([
+  'scripts/registration_rules.js',
+  'scripts/course_requisites.js',
+]);
 
 const semester = (termCode, courses) => ({ termCode, courses });
 const course = (code, id, grade = 'A') => ({ code, id: id || code, grade });
@@ -242,4 +245,33 @@ test('planner checks different-course corequisites but suppresses recitation/lab
     'an earlier cross-course corequisite satisfies the later course');
   assert.equal(warningsFor([semester('202401', [course('EE48010')])]).length, 0,
     'irregularly numbered lab component is not a planner course');
+});
+
+test('planner warnings use canonical program profiles for ENS491 and never target ENS491R', () => {
+  const info = new Map([
+    ['ENS491', { corequisites: 'ENS 491R' }],
+    ['ENS491R', { prerequisites: 'MATH 101 - Undergraduate - Min Grade D' }],
+  ]);
+  const warnings = req.plannerWarningsForSemesters(
+    [semester('202602', [course('ENS491', 'ens491', ''), course('ENS491R', 'ens491r', '')])],
+    info,
+    eligible,
+    undefined,
+    {
+      programProfiles: [{ role: 'main', program: 'CS', admitTermCode: '202501' }],
+    },
+  );
+
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(warnings.map((item) => item.courseCode))),
+    ['ENS491'],
+  );
+  const warning = warnings[0];
+  assert.equal(warning.priorSuRequirement.minimum, 80);
+  assert.equal(warning.priorSuRequirement.actual, 0);
+  assert.equal(warning.corequisites.length, 0);
+  assert.equal(warning.supplemental.status, 'unmet');
+  assert.ok(warning.supplemental.guidance.some((item) => (
+    item.status === 'unmet' && /CS300, CS306, or CS308/.test(item.text)
+  )));
 });

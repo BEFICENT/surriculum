@@ -473,6 +473,93 @@
     };
   }
 
+  function supplementalRegistrationEvaluation(courseCode, context) {
+    try {
+      const registry = (typeof window !== 'undefined') ? window.registrationRules : null;
+      if (!registry || typeof registry.getRule !== 'function') return null;
+      const rule = registry.getRule(courseCode);
+      if (!rule) return null;
+      if (typeof registry.evaluateRule !== 'function') {
+        return {
+          hasRule: true,
+          ruleId: String(rule.ruleId || ''),
+          courseCode: normalizeCourseCode(courseCode),
+          status: 'review',
+          reason: 'supplemental-evaluator-unavailable',
+          definitiveUnmet: false,
+          filterBlocking: false,
+          prerequisite: null,
+          priorSuRequirement: null,
+          guidance: [],
+          profiles: [],
+          components: Array.isArray(rule.components) ? rule.components : [],
+          source: rule.source || null,
+        };
+      }
+      return registry.evaluateRule(courseCode, context) || null;
+    } catch (_) {
+      return {
+        hasRule: true,
+        ruleId: '',
+        courseCode: normalizeCourseCode(courseCode),
+        status: 'review',
+        reason: 'supplemental-evaluation-failed',
+        definitiveUnmet: false,
+        filterBlocking: false,
+        prerequisite: null,
+        priorSuRequirement: null,
+        guidance: [],
+        profiles: [],
+        components: [],
+        source: null,
+      };
+    }
+  }
+
+  function stricterPriorSuRequirement(first, second) {
+    if (!first) return second || null;
+    if (!second) return first;
+    return Number(second.minimum) > Number(first.minimum) ? second : first;
+  }
+
+  // Supplemental policies are independent AND clauses. Preserve every legacy
+  // field while exposing the reviewed result separately for richer UI. A
+  // definite prerequisite/prior-credit miss remains actionable even if another
+  // supplemental scope requires human review; review itself never filters.
+  function combineCandidateRequirementResult(base, supplemental) {
+    if (!supplemental || supplemental.hasRule !== true) return base;
+    const prerequisite = mergePrerequisiteResults([
+      base && base.prerequisite,
+      supplemental.prerequisite,
+    ]);
+    const priorSuRequirement = stricterPriorSuRequirement(
+      base && base.priorSuRequirement,
+      supplemental.priorSuRequirement,
+    );
+    const baseStatus = String(base && base.status || 'unknown');
+    const supplementalStatus = String(supplemental.status || 'review');
+    let status = 'met';
+    if (baseStatus === 'unmet' || supplementalStatus === 'unmet') status = 'unmet';
+    else if (supplementalStatus === 'review') status = 'review';
+    else if (baseStatus === 'unknown' || supplementalStatus === 'unknown') status = 'unknown';
+    const filterBlocking = !!(prerequisite || priorSuRequirement);
+
+    return Object.assign({}, base || {}, {
+      known: status === 'met' || status === 'unmet',
+      status,
+      reason: status === 'review'
+        ? String(supplemental.reason || 'supplemental-review-required')
+        : String(base && base.reason || ''),
+      courseCode: normalizeCourseCode(base && base.courseCode || supplemental.courseCode),
+      hasRequirements: true,
+      prerequisite,
+      priorSuRequirement,
+      filterBlocking,
+      legacy: base || null,
+      supplemental,
+    });
+  }
+
   // Evaluate one not-yet-added course against a prebuilt target-term context.
   // Ordinary prerequisites must be in a strictly earlier term. Only a clause
   // explicitly marked "can be taken concurrently" may use the target term.
@@ -481,11 +568,18 @@
   // a false assertion that the candidate has met every requirement.
   function evaluateCandidateForTerm(info, courseCode, context) {
     const code = normalizeCourseCode(courseCode);
+    const supplemental = supplementalRegistrationEvaluation(code, context);
     if (!context || context.known !== true || !context.targetTerm) {
-      return unknownCandidateRequirementResult(code, 'unknown-target-term');
+      return combineCandidateRequirementResult(
+        unknownCandidateRequirementResult(code, 'unknown-target-term'),
+        supplemental,
+      );
     }
     if (!info || typeof info !== 'object') {
-      return unknownCandidateRequirementResult(code, 'missing-course-info');
+      return combineCandidateRequirementResult(
+        unknownCandidateRequirementResult(code, 'missing-course-info'),
+        supplemental,
+      );
     }
 
     const occurrences = Array.isArray(context.occurrences) ? context.occurrences : [];
@@ -528,7 +622,7 @@
     );
     const unmet = !!(prerequisite || priorSuRequirement || missingCorequisites.length);
 
-    return {
+    const legacyResult = {
       known: true,
       status: unmet ? 'unmet' : 'met',
       reason: '',
@@ -539,6 +633,7 @@
       corequisites: missingCorequisites,
       missingCorequisites,
     };
+    return combineCandidateRequirementResult(legacyResult, supplemental);
   }
 
   function plannerWarningsForSemesters(
@@ -546,7 +641,10 @@
     infoByCode,
     isEligible,
     isWarningTarget,
+    options,
   ) {
+    const opts = options && typeof options === 'object' ? options : {};
+    const programProfiles = Array.isArray(opts.programProfiles) ? opts.programProfiles : [];
     const rows = [];
     const source = Array.isArray(semesters) ? semesters : [];
     for (let i = 0; i < source.length; i++) {
@@ -575,21 +673,35 @@
       // Unknown term identity fails open, and an unsuccessful target attempt is
       // not actionable planning work.
       if (!target.term || !target.warningTarget) continue;
+      try {
+        const registry = (typeof window !== 'undefined') ? window.registrationRules : null;
+        const component = registry && typeof registry.getComponentMetadata === 'function'
+          ? registry.getComponentMetadata(target.code) : null;
+        if (component && component.plannerCourse === false) continue;
+      } catch (_) {}
       const info = courseInfoFor(infoByCode, target.code);
       if (!info) continue;
+
+      const termContext = buildTermRequirementContext(source, target.semester, isEligible);
+      termContext.programProfiles = programProfiles;
 
       const requirement = evaluateCandidateForTerm(
         info,
         target.code,
-        buildTermRequirementContext(source, target.semester, isEligible),
+        termContext,
       );
-      if (!requirement.known || requirement.status !== 'unmet') continue;
+      const supplementalReview = !!(
+        requirement.supplemental && requirement.supplemental.status === 'review'
+      );
+      if (requirement.status !== 'unmet' && !supplementalReview) continue;
       warnings.push({
         courseId: String(target.course.id || ''),
         courseCode: target.code,
         prerequisite: requirement.prerequisite,
         priorSuRequirement: requirement.priorSuRequirement,
         corequisites: requirement.corequisites,
+        legacy: requirement.legacy || null,
+        supplemental: requirement.supplemental || null,
       });
     }
     return warnings;
@@ -766,7 +878,8 @@
       wrapper.setAttribute('aria-live', 'polite');
       wrapper.setAttribute('aria-atomic', 'true');
 
-      const prereq = item.prerequisite;
+      const legacy = item.legacy && typeof item.legacy === 'object' ? item.legacy : null;
+      const prereq = legacy ? legacy.prerequisite : item.prerequisite;
       if (prereq && Array.isArray(prereq.required) && prereq.required.length) {
         const sameTermAllowed = new Set(Array.isArray(prereq.concurrent) ? prereq.concurrent : []);
         const earlierOnly = prereq.required.filter((code) => !sameTermAllowed.has(code));
@@ -794,9 +907,10 @@
           }
         }
       }
-      if (item.priorSuRequirement) {
-        const minimum = Number(item.priorSuRequirement.minimum) || 0;
-        const actual = Number(item.priorSuRequirement.actual) || 0;
+      const legacyPriorSu = legacy ? legacy.priorSuRequirement : item.priorSuRequirement;
+      if (legacyPriorSu) {
+        const minimum = Number(legacyPriorSu.minimum) || 0;
+        const actual = Number(legacyPriorSu.actual) || 0;
         const format = (value) => {
           const rounded = Math.round(Number(value || 0) * 100) / 100;
           return String(rounded);
@@ -804,9 +918,40 @@
         appendPlannerWarning(wrapper, 'prior-credits',
           `Prior SU requirement: ${format(actual)} of ${format(minimum)} SU planned/completed in earlier terms.`);
       }
-      if (Array.isArray(item.corequisites) && item.corequisites.length) {
+      const legacyCorequisites = legacy && Array.isArray(legacy.corequisites)
+        ? legacy.corequisites : item.corequisites;
+      if (Array.isArray(legacyCorequisites) && legacyCorequisites.length) {
         appendPlannerWarning(wrapper, 'corequisite',
-          `Corequisite: add ${item.corequisites.join(', ')} in this term or an earlier term.`);
+          `Corequisite: add ${legacyCorequisites.join(', ')} in this term or an earlier term.`);
+      }
+      const supplemental = item.supplemental;
+      let supplementalLines = 0;
+      if (supplemental && Array.isArray(supplemental.guidance)) {
+        supplemental.guidance.forEach((guidance) => {
+          if (!guidance || guidance.kind === 'component') return;
+          if (guidance.status !== 'unmet' && guidance.status !== 'review') return;
+          const text = String(guidance.text || '').trim();
+          if (!text) return;
+          appendPlannerWarning(
+            wrapper,
+            guidance.status === 'review' ? 'registration-review' : 'registration-rule',
+            text,
+          );
+          supplementalLines++;
+        });
+      }
+      if (supplementalLines && supplemental.source && supplemental.source.url) {
+        const source = document.createElement('div');
+        source.className = 'planner-requisite-warning';
+        source.dataset.warningKind = 'registration-source';
+        source.appendChild(document.createTextNode('Reviewed registration source: '));
+        const link = document.createElement('a');
+        link.href = String(supplemental.source.url);
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = String(supplemental.source.authority || 'SUIS');
+        source.appendChild(link);
+        wrapper.appendChild(source);
       }
       if (!wrapper.children.length) continue;
       card.classList.add('has-requisite-warning');
@@ -844,11 +989,21 @@
       }
       const infoByCode = await loadInfo();
       await renderPlannerOfferingTags(curriculum.semesters, infoByCode, warningTarget);
+      const programProfiles = (() => {
+        try {
+          const filters = (typeof window !== 'undefined') ? window.courseFilters : null;
+          return filters && typeof filters.buildProgramProfiles === 'function'
+            ? filters.buildProgramProfiles(curriculum) : [];
+        } catch (_) {
+          return [];
+        }
+      })();
       const warnings = plannerWarningsForSemesters(
         curriculum.semesters,
         infoByCode,
         eligible,
         warningTarget,
+        { programProfiles },
       );
       renderPlannerWarnings(warnings);
       return warnings;

@@ -664,7 +664,27 @@ function dynamic_click(e, curriculum, course_data)
             const requirements = evaluation && evaluation.requirements;
             if (filters.checkPrerequisites) {
                 const state = requirements && requirements.status ? requirements.status : 'unknown';
-                if (state === 'met') appendBadge(badges, 'Requirements met', 'is-met');
+                const supplemental = requirements && requirements.supplemental;
+                if (supplemental && supplemental.hasRule) {
+                    const registrationState = String(supplemental.status || 'review');
+                    if (registrationState === 'met') {
+                        appendBadge(badges, 'Registration guidance met', 'is-met');
+                    } else if (registrationState === 'unmet') {
+                        appendBadge(badges, 'Unmet registration guidance', 'is-unmet');
+                    } else {
+                        appendBadge(badges, 'Review registration guidance', 'is-review');
+                    }
+                    const legacy = requirements.legacy;
+                    if (legacy && legacy.hasRequirements) {
+                        if (legacy.status === 'met') {
+                            appendBadge(badges, 'Course requirements met', 'is-met');
+                        } else if (legacy.status === 'unmet') {
+                            appendBadge(badges, 'Unmet course requirements', 'is-unmet');
+                        } else {
+                            appendBadge(badges, 'Course requirements unavailable', 'is-unknown');
+                        }
+                    }
+                } else if (state === 'met') appendBadge(badges, 'Requirements met', 'is-met');
                 else if (state === 'unmet') appendBadge(badges, 'Unmet requirements', 'is-unmet');
                 else appendBadge(badges, 'Requirements unavailable', 'is-unknown');
             }
@@ -717,8 +737,38 @@ function dynamic_click(e, curriculum, course_data)
             if (filters.checkPrerequisites && requirements) {
                 const requisiteLines = document.createElement('div');
                 requisiteLines.className = 'course-option-requisites';
-                if (requirements.status === 'unmet') {
-                    const prerequisite = requirements.prerequisite;
+                const supplemental = requirements.supplemental;
+                if (supplemental && supplemental.hasRule) {
+                    const guidance = filterApi
+                        && typeof filterApi.supplementalGuidanceItems === 'function'
+                        ? filterApi.supplementalGuidanceItems(supplemental, {
+                            includeMet: false,
+                            includeComponents: false,
+                        })
+                        : (Array.isArray(supplemental.guidance) ? supplemental.guidance : []);
+                    const seenGuidance = new Set();
+                    (requirements.status === 'met' ? [] : guidance).forEach((item) => {
+                        const text = String(item && item.text ? item.text : item || '').trim();
+                        if (!text || seenGuidance.has(text)) return;
+                        seenGuidance.add(text);
+                        appendRequirementLine(
+                            requisiteLines,
+                            item && item.kind ? item.kind : 'registration-guidance',
+                            text,
+                        );
+                    });
+                    if (requirements.status === 'review' || supplemental.status === 'review') {
+                        appendRequirementLine(
+                            requisiteLines,
+                            'registration-review',
+                            'Some registration guidance could not be checked automatically; this course remains visible.',
+                        );
+                    }
+                }
+                const ordinaryRequirements = supplemental && supplemental.hasRule
+                    ? requirements.legacy : requirements;
+                if (ordinaryRequirements && ordinaryRequirements.status === 'unmet') {
+                    const prerequisite = ordinaryRequirements.prerequisite;
                     if (prerequisite) {
                         const required = Array.isArray(prerequisite.required)
                             ? prerequisite.required : [];
@@ -761,17 +811,18 @@ function dynamic_click(e, curriculum, course_data)
                             }
                         });
                     }
-                    if (requirements.priorSuRequirement) {
-                        const prior = requirements.priorSuRequirement;
+                    if (ordinaryRequirements.priorSuRequirement) {
+                        const prior = ordinaryRequirements.priorSuRequirement;
                         appendRequirementLine(
                             requisiteLines,
                             'prior-credits',
                             `Prior SU: ${formatPickerNumber(prior.actual)} of ${formatPickerNumber(prior.minimum)} SU planned/completed.`,
                         );
                     }
-                    const corequisites = Array.isArray(requirements.missingCorequisites)
-                        ? requirements.missingCorequisites
-                        : (Array.isArray(requirements.corequisites) ? requirements.corequisites : []);
+                    const corequisites = Array.isArray(ordinaryRequirements.missingCorequisites)
+                        ? ordinaryRequirements.missingCorequisites
+                        : (Array.isArray(ordinaryRequirements.corequisites)
+                            ? ordinaryRequirements.corequisites : []);
                     if (corequisites.length) {
                         appendRequirementLine(
                             requisiteLines,
@@ -779,7 +830,8 @@ function dynamic_click(e, curriculum, course_data)
                             `Corequisite: also add ${corequisites.join(', ')} in this or an earlier term.`,
                         );
                     }
-                } else if (requirements.status === 'unknown') {
+                } else if ((!supplemental || !supplemental.hasRule)
+                    && (requirements.status === 'unknown' || requirements.status === 'review')) {
                     const unavailable = document.createElement('div');
                     unavailable.className = 'course-option-requisite course-option-requisite-status';
                     unavailable.textContent = 'Requirements unavailable; this course remains visible.';
@@ -1654,6 +1706,50 @@ function dynamic_click(e, curriculum, course_data)
                 const desc = (info.description || '').toString();
                 const offered = Array.isArray(info.last_offered_terms) ? info.last_offered_terms : [];
                 const url = info.source_url || buildCourseUrl(courseCode);
+                const registrationDescription = (() => {
+                    try {
+                        const registry = (typeof window !== 'undefined')
+                            ? window.registrationRules : null;
+                        return registry && typeof registry.describeRule === 'function'
+                            ? registry.describeRule(courseCode) : null;
+                    } catch (_) {
+                        return null;
+                    }
+                })();
+                const registrationEvaluation = (() => {
+                    try {
+                        const shared = (typeof window !== 'undefined')
+                            ? window.courseRequisites : null;
+                        const filters = (typeof window !== 'undefined')
+                            ? window.courseFilters : null;
+                        const cur = (typeof window !== 'undefined') ? window.curriculum : null;
+                        const semesterElement = container && container.closest
+                            ? container.closest('.semester') : null;
+                        const semester = cur && semesterElement && typeof cur.getSemester === 'function'
+                            ? cur.getSemester(semesterElement.id) : null;
+                        const context = filters && typeof filters.buildTargetContext === 'function'
+                            ? filters.buildTargetContext(cur, semester) : null;
+                        if (!shared || typeof shared.evaluateCandidateForTerm !== 'function') return null;
+                        const result = shared.evaluateCandidateForTerm(info, courseCode, context);
+                        return result && result.supplemental ? result.supplemental : null;
+                    } catch (_) {
+                        return null;
+                    }
+                })();
+                const supplementalGuidance = registrationEvaluation
+                    || registrationDescription;
+                const hasSupplementalGuidance = !!(
+                    supplementalGuidance
+                    && (
+                        supplementalGuidance.hasRule
+                        || supplementalGuidance.ruleId
+                        || (Array.isArray(supplementalGuidance.guidance)
+                            && supplementalGuidance.guidance.length)
+                    )
+                );
+                const supplementalSource = hasSupplementalGuidance
+                    && supplementalGuidance.source && typeof supplementalGuidance.source === 'object'
+                    ? supplementalGuidance.source : {};
 
                 const formatDescription = (value) => {
                     const raw = String(value || '').trim();
@@ -1678,10 +1774,10 @@ function dynamic_click(e, curriculum, course_data)
                 };
 
                 const formattedDesc = formatDescription(desc);
-                const descHtml = formattedDesc
+                const descHtml = formattedDesc && supplementalSource.supersedesDescription !== true
                     ? `<div class="course-details-section"><h4>Description</h4><p>${escapeHtml(formattedDesc).replace(/\n\n/g, '<br><br>')}</p></div>`
                     : '';
-                const prereqHtml = prereq || !generalPrereq
+                const prereqHtml = prereq || (!generalPrereq && !hasSupplementalGuidance)
                     ? '<div class="course-details-section"><h4>Prerequisites</h4><p>'
                         + (prereq ? escapeHtml(prereq) : 'None') + '</p></div>'
                     : '';
@@ -1693,6 +1789,54 @@ function dynamic_click(e, curriculum, course_data)
                     ? '<div class="course-details-section"><h4>General requirements</h4><p>'
                         + escapeHtml(generalRequirementsText) + '</p></div>'
                     : '';
+                const supplementalGuidanceHtml = (() => {
+                    if (!hasSupplementalGuidance) return '';
+                    const guidanceApi = (typeof window !== 'undefined')
+                        ? window.courseFilters : null;
+                    const guidance = guidanceApi
+                        && typeof guidanceApi.supplementalGuidanceItems === 'function'
+                        ? guidanceApi.supplementalGuidanceItems(supplementalGuidance, {
+                            includeMet: true,
+                            includeComponents: true,
+                            includeAllBranches: !registrationEvaluation,
+                        })
+                        : (Array.isArray(supplementalGuidance.guidance)
+                            ? supplementalGuidance.guidance : []);
+                    const seen = new Set();
+                    const items = guidance.map((item) => (
+                        String(item && item.text ? item.text : item || '').trim()
+                    )).filter((text) => {
+                        if (!text || seen.has(text)) return false;
+                        seen.add(text);
+                        return true;
+                    });
+                    if (!items.length && supplementalSource.summary) {
+                        items.push(String(supplementalSource.summary));
+                    }
+                    const state = String(supplementalGuidance.status || 'review').toLowerCase();
+                    const stateLabel = state === 'met' ? 'Met'
+                        : (state === 'unmet' ? 'Needs attention' : 'Review');
+                    const sourceUrl = supplementalSource.url || url;
+                    const authority = supplementalSource.authority || 'SUIS';
+                    const reviewedAt = supplementalSource.reviewedAt
+                        ? `, reviewed ${String(supplementalSource.reviewedAt)}` : '';
+                    const sourceLine = sourceUrl
+                        ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(authority)} course page</a>${escapeHtml(reviewedAt)}`
+                        : `${escapeHtml(authority)}${escapeHtml(reviewedAt)}`;
+                    return '<div class="course-details-section course-registration-guidance">'
+                        + '<div class="course-registration-guidance-heading">'
+                        + '<h4>Registration guidance</h4>'
+                        + `<span class="course-registration-state is-${escapeHtml(state)}">${escapeHtml(stateLabel)}</span>`
+                        + '</div>'
+                        + (items.length
+                            ? '<ul class="course-details-list">'
+                                + items.map((text) => `<li>${escapeHtml(text)}</li>`).join('')
+                                + '</ul>'
+                            : '<p>Review the linked course page before registration.</p>')
+                        + `<p class="course-registration-source">Source: ${sourceLine}.</p>`
+                        + '<p class="course-registration-advisory">Advisory only—confirm eligibility and any exceptions in SUIS or with your advisor.</p>'
+                        + '</div>';
+                })();
 
                 const instructorHistory = (
                     instructorHistoryInfo && Array.isArray(instructorHistoryInfo.history)
@@ -1825,6 +1969,7 @@ function dynamic_click(e, curriculum, course_data)
                      '</div>' +
                      prereqHtml +
                      generalRequirementsHtml +
+                     supplementalGuidanceHtml +
                      '<div class="course-details-section"><h4>Corequisites</h4><p>' + (coreq ? escapeHtml(coreq) : 'None') + '</p></div>' +
                      descHtml +
                      termHistoryHtml +

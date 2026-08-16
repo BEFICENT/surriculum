@@ -171,6 +171,124 @@
     };
   }
 
+  // Registration-rule profiles deliberately reuse the curriculum's canonical
+  // admit-term values.  They are presentation/evaluation context only: this
+  // helper neither derives a new term nor reads a second persistence source.
+  function buildProgramProfiles(curriculum) {
+    const cur = curriculum && typeof curriculum === 'object' ? curriculum : {};
+    const profiles = [];
+    const universityAdmitTermCode = String(cur.entryTerm || '').trim();
+    const add = (role, program, admitTermCode) => {
+      const normalizedProgram = String(program || '').trim().toUpperCase();
+      if (!normalizedProgram || normalizedProgram === 'NONE') return;
+      const key = `${role}:${normalizedProgram}`;
+      if (profiles.some((profile) => `${profile.role}:${profile.program}` === key)) return;
+      profiles.push({
+        role,
+        program: normalizedProgram,
+        admitTermCode: String(admitTermCode || '').trim(),
+        universityAdmitTermCode,
+      });
+    };
+
+    add('main', cur.major, cur.entryTerm);
+    add('dm', cur.doubleMajor, cur.entryTermDM);
+    const minorTerms = cur.minorTermsByCode && typeof cur.minorTermsByCode === 'object'
+      ? cur.minorTermsByCode : {};
+    const minors = Array.isArray(cur.minors) ? cur.minors : [];
+    for (let i = 0; i < minors.length; i++) {
+      const program = String(minors[i] || '').trim().toUpperCase();
+      add('minor', program, minorTerms[program] || cur.entryTermMinor);
+    }
+
+    return profiles;
+  }
+
+  function isSupplementalPlannerComponent(courseCode) {
+    try {
+      const registry = (typeof window !== 'undefined') ? window.registrationRules : null;
+      if (!registry || typeof registry.getComponentMetadata !== 'function') return false;
+      const metadata = registry.getComponentMetadata(normalizeCourseCode(courseCode));
+      return !!(metadata && metadata.plannerCourse === false);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function supplementalGuidanceItems(supplemental, options) {
+    if (!supplemental || typeof supplemental !== 'object') return [];
+    const opts = options && typeof options === 'object' ? options : {};
+    const includeMet = opts.includeMet === true;
+    const includeComponents = opts.includeComponents === true;
+    const includeAllBranches = opts.includeAllBranches === true;
+    const staticGuidance = Array.isArray(supplemental.guidance)
+      ? supplemental.guidance : [];
+    const profiles = Array.isArray(supplemental.profiles)
+      ? supplemental.profiles
+      : (Array.isArray(supplemental.scopes) ? supplemental.scopes : []);
+    const out = [];
+    const seen = new Set();
+    const add = (item, fallbackKind) => {
+      const text = String(item && item.text ? item.text : item || '').trim();
+      if (!text || seen.has(text)) return;
+      seen.add(text);
+      out.push({
+        kind: String(item && item.kind ? item.kind : fallbackKind || 'registration-guidance'),
+        text,
+      });
+    };
+
+    if (includeAllBranches) {
+      staticGuidance.forEach((item) => {
+        if (!includeComponents && item && item.kind === 'component') return;
+        add(item);
+      });
+      return out;
+    }
+
+    if (!profiles.length) {
+      staticGuidance.forEach((item) => {
+        if (!item || (!includeComponents && item.kind === 'component')) return;
+        if (includeMet || String(item.status || 'review') !== 'met') add(item);
+      });
+      return out;
+    }
+
+    const prior = supplemental.priorSuRequirement;
+    const common = staticGuidance.find((item) => item && item.kind === 'prior-credits');
+    if (prior) {
+      const compact = (value) => String(Math.round((Number(value) || 0) * 100) / 100);
+      add({
+        kind: 'prior-credits',
+        text: `Prior SU: ${compact(prior.actual)} of ${compact(prior.minimum)} SU planned/completed in earlier semesters.`,
+      });
+    } else if (common && (includeMet || String(common.status || '') === 'review')) {
+      add(common);
+    }
+
+    profiles.forEach((profile) => {
+      const status = String(profile && profile.status || 'review').toLowerCase();
+      if (!includeMet && status === 'met') return;
+      const guidance = profile && Array.isArray(profile.guidance) ? profile.guidance : [];
+      guidance.forEach((text) => add({ kind: 'program-prerequisite', text }));
+    });
+    staticGuidance.forEach((item) => {
+      if (!item || item.kind === 'prior-credits' || item.kind === 'component') return;
+      if (includeMet || String(item.status || '') !== 'met') add(item);
+    });
+    if (includeComponents) {
+      staticGuidance.filter((item) => item && item.kind === 'component').forEach((item) => add(item));
+      const components = Array.isArray(supplemental.components)
+        ? supplemental.components : [];
+      components.forEach((component) => {
+        if (component && component.guidance) {
+          add({ kind: 'component', text: component.guidance });
+        }
+      });
+    }
+    return out;
+  }
+
   function buildCandidates(primaryCourseData, curriculum) {
     const byCode = new Map();
     const cur = curriculum && typeof curriculum === 'object' ? curriculum : {};
@@ -185,7 +303,8 @@
 
     const ensureCandidate = (record) => {
       const code = recordCourseCode(record);
-      if (!code || (record && record.__globalCourseDefinition)) return null;
+      if (!code || (record && record.__globalCourseDefinition)
+        || isSupplementalPlannerComponent(code)) return null;
       if (!byCode.has(code)) {
         byCode.set(code, {
           code,
@@ -843,7 +962,20 @@
         normalized.checkPrerequisites
         && !normalized.showUnmetPrerequisites
         && requirements
-        && (requirements.prerequisite || requirements.priorSuRequirement)
+        && (() => {
+          const supplemental = requirements.supplemental;
+          if (supplemental && supplemental.hasRule) {
+            // Supplemental components are advisory and must never make the
+            // parent course disappear.  The rule evaluator exposes a narrow,
+            // definitive filter result for prerequisite/prior-SU failures;
+            // review/unknown states fail open.
+            return requirements.filterBlocking === true
+              || supplemental.definitiveUnmet === true;
+          }
+          // Preserve the established ordinary-course behavior, including its
+          // deliberate decision not to hide corequisite-only candidates.
+          return !!(requirements.prerequisite || requirements.priorSuRequirement);
+        })()
       ),
     };
     const reasons = Object.keys(matches).filter((key) => matches[key] === false);
@@ -894,7 +1026,13 @@
         typeof cur.isDegreeEligibleCourse !== 'function'
         || cur.isDegreeEligibleCourse(course)
       );
-      return shared.buildTermRequirementContext(cur.semesters, targetSemester, eligible);
+      const context = shared.buildTermRequirementContext(cur.semesters, targetSemester, eligible);
+      if (context && typeof context === 'object') {
+        // The picker's visual Program filter must not alter academic rule
+        // evaluation.  Always provide every canonical selected-program profile.
+        context.programProfiles = buildProgramProfiles(cur);
+      }
+      return context;
     } catch (_) {
       return null;
     }
@@ -908,6 +1046,8 @@
     normalizeFilters,
     courseLevelForCode,
     buildCandidates,
+    buildProgramProfiles,
+    supplementalGuidanceItems,
     buildTargetContext,
     membershipsForProgram,
     matchesSearch,

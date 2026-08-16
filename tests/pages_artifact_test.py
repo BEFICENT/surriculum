@@ -21,6 +21,7 @@ def main() -> None:
         "index.html",
         "LICENSE",
         "data/manifest.json",
+        "scripts/registration_rules.js",
         "courses/schedule_subjects.json",
         "courses/all_coursepage_info.jsonl",
         "assets/vendor/pdfjs-6.2.108/LICENSE",

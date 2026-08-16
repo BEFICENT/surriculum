@@ -131,6 +131,74 @@ test.describe('advisory planner prerequisite/corequisite warnings', () => {
       .toHaveCount(0);
   });
 
+  test('ENS491 picker, card, and details use reviewed program-aware registration guidance', async ({ page }) => {
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: 'Fall 2024-2025',
+      curriculum: [[]],
+      grades: [[]],
+      dates: ['Spring 2024-2025'],
+      termCodes: ['202402'],
+    });
+
+    const semester = page.locator('.container_semester').first();
+    await semester.locator('.addCourse').click();
+    const picker = semester.locator('.input_container');
+    await picker.locator('.planner-course-filter-btn').click();
+    const filters = picker.locator('.planner-course-filter-menu');
+    const check = filters.locator('.planner-filter-prerequisites');
+    if (!(await check.isChecked())) await check.check();
+    const showUnmet = filters.locator('.planner-filter-show-unmet');
+    if (!(await showUnmet.isChecked())) await showUnmet.check();
+    await page.keyboard.press('Escape');
+
+    await picker.locator('.course_select').fill('ENS491');
+    const option = picker.locator('.course-option[data-code="ENS491"]');
+    await expect(option).toBeVisible({ timeout: 15000 });
+    await expect(option).toHaveAttribute('data-requisite-state', 'unmet');
+    await expect(option).toContainText('Unmet registration guidance');
+    await expect(option).toContainText(/80 SU/i);
+    await expect(option).toContainText(/CS300, CS306, or CS308/i);
+
+    await picker.locator('.planner-course-filter-btn').click();
+    await showUnmet.uncheck();
+    await expect(option).toHaveCount(0);
+    await showUnmet.check();
+    await expect(option).toBeVisible();
+    await filters.locator('.planner-course-filter-close').click();
+    await picker.locator('.course_select').fill('ENS491');
+    await expect(option).toBeVisible();
+
+    await option.click();
+    await picker.locator('.enter').click();
+    await page.evaluate(() => window.courseRequisites.refreshPlannerWarnings());
+
+    const card = page.locator('.course:has(.course_code:text-is("ENS491"))');
+    await expect(card).toHaveCount(1);
+    const cardWarnings = card.locator('.planner-course-warnings');
+    await expect(cardWarnings).toContainText(/80 SU/i);
+    await expect(cardWarnings).toContainText(/CS300, CS306, or CS308/i);
+    const reviewedSource = warning(page, 'ENS491', 'registration-source');
+    await expect(reviewedSource).toContainText(/reviewed registration source/i);
+    await expect(reviewedSource.locator('a')).toHaveAttribute('href', /suis\.sabanciuniv\.edu/);
+
+    await card.locator('.details_course').click();
+    const details = page.locator('.modal.app-modal').filter({ hasText: 'Course Details' });
+    await expect(details).toBeVisible();
+    const guidance = details.locator('.course-registration-guidance');
+    await expect(guidance).toContainText('Registration guidance');
+    await expect(guidance).toContainText('Needs attention');
+    await expect(guidance).toContainText(/80 SU/i);
+    await expect(guidance).toContainText(/CS300, CS306, or CS308/i);
+    await expect(guidance).toContainText(/reviewed 2026-08-17/i);
+    await expect(guidance.locator('a')).toHaveAttribute('href', /suis\.sabanciuniv\.edu/);
+    await expect(details.locator('.course-details-section h4', { hasText: /^Description$/ }))
+      .toHaveCount(0);
+    await expect(details.locator('.course-details-section h4', { hasText: /^Prerequisites$/ }))
+      .toHaveCount(0);
+    await expect(details).not.toContainText('Computer Science and Engineering: CS 300');
+  });
+
   test('warnings remain advisory and do not alter graduation results', async ({ page }) => {
     const courses = plans['202301'].CS;
     await seedPlan(page, {

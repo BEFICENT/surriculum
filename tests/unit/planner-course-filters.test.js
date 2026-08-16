@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const { loadScriptsGlobals } = require('./helpers/load-script');
 
 const globals = loadScriptsGlobals([
+  'scripts/registration_rules.js',
   'scripts/course_requisites.js',
   'scripts/course_filters.js',
 ]);
@@ -75,6 +76,52 @@ test('buildCandidates merges catalog provenance without mutating any source reco
   assert.equal(ie305.su, 3, 'primary metadata remains authoritative after provenance merges');
   assert.equal(candidateByCode(candidates, 'GLOBAL999'), undefined);
   assert.deepEqual({ primary, dm, minor, curriculum }, before);
+});
+
+test('registration profiles reuse canonical per-program admit terms independent of picker scope', () => {
+  const curriculum = {
+    major: 'CS',
+    entryTerm: '202501',
+    doubleMajor: 'EE',
+    entryTermDM: '202601',
+    minors: ['MAT-MINOR', 'BIO-MINOR'],
+    minorTermsByCode: {
+      'MAT-MINOR': '202401',
+      'BIO-MINOR': '202301',
+    },
+  };
+
+  assert.deepEqual(JSON.parse(JSON.stringify(filters.buildProgramProfiles(curriculum))), [
+    {
+      role: 'main', program: 'CS', admitTermCode: '202501', universityAdmitTermCode: '202501',
+    },
+    {
+      role: 'dm', program: 'EE', admitTermCode: '202601', universityAdmitTermCode: '202501',
+    },
+    {
+      role: 'minor', program: 'MAT-MINOR', admitTermCode: '202401',
+      universityAdmitTermCode: '202501',
+    },
+    {
+      role: 'minor', program: 'BIO-MINOR', admitTermCode: '202301',
+      universityAdmitTermCode: '202501',
+    },
+  ]);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(filters.buildProgramProfiles(curriculum, 'EE'))),
+    JSON.parse(JSON.stringify(filters.buildProgramProfiles(curriculum))),
+    'a temporary picker filter cannot discard another applicable registration profile',
+  );
+});
+
+test('supplemental component metadata suppresses ENS491R without affecting ordinary candidates', () => {
+  const candidates = filters.buildCandidates([
+    record('ENS', '491', 'Graduation Project (Design)', 'required', { su: 1 }),
+    record('ENS', '491R', 'Graduation Project: Case Study Session', 'required', { su: 0 }),
+    record('CS', '201', 'Programming Fundamentals', 'required'),
+  ], { major: 'CS', minors: [] });
+
+  assert.deepEqual(candidates.map((candidate) => candidate.code), ['CS201', 'ENS491']);
 });
 
 test('canonical DSA210 metadata wins when a legacy CS210 alias appears first', () => {
@@ -562,6 +609,58 @@ test('hide-unmet filters prerequisite/prior-SU failures but keeps coreq-only and
   });
   assert.equal(unknownTerm.requirements.status, 'unknown');
   assert.equal(unknownTerm.visible, true);
+});
+
+test('hide-unmet filters definitive ENS491 misses but keeps mixed-program review visible', () => {
+  const candidate = {
+    code: 'ENS491',
+    name: 'Graduation Project (Design)',
+    memberships: {
+      main: { program: 'CS', type: 'required' },
+      doubleMajor: { program: 'ME', type: 'required' },
+      minors: [],
+    },
+  };
+  const baseFilters = { checkPrerequisites: true, showUnmetPrerequisites: false };
+  const courseInfoByCode = new Map([['ENS491', { corequisites: 'ENS 491R' }]]);
+
+  const target = { termCode: '202602', courses: [] };
+  const unmetContext = req.buildTermRequirementContext([target], target, () => true);
+  unmetContext.programProfiles = [{
+    role: 'main', program: 'CS', admitTermCode: '202501',
+  }];
+  const unmet = filters.evaluateCandidate(candidate, baseFilters, {
+    requirementContext: unmetContext,
+    courseInfoByCode,
+  });
+  assert.equal(unmet.requirements.status, 'unmet');
+  assert.equal(unmet.requirements.supplemental.hasRule, true);
+  assert.equal(unmet.requirements.filterBlocking, true);
+  assert.equal(unmet.visible, false);
+  assert.deepEqual([...unmet.reasons], ['prerequisites']);
+
+  const reviewContext = {
+    known: true,
+    targetTerm: 202602,
+    priorEligibleSu: 80,
+    earlierCodes: new Set(['CS300']),
+    throughCodes: new Set(['CS300']),
+    occurrences: [{
+      code: 'CS300', term: 202601, eligible: true,
+      course: { code: 'CS300', grade: 'A' },
+    }],
+    programProfiles: [
+      { role: 'main', program: 'CS', admitTermCode: '202501' },
+      { role: 'dm', program: 'ME', admitTermCode: '202501' },
+    ],
+  };
+  const mixed = filters.evaluateCandidate(candidate, baseFilters, {
+    requirementContext: reviewContext,
+    courseInfoByCode,
+  });
+  assert.equal(mixed.requirements.status, 'review');
+  assert.equal(mixed.requirements.filterBlocking, false);
+  assert.equal(mixed.visible, true, 'mixed program guidance fails open');
 });
 
 test('active-filter count excludes search and annotation-only prerequisite checking', () => {

@@ -134,4 +134,54 @@ test.describe('scheduler (desktop)', () => {
     await expect(course).toContainText(/Prereq.*SPS102/s);
     await expect(course).toContainText(/Prereq.*Prior SU: 9 of 23 planned\/completed/s);
   });
+
+  test('ENS491 uses the shared registration guidance and keeps ENS491R as one linked component', async ({ page }) => {
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: 'Fall 2024-2025',
+      curriculum: [[]],
+      grades: [[]],
+      dates: ['Spring 2024-2025'],
+      termCodes: ['202402'],
+      schedulerSelectedTerm: '202402',
+    });
+
+    await page.evaluate(() => {
+      window.preferenceStorage.setItem('schedulerCheckPrereqs', 'true');
+      window.preferenceStorage.setItem('schedulerShowUnmetPrereqs', 'true');
+      window.openSchedulerModal();
+    });
+    const modal = page.locator('.scheduler-modal');
+    await expect(modal).toBeVisible({ timeout: 15000 });
+    await modal.locator('.scheduler-search').fill('ENS491');
+
+    const course = modal.locator('.scheduler-course[data-course="ENS491"]');
+    await expect(course).toBeVisible({ timeout: 15000 });
+    await expect(course).toHaveClass(/is-unmet-prereq/);
+    await expect(course).toContainText('Unmet registration guidance');
+    await expect(course).toContainText(/80 SU/i);
+    await expect(course).toContainText(/CS300, CS306, or CS308/i);
+    const linkedRows = course.locator('.scheduler-coreq-row', { hasText: 'ENS491R' });
+    await expect(linkedRows).toHaveCount(1);
+    await expect(modal.locator('.scheduler-course[data-course="ENS491R"]')).toHaveCount(0);
+
+    // A direct component-code query resolves to its reviewed parent instead of
+    // surfacing the reverse ENS491R -> ENS491 catalog edge as a second card.
+    await modal.locator('.scheduler-search').fill('ENS491R');
+    await expect(course).toBeVisible({ timeout: 15000 });
+    await expect(modal.locator('.scheduler-course')).toHaveCount(1);
+    await expect(modal.locator('.scheduler-course[data-course="ENS491R"]')).toHaveCount(0);
+    await expect(course.locator('.scheduler-coreq-row', { hasText: 'ENS491R' })).toHaveCount(1);
+
+    await course.locator('.scheduler-course-actions > .scheduler-details').click();
+    const details = page.locator('.scheduler-details-modal');
+    await expect(details).toBeVisible();
+    await expect(details.locator('.scheduler-registration-guidance'))
+      .toContainText('Registration guidance');
+    await expect(details.locator('.scheduler-registration-guidance'))
+      .toContainText(/reviewed 2026-08-17/i);
+    await expect(details.locator('.scheduler-registration-guidance a'))
+      .toHaveAttribute('href', /suis\.sabanciuniv\.edu/);
+    await expect(details).not.toContainText('Computer Science and Engineering: CS 300');
+  });
 });

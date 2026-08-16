@@ -319,3 +319,103 @@ test('Summer history badge and planned-card tag stay contained on a narrow phone
   await expect(card.locator('[data-offering-advisory="no-summer"]'))
     .toHaveText('No Summer offerings found', { timeout: 15000 });
 });
+
+test('ENS491 reviewed registration guidance stays usable and contained at 320px', async ({ page }) => {
+  const viewport = { width: 320, height: 568 };
+  await page.setViewportSize(viewport);
+  await seedPlan(page, {
+    major: 'CS',
+    entryTerm: 'Fall 2024-2025',
+    curriculum: [[]],
+    grades: [[]],
+    dates: ['Spring 2024-2025'],
+    termCodes: ['202402'],
+  });
+  await expect(page.locator('body')).toHaveClass(/is-mobile/);
+
+  const { picker, menu } = await openPickerForTerm(page, 'Spring 2024-2025');
+  await setChecked(menu.locator('.planner-filter-prerequisites'), true);
+  await setChecked(menu.locator('.planner-filter-show-unmet'), true);
+  await menu.locator('.planner-course-filter-close').click();
+
+  await picker.locator('.course_select').fill('ENS491');
+  const option = picker.locator('.course-option[data-code="ENS491"]');
+  await expect(option).toBeVisible({ timeout: 15000 });
+  await expect(option).toHaveAttribute('data-requisite-state', 'unmet');
+  await expect(option).toContainText('Unmet registration guidance');
+  await expect(option).toContainText(/80 SU/i);
+  await expect(option).toContainText(/CS300, CS306, or CS308/i);
+
+  const optionGeometry = await option.evaluate((element) => {
+    const optionRect = element.getBoundingClientRect();
+    const dropdownRect = element.closest('.course-dropdown').getBoundingClientRect();
+    const guidanceRows = Array.from(element.querySelectorAll('.course-option-requisite'));
+    return {
+      optionWithinDropdown: optionRect.left >= dropdownRect.left - 1
+        && optionRect.right <= dropdownRect.right + 1,
+      guidanceContained: guidanceRows.every((row) => {
+        const rect = row.getBoundingClientRect();
+        return rect.left >= optionRect.left - 1 && rect.right <= optionRect.right + 1;
+      }),
+      documentOverflow:
+        document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    };
+  });
+  expect(optionGeometry.optionWithinDropdown).toBe(true);
+  expect(optionGeometry.guidanceContained).toBe(true);
+  expect(optionGeometry.documentOverflow).toBeLessThanOrEqual(1);
+
+  await option.click();
+  await picker.locator('.enter').click();
+  await page.evaluate(() => window.courseRequisites.refreshPlannerWarnings());
+
+  const card = page.locator('.course:has(.course_code:text-is("ENS491"))');
+  await expect(card).toHaveCount(1);
+  const cardWarnings = card.locator('.planner-course-warnings');
+  await expect(cardWarnings).toContainText(/80 SU/i);
+  await expect(cardWarnings).toContainText(/CS300, CS306, or CS308/i);
+  await expect(cardWarnings.locator('[data-warning-kind="registration-source"] a'))
+    .toHaveAttribute('href', /suis\.sabanciuniv\.edu/);
+
+  const cardGeometry = await card.evaluate((element) => {
+    const cardRect = element.getBoundingClientRect();
+    const warningRows = Array.from(element.querySelectorAll('.planner-requisite-warning'));
+    return {
+      warningsContained: warningRows.every((row) => {
+        const rect = row.getBoundingClientRect();
+        return rect.left >= cardRect.left - 1 && rect.right <= cardRect.right + 1;
+      }),
+      documentOverflow:
+        document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    };
+  });
+  expect(cardGeometry.warningsContained).toBe(true);
+  expect(cardGeometry.documentOverflow).toBeLessThanOrEqual(1);
+
+  await card.locator('.details_course').click();
+  const details = page.locator('.modal.app-modal').filter({ hasText: 'Course Details' });
+  await expect(details).toBeVisible();
+  const guidance = details.locator('.course-registration-guidance');
+  await expect(guidance).toContainText('Needs attention');
+  await expect(guidance).toContainText(/80 SU/i);
+  await expect(guidance).toContainText(/CS300, CS306, or CS308/i);
+  await expect(guidance).toContainText(/reviewed 2026-08-17/i);
+  await expect(guidance.locator('a')).toHaveAttribute('href', /suis\.sabanciuniv\.edu/);
+
+  const detailsGeometry = await details.evaluate((dialog) => {
+    const dialogRect = dialog.getBoundingClientRect();
+    const guidance = dialog.querySelector('.course-registration-guidance');
+    const guidanceRect = guidance.getBoundingClientRect();
+    return {
+      dialogWithinViewport: dialogRect.left >= -1
+        && dialogRect.right <= document.documentElement.clientWidth + 1,
+      guidanceContained: guidanceRect.left >= dialogRect.left - 1
+        && guidanceRect.right <= dialogRect.right + 1,
+      documentOverflow:
+        document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    };
+  });
+  expect(detailsGeometry.dialogWithinViewport).toBe(true);
+  expect(detailsGeometry.guidanceContained).toBe(true);
+  expect(detailsGeometry.documentOverflow).toBeLessThanOrEqual(1);
+});

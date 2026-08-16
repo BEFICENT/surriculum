@@ -3270,6 +3270,60 @@ body.is-mobile .semester-drop-placeholder {
     color: var(--text-primary);
 }
 
+.course-registration-guidance {
+    padding: 10px;
+    border: 1px solid var(--state-warning);
+    border-radius: var(--radius-md);
+    background: var(--planner-warning-bg);
+}
+
+.course-registration-guidance-heading,
+.scheduler-registration-guidance-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+.course-registration-guidance-heading h4,
+.scheduler-registration-guidance-heading .scheduler-details-subtitle {
+    margin-bottom: 0;
+}
+
+.course-registration-state {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+    min-height: 20px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: var(--bg-surface);
+    color: var(--planner-warning-text);
+    font-size: 0.68rem;
+    font-weight: 700;
+}
+
+.course-registration-state.is-met {
+    color: var(--accent);
+}
+
+.course-registration-state.is-unmet {
+    color: var(--tone-danger-500);
+}
+
+.course-registration-source,
+.course-registration-advisory {
+    margin-top: 7px !important;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    line-height: 1.35;
+}
+
+.course-registration-source a {
+    color: var(--accent);
+}
+
 .course-details-list {
     margin: 0;
     padding-left: 18px;
@@ -3704,6 +3758,40 @@ body.is-mobile .semester-drop-placeholder {
 
 .scheduler-details-subsection {
     margin-top: 10px;
+}
+
+.scheduler-badge-registration {
+    display: inline-block;
+    padding: 2px 8px;
+    border: 1px solid var(--state-warning);
+    border-radius: 999px;
+    background: var(--planner-warning-bg);
+    color: var(--planner-warning-text);
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.scheduler-course-registration.is-met .scheduler-badge-registration {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--bg-surface);
+}
+
+.scheduler-course-registration.is-unmet .scheduler-badge-registration {
+    border-color: var(--alpha-vivid-danger-22);
+    color: var(--tone-danger-500);
+    background: var(--alpha-vivid-danger-14);
+}
+
+.scheduler-registration-line {
+    margin-left: 2px;
+}
+
+.scheduler-registration-guidance {
+    padding: 10px;
+    border: 1px solid var(--state-warning);
+    border-radius: var(--radius-md);
+    background: var(--planner-warning-bg);
 }
 
 .scheduler-details-subtitle {
@@ -5320,6 +5408,12 @@ body.is-mobile .semester-drop-placeholder {
     color: var(--text-secondary);
 }
 
+.course-option-badge.is-review,
+.course-option[data-requisite-state="review"] .course-option-requisite-status {
+    color: var(--planner-warning-text);
+    background: var(--planner-warning-bg);
+}
+
 .course-option-badge.is-history {
     color: var(--planner-warning-text);
     background: var(--planner-warning-bg);
@@ -5353,6 +5447,10 @@ body.is-mobile .semester-drop-placeholder {
 
 .course-option[data-requisite-state="unmet"] {
     box-shadow: inset 3px 0 0 var(--tone-danger-500);
+}
+
+.course-option[data-requisite-state="review"] {
+    box-shadow: inset 3px 0 0 var(--state-warning);
 }
 
 .course-option-requisites {

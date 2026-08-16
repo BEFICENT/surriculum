@@ -54,6 +54,7 @@ APP_FILES = {
     "scripts/plan_manager.js",
     "scripts/helper_functions.js",
     "scripts/course_retakes.js",
+    "scripts/registration_rules.js",
     "scripts/course_requisites.js",
     "scripts/course_filters.js",
     "scripts/scheduler.js",
