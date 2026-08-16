@@ -105,13 +105,18 @@ for (const viewport of [
     const filterButton = picker.locator('.planner-course-filter-btn');
     await filterButton.click();
     const menu = picker.locator('.planner-course-filter-menu');
+    const closeButton = menu.locator('.planner-course-filter-close');
     await expect(menu).toBeVisible();
+    await expect(closeButton).toBeVisible();
+    await expect(closeButton).toHaveAccessibleName(/close course filters/i);
 
     const geometry = await menu.evaluate((panel) => {
       const rect = panel.getBoundingClientRect();
       const picker = panel.closest('.input_container');
       const button = picker.querySelector('.planner-course-filter-btn');
+      const closeButton = panel.querySelector('.planner-course-filter-close');
       const buttonRect = button.getBoundingClientRect();
+      const closeButtonRect = closeButton.getBoundingClientRect();
       const visibleControls = Array.from(panel.querySelectorAll('button, input, select')).filter((control) => {
         const styles = getComputedStyle(control);
         const box = control.getBoundingClientRect();
@@ -121,6 +126,12 @@ for (const viewport of [
       return {
         panel: { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom },
         filterButton: { width: buttonRect.width, height: buttonRect.height },
+        closeButton: {
+          left: closeButtonRect.left,
+          right: closeButtonRect.right,
+          width: closeButtonRect.width,
+          height: closeButtonRect.height,
+        },
         controlsContainedHorizontally: visibleControls.every((control) => {
           const box = control.getBoundingClientRect();
           return box.left >= rect.left - 1 && box.right <= rect.right + 1;
@@ -137,9 +148,35 @@ for (const viewport of [
     expect(geometry.documentOverflow).toBeLessThanOrEqual(1);
     expect(geometry.filterButton.width).toBeGreaterThanOrEqual(40);
     expect(geometry.filterButton.height).toBeGreaterThanOrEqual(36);
+    expect(geometry.closeButton.left).toBeGreaterThanOrEqual(geometry.panel.left - 1);
+    expect(geometry.closeButton.right).toBeLessThanOrEqual(geometry.panel.right + 1);
+    expect(geometry.closeButton.width).toBeGreaterThanOrEqual(44);
+    expect(geometry.closeButton.height).toBeGreaterThanOrEqual(44);
 
-    await page.keyboard.press('Escape');
+    await menu.evaluate((panel) => {
+      panel.scrollTop = panel.scrollHeight;
+    });
+    const scrolledGeometry = await menu.evaluate((panel) => {
+      const panelRect = panel.getBoundingClientRect();
+      const closeRect = panel.querySelector('.planner-course-filter-close').getBoundingClientRect();
+      return {
+        reachedBottom: Math.abs(
+          panel.scrollHeight - panel.clientHeight - panel.scrollTop,
+        ) <= 1,
+        closeContained: closeRect.left >= panelRect.left - 1
+          && closeRect.right <= panelRect.right + 1
+          && closeRect.top >= panelRect.top - 1
+          && closeRect.bottom <= panelRect.bottom + 1,
+      };
+    });
+    expect(scrolledGeometry.reachedBottom).toBe(true);
+    expect(scrolledGeometry.closeContained).toBe(true);
+    await expect(closeButton).toBeVisible();
+
+    await closeButton.click();
     await expect(menu).toBeHidden();
+    await expect(filterButton).toHaveAttribute('aria-expanded', 'false');
+    await expect(filterButton).toBeFocused();
     await picker.locator('.course_select').fill('CS301');
     const option = picker.locator('.course-option[data-code="CS301"]');
     await expect(option).toBeVisible();

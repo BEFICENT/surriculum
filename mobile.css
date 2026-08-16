@@ -491,6 +491,12 @@ body.is-mobile .planner-course-filter-btn {
     padding-inline: 9px;
 }
 
+body.is-mobile .planner-course-filter-close {
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+}
+
 body.is-mobile .input_container input,
 body.is-mobile .planner-filter-control .select-control {
     min-height: 36px;

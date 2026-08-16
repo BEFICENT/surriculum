@@ -82,6 +82,41 @@ async function mockOfferingHistory(page, records) {
 }
 
 test.describe('planner course filters (desktop)', () => {
+  test('close control and Escape dismiss filters, restore focus, and preserve picker-local choices', async ({ page }) => {
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: 'Fall 2024-2025',
+      curriculum: [['IF100']],
+      grades: [['A']],
+      dates: ['Spring 2024-2025'],
+      termCodes: ['202402'],
+    });
+
+    const picker = await openPicker(page, 'Spring 2024-2025');
+    const { button, menu } = await openFilters(picker);
+    const closeButton = menu.locator('.planner-course-filter-close');
+    await expect(closeButton).toBeVisible();
+    await expect(closeButton).toHaveAccessibleName(/close course filters/i);
+
+    await chooseOptionContaining(menu.locator('.planner-filter-level'), '400');
+    await setChecked(menu.locator('.planner-filter-show-unmet'), false);
+    await closeButton.click();
+    await expect(menu).toBeHidden();
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+    await expect(button).toBeFocused();
+
+    await button.click();
+    await expect(menu).toBeVisible();
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    await expect(menu.locator('.planner-filter-level')).toHaveValue('400');
+    await expect(menu.locator('.planner-filter-show-unmet')).not.toBeChecked();
+
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+    await expect(button).toBeFocused();
+  });
+
   test('filter menu is accessible, intersects search, reports results, and resets cleanly', async ({ page }) => {
     await seedPlan(page, {
       major: 'CS',

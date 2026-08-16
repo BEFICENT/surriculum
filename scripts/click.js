@@ -171,10 +171,13 @@ function dynamic_click(e, curriculum, course_data)
         const smartSortId = pickerId + '_smart_sort';
         filterMenu.innerHTML =
             '<div class="planner-course-filter-header">'
-            + '  <div>'
+            + '  <div class="planner-course-filter-heading">'
             + '    <div class="planner-course-filter-title">Course filters</div>'
             + '    <div class="planner-course-filter-context"></div>'
             + '  </div>'
+            + '  <button class="btn-icon planner-course-filter-close" type="button" aria-label="Close course filters" title="Close course filters">'
+            + '    <i class="fa-solid fa-xmark" aria-hidden="true"></i>'
+            + '  </button>'
             + '</div>'
             + '<fieldset class="planner-course-filter-section">'
             + '  <legend>Eligibility</legend>'
@@ -211,6 +214,7 @@ function dynamic_click(e, curriculum, course_data)
             + '</div>';
 
         const filterContextText = filterMenu.querySelector('.planner-course-filter-context');
+        const filterCloseButton = filterMenu.querySelector('.planner-course-filter-close');
         if (filterContextText) {
             filterContextText.textContent = targetTermCode
                 ? `Requirements and offerings are checked for ${targetTermLabel}.`
@@ -945,6 +949,12 @@ function dynamic_click(e, curriculum, course_data)
             }
         };
 
+        const closeFilterMenu = (restoreFocus) => {
+            dropdown.style.display = 'none';
+            input.setAttribute('aria-expanded', 'false');
+            setFilterMenuOpen(false, restoreFocus);
+        };
+
         const syncSharedPreferenceControls = () => {
             controls.hideTaken.checked = typeof window.hideTakenCourses === 'boolean'
                 ? window.hideTakenCourses : controls.hideTaken.checked;
@@ -1028,8 +1038,16 @@ function dynamic_click(e, curriculum, course_data)
             }, 100);
         });
         cleanupDropdown.on(filterButton, 'click', () => {
-            setFilterMenuOpen(filterMenu.hidden, false);
+            if (filterMenu.hidden) setFilterMenuOpen(true, false);
+            else closeFilterMenu(false);
         });
+        if (filterCloseButton) {
+            cleanupDropdown.on(filterCloseButton, 'click', (evt) => {
+                evt.preventDefault();
+                evt.stopPropagation();
+                closeFilterMenu(true);
+            });
+        }
         cleanupDropdown.on(input_container, 'click', (evt) => {
             const reset = evt.target && typeof evt.target.closest === 'function'
                 ? evt.target.closest('.planner-filter-reset') : null;
@@ -1110,9 +1128,7 @@ function dynamic_click(e, curriculum, course_data)
                 evt.preventDefault();
                 if (!filterMenu.hidden) {
                     evt.stopPropagation();
-                    dropdown.style.display = 'none';
-                    input.setAttribute('aria-expanded', 'false');
-                    setFilterMenuOpen(false, true);
+                    closeFilterMenu(true);
                 } else {
                     dropdown.style.display = 'none';
                     input.setAttribute('aria-expanded', 'false');
@@ -1124,15 +1140,11 @@ function dynamic_click(e, curriculum, course_data)
         cleanupDropdown.on(document, 'keydown', (evt) => {
             if (evt.key !== 'Escape' || filterMenu.hidden) return;
             evt.preventDefault();
-            dropdown.style.display = 'none';
-            input.setAttribute('aria-expanded', 'false');
-            setFilterMenuOpen(false, true);
+            closeFilterMenu(true);
         });
         cleanupDropdown.on(document, 'pointerdown', (evt) => {
             if (input_container.contains(evt.target)) return;
-            setFilterMenuOpen(false, false);
-            dropdown.style.display = 'none';
-            input.setAttribute('aria-expanded', 'false');
+            closeFilterMenu(false);
         });
         cleanupDropdown.on(document, 'courseDetailsToggleChanged', () => {
             syncSharedPreferenceControls();
