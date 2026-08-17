@@ -10,8 +10,8 @@
 // The academic calendar it encodes (a term "starts" in the year the Fall did):
 //   Jan 1  - Jan 19   -> Fall   of the PREVIOUS academic year (still finishing)
 //   Jan 20 - Jun 19   -> Spring of the previous year
-//   Jun 20 - Aug 31   -> Summer of the previous year
-//   Sep 1  - Dec 31   -> Fall   of the CURRENT year
+//   Jun 20 - Aug 19   -> Summer of the previous year
+//   Aug 20 - Dec 31   -> Fall   of the CURRENT year
 //
 // Note every boundary is tested from both sides: the ones inside a month
 // (Jan 19/20, Jun 19/20) are hand-written comparisons in the source and are
@@ -45,17 +45,18 @@ test('Spring runs to Jun 19', () => {
 test('Jun 20 flips to Summer', () => {
   assert.equal(at(2025, JUN, 20), 'Summer 2024-2025', 'Jun 20 is the first Summer day');
   assert.equal(at(2025, JUL, 15), 'Summer 2024-2025');
-  assert.equal(at(2025, AUG, 31), 'Summer 2024-2025', 'Aug 31 is the last Summer day');
+  assert.equal(at(2025, AUG, 19), 'Summer 2024-2025', 'Aug 19 is the last Summer day');
 });
 
-test('Sep 1 starts the NEW academic year Fall', () => {
-  // The only boundary where the academic year rolls over: Aug 31 belongs to
-  // 2024-2025, Sep 1 to 2025-2026.
-  assert.equal(at(2025, SEP, 1), 'Fall 2025-2026', 'Sep 1 is the first Fall day');
+test('Aug 20 starts the NEW academic year Fall', () => {
+  // The only boundary where the academic year rolls over: Aug 19 belongs to
+  // 2024-2025, Aug 20 to 2025-2026.
+  assert.equal(at(2025, AUG, 20), 'Fall 2025-2026', 'Aug 20 is the first Fall day');
+  assert.equal(at(2025, SEP, 1), 'Fall 2025-2026');
   assert.equal(at(2025, DEC, 31), 'Fall 2025-2026', 'Dec 31 is still that Fall');
 });
 
-test('the year rolls over at Sep 1 and back at Jan 1, not at New Year', () => {
+test('the year rolls over at Aug 20 and back at Jan 1, not at New Year', () => {
   // Dec 31 -> Jan 1 crosses the calendar year but NOT the academic term.
   assert.equal(at(2025, DEC, 31), 'Fall 2025-2026');
   assert.equal(at(2026, JAN, 1), 'Fall 2025-2026', 'the term must survive New Year');
@@ -92,7 +93,9 @@ test('an invalid date yields an empty string rather than throwing', () => {
 test('the term it returns round-trips through the term-code helpers', () => {
   // getCurrentTermNameFromDate feeds termNameToCode all over the app, so its
   // output format has to be exactly what that parser expects.
-  for (const [m, d] of [[JAN, 5], [FEB, 14], [JUN, 30], [SEP, 15], [DEC, 20]]) {
+  for (const [m, d] of [
+    [JAN, 5], [FEB, 14], [JUN, 30], [AUG, 19], [AUG, 20], [SEP, 15], [DEC, 20],
+  ]) {
     const name = at(2025, m, d);
     const code = h.termNameToCode(name);
     assert.match(code, /^\d{6}$/, `${name} should convert to a 6-digit code`);

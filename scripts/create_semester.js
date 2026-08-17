@@ -164,13 +164,20 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
                     }
                 } catch (_) {}
                 if (!termToUse) {
-                    // Last-resort fallback (legacy month-based heuristic)
+                    // Last-resort fallback mirroring getCurrentTermNameFromDate.
                     const currentDate = new Date();
                     const currentMonth = currentDate.getMonth();
+                    const currentDay = currentDate.getDate();
                     const currentYear = currentDate.getFullYear();
-                    if (currentMonth >= 7) termToUse = 'Fall ' + currentYear + '-' + (currentYear + 1);
-                    else if (currentMonth >= 0 && currentMonth < 5) termToUse = 'Spring ' + (currentYear - 1) + '-' + currentYear;
-                    else termToUse = 'Summer ' + (currentYear - 1) + '-' + currentYear;
+                    if (currentMonth === 0 && currentDay < 20) {
+                        termToUse = 'Fall ' + (currentYear - 1) + '-' + currentYear;
+                    } else if (currentMonth < 5 || (currentMonth === 5 && currentDay < 20)) {
+                        termToUse = 'Spring ' + (currentYear - 1) + '-' + currentYear;
+                    } else if (currentMonth < 7 || (currentMonth === 7 && currentDay < 20)) {
+                        termToUse = 'Summer ' + (currentYear - 1) + '-' + currentYear;
+                    } else {
+                        termToUse = 'Fall ' + currentYear + '-' + (currentYear + 1);
+                    }
                 }
 
                 nextTermIndex = terms.indexOf(termToUse) !== -1 ? terms.indexOf(termToUse) : 0;

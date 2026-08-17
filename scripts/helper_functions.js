@@ -9,8 +9,8 @@
 // Rules:
 // - Before Jan 20: Fall of (year-1)-(year)
 // - Before June 20: Spring of (year-1)-(year)
-// - Before September: Summer of (year-1)-(year)
-// - Otherwise: Fall of (year)-(year+1)
+// - Through Aug 19: Summer of (year-1)-(year)
+// - From Aug 20: Fall of (year)-(year+1)
 let currentDate = new Date();
 let currentYear = currentDate.getFullYear();
 let currentMonth = currentDate.getMonth(); // 0-11
@@ -31,12 +31,12 @@ function getCurrentTermNameFromDate(d) {
             const start = y - 1;
             return `Spring ${start}-${start + 1}`;
         }
-        // Jun 20 -> Aug 31
-        if (m < 8) {
+        // Jun 20 -> Aug 19
+        if (m < 7 || (m === 7 && day < 20)) {
             const start = y - 1;
             return `Summer ${start}-${start + 1}`;
         }
-        // Sep -> Dec
+        // Aug 20 -> Dec 31
         const start = y;
         return `Fall ${start}-${start + 1}`;
     } catch (_) {

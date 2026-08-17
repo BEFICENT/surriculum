@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Offline regressions for SUIS response identity and atomic publication."""
 
+import datetime
 import json
 import os
 import subprocess
@@ -17,6 +18,7 @@ sys.path.insert(0, ROOT)
 import fetch_courses as fc  # noqa: E402
 import fetch_minors as fm  # noqa: E402
 import fetch_requirements as fr  # noqa: E402
+from term_utils import generate_terms, term_code_from_date, term_name_from_date  # noqa: E402
 from suis_page_validation import (  # noqa: E402
     DegreePageTermMismatch,
     require_matching_admit_term,
@@ -73,6 +75,26 @@ class FakeSession:
 
 
 class TermIdentityTests(unittest.TestCase):
+    def test_browser_mirrored_current_term_rolls_to_fall_on_august_20(self):
+        self.assertEqual(
+            term_name_from_date(datetime.date(2026, 8, 19)),
+            "Summer 2025-2026",
+        )
+        self.assertEqual(
+            term_name_from_date(datetime.date(2026, 8, 20)),
+            "Fall 2026-2027",
+        )
+        self.assertEqual(term_code_from_date(datetime.date(2026, 8, 19)), "202503")
+        self.assertEqual(term_code_from_date(datetime.date(2026, 8, 20)), "202601")
+        self.assertEqual(
+            generate_terms(start_year=2025, through_date=datetime.date(2026, 8, 19))[-1],
+            "202503",
+        )
+        self.assertEqual(
+            generate_terms(start_year=2025, through_date=datetime.date(2026, 8, 20))[-1],
+            "202601",
+        )
+
     def test_exact_displayed_term_is_required(self):
         soup = BeautifulSoup(VALID_PAGE, "lxml")
         self.assertEqual(require_matching_admit_term(soup, "202601"), "202601")

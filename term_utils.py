@@ -30,8 +30,8 @@ def term_name_from_date(d: _dt.date) -> str:
     Rules:
     - Jan 1-19: Fall of (year-1)-(year)
     - Jan 20 - Jun 19: Spring of (year-1)-(year)
-    - Jun 20 - Aug 31: Summer of (year-1)-(year)
-    - Sep 1 - Dec 31: Fall of (year)-(year+1)
+    - Jun 20 - Aug 19: Summer of (year-1)-(year)
+    - Aug 20 - Dec 31: Fall of (year)-(year+1)
     """
     y = int(d.year)
     m = int(d.month)  # 1-12
@@ -47,12 +47,12 @@ def term_name_from_date(d: _dt.date) -> str:
         start = y - 1
         return f"Spring {start}-{start + 1}"
 
-    # Jun 20 -> Aug 31
-    if m < 9:
+    # Jun 20 -> Aug 19
+    if (m < 8) or (m == 8 and day < 20):
         start = y - 1
         return f"Summer {start}-{start + 1}"
 
-    # Sep -> Dec
+    # Aug 20 -> Dec 31
     start = y
     return f"Fall {start}-{start + 1}"
 
