@@ -2,7 +2,7 @@
 
 // Unit tests for the term-name <-> term-code helpers in helper_functions.js.
 // These are pure and dependency-free, and the ordering property they encode is
-// load-bearing: the scheduler's prereq check and the "hide taken" filter both
+// load-bearing: the scheduler's prereq check and earlier-planned filter both
 // compare numeric term codes to decide what counts as past / current / future.
 
 const test = require('node:test');

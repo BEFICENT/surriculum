@@ -5116,7 +5116,7 @@ else {SUrriculum(initial_major_chosen);}
                     <section class="help-info-section" id="help-planner" aria-labelledby="help-planner-title">
                         <h4 id="help-planner-title" tabindex="-1">Using the planner</h4>
                         <h5>Add and find courses</h5>
-                        <p>Use Add course inside the destination semester and search by code or title. Open Filters beside the search field to narrow by program, category, level, credits, exact-semester offering, already-planned status, or course requirements. Controls → Course picker defaults sets the initial detail, planned-course, offered-only, and sorting choices for newly opened pickers. Offered-only can then be changed for one semester without changing the default or another open picker. “The semester” means the destination card's saved academic term, not the current date or visual card order.</p>
+                        <p>Use Add course inside the destination semester and search by code or title. Open Filters beside the search field to narrow by program, category, level, credits, exact-semester offering, already-planned status, or course requirements. Controls → Course picker defaults sets the initial detail, planned-course, offered-only, and sorting choices for newly opened pickers. In the Planner, Hide courses planned in this or earlier semesters removes courses present in the destination semester or an academically earlier semester; courses planned only later remain visible. Offered-only can then be changed for one semester without changing the default or another open picker. “The semester” means the destination card's saved academic term, not the current date or visual card order.</p>
 
                         <h5>Understand chronology</h5>
                         <p>A semester's saved academic term code is the source of truth for prerequisite checks, retakes, current-term state, and progress calculations. Dragging semester cards only changes their visual order. Sort Semesters restores chronological display.</p>
@@ -5133,7 +5133,7 @@ else {SUrriculum(initial_major_chosen);}
                         <ol>
                             <li>Open Scheduler and choose the academic term you want to arrange.</li>
                             <li>Search for courses, expand a course, and select a section bundle. Labs and recitations stay bundled with their main course where the schedule data identifies that relationship.</li>
-                            <li>Use prerequisite and taken-course filters, Smart Sort, availability highlighting, and blocked-hour controls as needed. Inspect the weekly grid for highlighted conflicts.</li>
+                            <li>Use prerequisite checks, the Hide courses planned before the selected term filter, Smart Sort, availability highlighting, and blocked-hour controls as needed. Inspect the weekly grid for highlighted conflicts.</li>
                             <li>Copy CRNs when you are ready to register. The scheduler does not register courses for you.</li>
                             <li><strong>Update planner semester replaces the matching term's planned main courses</strong> with the scheduler selection. Lab and recitation rows are not added as separate planner courses, so review the confirmation before applying it.</li>
                         </ol>

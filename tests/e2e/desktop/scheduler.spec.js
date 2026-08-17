@@ -22,16 +22,17 @@ test.describe('scheduler (desktop)', () => {
     expect(browserErrors, browserErrors.join('\n')).toEqual([]);
   });
 
-  test('hide-taken keeps a future-term-planned course visible but hides a past-term one', async ({ page }) => {
-    // Regression guard for the fix: a course planned only for a term AFTER the
-    // scheduler's selected term is not "taken" yet and must stay listed.
+  test('earlier-planned filter keeps selected and future terms visible', async ({ page }) => {
+    // The Scheduler hides only courses planned before its selected term. A
+    // course in the selected term must remain available for section selection,
+    // and a future course has not reached this point in the plan yet.
     await seedPlan(page, {
       major: 'CS',
       entryTerm: 'Fall 2024-2025',
-      curriculum: [['MATH101'], ['MATH102']], // sem0 past, sem1 future
-      grades: [['A'], ['']],
-      dates: ['Fall 2024-2025', 'Fall 2026-2027'], // 202401 (past), 202601 (future)
-      schedulerSelectedTerm: '202503', // Summer 2025-2026: strictly between the two
+      curriculum: [['MATH101'], ['MATH102'], ['MATH203']],
+      grades: [['A'], [''], ['']],
+      dates: ['Fall 2024-2025', 'Summer 2025-2026', 'Fall 2026-2027'],
+      schedulerSelectedTerm: '202503',
     });
 
     await page.evaluate(() => { window.hideTakenCourses = true; window.openSchedulerModal(); });
@@ -39,13 +40,15 @@ test.describe('scheduler (desktop)', () => {
     await expect(modal).toBeVisible({ timeout: 15000 });
 
     // Narrow the list so result pagination can't be what hides a course.
-    await modal.locator('.scheduler-search').fill('MATH10');
+    await modal.locator('.scheduler-search').fill('MATH');
     await expect(modal.locator('.scheduler-course').first()).toBeVisible({ timeout: 15000 });
 
-    // MATH102 is planned for a FUTURE term -> not taken yet -> visible.
-    await expect(modal.locator('.scheduler-course[data-course="MATH102"]')).toHaveCount(1);
-    // MATH101 is planned for a PAST term -> taken -> hidden.
+    // MATH101 is planned before the selected term -> hidden.
     await expect(modal.locator('.scheduler-course[data-course="MATH101"]')).toHaveCount(0);
+    // MATH102 belongs to the selected term and remains schedulable.
+    await expect(modal.locator('.scheduler-course[data-course="MATH102"]')).toHaveCount(1);
+    // MATH203 is planned only in a later term and also remains visible.
+    await expect(modal.locator('.scheduler-course[data-course="MATH203"]')).toHaveCount(1);
   });
 
   test('shared prerequisite evaluator still marks unmet scheduler courses', async ({ page }) => {

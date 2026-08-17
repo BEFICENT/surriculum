@@ -181,7 +181,7 @@ function dynamic_click(e, curriculum, course_data)
             + '</div>'
             + '<fieldset class="planner-course-filter-section">'
             + '  <legend>Eligibility</legend>'
-            + `  <label class="planner-filter-toggle" for="${hideTakenId}"><span>Hide courses planned by this semester</span><input class="planner-filter-hide-taken" id="${hideTakenId}" type="checkbox"></label>`
+            + `  <label class="planner-filter-toggle" for="${hideTakenId}"><span>Hide courses planned in this or earlier semesters</span><input class="planner-filter-hide-taken" id="${hideTakenId}" type="checkbox"></label>`
             + `  <label class="planner-filter-toggle" for="${offeredId}"><span>Only offered in this semester</span><input class="planner-filter-offered" id="${offeredId}" type="checkbox"></label>`
             + `  <label class="planner-filter-toggle" for="${prerequisitesId}"><span>Check requirements</span><input class="planner-filter-prerequisites" id="${prerequisitesId}" type="checkbox"></label>`
             + `  <label class="planner-filter-toggle" for="${showUnmetId}"><span>Show courses with unmet requirements</span><input class="planner-filter-show-unmet" id="${showUnmetId}" type="checkbox"></label>`

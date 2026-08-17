@@ -1909,8 +1909,8 @@
     const schedulerFilterControlsHtml =
       `<div class="scheduler-controls">` +
       `  <div class="scheduler-control control-row toggle-row">` +
-      `    <div class="toggle-text">Hide taken courses</div>` +
-      `    <label class="toggle-switch"><input class="scheduler-toggle-hide-taken" type="checkbox" aria-label="Hide taken courses" /><span class="toggle-slider"></span></label>` +
+      `    <div class="toggle-text">Hide courses planned before the selected term</div>` +
+      `    <label class="toggle-switch"><input class="scheduler-toggle-hide-taken" type="checkbox" aria-label="Hide courses planned before the selected term" /><span class="toggle-slider"></span></label>` +
       `  </div>` +
       `  <div class="scheduler-control control-row toggle-row">` +
       `    <div class="toggle-text">Show course details</div>` +
@@ -3267,7 +3267,7 @@
       }
     };
 
-    // The "hide taken" filter treats a course as taken only if it's planned for
+    // The earlier-planned filter treats a course as matched only if it's planned for
     // the scheduler's selected term OR an earlier one. A course planned solely
     // for a LATER term hasn't been taken yet as of the selected term, so it must
     // stay visible instead of being filtered out. (Current-term planned/selected
@@ -4516,7 +4516,7 @@
         }
       } catch (_) {}
 
-      // Courses that we should keep visible even when "Hide taken courses" is enabled.
+      // Courses that we should keep visible even when the earlier-planned filter is enabled.
       const keepVisible = new Set();
       try {
         plannedCourses.forEach(c => keepVisible.add(normalizeCourseId(c)));

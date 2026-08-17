@@ -531,7 +531,10 @@ a time and checked off only after the fix and its verification are complete.
   Completed on 2026-08-16: those three controls plus offered-only are presented
   as Course picker defaults. Offered-only is copied into a newly opened picker, then stays
   local to its destination semester instead of changing the default or another
-  open picker. Planner credit and requirement values migrate once from the old
+  open picker. The shared hide-planned state uses contextual labels: Planner hides
+  courses through the destination semester, while Scheduler hides only courses
+  before its selected term so current-term courses remain schedulable. Planner
+  credit and requirement values migrate once from the old
   Scheduler-shared keys and no longer cross-write them.
 - [x] Accept the ambiguous pre-multi-plan raw plan keys for 3.1. The maintainer
   explicitly chose not to add migration provenance or a reset tombstone for

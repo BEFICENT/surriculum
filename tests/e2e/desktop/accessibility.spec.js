@@ -19,7 +19,7 @@ test.describe('planner accessibility', () => {
     }
     for (const name of [
       'Show course details',
-      'Hide courses planned by this term',
+      'Hide courses planned by the selected semester',
       'Only show courses offered in the semester',
       'Smart Sort',
     ]) {

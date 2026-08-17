@@ -34,7 +34,7 @@ test.describe('scheduler accessibility', () => {
     await expect(filters).toHaveAttribute('aria-expanded', 'true');
 
     for (const name of [
-      'Hide taken courses',
+      'Hide courses planned before the selected term',
       'Show course details',
       'Smart Sort',
       'Hover preview',

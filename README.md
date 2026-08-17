@@ -123,10 +123,16 @@ If a course is missing from the catalog (or you want placeholders), you can add 
 ## Course picker defaults and filters
 
 Controls provides four course-picker defaults: **Show course
-details**, **Hide courses planned by this term**, **Only show courses offered in
+details**, **Hide courses planned by the selected semester**, **Only show courses offered in
 the semester**, and **Smart Sort**. They are applied when a course picker opens.
 The offered-only control inside a picker is local to that semester: changing it
 does not rewrite the sidebar default or another open semester's picker.
+
+In a Planner course picker, **Hide courses planned in this or earlier semesters**
+hides courses in the destination semester and academically earlier semesters; a
+course planned only in a later semester remains visible. In Scheduler, **Hide
+courses planned before the selected term** keeps the selected term's planned
+courses available for section selection.
 
 The offered-only setting uses the destination semester's exact schedule. If
 that schedule is unavailable, it fails open and leaves courses visible;
@@ -234,7 +240,7 @@ Key features:
   - Enable block mode and click-drag to block time slots
   - Courses that can’t fit around blocked hours can be filtered out, or optionally shown in red
 - Optional helpers (toggles):
-  - Hide taken courses
+  - Hide courses planned before the selected term
   - Show course details in the list (credits/type)
   - Check course prerequisites, including prior-SU and General Requirements
     rules, with an option to keep unmet courses visible

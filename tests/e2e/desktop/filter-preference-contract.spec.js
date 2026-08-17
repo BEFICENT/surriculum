@@ -81,6 +81,9 @@ test.describe('course-filter preference contract (desktop)', () => {
       offered: pickerState.menu.locator('.planner-filter-offered'),
       smartSort: pickerState.menu.locator('.planner-filter-smart-sort'),
     };
+    await expect(planner.hideTaken).toHaveAccessibleName(
+      'Hide courses planned in this or earlier semesters',
+    );
     for (const control of Object.values(planner)) await expect(control).not.toBeChecked();
 
     // The three shared controls update the sidebar immediately. Offered-only is
