@@ -171,6 +171,7 @@
 {"Major": "MATH", "Code": "311", "Course_Name": "Introduction to Algebra", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "MATH", "Code": "317", "Course_Name": "Elementary Number Theory", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "MATH", "Code": "318", "Course_Name": "Introduction to Combinatorics", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
+{"Major": "MATH", "Code": "428", "Course_Name": "Introduction to Approximation Methods", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "MATH", "Code": "484", "Course_Name": "Mathematical Introduction to Quantum Algorithms and Post-Quantum Cryptography", "ECTS": "6", "Engineering": 3.0, "Basic_Science": 3.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "MAT", "Code": "204", "Course_Name": "Electrical, Optical and Magnetic Properties of Materials", "ECTS": "6", "Engineering": 2.0, "Basic_Science": 4.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "FENS"}
 {"Major": "MAT", "Code": "206", "Course_Name": "Kinetics of Materials", "ECTS": "6", "Engineering": 5.0, "Basic_Science": 1.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
@@ -364,7 +365,6 @@
 {"Major": "MATH", "Code": "409", "Course_Name": "Proofs from the Notebook", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "MATH", "Code": "410", "Course_Name": "Introduction to Stochastic Calculus", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "MATH", "Code": "414", "Course_Name": "Finite Fields and Applications", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "MATH", "Code": "428", "Course_Name": "Introduction to Approximation Methods", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "MAT", "Code": "308", "Course_Name": "Phase Equilibria", "ECTS": "5", "Engineering": 4.0, "Basic_Science": 1.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "MAT", "Code": "314", "Course_Name": "Mechanical Properties of Materials", "ECTS": "5", "Engineering": 4.0, "Basic_Science": 1.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "MAT", "Code": "401", "Course_Name": "Surface Science and Engineering", "ECTS": "6", "Engineering": 2.0, "Basic_Science": 4.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
