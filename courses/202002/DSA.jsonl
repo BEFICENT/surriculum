@@ -90,6 +90,7 @@
 {"Major": "IE", "Code": "413", "Course_Name": "Information Systems", "ECTS": "5", "Engineering": 5.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "IE", "Code": "48002", "Course_Name": "Special Topics in IE:Advanced statistics with R", "ECTS": "6", "Engineering": 2.0, "Basic_Science": 4.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "IR", "Code": "391", "Course_Name": "International Political Economy", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "FASS"}
+{"Major": "MATH", "Code": "428", "Course_Name": "Introduction to Approximation Methods", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "MATH", "Code": "484", "Course_Name": "Mathematical Introduction to Quantum Algorithms and Post-Quantum Cryptography", "ECTS": "6", "Engineering": 3.0, "Basic_Science": 3.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "MGMT", "Code": "404", "Course_Name": "Technology Management", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "MGMT", "Code": "421", "Course_Name": "Technology Awareness and Implications of Technology Trends to Business Life and Processes", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "area", "Faculty_Course": "No"}
@@ -477,7 +478,6 @@
 {"Major": "MATH", "Code": "409", "Course_Name": "Proofs from the Notebook", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "MATH", "Code": "410", "Course_Name": "Introduction to Stochastic Calculus", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "MATH", "Code": "414", "Course_Name": "Finite Fields and Applications", "ECTS": "6", "Engineering": 0, "Basic_Science": 6.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "MATH", "Code": "428", "Course_Name": "Introduction to Approximation Methods", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "MATH", "Code": "479", "Course_Name": "Calculus of Variations", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "MAT", "Code": "204", "Course_Name": "Electrical, Optical and Magnetic Properties of Materials", "ECTS": "6", "Engineering": 2.0, "Basic_Science": 4.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "FENS"}
 {"Major": "MAT", "Code": "206", "Course_Name": "Kinetics of Materials", "ECTS": "6", "Engineering": 5.0, "Basic_Science": 1.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
