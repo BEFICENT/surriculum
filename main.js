@@ -421,6 +421,8 @@ if ('serviceWorker' in navigator) {
 
 
 function SUrriculum(major_chosen_by_user) {
+    try { performance.mark('surriculum:planner-hydrate-start'); } catch (_) {}
+
     function parseJsonOrJsonl(text) {
         const trimmed = (text || '').trim();
         if (!trimmed) return null;
@@ -4965,6 +4967,7 @@ function SUrriculum(major_chosen_by_user) {
     // listener registered late in this same script cannot miss readiness.
     try {
         window.__surriculumReady = true;
+        try { performance.mark('surriculum:planner-ready'); } catch (_) {}
         document.dispatchEvent(new CustomEvent('surriculum:ready'));
     } catch (_) {}
 

@@ -3468,6 +3468,25 @@ body.is-mobile .semester-drop-placeholder {
 /* === SCHEDULER (CURRENT TERM) === */
 .scheduler-overlay {
     z-index: 2900;
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    overflow: hidden;
+}
+
+.scheduler-edge-blur {
+    position: absolute;
+    z-index: 0;
+    pointer-events: none;
+    background: var(--alpha-black-50);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    contain: strict;
+}
+
+.scheduler-overlay > .scheduler-modal {
+    position: relative;
+    z-index: 1;
 }
 
 .scheduler-picker-overlay {

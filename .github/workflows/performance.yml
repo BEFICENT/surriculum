@@ -1,0 +1,164 @@
+name: Performance
+
+on:
+  # Intentionally no paths/paths-ignore filter. Runtime data under courses/,
+  # requirements/, and data/ can change startup, parsing, and transfer cost just
+  # as application source can.
+  push:
+  pull_request:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Hosted-runner profile (software-rendered; never a battery/GPU result)
+        required: true
+        type: choice
+        options:
+          - smoke
+          - nightly
+        default: smoke
+
+# Tests may read the checkout and create ephemeral Actions artifacts. They may
+# not update baselines, write repository contents, or deploy the application.
+permissions:
+  contents: read
+
+concurrency:
+  group: performance-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
+env:
+  CI: "true"
+  PYTHONDONTWRITEBYTECODE: "1"
+  PERF_EXECUTION_ENVIRONMENT: github-hosted-software-rendered
+  PERF_WORKERS: "1"
+  PERF_RETRIES: "0"
+
+jobs:
+  contracts:
+    name: Deterministic performance contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+
+      - name: Install test dependencies
+        run: npm ci
+
+      - name: Run deterministic performance contracts
+        run: node --test "tests/perf/contracts/*.test.js"
+
+  smoke:
+    name: Chromium performance smoke
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' && inputs.profile == 'smoke')
+    needs: contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+
+      - name: Install test dependencies
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run local-artifact smoke with one worker and no retries
+        run: >-
+          node tests/perf/run.js
+          --profile ci-smoke
+          --target local-artifact
+          --browser chromium
+          --headless
+          --workers 1
+          --retries 0
+
+      - name: Upload performance smoke evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: performance-smoke-${{ github.run_id }}
+          path: test-results/perf/
+          if-no-files-found: warn
+          retention-days: 14
+
+  nightly:
+    name: Hosted Chromium nightly benchmark
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.profile == 'nightly')
+    needs: contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+
+      - name: Install test dependencies
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run hosted nightly profile with one worker and no retries
+        # GitHub-hosted rendering and emulated throttling are useful regression
+        # signals, but this job does not represent a physical GPU or battery.
+        run: >-
+          node tests/perf/run.js
+          --profile nightly
+          --target local-artifact
+          --browser chromium
+          --headless
+          --workers 1
+          --retries 0
+
+      - name: Upload nightly performance evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: performance-nightly-${{ github.run_id }}
+          path: test-results/perf/
+          if-no-files-found: warn
+          retention-days: 14

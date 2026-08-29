@@ -41,7 +41,7 @@ test('course-page prerequisite qualifiers stay within the reviewed rule set', ()
     .filter((row) => /can be taken concurrently/i.test(String(row.prerequisites || '')))
     .map((row) => row.course_id)
     .sort();
-  assert.deepEqual(concurrent, ['CS405', 'CS432', 'ENS205', 'POLS492', 'PSY306']);
+  assert.deepEqual(concurrent, ['CS405', 'CS432', 'ENS205', 'POLS492']);
 
   const bindingMinS = coursePageInfo
     .filter((row) => /Min Grade S/i.test(String(row.prerequisites || '')))

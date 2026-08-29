@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "requireSameEnvironment": true,
+  "defaultMode": "advisory",
+  "invariants": [
+    {
+      "id": "no-page-errors",
+      "path": "diagnostics.pageErrors",
+      "aggregate": "count",
+      "comparator": "lte",
+      "value": 0,
+      "description": "A measured journey must not raise a page exception."
+    },
+    {
+      "id": "no-console-errors",
+      "path": "diagnostics.consoleErrors",
+      "aggregate": "count",
+      "comparator": "lte",
+      "value": 0,
+      "description": "A measured journey must not log an error-level console message."
+    },
+    {
+      "id": "no-unexpected-request-failures",
+      "path": "diagnostics.requestFailures",
+      "aggregate": "count",
+      "comparator": "lte",
+      "value": 0,
+      "description": "Unexpected same-origin request failures invalidate the measurement."
+    },
+    {
+      "id": "no-bad-responses",
+      "path": "diagnostics.badResponses",
+      "aggregate": "count",
+      "comparator": "lte",
+      "value": 0,
+      "description": "HTTP error responses invalidate the measurement."
+    },
+    {
+      "id": "stable-power-source",
+      "path": "metadata.powerValidation.valid",
+      "comparator": "eq",
+      "value": true,
+      "missing": "skip",
+      "description": "Reference-device iterations must begin and end on the same requested power source."
+    }
+  ],
+  "rules": [
+    {
+      "id": "good-cls",
+      "path": "metrics.observers.derived.cls",
+      "comparator": "lte",
+      "value": 0.1,
+      "severity": "gate",
+      "missing": "skip"
+    },
+    {
+      "id": "few-over-50ms-frames",
+      "path": "metrics.phases.*.frames.over50Share",
+      "aggregate": "max",
+      "comparator": "lte",
+      "value": 0.03,
+      "severity": "gate",
+      "missing": "skip"
+    }
+  ],
+  "comparisonRules": [
+    {
+      "id": "action-duration-regression",
+      "path": "metrics.timings.*",
+      "comparator": "regression",
+      "direction": "increase",
+      "relativeThreshold": 0.15,
+      "absoluteThreshold": 50,
+      "severity": "gate",
+      "missing": "skip"
+    },
+    {
+      "id": "frame-p95-regression",
+      "path": "metrics.phases.*.frames.p95",
+      "aggregate": "max",
+      "comparator": "regression",
+      "direction": "increase",
+      "relativeThreshold": 0.2,
+      "absoluteThreshold": 16,
+      "severity": "gate",
+      "missing": "skip"
+    },
+    {
+      "id": "network-transfer-regression",
+      "path": "metrics.network.encodedDataLength",
+      "comparator": "regression",
+      "direction": "increase",
+      "relativeThreshold": 0.1,
+      "absoluteThreshold": 102400,
+      "severity": "gate",
+      "missing": "skip"
+    }
+  ]
+}

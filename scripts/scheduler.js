@@ -145,6 +145,116 @@
     };
   }
 
+  // A full-viewport backdrop-filter forces the browser to continuously
+  // re-rasterize the entire planner while the Scheduler scrolls. Keep the
+  // visual treatment, but restrict the expensive blur surfaces to the four
+  // strips that are actually visible around the Scheduler modal.
+  function activateSchedulerEdgeBlur(overlay, modal) {
+    if (!overlay || !modal) return { refresh() {}, release() {} };
+
+    const bands = {};
+    ['top', 'right', 'bottom', 'left'].forEach((side) => {
+      const band = document.createElement('div');
+      band.className = `scheduler-edge-blur scheduler-edge-blur--${side}`;
+      band.setAttribute('aria-hidden', 'true');
+      overlay.insertBefore(band, modal);
+      bands[side] = band;
+    });
+    overlay.classList.add('scheduler-edge-blur-ready');
+
+    let disposed = false;
+    let frame = 0;
+    const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+    const px = (value) => `${Math.round(value * 100) / 100}px`;
+
+    const place = (band, left, top, width, height) => {
+      if (!band) return;
+      const visible = width > 0.5 && height > 0.5;
+      band.hidden = !visible;
+      if (!visible) return;
+      band.style.left = px(left);
+      band.style.top = px(top);
+      band.style.width = px(width);
+      band.style.height = px(height);
+    };
+
+    const update = () => {
+      frame = 0;
+      if (disposed || !overlay.isConnected || !modal.isConnected) return;
+      try {
+        const overlayRect = overlay.getBoundingClientRect();
+        const modalRect = modal.getBoundingClientRect();
+        const width = Math.max(0, overlayRect.width);
+        const height = Math.max(0, overlayRect.height);
+        const left = clamp(modalRect.left - overlayRect.left, 0, width);
+        const right = clamp(modalRect.right - overlayRect.left, left, width);
+        const top = clamp(modalRect.top - overlayRect.top, 0, height);
+        const bottom = clamp(modalRect.bottom - overlayRect.top, top, height);
+
+        place(bands.top, 0, 0, width, top);
+        place(bands.bottom, 0, bottom, width, height - bottom);
+        place(bands.left, 0, top, left, bottom - top);
+        place(bands.right, right, top, width - right, bottom - top);
+
+        overlay.dataset.schedulerBlurArea = String(Math.round(
+          (width * top) + (width * (height - bottom))
+          + (left * (bottom - top)) + ((width - right) * (bottom - top))
+        ));
+      } catch (_) {}
+    };
+
+    const refresh = () => {
+      if (disposed || frame) return;
+      try {
+        frame = requestAnimationFrame(update);
+      } catch (_) {
+        update();
+      }
+    };
+
+    let resizeObserver = null;
+    try {
+      resizeObserver = new ResizeObserver(refresh);
+      resizeObserver.observe(overlay);
+      resizeObserver.observe(modal);
+    } catch (_) {}
+    try { window.addEventListener('resize', refresh, { passive: true }); } catch (_) {}
+    try {
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', refresh, { passive: true });
+        window.visualViewport.addEventListener('scroll', refresh, { passive: true });
+      }
+    } catch (_) {}
+    refresh();
+
+    return {
+      refresh,
+      release() {
+        if (disposed) return;
+        disposed = true;
+        if (frame) {
+          try { cancelAnimationFrame(frame); } catch (_) {}
+          frame = 0;
+        }
+        try { if (resizeObserver) resizeObserver.disconnect(); } catch (_) {}
+        try { window.removeEventListener('resize', refresh); } catch (_) {}
+        try {
+          if (window.visualViewport) {
+            window.visualViewport.removeEventListener('resize', refresh);
+            window.visualViewport.removeEventListener('scroll', refresh);
+          }
+        } catch (_) {}
+        Object.values(bands).forEach((band) => {
+          try { band.remove(); } catch (_) {}
+        });
+        try {
+          overlay.classList.remove('scheduler-edge-blur-ready');
+          delete overlay.dataset.schedulerBlurArea;
+        } catch (_) {}
+      },
+    };
+  }
+
   function escapeHtml(value) {
     return String(value ?? '')
       .replace(/&/g, '&amp;')
@@ -933,6 +1043,8 @@
   }
 
   async function openSchedulerModal(preferredTermCode) {
+    try { performance.mark('surriculum:scheduler-open-start'); } catch (_) {}
+
     const schedulerOpener = typeof HTMLElement !== 'undefined' && document.activeElement instanceof HTMLElement
       ? document.activeElement : null;
     const currentTermName = getCurrentTermNameSafe();
@@ -1020,6 +1132,7 @@
     let onSharedHideTakenChange = null;
     let onSharedDetailsChange = null;
     let onSharedSortChange = null;
+    let edgeBlurController = null;
     let schedulerClosed = false;
     let filterMenuOpen = false;
     let setFilterMenuOpen = null;
@@ -1718,6 +1831,7 @@
         if (!icon) return;
         icon.classList.toggle('fa-expand', !inFs);
         icon.classList.toggle('fa-compress', inFs);
+        try { if (edgeBlurController) edgeBlurController.refresh(); } catch (_) {}
       } catch (_) {}
     };
 
@@ -1734,6 +1848,7 @@
       try { if (onSharedDetailsChange) document.removeEventListener('courseDetailsToggleChanged', onSharedDetailsChange); } catch (_) {}
       try { if (onSharedSortChange) document.removeEventListener('sortByScoreToggleChanged', onSharedSortChange); } catch (_) {}
       try { if (mobileDayObserver) mobileDayObserver.disconnect(); } catch (_) {}
+      try { if (edgeBlurController) edgeBlurController.release(); } catch (_) {}
       try {
         if (typeof modal.__setCourseSheetOpen === 'function') modal.__setCourseSheetOpen(false);
       } catch (_) {}
@@ -2080,6 +2195,7 @@
     modal.appendChild(body);
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
+    edgeBlurController = activateSchedulerEdgeBlur(overlay, modal);
 
     const syncMobileDayTabSemantics = () => {
       try {
@@ -6935,6 +7051,7 @@
       renderSelected();
       renderResults(idx, '');
       renderGrid(idx);
+      try { performance.mark('surriculum:scheduler-ready'); } catch (_) {}
 
       // Notify once if the schedule data has changed for any previously-seen
       // selected sections (hours/instructors), then refresh the "last seen"

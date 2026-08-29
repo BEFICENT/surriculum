@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "synchronousXhrSites": {
+    "main.js": 3,
+    "scripts/helper_functions.js": 4,
+    "scripts/minor_requirements.js": 2,
+    "scripts/requirements.js": 1,
+    "scripts/scheduler.js": 2
+  },
+  "riskyPatterns": {
+    "setInterval": {
+      "main.js": 1,
+      "mobile.js": 1
+    },
+    "transitionAll": {
+      "styles.css": 6
+    },
+    "touchmoveListeners": {
+      "main.js": 1,
+      "mobile.js": 1
+    },
+    "documentMouseHoverListeners": {
+      "main.js": 2
+    }
+  },
+  "backdropFilter": {
+    "allowedBlurSelectors": [
+      ".modal-overlay",
+      ".scheduler-edge-blur",
+      "body:not(.is-mobile) .summary_detail_section_nav",
+      "body:not(.is-mobile) .summary_minor_panel_header",
+      "body:not(.is-mobile) .summary_modal_overlay"
+    ],
+    "allowedFullViewportBlurSelectors": [
+      ".modal-overlay"
+    ]
+  },
+  "artifact": {
+    "maxFiles": 850,
+    "maxTotalBytes": 75497472,
+    "maxGroups": {
+      "app-shell": {
+        "files": 80,
+        "bytes": 6291456
+      },
+      "assets": {
+        "files": 40,
+        "bytes": 3670016
+      },
+      "courses": {
+        "files": 700,
+        "bytes": 69206016
+      },
+      "requirements": {
+        "files": 60,
+        "bytes": 524288
+      },
+      "scripts": {
+        "files": 30,
+        "bytes": 1677722
+      }
+    },
+    "maxFileBytes": {
+      "index.html": 32768,
+      "main.js": 368640,
+      "mobile.css": 76800,
+      "mobile.js": 81920,
+      "scripts/graduation_check.js": 194560,
+      "scripts/helper_functions.js": 122880,
+      "scripts/scheduler.js": 409600,
+      "styles.css": 235520,
+      "sw.js": 16384,
+      "courses/all_coursepage_info.jsonl": 2621440
+    }
+  }
+}

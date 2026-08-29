@@ -17,6 +17,8 @@ npm run test:unit      # fast: node --test + the legacy static checks
 npm run test:python    # offline scraper/data/Pages-artifact checks
 npm run test:e2e       # full Chromium Playwright suite
 npm run test:e2e:cross-browser  # one critical flow in Firefox + WebKit
+npm run perf:contracts # deterministic source/artifact performance guards
+npm run perf:smoke     # single-worker, zero-retry browser performance smoke
 python tests/scrape_groups_test.py
 python tests/scrape_coursepages_fallback_test.py
 python tests/coursepage_requirements_data_test.py
@@ -46,6 +48,11 @@ tests/
     cross-browser/*.spec.js focused Firefox/WebKit release-critical flow
     desktop/*.spec.js      desktop-viewport flows
     mobile/*.spec.js       phone-viewport flows (body.is-mobile layer)
+  perf/
+    README.md              performance lanes, metrics, and AC/battery protocol
+    run.js                 isolated browser journey runner
+    compare.js             environment-safe regression and power comparison
+    contracts/*.test.js    deterministic performance regression guards
   coursepage_requirements_data_test.py  reviewed General Requirements schema/data
   pages_artifact_test.py   release allowlist + mounted-subpath smoke
 ```
@@ -82,6 +89,10 @@ internal restructuring. Unit tests are a second layer for pure logic only.
   that heavier workflow; the refresh job still runs the fast course-page rule,
   requirements, term-identity, and manifest validators before it opens a pull
   request.
+- `.github/workflows/performance.yml` separately runs deterministic contracts,
+  a short pull-request smoke, and a scheduled extended benchmark. Hosted-runner
+  artifacts are software/virtual-machine evidence; real GPU and AC/battery
+  conclusions use the reference-device protocol in `tests/perf/README.md`.
 - `.github/workflows/pages-release.yml` is manual and build-only by default. A
   build-only run first validates the reviewed course-page rules and data
   manifest, then uploads the allowlisted bundle for review. Deployment requires
