@@ -353,6 +353,11 @@ test.describe('planner course filters (desktop)', () => {
     });
     await page.evaluate(() => {
       window.preferenceStorage.setItem('plannerFilterCheckPrerequisites', 'false');
+      // Cadence is deliberately evaluated against the real current term. Pin
+      // this fixture to the Summer reference it was authored for so crossing
+      // an academic-year boundary cannot silently change "limited" to
+      // "regular" (or eventually "irregular").
+      window.currentTermCode = '202503';
     });
 
     const picker = await openPicker(page, 'Fall 2028-2029');

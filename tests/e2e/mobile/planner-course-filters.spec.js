@@ -256,6 +256,8 @@ test('offered-only stays picker-local and the mobile Controls toggle is a future
 
   // Controls changes save a new default but leave both open picker instances
   // untouched, including Spring's inherited value.
+  await fall.menu.locator('.planner-course-filter-close').click();
+  await expect(fall.menu).toBeHidden();
   await page.locator('.m-nav-item[data-mtab="controls"]').click();
   await expect(page.locator('body')).toHaveAttribute('data-mobile-tab', 'controls');
   await setChecked(sidebarOffered, false);
