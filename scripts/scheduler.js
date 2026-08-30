@@ -2362,13 +2362,14 @@
       try {
         const gridEl = body.querySelector('.scheduler-grid');
         if (gridEl) {
-          const mm = getComputedStyle(gridEl).getPropertyValue('--scheduler-minute');
+          const gridStyle = getComputedStyle(gridEl);
+          const mm = gridStyle.getPropertyValue('--scheduler-minute');
           const mmN = parseFloat(String(mm || '').trim());
           if (Number.isFinite(mmN) && mmN > 0) pxPerMin = mmN;
-          const tg = getComputedStyle(gridEl).getPropertyValue('--scheduler-top-gap');
+          const tg = gridStyle.getPropertyValue('--scheduler-top-gap');
           const tgN = parseFloat(String(tg || '').trim());
           if (Number.isFinite(tgN) && tgN >= 0) topGapPx = tgN;
-          const bg = getComputedStyle(gridEl).getPropertyValue('--scheduler-block-gap');
+          const bg = gridStyle.getPropertyValue('--scheduler-block-gap');
           const bgN = parseFloat(String(bg || '').trim());
           if (Number.isFinite(bgN) && bgN >= 0) blockGapPx = bgN;
         }
@@ -2376,9 +2377,9 @@
       return { pxPerMin, topGapPx, blockGapPx };
     };
 
-    const setBlockPosition = (el, startMin, endMin) => {
+    const setBlockPosition = (el, startMin, endMin, schedulerLayout) => {
       try {
-        const { pxPerMin, topGapPx, blockGapPx } = getSchedulerLayout();
+        const { pxPerMin, topGapPx, blockGapPx } = schedulerLayout || getSchedulerLayout();
         const topMin = Math.max(0, startMin - DAY_START_MIN);
         const durMin = Math.max(8, endMin - startMin);
         const topPx = topGapPx + (topMin * pxPerMin) + blockGapPx;
@@ -4034,11 +4035,11 @@
       try { body.querySelectorAll('.scheduler-block.is-preview').forEach(el => el.remove()); } catch (_) {}
     };
 
-    const clearPreviewBlocks = () => {
+    const clearPreviewBlocks = (schedulerLayout) => {
       removePreviewBlocks();
       activePreviewIntervals = [];
       try { updateGridExtent(scheduleIndex); } catch (_) {}
-      try { renderBlockedBackground(); } catch (_) {}
+      try { renderBlockedBackground(schedulerLayout); } catch (_) {}
     };
 
     const clearHoverHighlights = () => {
@@ -4059,7 +4060,8 @@
     };
 
     const renderPreviewForCourse = (idx, baseCourseId, forcedSection, options) => {
-      clearPreviewBlocks();
+      const schedulerLayout = getSchedulerLayout();
+      clearPreviewBlocks(schedulerLayout);
       try {
         if (!idx || !baseCourseId) return;
         if (!(options && options.ignoreHoverPreference) && !shouldHoverPreview()) return;
@@ -4110,7 +4112,7 @@
 
         activePreviewIntervals = previewItems.map(item => item.interval);
         updateGridExtent(idx);
-        try { renderBlockedBackground(); } catch (_) {}
+        try { renderBlockedBackground(schedulerLayout); } catch (_) {}
 
         const previewBlocksByDay = {};
         DAYS.forEach(d => { previewBlocksByDay[d.key] = []; });
@@ -4124,7 +4126,7 @@
           const block = document.createElement('div');
           block.className = 'scheduler-block is-preview';
           const dr = getDisplayRange(it.start, it.end);
-          setBlockPosition(block, dr.start, dr.end);
+          setBlockPosition(block, dr.start, dr.end, schedulerLayout);
           block.style.background = item.color;
           block.setAttribute('data-course', courseId);
           block.setAttribute('data-day', String(it.dayKey));
@@ -4342,12 +4344,13 @@
       } catch (_) {}
     };
 
-    const renderBlockedBackground = () => {
+    const renderBlockedBackground = (schedulerLayout) => {
       try {
         // Remove previous blocked backgrounds (keeps course blocks).
         body.querySelectorAll('.scheduler-block.scheduler-block-bg').forEach(el => el.remove());
       } catch (_) {}
       const byDay = getBlockedByDay();
+      let blockLayout = schedulerLayout || null;
       for (const dayKey of Object.keys(byDay)) {
         const col = body.querySelector(`.scheduler-day-col[data-day="${dayKey}"]`);
         if (!col || col.hidden) continue;
@@ -4363,7 +4366,8 @@
           block.className = 'scheduler-block scheduler-block-bg is-blocked';
           try { if (b && b.id) block.setAttribute('data-block-id', String(b.id)); } catch (_) {}
           const dr = getDisplayRange(visibleStart, visibleEnd);
-          setBlockPosition(block, dr.start, dr.end);
+          if (!blockLayout) blockLayout = getSchedulerLayout();
+          setBlockPosition(block, dr.start, dr.end, blockLayout);
           block.setAttribute('data-day', String(dayKey));
           block.setAttribute('data-start', String(start));
           block.setAttribute('data-end', String(end));
@@ -4490,9 +4494,10 @@
     };
 
     const renderGrid = (scheduleIndex) => {
+      const schedulerLayout = getSchedulerLayout();
       clearGridBlocks();
-      clearPreviewBlocks();
-      renderBlockedBackground();
+      clearPreviewBlocks(schedulerLayout);
+      renderBlockedBackground(schedulerLayout);
       const blocksByDay = {};
       DAYS.forEach(d => blocksByDay[d.key] = []);
 
@@ -4505,7 +4510,7 @@
         block.type = 'button';
         block.className = 'scheduler-block';
         const dr = getDisplayRange(start, end);
-        setBlockPosition(block, dr.start, dr.end);
+        setBlockPosition(block, dr.start, dr.end, schedulerLayout);
         block.style.background = color;
         try { if (meta && meta.course_id) block.setAttribute('data-course', String(meta.course_id)); } catch (_) {}
         try { block.setAttribute('data-kind', 'course'); } catch (_) {}
