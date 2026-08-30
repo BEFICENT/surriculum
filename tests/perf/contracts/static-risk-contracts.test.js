@@ -127,7 +127,7 @@ test('backdrop blur declarations remain on the reviewed selector allowlist', () 
   );
 });
 
-test('Scheduler disables inherited full-screen blur and uses bounded edge bands', () => {
+test('Scheduler disables inherited full-screen blur and uses bounded edge and corner surfaces', () => {
   const stylesheet = readRepositoryFile('styles.css');
   const blocks = parseCssBlocks(stylesheet);
   const overlay = declarationsForSelector(blocks, '.scheduler-overlay');
@@ -150,6 +150,26 @@ test('Scheduler disables inherited full-screen blur and uses bounded edge bands'
     schedulerSource.includes('scheduler-edge-blur--${side}'),
     'Scheduler edge-band elements must receive their side modifier class.'
   );
+  assert.match(
+    schedulerSource,
+    /\[\s*['"]top-left['"]\s*,\s*['"]top-right['"]\s*,\s*['"]bottom-right['"]\s*,\s*['"]bottom-left['"]\s*\]/,
+    'Scheduler must create a bounded patch for every rounded corner.'
+  );
+  assert.ok(
+    schedulerSource.includes('scheduler-corner-blur--${corner}'),
+    'Scheduler corner patches must receive their corner modifier class.'
+  );
+  for (const property of [
+    'borderTopLeftRadius',
+    'borderTopRightRadius',
+    'borderBottomRightRadius',
+    'borderBottomLeftRadius',
+  ]) {
+    assert.ok(
+      schedulerSource.includes(property),
+      `Scheduler corner geometry must follow the computed ${property}.`
+    );
+  }
 
   for (const block of blocks.filter((entry) => entry.selector.includes('.scheduler-edge-blur'))) {
     const hasInsetZero = /(?:^|;)\s*inset\s*:\s*0(?:\D|$)/i.test(block.body);

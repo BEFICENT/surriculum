@@ -148,7 +148,9 @@
   // A full-viewport backdrop-filter forces the browser to continuously
   // re-rasterize the entire planner while the Scheduler scrolls. Keep the
   // visual treatment, but restrict the expensive blur surfaces to the four
-  // strips that are actually visible around the Scheduler modal.
+  // strips that are actually visible around the Scheduler modal. Tiny patches
+  // behind its rounded corners cover the cutouts inside the modal's rectangular
+  // bounds without extending a blur strip underneath the whole modal.
   function activateSchedulerEdgeBlur(overlay, modal) {
     if (!overlay || !modal) return { refresh() {}, release() {} };
 
@@ -160,6 +162,15 @@
       overlay.insertBefore(band, modal);
       bands[side] = band;
     });
+    const corners = {};
+    ['top-left', 'top-right', 'bottom-right', 'bottom-left'].forEach((corner) => {
+      const patch = document.createElement('div');
+      patch.className = `scheduler-edge-blur scheduler-corner-blur scheduler-corner-blur--${corner}`;
+      patch.setAttribute('aria-hidden', 'true');
+      patch.dataset.schedulerBlurCorner = corner;
+      overlay.insertBefore(patch, modal);
+      corners[corner] = patch;
+    });
     overlay.classList.add('scheduler-edge-blur-ready');
 
     let disposed = false;
@@ -168,14 +179,29 @@
     const px = (value) => `${Math.round(value * 100) / 100}px`;
 
     const place = (band, left, top, width, height) => {
-      if (!band) return;
+      if (!band) return 0;
       const visible = width > 0.5 && height > 0.5;
       band.hidden = !visible;
-      if (!visible) return;
+      if (!visible) return 0;
       band.style.left = px(left);
       band.style.top = px(top);
       band.style.width = px(width);
       band.style.height = px(height);
+      return width * height;
+    };
+
+    const readRadius = (style, property, maxWidth, maxHeight) => {
+      const values = String(style && style[property] || '')
+        .trim()
+        .split(/\s+/)
+        .map((value) => Number.parseFloat(value))
+        .filter(Number.isFinite);
+      const radiusX = values.length ? values[0] : 0;
+      const radiusY = values.length > 1 ? values[1] : radiusX;
+      return {
+        x: clamp(radiusX, 0, Math.max(0, maxWidth / 2)),
+        y: clamp(radiusY, 0, Math.max(0, maxHeight / 2)),
+      };
     };
 
     const update = () => {
@@ -190,16 +216,51 @@
         const right = clamp(modalRect.right - overlayRect.left, left, width);
         const top = clamp(modalRect.top - overlayRect.top, 0, height);
         const bottom = clamp(modalRect.bottom - overlayRect.top, top, height);
+        const modalWidth = right - left;
+        const modalHeight = bottom - top;
 
         place(bands.top, 0, 0, width, top);
         place(bands.bottom, 0, bottom, width, height - bottom);
         place(bands.left, 0, top, left, bottom - top);
         place(bands.right, right, top, width - right, bottom - top);
 
+        const modalStyle = getComputedStyle(modal);
+        const radii = {
+          'top-left': readRadius(modalStyle, 'borderTopLeftRadius', modalWidth, modalHeight),
+          'top-right': readRadius(modalStyle, 'borderTopRightRadius', modalWidth, modalHeight),
+          'bottom-right': readRadius(modalStyle, 'borderBottomRightRadius', modalWidth, modalHeight),
+          'bottom-left': readRadius(modalStyle, 'borderBottomLeftRadius', modalWidth, modalHeight),
+        };
+        let cornerArea = 0;
+        cornerArea += place(corners['top-left'], left, top, radii['top-left'].x, radii['top-left'].y);
+        cornerArea += place(
+          corners['top-right'],
+          right - radii['top-right'].x,
+          top,
+          radii['top-right'].x,
+          radii['top-right'].y,
+        );
+        cornerArea += place(
+          corners['bottom-right'],
+          right - radii['bottom-right'].x,
+          bottom - radii['bottom-right'].y,
+          radii['bottom-right'].x,
+          radii['bottom-right'].y,
+        );
+        cornerArea += place(
+          corners['bottom-left'],
+          left,
+          bottom - radii['bottom-left'].y,
+          radii['bottom-left'].x,
+          radii['bottom-left'].y,
+        );
+
         overlay.dataset.schedulerBlurArea = String(Math.round(
           (width * top) + (width * (height - bottom))
           + (left * (bottom - top)) + ((width - right) * (bottom - top))
+          + cornerArea
         ));
+        overlay.dataset.schedulerBlurCornerArea = String(Math.round(cornerArea));
       } catch (_) {}
     };
 
@@ -244,12 +305,13 @@
             window.visualViewport.removeEventListener('scroll', refresh);
           }
         } catch (_) {}
-        Object.values(bands).forEach((band) => {
-          try { band.remove(); } catch (_) {}
+        [...Object.values(bands), ...Object.values(corners)].forEach((surface) => {
+          try { surface.remove(); } catch (_) {}
         });
         try {
           overlay.classList.remove('scheduler-edge-blur-ready');
           delete overlay.dataset.schedulerBlurArea;
+          delete overlay.dataset.schedulerBlurCornerArea;
         } catch (_) {}
       },
     };
@@ -2164,7 +2226,7 @@
       `        <div class="scheduler-section-title">Courses</div>` +
       `        <div class="scheduler-search-row">` +
       `          <input class="scheduler-search" type="text" aria-label="Search courses" placeholder="Search courses (e.g., CS 201, programming)..." />` +
-      `          <button class="btn btn-secondary btn-sm scheduler-filter-btn" type="button" aria-expanded="false" aria-controls="${schedulerDialogId}-filters"><i class="fa-solid fa-filter" aria-hidden="true"></i>&nbsp;Filters</button>` +
+      `          <button class="btn btn-secondary btn-sm scheduler-filter-btn" type="button" aria-label="Filters" aria-expanded="false" aria-controls="${schedulerDialogId}-filters"><i class="fa-solid fa-filter" aria-hidden="true"></i><span class="scheduler-filter-btn-label">Filters</span><span class="scheduler-filter-count" aria-hidden="true" hidden>0</span></button>` +
       `        </div>` +
       `        <div id="${schedulerDialogId}-filters" class="scheduler-filter-menu" role="region" aria-labelledby="${schedulerDialogId}-filters-title" hidden>` +
       `          <div id="${schedulerDialogId}-filters-title" class="scheduler-filter-menu-header">Filter Options</div>` +
@@ -2727,6 +2789,7 @@
     const blockedClearBtn = body.querySelector('.scheduler-blocked-clear');
     const searchEl = body.querySelector('.scheduler-search');
     const filterBtn = body.querySelector('.scheduler-filter-btn');
+    const filterCountEl = body.querySelector('.scheduler-filter-count');
     const filterMenuEl = body.querySelector('.scheduler-filter-menu');
     const clearBtn = body.querySelector('.scheduler-clear');
     const pickPlanBtn = body.querySelector('.scheduler-pick-plan');
@@ -2818,6 +2881,60 @@
     };
     syncPrereqUi();
 
+    const countSchedulerFilters = () => {
+      try {
+        const commonFilters = {
+          hideTaken: !!(hideTakenToggle && hideTakenToggle.checked),
+          minSu: minSuInput && minSuInput.value,
+          minEcts: minEctsInput && minEctsInput.value,
+          minBasicScience: minBsInput && minBsInput.value,
+          minEngineering: minEngInput && minEngInput.value,
+          checkPrerequisites: !!(prereqToggle && prereqToggle.checked),
+          showUnmetPrerequisites: !!(showUnmetPrereqToggle && showUnmetPrereqToggle.checked),
+        };
+        const filterApi = (typeof window !== 'undefined') ? window.courseFilters : null;
+        let count = 0;
+        if (filterApi && typeof filterApi.countActiveFilters === 'function') {
+          count = filterApi.countActiveFilters(commonFilters);
+        } else {
+          const positive = (value) => {
+            const parsed = Number.parseFloat(String(value == null ? '' : value).trim());
+            return Number.isFinite(parsed) && parsed > 0;
+          };
+          if (commonFilters.hideTaken) count++;
+          if (positive(commonFilters.minSu)) count++;
+          if (positive(commonFilters.minEcts)) count++;
+          if (positive(commonFilters.minBasicScience)) count++;
+          if (positive(commonFilters.minEngineering)) count++;
+          if (commonFilters.checkPrerequisites && !commonFilters.showUnmetPrerequisites) count++;
+        }
+        if (minMainTypeSelect && String(minMainTypeSelect.value || '').trim()) count++;
+        if (minDmTypeSelect && String(minDmTypeSelect.value || '').trim()) count++;
+        if (minMinorTypeSelect && String(minMinorTypeSelect.value || '').trim()) count++;
+        if (showBlockedToggle && !showBlockedToggle.checked) count++;
+        return count;
+      } catch (_) {
+        return 0;
+      }
+    };
+
+    const syncFilterButtonFeedback = () => {
+      try {
+        const activeCount = countSchedulerFilters();
+        if (filterCountEl) {
+          const countText = String(activeCount);
+          const hidden = activeCount <= 0;
+          if (filterCountEl.textContent !== countText) filterCountEl.textContent = countText;
+          if (filterCountEl.hidden !== hidden) filterCountEl.hidden = hidden;
+        }
+        if (filterBtn) {
+          filterBtn.classList.toggle('has-active-filters', activeCount > 0);
+          const label = activeCount > 0 ? `Filters, ${activeCount} active` : 'Filters';
+          if (filterBtn.getAttribute('aria-label') !== label) filterBtn.setAttribute('aria-label', label);
+        }
+      } catch (_) {}
+    };
+
     setFilterMenuOpen = (open) => {
       try {
         const next = !!open;
@@ -2833,6 +2950,7 @@
       } catch (_) {}
     };
     setFilterMenuOpen(false);
+    syncFilterButtonFeedback();
 
     if (filterBtn) {
       filterBtn.addEventListener('click', (e) => {
@@ -4531,6 +4649,7 @@
     };
 
     const renderResults = (scheduleIndex, query) => {
+      syncFilterButtonFeedback();
       const qRaw = String(query || '').trim();
       const q = qRaw.toLowerCase();
       lastQuery = q;
@@ -6590,6 +6709,7 @@
       hideTakenToggle.addEventListener('change', () => {
         const enabled = !!hideTakenToggle.checked;
         setGlobalBool('hideTakenCourses', enabled);
+        syncFilterButtonFeedback();
         try { document.dispatchEvent(new Event('hideTakenCoursesToggleChanged')); } catch (_) {}
         try { if (scheduleIndex) renderResults(scheduleIndex, lastQuery); } catch (_) {}
       });
@@ -6618,6 +6738,7 @@
       const enabled = !!window.hideTakenCourses;
       if (hideTakenToggle.checked === enabled) return;
       hideTakenToggle.checked = enabled;
+      syncFilterButtonFeedback();
       try { if (scheduleIndex) renderResults(scheduleIndex, lastQuery); } catch (_) {}
     };
     onSharedDetailsChange = () => {
@@ -6661,6 +6782,7 @@
       showBlockedToggle.addEventListener('change', () => {
         const enabled = !!showBlockedToggle.checked;
         preferenceSetItem('schedulerShowBlockedCourses', enabled ? 'true' : 'false');
+        syncFilterButtonFeedback();
         try { if (scheduleIndex) renderResults(scheduleIndex, lastQuery); } catch (_) {}
       });
     }
@@ -6671,6 +6793,7 @@
       if (!el) return;
       el.addEventListener('change', () => {
         preferenceSetItem(key, String(el.value || ''));
+        syncFilterButtonFeedback();
         rerenderResultsSafe();
       });
     };
@@ -6683,9 +6806,11 @@
       let t = null;
       const flush = () => {
         preferenceSetItem(key, String(el.value || ''));
+        syncFilterButtonFeedback();
         rerenderResultsSafe();
       };
       el.addEventListener('input', () => {
+        syncFilterButtonFeedback();
         if (t) clearTimeout(t);
         t = setTimeout(flush, 120);
       });
@@ -6701,6 +6826,7 @@
         const enabled = !!prereqToggle.checked;
         preferenceSetItem('schedulerCheckPrereqs', enabled ? 'true' : 'false');
         syncPrereqUi();
+        syncFilterButtonFeedback();
         rerenderResultsSafe();
       });
     }
@@ -6708,6 +6834,7 @@
       showUnmetPrereqToggle.addEventListener('change', () => {
         const enabled = !!showUnmetPrereqToggle.checked;
         preferenceSetItem('schedulerShowUnmetPrereqs', enabled ? 'true' : 'false');
+        syncFilterButtonFeedback();
         rerenderResultsSafe();
       });
     }

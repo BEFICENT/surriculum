@@ -58,6 +58,82 @@ const BASE_PLAN = {
 };
 
 test.describe('course-filter preference contract (desktop)', () => {
+  test('scheduler filter button reports active narrowing filters', async ({ page }) => {
+    await seedPlan(page, BASE_PLAN);
+    await page.evaluate(() => {
+      const set = (key, value) => window.preferenceStorage.setItem(key, value);
+      window.hideTakenCourses = false;
+      set('hideTakenCourses', 'false');
+      set('schedulerShowBlockedCourses', 'true');
+      set('schedulerMinMajorType', '');
+      set('schedulerMinDmType', '');
+      set('schedulerMinMinorType', '');
+      set('schedulerMinSuCredits', '');
+      set('schedulerMinEcts', '');
+      set('schedulerMinBasicScience', '');
+      set('schedulerMinEngineering', '');
+      set('schedulerCheckPrereqs', 'true');
+      set('schedulerShowUnmetPrereqs', 'true');
+    });
+
+    const { modal, menu } = await openSchedulerFilters(page);
+    const button = modal.locator('.scheduler-filter-btn');
+    const badge = button.locator('.scheduler-filter-count');
+    await expect(badge).toBeHidden();
+    await expect(button).toHaveAccessibleName('Filters');
+    await expect(button).not.toHaveClass(/has-active-filters/);
+
+    await setChecked(menu.locator('.scheduler-toggle-hide-taken'), true);
+    await expect(badge).toHaveText('1');
+    await menu.locator('.scheduler-filter-min-su').fill('3');
+    await expect(badge).toHaveText('2');
+    await menu.locator('.scheduler-filter-min-main').selectOption('required');
+    await expect(badge).toHaveText('3');
+    await setChecked(menu.locator('.scheduler-toggle-show-blocked'), false);
+    await expect(badge).toHaveText('4');
+    await setChecked(menu.locator('.scheduler-toggle-show-unmet-prereq'), false);
+    await expect(badge).toHaveText('5');
+    await expect(button).toHaveAccessibleName('Filters, 5 active');
+    await expect(button).toHaveClass(/has-active-filters/);
+
+    // Presentation, sorting, annotation, and search controls do not narrow the
+    // course set, so they do not inflate the active-filter count.
+    await setChecked(menu.locator('.scheduler-toggle-details'), false);
+    await setChecked(menu.locator('.scheduler-toggle-score'), false);
+    await setChecked(menu.locator('.scheduler-toggle-hover-preview'), false);
+    await setChecked(menu.locator('.scheduler-toggle-highlight'), false);
+    await modal.locator('.scheduler-search').fill('CS');
+    await expect(badge).toHaveText('5');
+
+    await button.click();
+    await expect(menu).toBeHidden();
+    await expect(badge).toBeVisible();
+    await expect(button).toHaveClass(/has-active-filters/);
+
+    await button.click();
+    await setChecked(menu.locator('.scheduler-toggle-hide-taken'), false);
+    await menu.locator('.scheduler-filter-min-su').fill('');
+    await menu.locator('.scheduler-filter-min-main').selectOption('');
+    await setChecked(menu.locator('.scheduler-toggle-show-blocked'), true);
+    await setChecked(menu.locator('.scheduler-toggle-show-unmet-prereq'), true);
+    await expect(badge).toBeHidden();
+    await expect(button).toHaveAccessibleName('Filters');
+    await expect(button).not.toHaveClass(/has-active-filters/);
+
+    // A sidebar-originated shared preference change updates an already-open
+    // Scheduler instead of leaving stale feedback on its button.
+    await page.evaluate(() => {
+      window.hideTakenCourses = true;
+      document.dispatchEvent(new Event('hideTakenCoursesToggleChanged'));
+    });
+    await expect(badge).toHaveText('1');
+    await page.evaluate(() => {
+      window.hideTakenCourses = false;
+      document.dispatchEvent(new Event('hideTakenCoursesToggleChanged'));
+    });
+    await expect(badge).toBeHidden();
+  });
+
   test('three shared controls synchronize while offered-only remains a picker default', async ({ page }) => {
     await seedPlan(page, BASE_PLAN);
 

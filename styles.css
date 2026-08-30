@@ -3649,6 +3649,7 @@ body.is-mobile .semester-drop-placeholder {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: 5px;
     padding-top: 0;
     padding-bottom: 0;
 }
@@ -5214,13 +5215,16 @@ body.is-mobile .semester-drop-placeholder {
 }
 
 .planner-course-filter-btn.is-active,
-.planner-course-filter-btn[aria-expanded="true"] {
+.planner-course-filter-btn[aria-expanded="true"],
+.scheduler-filter-btn.has-active-filters,
+.scheduler-filter-btn[aria-expanded="true"] {
     border-color: var(--primary);
     color: var(--primary);
     background: color-mix(in srgb, var(--primary) 10%, var(--bg-card));
 }
 
-.planner-course-filter-count {
+.planner-course-filter-count,
+.scheduler-filter-count {
     min-width: 17px;
     height: 17px;
     padding: 0 4px;
@@ -5235,7 +5239,8 @@ body.is-mobile .semester-drop-placeholder {
     line-height: 1;
 }
 
-.planner-course-filter-count[hidden] {
+.planner-course-filter-count[hidden],
+.scheduler-filter-count[hidden] {
     display: none;
 }
 

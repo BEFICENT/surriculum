@@ -108,9 +108,10 @@ regenerated automatically:
 - Backdrop blur declarations are selector-allowlisted. The generic
   `.modal-overlay` remains the one reviewed full-viewport legacy blur for small
   dialogs. Scheduler must explicitly disable that inherited surface and create
-  four bounded `.scheduler-edge-blur--top|right|bottom|left` bands whose
-  geometry follows the actual modal and refreshes on layout/visual-viewport
-  change notifications.
+  four bounded `.scheduler-edge-blur--top|right|bottom|left` bands plus four
+  radius-sized corner patches. Their geometry follows the actual modal and
+  refreshes on layout/visual-viewport change notifications; the corner patches
+  sit behind the modal so only its rounded cutouts expose them.
 - The artifact test invokes the production Pages builder, then checks total,
   top-level group, and selected large-file byte/count budgets. It measures raw
   shipped bytes, not an optimistic gzip estimate.

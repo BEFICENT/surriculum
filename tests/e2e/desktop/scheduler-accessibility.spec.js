@@ -28,7 +28,7 @@ test.describe('scheduler accessibility', () => {
     await expect(dialog.getByRole('textbox', { name: 'Search courses' })).toBeFocused();
     await expect(dialog.getByRole('combobox', { name: 'Schedule term' })).toBeVisible();
 
-    const filters = dialog.getByRole('button', { name: 'Filters' });
+    const filters = dialog.getByRole('button', { name: /^Filters(?:, \d+ active)?$/ });
     await expect(filters).toHaveAttribute('aria-expanded', 'false');
     await filters.click();
     await expect(filters).toHaveAttribute('aria-expanded', 'true');

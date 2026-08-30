@@ -54,6 +54,52 @@ async function waitForLandscapeFit(modal) {
 }
 
 test.describe('mobile scheduler', () => {
+  test('restores a two-digit active-filter badge without overflowing the course sheet', async ({ page }) => {
+    await seedScheduler(page);
+    await page.evaluate(() => {
+      const set = (key, value) => window.preferenceStorage.setItem(key, value);
+      window.hideTakenCourses = true;
+      set('hideTakenCourses', 'true');
+      set('schedulerShowBlockedCourses', 'false');
+      set('schedulerMinMajorType', 'free');
+      set('schedulerMinDmType', 'free');
+      set('schedulerMinMinorType', 'free');
+      set('schedulerMinSuCredits', '0.5');
+      set('schedulerMinEcts', '0.5');
+      set('schedulerMinBasicScience', '0.5');
+      set('schedulerMinEngineering', '0.5');
+      set('schedulerCheckPrereqs', 'true');
+      set('schedulerShowUnmetPrereqs', 'false');
+    });
+
+    await page.evaluate(() => { window.openSchedulerModal(); });
+    const modal = page.locator('.scheduler-modal.m-scheduler');
+    await expect(modal).toBeVisible({ timeout: 15000 });
+    await modal.locator('.m-sched-fab').click();
+    await expect(modal).toHaveClass(/m-sheet-open/);
+
+    const button = modal.locator('.scheduler-filter-btn');
+    const badge = button.locator('.scheduler-filter-count');
+    await expect(badge).toBeVisible();
+    await expect(badge).toHaveText('10');
+    await expect(button).toHaveAccessibleName('Filters, 10 active');
+    await expect(button).toHaveClass(/has-active-filters/);
+
+    const geometry = await button.evaluate((filterButton) => {
+      const buttonRect = filterButton.getBoundingClientRect();
+      const badgeRect = filterButton.querySelector('.scheduler-filter-count').getBoundingClientRect();
+      return {
+        badgeInsideButton: badgeRect.left >= buttonRect.left - 1
+          && badgeRect.right <= buttonRect.right + 1
+          && badgeRect.top >= buttonRect.top - 1
+          && badgeRect.bottom <= buttonRect.bottom + 1,
+        buttonInsideViewport: buttonRect.left >= -1 && buttonRect.right <= window.innerWidth + 1,
+      };
+    });
+    expect(geometry.badgeInsideButton).toBe(true);
+    expect(geometry.buttonInsideViewport).toBe(true);
+  });
+
   test('portrait course sheet is removed from tab order and restores its exact opener', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('body')).toHaveClass(/is-mobile/);

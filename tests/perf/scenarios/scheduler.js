@@ -133,6 +133,11 @@ async function collectBlurGeometry(page) {
       side,
       backdrop.find((entry) => entry.classes.includes(`scheduler-edge-blur--${side}`)) || null,
     ]));
+    const cornerNames = ['top-left', 'top-right', 'bottom-right', 'bottom-left'];
+    const cornerPatches = Object.fromEntries(cornerNames.map((corner) => [
+      corner,
+      backdrop.find((entry) => entry.classes.includes(`scheduler-corner-blur--${corner}`)) || null,
+    ]));
     const closeEnough = (left, right) => Math.abs(left - right) <= 1.5;
     const expectedBandVisibility = clippedModal ? {
       top: clippedModal.top > 0.5,
@@ -158,8 +163,65 @@ async function collectBlurGeometry(page) {
         && closeEnough(edgeBands.left.rect.top, clippedModal.top)
         && closeEnough(edgeBands.left.rect.bottom, clippedModal.bottom)),
     } : { top: false, right: false, bottom: false, left: false };
+    const radius = (value) => {
+      const values = String(value || '').split(/\s+/).map(Number.parseFloat).filter(Number.isFinite);
+      return { x: values[0] || 0, y: values[1] || values[0] || 0 };
+    };
+    const modalStyle = modal ? getComputedStyle(modal) : null;
+    const cornerRadii = modalStyle ? {
+      'top-left': radius(modalStyle.borderTopLeftRadius),
+      'top-right': radius(modalStyle.borderTopRightRadius),
+      'bottom-right': radius(modalStyle.borderBottomRightRadius),
+      'bottom-left': radius(modalStyle.borderBottomLeftRadius),
+    } : Object.fromEntries(cornerNames.map((corner) => [corner, { x: 0, y: 0 }]));
+    const expectedCornerVisibility = Object.fromEntries(cornerNames.map((corner) => [
+      corner,
+      cornerRadii[corner].x > 0.5 && cornerRadii[corner].y > 0.5,
+    ]));
+    const expectedCornerRects = clippedModal ? {
+      'top-left': {
+        left: clippedModal.left,
+        top: clippedModal.top,
+        right: clippedModal.left + cornerRadii['top-left'].x,
+        bottom: clippedModal.top + cornerRadii['top-left'].y,
+      },
+      'top-right': {
+        left: clippedModal.right - cornerRadii['top-right'].x,
+        top: clippedModal.top,
+        right: clippedModal.right,
+        bottom: clippedModal.top + cornerRadii['top-right'].y,
+      },
+      'bottom-right': {
+        left: clippedModal.right - cornerRadii['bottom-right'].x,
+        top: clippedModal.bottom - cornerRadii['bottom-right'].y,
+        right: clippedModal.right,
+        bottom: clippedModal.bottom,
+      },
+      'bottom-left': {
+        left: clippedModal.left,
+        top: clippedModal.bottom - cornerRadii['bottom-left'].y,
+        right: clippedModal.left + cornerRadii['bottom-left'].x,
+        bottom: clippedModal.bottom,
+      },
+    } : null;
+    const cornerAlignment = Object.fromEntries(cornerNames.map((corner) => {
+      if (!expectedCornerVisibility[corner]) return [corner, !cornerPatches[corner]];
+      const actual = cornerPatches[corner]?.rect;
+      const expected = expectedCornerRects?.[corner];
+      return [corner, Boolean(actual && expected
+        && closeEnough(actual.left, expected.left)
+        && closeEnough(actual.top, expected.top)
+        && closeEnough(actual.right, expected.right)
+        && closeEnough(actual.bottom, expected.bottom))];
+    }));
+    const expectedCornerArea = cornerNames.reduce((sum, corner) => (
+      sum + (expectedCornerVisibility[corner]
+        ? cornerRadii[corner].x * cornerRadii[corner].y
+        : 0)
+    ), 0);
     const expectedBackdropAreaFraction = clippedModal
-      ? Math.max(0, viewportArea - area(clippedModal)) / viewportArea : null;
+      ? (Math.max(0, viewportArea - area(clippedModal)) + expectedCornerArea) / viewportArea
+      : null;
     return {
       viewport,
       modal: clippedModal,
@@ -169,9 +231,13 @@ async function collectBlurGeometry(page) {
       mobile: document.body.classList.contains('is-mobile'),
       blurred,
       edgeBands,
+      cornerPatches,
       edgeBandAlignment: alignment,
       edgeBandsTrackModal: Object.values(alignment).every(Boolean),
+      cornerPatchAlignment: cornerAlignment,
+      cornerPatchesTrackModal: Object.values(cornerAlignment).every(Boolean),
       expectedBandVisibility,
+      expectedCornerVisibility,
       backdropCount: backdrop.length,
       backdropViewportAreaFraction: backdrop.reduce(
         (sum, entry) => sum + entry.viewportAreaFraction,
@@ -440,6 +506,13 @@ module.exports = {
       initialBlurGeometry.edgeBandsTrackModal,
       initialBlurGeometry,
     );
+    await recordInvariant(
+      ctx,
+      invariants,
+      'scheduler.corner-patches-track-rounded-modal-geometry',
+      initialBlurGeometry.cornerPatchesTrackModal,
+      initialBlurGeometry,
+    );
 
     const originalViewport = page.viewportSize() || await page.evaluate(() => ({
       width: window.innerWidth,
@@ -470,6 +543,7 @@ module.exports = {
       'scheduler.resized-backdrop-does-not-cover-modal',
       resizedBlurGeometry.backdropModalOverlapFraction <= 0.01
         && resizedBlurGeometry.edgeBandsTrackModal
+        && resizedBlurGeometry.cornerPatchesTrackModal
         && resizedBlurGeometry.backdropAreaErrorFraction <= 0.02,
       resizedBlurGeometry,
     );
@@ -492,7 +566,8 @@ module.exports = {
         'scheduler.edge-to-edge-mobile-has-no-blur-surface',
         mobileBlurGeometry.backdropViewportAreaFraction <= 0.01
           && mobileBlurGeometry.backdropModalOverlapFraction <= 0.01
-          && mobileBlurGeometry.edgeBandsTrackModal,
+          && mobileBlurGeometry.edgeBandsTrackModal
+          && mobileBlurGeometry.cornerPatchesTrackModal,
         mobileBlurGeometry,
       );
     }
