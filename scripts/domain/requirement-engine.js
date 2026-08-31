@@ -124,6 +124,19 @@
         return sum;
     }
 
+    // Count distinct eligible course codes from a named pool. A repeated attempt
+    // of the same course can appear in more than one semester, but it must not
+    // satisfy a requirement for two different HUM courses twice.
+    function countDistinctPoolCourses(semesters, pool, isEligible) {
+        const allowed = new Set((pool || []).map(canonicalCourseCode));
+        const seen = new Set();
+        forEachCourse(semesters, (course) => {
+            const code = canonicalCourseCode(course.code);
+            if (allowed.has(code)) seen.add(code);
+        }, isEligible);
+        return seen.size;
+    }
+
     // type -> predicate(ctx, rule) returning TRUE when the requirement is SATISFIED.
     // `ctx` = { curr, semesters, fields, entryTerm }.
     const RULE_EVALUATORS = {
@@ -131,6 +144,10 @@
         hasCourse: (ctx, r) => hasDegreeEligibleCourse(ctx.semesters, r.code, ctx.isEligible),
         // At least one of a list is present ("one of the following").
         hasAny: (ctx, r) => hasAnyDegreeEligibleCourse(ctx.semesters, r.codes, ctx.isEligible),
+        // At least `min` different eligible course codes from a list are present.
+        hasDistinctAny: (ctx, r) => countDistinctPoolCourses(
+            ctx.semesters, r.codes, ctx.isEligible,
+        ) >= r.min,
         // A faculty-course pool count meets its minimum (see tallyFacultyCourses).
         facultyCount: (ctx, r) => tallyFacultyCourses(ctx.semesters, ctx.fields.effective, ctx.isEligible)[r.pool] >= r.min,
         // Faculty courses span at least `min` distinct areas (flag 18).
@@ -244,18 +261,28 @@
         { type: 'hasCourse', code: 'SPS303', flag: 11, suis: 'University Courses (all programs)' },
     ];
 
-    // The HUM university requirement, built from the program's scraped `humRequired`
-    // (requirements data, via fetch_requirements.py): 2 = one 2XX AND one 3XX HUM
-    // (flags 12 then 13); 1 = any single HUM (flag 12); 0 / absent = none.
-    function humRules(humRequired) {
-        if (humRequired >= 2) {
+    // The HUM university requirement is fully described by scraped requirement
+    // data. `humRequired` is the number of distinct HUM courses. `humRule: any`
+    // accepts that many courses from either level; `one200One300` requires one
+    // course from each level. Unknown or missing policy is not inferred from the
+    // count; requirement-record validation rejects it before graduation runs.
+    function humRules(humRequired, humRule) {
+        const required = Number(humRequired);
+        const rule = String(humRule || '');
+        if (required === 2 && rule === 'one200One300') {
             return [
                 { type: 'hasAny', codes: HUM_200_LEVEL, flag: 12, suis: 'University Courses (HUM 2XX)' },
                 { type: 'hasAny', codes: HUM_300_LEVEL, flag: 13, suis: 'University Courses (HUM 3XX)' },
             ];
         }
-        if (humRequired >= 1) {
-            return [{ type: 'hasAny', codes: HUM_ANY_LEVEL, flag: 12, suis: 'University Courses (one HUM)' }];
+        if ((required === 1 || required === 2) && rule === 'any') {
+            return [{
+                type: 'hasDistinctAny',
+                codes: HUM_ANY_LEVEL,
+                min: required,
+                flag: 12,
+                suis: `University Courses (${required} HUM)`,
+            }];
         }
         return [];
     }
@@ -505,7 +532,7 @@
     // programs. Always prefixed by the shared university rules + the HUM rule.
     function graduationRulesFor(major, req) {
         const r = req || {};
-        const shared = UNIVERSITY_RULES.concat(humRules(r.humRequired));
+        const shared = UNIVERSITY_RULES.concat(humRules(r.humRequired, r.humRule));
         if (r.groups) {
             return shared.concat(groupRules(r.groups, r.facultyReq));
         }

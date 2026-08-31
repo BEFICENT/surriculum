@@ -171,7 +171,7 @@ Extra points:
 - For **engineering majors only** (Data Science is not treated as engineering):
   - `+ 2 × (Basic Science credits)` only if your Basic Science requirement is **not fulfilled yet**
   - `+ 1 × (Engineering credits)` only if your Engineering requirement is **not fulfilled yet**
-- `University` and `Required` points stop contributing once the relevant requirement is already fulfilled (per program).
+- `University` and `Required` points stop contributing once the relevant requirement is already fulfilled (per program). A HUM course also loses its University points once it no longer fills that program and admit term's remaining HUM requirement; it stays visible and selectable. Thus a second 200-level HUM is demoted when the rule still needs a 300-level HUM, but remains prioritized under the historical any-two-HUM rule. Missing SPS 303 does not promote unrelated extra HUM choices.
 
 Program weighting:
 

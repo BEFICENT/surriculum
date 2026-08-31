@@ -26,9 +26,9 @@ function createCalculator(overrides) {
     allocateCascade: (baseType) => baseType,
     applyManDiversity: () => {},
     groupProgressFor: () => [],
-    hum200Level: ['HUM201'],
+    hum200Level: ['HUM201', 'HUM202'],
     hum300Level: ['HUM311'],
-    humAnyLevel: ['HUM201', 'HUM311'],
+    humAnyLevel: ['HUM201', 'HUM202', 'HUM311'],
     ...(overrides || {}),
   });
 }
@@ -47,6 +47,7 @@ function buildContext(catalog, overrides) {
       core: 12,
       area: 12,
       humRequired: 1,
+      humRule: 'any',
       internshipCourse: 'PROJ300',
     },
     groupRows: [],
@@ -93,14 +94,87 @@ test('candidate impact preserves named requirements, aliases, and immutable desc
   assert.deepEqual(Array.from(impacts.get('SPS303').reasons), [
     'University requirement: SPS303',
   ]);
+  assert.equal(impacts.get('SPS303').fillsNamedRequirement, true);
+  assert.equal(impacts.get('SPS303').suppressUniversityWeight, false);
   assert.deepEqual(Array.from(impacts.get('HUM201').reasons), [
     'University requirement: one HUM',
   ]);
+  assert.equal(impacts.get('HUM201').fillsNamedRequirement, true);
+  assert.equal(impacts.get('HUM201').suppressUniversityWeight, false);
   assert.deepEqual(Array.from(impacts.get('PROJ300').reasons), ['Required internship']);
   assert.equal(impacts.get('DSA210').effectiveType, 'core',
     'the canonical DSA row must replace the older CS alias');
   assert.equal(Object.isFrozen(impacts.get('DSA210')), true);
   assert.equal(Object.isFrozen(impacts.get('SPS303').reasons), true);
+});
+
+test('any-HUM rules count distinct planned HUM courses up to humRequired', () => {
+  const catalog = [
+    { Major: 'HUM', Code: '201', EL_Type: 'university', SU_credit: '3' },
+    { Major: 'HUM', Code: '202', EL_Type: 'university', SU_credit: '3' },
+    { Major: 'HUM', Code: '311', EL_Type: 'university', SU_credit: '3' },
+  ];
+  const priorHum = {
+    courses: [
+      { code: 'HUM201', SU_credit: 3, grade: 'A' },
+      { code: 'HUM201', SU_credit: 3, grade: 'A' },
+    ],
+  };
+
+  const oneHumContext = buildContext(catalog, {
+    chronologicalSemesters: [priorHum],
+  });
+  const oneHumImpacts = createCalculator().build(oneHumContext);
+  assert.equal(oneHumImpacts.get('HUM311').fillsNamedRequirement, false);
+  assert.equal(oneHumImpacts.get('HUM311').suppressUniversityWeight, true);
+
+  const twoHumContext = buildContext(catalog, {
+    chronologicalSemesters: [priorHum],
+  });
+  twoHumContext.snapshot.req.humRequired = 2;
+  const twoHumImpacts = createCalculator().build(twoHumContext);
+  assert.equal(twoHumImpacts.get('HUM201').suppressUniversityWeight, true,
+    'repeating the same HUM does not advance a distinct-course rule');
+  assert.equal(twoHumImpacts.get('HUM202').fillsNamedRequirement, true);
+  assert.equal(twoHumImpacts.get('HUM202').suppressUniversityWeight, false,
+    'a different 200-level HUM can fill an any-HUM rule');
+  assert.equal(twoHumImpacts.get('HUM311').fillsNamedRequirement, true);
+  assert.equal(twoHumImpacts.get('HUM311').suppressUniversityWeight, false);
+
+  const completedContext = buildContext(catalog, {
+    chronologicalSemesters: [{
+      courses: [
+        { code: 'HUM201', SU_credit: 3, grade: 'A' },
+        { code: 'HUM311', SU_credit: 3, grade: 'A' },
+      ],
+    }],
+  });
+  completedContext.snapshot.req.humRequired = 2;
+  const completedImpacts = createCalculator().build(completedContext);
+  assert.equal(completedImpacts.get('HUM202').fillsNamedRequirement, false);
+  assert.equal(completedImpacts.get('HUM202').suppressUniversityWeight, true);
+});
+
+test('tiered HUM rules preserve independent 200- and 300-level needs', () => {
+  const catalog = [
+    { Major: 'HUM', Code: '201', EL_Type: 'university', SU_credit: '3' },
+    { Major: 'HUM', Code: '202', EL_Type: 'university', SU_credit: '3' },
+    { Major: 'HUM', Code: '311', EL_Type: 'university', SU_credit: '3' },
+  ];
+  const context = buildContext(catalog, {
+    chronologicalSemesters: [{
+      courses: [{ code: 'HUM201', SU_credit: 3, grade: 'A' }],
+    }],
+  });
+  context.snapshot.req.humRequired = 2;
+  context.snapshot.req.humRule = 'one200One300';
+
+  const impacts = createCalculator().build(context);
+  assert.equal(impacts.get('HUM202').fillsNamedRequirement, false);
+  assert.equal(impacts.get('HUM202').suppressUniversityWeight, true,
+    'another 200-level HUM does not fill the missing 300-level tier');
+  assert.equal(impacts.get('HUM311').fillsNamedRequirement, true);
+  assert.equal(impacts.get('HUM311').suppressUniversityWeight, false);
 });
 
 test('candidate impact measures an unmet requirement group without mutating the snapshot', () => {

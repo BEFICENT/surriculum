@@ -118,6 +118,42 @@ test('fulfilled university and required categories suppress only their type poin
   }).score, 28.3);
 });
 
+test('an additional HUM can lose University points while remaining selectable', () => {
+  const hum = record('HUM', '311', 'university');
+  const details = ranking.scoreSuggestionRecordDetails(hum, {
+    includeUniversityWeights: true,
+    suppressUniversityWeightCodes: new Set(['HUM311']),
+  });
+
+  assert.equal(details.baseType, 'university');
+  assert.equal(details.effectiveType, 'university');
+  assert.equal(details.excluded, false);
+  assert.equal(details.typeScore, 0);
+  assert.equal(details.creditScore, 0.3);
+  assert.equal(details.score, 0.3);
+});
+
+test('main and double-major contexts preserve independent HUM needs', () => {
+  const hum = record('HUM', '311', 'university');
+  const map = ranking.buildSuggestionRecordMap([hum]);
+  const score = ranking.scoreSuggestionCourse('HUM311', [
+    {
+      weight: 1.2,
+      map,
+      suppressUniversityWeightCodes: new Set(['HUM311']),
+    },
+    {
+      weight: 0.8,
+      map,
+      retainBaseTypeCodes: new Set(['HUM311']),
+      groupBonusCodes: new Set(['HUM311']),
+    },
+  ]);
+
+  assert.equal(score, 34.2,
+    'main contributes only credit while the double major keeps University + named points');
+});
+
 test('pool needs assign the highest still-useful marginal requirement type', () => {
   const required = record('CS', '301', 'required');
   const core = record('CS', '302', 'core');

@@ -91,6 +91,13 @@
                 core: Number(req.core) || 0,
                 area: Number(req.area) || 0,
             };
+            const humRequired = Number(req.humRequired) || 0;
+            const humRule = String(req.humRule || '').trim();
+            const priorHumCodes = new Set();
+            for (let h = 0; h < humAnyLevel.length; h++) {
+                const humCode = canonicalCourseCode(humAnyLevel[h]);
+                if (humCode && priorCodes.has(humCode)) priorHumCodes.add(humCode);
+            }
             const namedRequirementReasons = (code) => {
                 const reasons = [];
                 if (code === 'SPS303' && !priorCodes.has('SPS303')) {
@@ -101,17 +108,19 @@
                     reasons.push('Required internship');
                 }
                 const hasAny = (codes) => codes.some((candidate) => priorCodes.has(candidate));
-                const humRequired = Number(req.humRequired) || 0;
-                if (humRequired >= 2) {
+                if (humRule === 'one200One300') {
                     if (hum200Level.includes(code) && !hasAny(hum200Level)) {
                         reasons.push('University requirement: one 200-level HUM');
                     }
                     if (hum300Level.includes(code) && !hasAny(hum300Level)) {
                         reasons.push('University requirement: one 300-level HUM');
                     }
-                } else if (humRequired >= 1 && humAnyLevel.includes(code)
-                    && !hasAny(humAnyLevel)) {
-                    reasons.push('University requirement: one HUM');
+                } else if (humRule === 'any' && (humRequired === 1 || humRequired === 2)
+                    && humAnyLevel.includes(code) && !priorCodes.has(code)
+                    && priorHumCodes.size < humRequired) {
+                    reasons.push(humRequired === 1
+                        ? 'University requirement: one HUM'
+                        : `University requirement: ${humRequired} distinct HUM courses`);
                 }
                 return reasons;
             };
@@ -218,6 +227,7 @@
                 }
 
                 const reasons = namedRequirementReasons(code);
+                const fillsNamedRequirement = reasons.length > 0;
                 let fillsUnmetGroup = false;
                 if (!excluded && effectiveType !== 'none' && Array.isArray(req.groups)) {
                     const nextRows = groupProgressFor({
@@ -243,12 +253,18 @@
                     }
                 }
 
+                const suppressUniversityWeight = staticType === 'university'
+                    && humAnyLevel.includes(code)
+                    && !fillsNamedRequirement
+                    && !fillsUnmetGroup;
                 impacts.set(code, Object.freeze({
                     excluded,
                     baseTypeOverride: baseType !== staticType ? baseType : '',
                     forceBaseType: forceCore,
-                    retainBaseType: reasons.length > 0 || fillsUnmetGroup,
+                    retainBaseType: fillsNamedRequirement || fillsUnmetGroup,
+                    fillsNamedRequirement,
                     fillsUnmetGroup,
+                    suppressUniversityWeight,
                     effectiveType,
                     reasons: Object.freeze(Array.from(new Set(reasons))),
                 }));

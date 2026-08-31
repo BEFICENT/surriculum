@@ -10,17 +10,18 @@ const plans = require('../test-data/passing-plans-multiterm.json');
 //   "All freshman courses (1XX coded courses, including PROJ 201) and SPS 303
 //    are required."                                    -> flag 11, every major
 //
-//   FASS/SBS programs (university 44): "At least 2 of the below listed HUM
-//    courses must be taken. First the 2xx coded course, then the 3xx coded
-//    course must be taken."                            -> flags 12 + 13
-//   CS (university 41): one HUM course. Other FENS programs currently carry
-//   no verified HUM rule in requirements data, so this suite makes no broader
-//   one-HUM claim for them.
+//   FASS/SBS programs (university 44), from 202001: "At least 2 of the below
+//    listed HUM courses must be taken. First the 2xx coded course, then the 3xx
+//    coded course must be taken."                      -> flags 12 + 13
+//   The 2019 pages instead say any two HUM courses are required, without a
+//   level split. The requirement data preserves that admit-term boundary.
+//   Every remaining program (university 41): one HUM course. The requirement
+//   refresh parses this wording per major/admit term rather than inferring it
+//   from the aggregate credit count.
 //
-// The HUM rule cannot be a count or a credit check — HUM201 + HUM202 is two HUM
-// courses and reaches 44 university credits, yet fails the rule for want of a
-// 3xx. It is compositional: one from each level. That is what flags 12 and 13
-// were always for; only the 12 half was ever written, leaving 13 dead.
+// The 2020+ HUM rule cannot be only a count or credit check — HUM201 + HUM202
+// reaches 44 university credits, yet fails for want of a 3xx. The 2019 rule is
+// a distinct-course count, so both shapes are explicit in the requirements.
 const TERM = '202501';
 const TERM_NAME = 'Fall 2025-2026';
 
@@ -55,7 +56,7 @@ test.describe('SPS 303 is required for every undergrad program', () => {
   }
 });
 
-test.describe('HUM requirement (FASS/SBS programs need a 2xx AND a 3xx)', () => {
+test.describe('HUM requirement levels', () => {
   for (const major of TWO_HUM_MAJORS) {
     test(`${major}: no 3xx HUM raises flag 13`, async ({ page }) => {
       // The case the maintainer flagged: keep the 2xx courses, drop every 3xx.
@@ -93,13 +94,43 @@ test.describe('HUM requirement (FASS/SBS programs need a 2xx AND a 3xx)', () => 
     expect(await flag(page), 'yet the HUM rule is not').toBe(13);
   });
 
-  test('DSA is not held to the two-level rule under the current requirement record', async ({ page }) => {
-    // DSA currently has humRequired=0. This proves only that it is not subject
-    // to the FASS/SBS two-level rule; it deliberately does not claim that a
-    // one-HUM DSA rule was verified from SUIS.
+  test('DSA requires one HUM but is not held to the two-level rule', async ({ page }) => {
     await seed(page, 'DSA', HUM_3XX);
-    const f = await flag(page);
-    expect([12, 13], `DSA got unexpected HUM flag ${f}`).not.toContain(f);
+    const result = await page.evaluate(() => ({
+      flag: window.curriculum.canGraduate(),
+      humRequired: window.requirements.DSA.humRequired,
+      humRule: window.requirements.DSA.humRule,
+    }));
+    expect(result.humRequired).toBe(1);
+    expect(result.humRule).toBe('any');
+    expect([12, 13], `DSA got unexpected HUM flag ${result.flag}`).not.toContain(result.flag);
+  });
+
+  test('2019 FASS requirements accept any two distinct HUM courses', async ({ page }) => {
+    await seedPlan(page, {
+      major: 'ECON',
+      entryTerm: 'Fall 2019-2020',
+      curriculum: [[]],
+      grades: [[]],
+      dates: ['Fall 2019-2020'],
+    });
+
+    const result = await page.evaluate(() => {
+      const requirement = window.requirements.ECON;
+      const humRules = window.graduationRulesFor('ECON', requirement)
+        .filter((rule) => rule.flag === 12 || rule.flag === 13)
+        .map((rule) => ({ type: rule.type, min: rule.min, flag: rule.flag }));
+      return {
+        humRequired: requirement.humRequired,
+        humRule: requirement.humRule,
+        humRules,
+      };
+    });
+    expect(result).toEqual({
+      humRequired: 2,
+      humRule: 'any',
+      humRules: [{ type: 'hasDistinctAny', min: 2, flag: 12 }],
+    });
   });
 });
 

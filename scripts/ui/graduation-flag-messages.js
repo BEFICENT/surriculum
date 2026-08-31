@@ -45,7 +45,14 @@ export function buildFlagMessages(major) {
       //Major-specific messages
 
       11: () => `You have not taken SPS303!`,
-      12: () => `You have not taken a HUM2XX class!`,
+      12: () => {
+        if (req.humRule === 'any') {
+          return Number(req.humRequired) >= 2
+            ? `You need at least ${req.humRequired} distinct HUM courses!`
+            : `You have not taken a HUM course!`;
+        }
+        return `You have not taken a HUM2XX class!`;
+      },
       13: () => `You have not taken a HUM3XX class!`,
       14: () => `You need at least 5 faculty courses!`,
       15: () => `You need at least 3 FASS faculty courses!`,

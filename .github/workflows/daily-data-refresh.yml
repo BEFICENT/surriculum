@@ -101,6 +101,7 @@ jobs:
       - name: Validate refreshed course rules, requirements, and data manifest
         run: |
           python tests/coursepage_requirements_data_test.py
+          python tests/scrape_groups_test.py
           python tests/requirements_validation_test.py
           python tests/scraper_term_identity_test.py
           python tests/manifest_integrity_test.py

@@ -46,6 +46,21 @@ test('hasCourse / hasAny', () => {
   assert.equal(one([C('CS201')], { type: 'hasAny', codes: ['HUM201', 'HUM202'], flag: 12 }), 12);
 });
 
+test('hasDistinctAny counts course codes, not repeated attempts', () => {
+  const rule = {
+    type: 'hasDistinctAny',
+    codes: ['HUM201', 'HUM202', 'HUM311'],
+    min: 2,
+    flag: 12,
+  };
+  assert.equal(one([C('HUM201'), C('HUM201')], rule), 12,
+    'taking the same HUM twice is still one distinct course');
+  assert.equal(one([C('HUM 201'), C('hum202')], rule), 0,
+    'two distinct codes satisfy the count after code normalization');
+  assert.equal(one([C('HUM201'), C('CS201'), C('HUM311')], rule), 0,
+    'courses outside the HUM pool do not affect the distinct count');
+});
+
 test('facultyCount / facultyAreas delegate to the shared tallies', () => {
   const many = [C('CS401', { pool: 'FENS' }), C('MATH301', { pool: 'FENS' }),
     C('HIST191', { pool: 'FASS' }), C('MGMT301', { pool: 'SBS' }), C('IF100', { pool: 'FENS' })];
@@ -142,16 +157,34 @@ test('every program requires SPS303 (flag 11) — DM non-CS used to skip it', ()
   }
 });
 
-test('HUM rule is generated from humRequired (scraped data), not hard-listed', () => {
-  // 2 -> one 2XX AND one 3XX (flags 12 then 13); 1 -> any single HUM (12);
-  // 0/absent -> none. It is a university rule, so it does not depend on the major.
+test('HUM rules are generated from humRequired + humRule, not hard-listed', () => {
+  // `any` uses one distinct-course rule at either level. `one200One300` uses
+  // separate ordered checks (flags 12 then 13). It is a university rule, so it
+  // does not depend on the major.
   // Spread into a test-realm array (the rule list is built inside the vm sandbox).
-  const humFlags = (major, humRequired) =>
-    [...graduationRulesFor(major, { humRequired }).map((r) => r.flag).filter((f) => f === 12 || f === 13)];
-  assert.deepEqual(humFlags('ECON', 2), [12, 13], 'humRequired 2 -> 12 then 13');
-  assert.deepEqual(humFlags('CS', 1), [12], 'humRequired 1 -> flag 12 only');
-  assert.deepEqual(humFlags('IE', 0), [], 'humRequired 0 -> no HUM');
-  assert.deepEqual(humFlags('ECON', undefined), [], 'absent -> no HUM');
+  const humRulesFor = (major, humRequired, humRule) =>
+    [...graduationRulesFor(major, { humRequired, humRule })
+      .filter((r) => r.flag === 12 || r.flag === 13)];
+  const anyOne = humRulesFor('CS', 1, 'any');
+  assert.deepEqual(anyOne.map((r) => r.flag), [12]);
+  assert.equal(anyOne[0].type, 'hasDistinctAny');
+  assert.equal(anyOne[0].min, 1);
+
+  const anyTwo = humRulesFor('ECON', 2, 'any');
+  assert.deepEqual(anyTwo.map((r) => r.flag), [12]);
+  assert.equal(anyTwo[0].type, 'hasDistinctAny');
+  assert.equal(anyTwo[0].min, 2);
+
+  const levelSplit = humRulesFor('ECON', 2, 'one200One300');
+  assert.deepEqual(levelSplit.map((r) => r.flag), [12, 13]);
+  assert.deepEqual(levelSplit.map((r) => r.type), ['hasAny', 'hasAny']);
+
+  assert.deepEqual(humRulesFor('LEGACY', 0, 'any').map((r) => r.flag), [],
+    'legacy humRequired 0 remains non-throwing');
+  assert.deepEqual(humRulesFor('ECON', 2, undefined).map((r) => r.flag), [],
+    'a missing rule is not inferred from an otherwise ambiguous count');
+  assert.deepEqual(humRulesFor('ECON', undefined, undefined).map((r) => r.flag), [],
+    'absent fields remain non-throwing');
 });
 
 test('EE carries the faculty-course check (14/19/16) — EE-DM used to lack it', () => {
@@ -210,6 +243,7 @@ test('graduationRulesFor uses groups+facultyReq when present and shared rules ot
   // A VACD-shaped req reproduces the exact order/flags the old hard-listed table had.
   const vacdReq = {
     humRequired: 2,
+    humRule: 'one200One300',
     facultyReq: { total: 5, fass: 3, areas: 3 },
     groups: [
       { rule: 'faculty' }, // marker -> faculty ticker spliced in at this position
@@ -221,8 +255,14 @@ test('graduationRulesFor uses groups+facultyReq when present and shared rules ot
   assert.deepEqual([...graduationRulesFor('VACD', vacdReq).map((r) => r.flag)],
     [11, 12, 13, 14, 15, 18, 30, 31, 40]);
   // A faculty-ticker-only program (CS) generates just the ticker from facultyReq.
-  const cs = [...graduationRulesFor('CS', { humRequired: 1, facultyReq: { total: 5, math: 2, fens: 3 } }).map((r) => r.flag)];
+  const cs = [...graduationRulesFor('CS', {
+    humRequired: 1,
+    humRule: 'any',
+    facultyReq: { total: 5, math: 2, fens: 3 },
+  }).map((r) => r.flag)];
   assert.deepEqual(cs, [11, 12, 14, 19, 16]);
   // No special-requirement data -> only the shared university + HUM rules.
-  assert.deepEqual([...graduationRulesFor('ZZZ', { humRequired: 1 }).map((r) => r.flag)], [11, 12]);
+  assert.deepEqual([
+    ...graduationRulesFor('ZZZ', { humRequired: 1, humRule: 'any' }).map((r) => r.flag),
+  ], [11, 12]);
 });

@@ -31,7 +31,7 @@ test.describe('graduation requirement branches (desktop)', () => {
     expect(await flag(page)).toBe(38);
   });
 
-  test('missing SPS303 flags 11 (CS-specific)', async ({ page }) => {
+  test('missing SPS303 flags 11', async ({ page }) => {
     await seedGradPlan(page, { drop: ['SPS303'] });
     expect(await flag(page)).toBe(11);
   });

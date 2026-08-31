@@ -102,9 +102,9 @@
     const HUM_300_LEVEL = ['HUM311', 'HUM312', 'HUM317', 'HUM321', 'HUM322', 'HUM371'];
     const HUM_ANY_LEVEL = HUM_200_LEVEL.concat(HUM_300_LEVEL);
 
-    // These pools support the data-driven `humRequired` graduation rule. Programs
-    // requiring two HUM courses need one 2xx and one 3xx; programs requiring one
-    // accept either pool.
+    // These pools support the data-driven `humRequired` + `humRule` graduation
+    // requirement. Programs may accept any distinct HUM courses or require one
+    // 2xx and one 3xx; one-course requirements accept either pool.
 
     // "PSY 4XX-level advanced Psychology courses" (SUIS, PSY area electives).
     function isPsyAdvancedCode(code) {

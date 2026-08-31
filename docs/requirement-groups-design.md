@@ -166,7 +166,7 @@ Kept deliberately simple, per the design call that this is a ticker.
 
 Proof of coverage: every current special rule, classified. Shared across all
 programs (not listed): the generic credit thresholds + GPA (unchanged), `SPS303`
-(flag 11), and HUM (already `humRequired`).
+(flag 11), and HUM (the parsed `humRequired` count plus `humRule` level policy).
 
 ### 6.1 Groups (base-subset, scraped)
 
@@ -203,6 +203,11 @@ program's ticker, then its groups in array order — matching today's flag order
 Parse the group sections + faculty minimums off SUIS → emit `groups` + `facultyReq`.
 Enumerable pools become `members`; open-ended ones become `match`. **Biggest
 unknown** — see §9. Faculty minimums are small and largely uniform (§6.2).
+The University Courses prose is also parsed per program and admit term into
+`humRequired` plus `humRule`: `any` covers one-any and the historical two-any
+wording, while `one200One300` preserves the later level-specific rule. Unknown
+or contradictory wording blocks publication instead of being inferred from the
+aggregate University-credit total.
 
 ### 7.2 Allocation (`recalcEffectiveTypes` / `…Double`)
 Base type and cascade are unchanged (groups inherit; tickers don't touch

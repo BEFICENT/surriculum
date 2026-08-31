@@ -23,3 +23,25 @@ test('requirement validation rejects category minimums above Total', () => {
     assert.equal(isValidRequirementRecord(contradictory, major), false, `${major}: 126 category SU / 125 total`);
   }
 });
+
+test('requirement validation accepts only the published HUM count/rule combinations', () => {
+  assert.equal(isValidRequirementRecord({ ...byMajor.EE, humRequired: 1, humRule: 'any' }, 'EE'), true);
+  assert.equal(isValidRequirementRecord({ ...byMajor.ECON, humRequired: 2, humRule: 'any' }, 'ECON'), true);
+  assert.equal(
+    isValidRequirementRecord({ ...byMajor.ECON, humRequired: 2, humRule: 'one200One300' }, 'ECON'),
+    true,
+  );
+  for (const [humRequired, humRule] of [
+    [0, 'any'],
+    [3, 'any'],
+    [1, 'one200One300'],
+    [2, 'unknown'],
+    [2, undefined],
+  ]) {
+    assert.equal(
+      isValidRequirementRecord({ ...byMajor.EE, humRequired, humRule }, 'EE'),
+      false,
+      `humRequired=${String(humRequired)}, humRule=${String(humRule)}`,
+    );
+  }
+});

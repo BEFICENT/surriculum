@@ -307,6 +307,7 @@
                     baseTypeOverrides: new Map(),
                     retainBaseTypeCodes: new Set(),
                     groupBonusCodes: new Set(),
+                    suppressUniversityWeightCodes: new Set(),
                 };
                 const impacts = scoped && scoped.available ? scoped.candidateImpacts : null;
                 if (!impacts || typeof impacts.forEach !== 'function') return out;
@@ -326,7 +327,12 @@
                         if (impact.forceBaseType || impact.retainBaseType) {
                             out.retainBaseTypeCodes.add(canonical);
                         }
-                        if (impact.fillsUnmetGroup) out.groupBonusCodes.add(canonical);
+                        if (impact.fillsNamedRequirement || impact.fillsUnmetGroup) {
+                            out.groupBonusCodes.add(canonical);
+                        }
+                        if (impact.suppressUniversityWeight) {
+                            out.suppressUniversityWeightCodes.add(canonical);
+                        }
                     });
                 } catch (_) {}
                 return out;
@@ -405,6 +411,7 @@
                             : groupBonusCodes('main', req),
                         excludedCodes: impact.excludedCodes,
                         retainBaseTypeCodes: impact.retainBaseTypeCodes,
+                        suppressUniversityWeightCodes: impact.suppressUniversityWeightCodes,
                         poolNeeds: poolNeeds('main', req),
                         baseTypeOverrides: impact.baseTypeOverrides,
                         map: buildMap(course_data),
@@ -449,6 +456,7 @@
                             : groupBonusCodes('dm', req),
                         excludedCodes: impact.excludedCodes,
                         retainBaseTypeCodes: impact.retainBaseTypeCodes,
+                        suppressUniversityWeightCodes: impact.suppressUniversityWeightCodes,
                         poolNeeds: poolNeeds('dm', req),
                         baseTypeOverrides: impact.baseTypeOverrides,
                         map: buildMap(cur.doubleMajorCourseData),

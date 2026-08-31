@@ -29,6 +29,11 @@ const REQUIREMENT_GROUP_RULES = new Set([
   'faculty', 'credits', 'oneOf', 'entryGatedOneOf', 'languageCap', 'levelCredits',
   'specialAny', 'prefixSpan', 'offeringCredits', 'offeringCount', 'advancedCount',
 ]);
+const VALID_HUM_REQUIREMENTS = new Set([
+  '1:any',
+  '2:any',
+  '2:one200One300',
+]);
 
 function isPlainObject(value) {
   return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -46,7 +51,7 @@ function isValidRequirementRecord(record, majorCode) {
     if (!isNonNegativeInteger(record[field])) return false;
   }
   if (record.total <= 0 || record.ects <= 0) return false;
-  if (!new Set([0, 1, 2]).has(record.humRequired)) return false;
+  if (!VALID_HUM_REQUIREMENTS.has(`${record.humRequired}:${record.humRule}`)) return false;
   const creditTotal = CREDIT_BUCKET_FIELDS.reduce((sum, field) => sum + record[field], 0);
   // Category values are minimum pool targets. They can legitimately add up to
   // less than the independently published overall Total (EE/ME's MATH212 path

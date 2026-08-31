@@ -64,7 +64,13 @@ function s_curriculum()
         }
         if (!record || typeof record !== 'object' || Array.isArray(record)) return false;
         const fields = ['university', 'required', 'core', 'area', 'free', 'ects', 'total', 'humRequired'];
+        const validHumRequirement = new Set([
+            '1:any',
+            '2:any',
+            '2:one200One300',
+        ]).has(`${record.humRequired}:${record.humRule}`);
         return fields.every(field => Number.isInteger(record[field]) && record[field] >= 0)
+            && validHumRequirement
             && record.total > 0
             && record.ects > 0
             && record.facultyReq

@@ -44,8 +44,95 @@ REQUIREMENT_GROUP_RULES = frozenset({
     'levelCredits', 'specialAny', 'prefixSpan', 'offeringCredits',
     'offeringCount', 'advancedCount',
 })
+HUM_RULE_ANY = 'any'
+HUM_RULE_TIERED = 'one200One300'
+VALID_HUM_REQUIREMENTS = frozenset({
+    (1, HUM_RULE_ANY),
+    (2, HUM_RULE_ANY),
+    (2, HUM_RULE_TIERED),
+})
 
 _session = None
+
+
+def parse_hum_requirement(soup):
+    """Parse the published University Courses HUM rule from a degree page.
+
+    SUIS publishes three forms across the supported admit terms: one course
+    from the complete HUM list, any two distinct HUM courses, or two courses
+    sequenced as one 2xx followed by one 3xx. This is a named graduation rule,
+    so deriving it from the aggregate University-credit total can silently turn
+    a required HUM course into an optional one or invent a level restriction.
+
+    Unknown wording is deliberately fatal.  The term-level publisher preserves
+    the last-known-good file when any program cannot be parsed, which is safer
+    than inventing a zero-HUM requirement.
+    """
+    if soup is None:
+        raise ValueError('University Courses HUM requirement wording is missing')
+
+    descriptions = []
+    for anchor in soup.find_all('a', attrs={'name': re.compile(r'^UC_', re.I)}):
+        row = anchor.find_parent('tr', class_='t_kategori_row')
+        if row is None:
+            continue
+        description = row.find_next_sibling('tr', class_='t_kategori_row_desc')
+        if description is None:
+            continue
+        text = re.sub(
+            r'\s+',
+            ' ',
+            description.get_text(separator=' ', strip=True),
+        ).strip()
+        if 'university courses' in text.lower() and 'hum' in text.lower():
+            descriptions.append(text)
+
+    if len(descriptions) != 1:
+        raise ValueError(
+            'University Courses HUM requirement description is missing or ambiguous'
+        )
+    lowered = descriptions[0].lower()
+
+    tiered_count = re.search(
+        r'\bat\s+least\s+(?:2|two)\b.{0,180}?\bhum\s+courses?\b.{0,100}?'
+        r'\bmust\s+be\s+taken\b',
+        lowered,
+    )
+    two_hum_levels = (
+        re.search(r'\b2xx\b.{0,180}?\b3xx\b', lowered)
+        or re.search(
+            r'\b200(?:-|\s*)level\b.{0,180}?\b300(?:-|\s*)level\b',
+            lowered,
+        )
+    )
+    tiered_hum = bool(tiered_count and two_hum_levels)
+
+    two_any_patterns = (
+        r'\bonly\s+(?:2|two)\s+of\s+the\s+hum(?:\s+coded)?\s+courses?\b'
+        r'.{0,120}?\bare\s+required\b',
+        r'\bany\s+(?:2|two)\s+(?:distinct\s+)?hum(?:\s+coded)?\s+courses?\b'
+        r'.{0,120}?\bare\s+required\b',
+    )
+    two_any = any(re.search(pattern, lowered) for pattern in two_any_patterns)
+
+    one_hum_patterns = (
+        r'\bone\s+of\s+the\s+hum(?:\s+coded)?\s+courses?\b.{0,120}?\bis\s+required\b',
+        r'\bone\s+hum(?:\s+coded)?\s+course\b.{0,120}?\bis\s+required\b',
+        r'\bat\s+least\s+(?:1|one)\b.{0,120}?\bhum\s+courses?\b.{0,100}?'
+        r'\bmust\s+be\s+taken\b',
+    )
+    one_hum = any(re.search(pattern, lowered) for pattern in one_hum_patterns)
+
+    matches = sum((bool(one_hum), bool(two_any), bool(tiered_hum)))
+    if matches != 1:
+        raise ValueError(
+            'University Courses HUM requirement wording is missing, partial, or contradictory'
+        )
+    if one_hum:
+        return {'humRequired': 1, 'humRule': HUM_RULE_ANY}
+    if two_any:
+        return {'humRequired': 2, 'humRule': HUM_RULE_ANY}
+    return {'humRequired': 2, 'humRule': HUM_RULE_TIERED}
 
 
 def _get_session():
@@ -178,6 +265,7 @@ def fetch_requirements(program, term, offline_dir=None, timeout_s: float = 30.0)
     # before writing the record. Only attached to a non-empty record so it can't
     # mask an otherwise-failed parse (the emptiness check in main).
     if req:
+        req.update(parse_hum_requirement(soup))
         req['_pools'] = parse_core_pools(soup)
 
     return req
@@ -239,18 +327,6 @@ def parse_core_pools(soup):
         pools.append({"poolno": poolno, "name": name, "min": minimum,
                       "overflowTo": overflow, "members": members})
     return pools
-
-def hum_required(major, university):
-    """HUM graduation requirement, materialized as data so the app's rule tables
-    don't hard-list it (flags 12/13). FASS/SBS programs — university credit 44 —
-    require one 2xx AND one 3xx HUM (returns 2); the FENS programs (41) require
-    one. Only CS's SUIS states the single-HUM rule explicitly, so the other FENS
-    programs carry none (0) rather than an unverified check. The `university == 44`
-    split matches the two-HUM set exactly (the extra 3 SU is that second HUM)."""
-    if university == 44:
-        return 2
-    return 1 if major == "CS" else 0
-
 
 # Hand-authored special-requirement SKELETON, materializing the app's constants
 # (s_curriculum.js) as data. See docs/requirement-groups-design.md.
@@ -438,8 +514,11 @@ def validate_requirement_record(major, data):
     # good data.
     if sum(data[field] for field in REQUIRED_CREDIT_FIELDS) > data['total']:
         raise ValueError('credit bucket minimums exceed total')
-    if data['humRequired'] not in (0, 1, 2):
-        raise ValueError('humRequired must be 0, 1, or 2')
+    hum_requirement = (data['humRequired'], data.get('humRule'))
+    if hum_requirement not in VALID_HUM_REQUIREMENTS:
+        raise ValueError(
+            'humRequired/humRule must be 1+any, 2+any, or 2+one200One300'
+        )
 
     faculty_req = data.get('facultyReq')
     if not isinstance(faculty_req, dict) or not faculty_req:
@@ -537,7 +616,6 @@ def main():
                 data = fetch_requirements(prog, term, None, timeout_s=args.timeout)
                 if not data:
                     raise ValueError('no data parsed')
-                data['humRequired'] = hum_required(major, data.get('university'))
                 scraped_pools = data.pop('_pools', None)
                 data.update(special_requirements(major, scraped_pools))
                 validate_requirement_record(major, data)

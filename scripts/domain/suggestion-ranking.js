@@ -179,6 +179,8 @@ function emptyScoreDetails(baseType = '', courseCode = '', excluded = true) {
  * - baseType: optional catalog/base-type override
  * - baseTypeOverrides: optional Map/object keyed by canonical course code
  * - excludedCodes: codes that must contribute no score in this context
+ * - suppressUniversityWeightCodes: University-applicable choices that do not
+ *   advance the program's remaining named University-course requirements
  * - poolNeeds: remaining required/core/area pool needs for marginal scoring
  * - retainBaseTypeCodes: named/group candidates that keep their original type
  * - includeUniversityWeights / includeRequiredWeights: suppression flags
@@ -220,7 +222,11 @@ export function scoreSuggestionRecordDetails(record, context = {}) {
     );
 
     let typeScore = SUGGESTION_TYPE_SCORES[effectiveType] || 0;
-    if (!retainBaseType
+    const suppressUniversityWeight = effectiveType === 'university'
+      && codeCollectionContains(safeContext.suppressUniversityWeightCodes, canonicalCode);
+    if (suppressUniversityWeight) {
+      typeScore = 0;
+    } else if (!retainBaseType
         && effectiveType === 'university'
         && safeContext.includeUniversityWeights === false) {
       typeScore = 0;

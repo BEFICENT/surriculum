@@ -18,6 +18,8 @@ Exits non-zero on the first failed assertion.
 import os
 import sys
 
+from bs4 import BeautifulSoup
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
@@ -91,10 +93,78 @@ def check_fallback_on_parse_miss():
     print("  fallback: no/empty scrape keeps the hand-authored members")
 
 
+def check_hum_requirement_wording():
+    """HUM requiredness comes from each page's University Courses prose."""
+    fixtures = {
+        "SU_DEGREE.p_degree_detail_main.html": (1, "any"),
+        "SU_DEGREE.p_degree_detail_EE.html": (1, "any"),
+        "SU_DEGREE.p_degree_detail_ECON.html": (2, "one200One300"),
+        "SU_DEGREE.p_degree_detail_MAN.html": (2, "one200One300"),
+        "SU_DEGREE.p_degree_detail_PSIR.html": (2, "one200One300"),
+        "SU_DEGREE.p_degree_detail_PSY.html": (2, "one200One300"),
+        "SU_DEGREE.p_degree_detail_VACD.html": (2, "one200One300"),
+    }
+    for filename, expected in fixtures.items():
+        path = os.path.join(fr.DETAIL_PAGES_DIR, filename)
+        with open(path, "r", encoding="utf-8") as handle:
+            soup = BeautifulSoup(handle.read(), "lxml")
+        parsed = fr.parse_hum_requirement(soup)
+        actual = (parsed["humRequired"], parsed["humRule"])
+        assert actual == expected, f"{filename}: HUM rule {actual}, expected {expected}"
+
+    def page(description, unrelated=""):
+        return BeautifulSoup(
+            f"""
+            <table>
+              <tr class="t_kategori_row"><td><a name="UC_FENS">University Courses</a></td></tr>
+              <tr class="t_kategori_row_desc"><td>
+                <p>From the University Courses listed below:</p>
+                <p>{description}</p>
+              </td></tr>
+            </table>
+            <p>{unrelated}</p>
+            """,
+            "lxml",
+        )
+
+    normalized_one = page("ONE of the HUM\n coded courses listed below IS required.")
+    assert fr.parse_hum_requirement(normalized_one) == {
+        "humRequired": 1,
+        "humRule": "any",
+    }
+    historical_two = page("Only two of the HUM coded courses listed below are required.")
+    assert fr.parse_hum_requirement(historical_two) == {
+        "humRequired": 2,
+        "humRule": "any",
+    }
+
+    rejected = {
+        "ambiguous": page("Several HUM courses are listed."),
+        "two-without-levels": page("At least 2 of the listed HUM courses must be taken."),
+        "unrelated-level-text": page(
+            "At least 2 of the listed HUM courses must be taken.",
+            "An unrelated rule mentions 2xx and 3xx courses.",
+        ),
+        "contradictory": page(
+            "One of the HUM coded courses listed below is required. "
+            "At least 2 of the listed HUM courses must be taken; first the 2xx, then the 3xx."
+        ),
+    }
+    for label, soup in rejected.items():
+        try:
+            fr.parse_hum_requirement(soup)
+        except ValueError as exc:
+            assert "University Courses HUM" in str(exc), f"{label}: {exc}"
+        else:
+            raise AssertionError(f"{label} HUM wording was silently accepted")
+    print("  HUM wording: one-any, two-any, and tiered rules parsed; ambiguity rejected")
+
+
 def main():
     for program in PROGRAMS:
         check_parity(program)
     check_fallback_on_parse_miss()
+    check_hum_requirement_wording()
     print("OK: scrape-groups parity checks passed.")
 
 

@@ -49,6 +49,13 @@ def degree_page(admit_heading, total_ects="240", total_su="132"):
             <tr><td>Free Electives</td><td>-</td><td>15</td></tr>
             <tr><td>Total</td><td>{total_ects}</td><td>{total_su}</td></tr>
           </table>
+          <table>
+            <tr class="t_kategori_row"><td><a name="UC_FENS">University Courses</a></td></tr>
+            <tr class="t_kategori_row_desc"><td>
+              <p>From the University Courses listed below, 16 courses must be completed.</p>
+              <p>One of the HUM coded courses listed below is required.</p>
+            </td></tr>
+          </table>
           <a name="CS_REQ"></a>
           <table><tr><th></th><th>Course</th><th>Name</th><th>ECTS</th><th>SU Credits</th></tr>
             <tr><td></td><td>CS 201</td><td>Programming Fundamentals</td><td>6</td><td>3</td></tr>
@@ -192,7 +199,7 @@ class TermIdentityTests(unittest.TestCase):
 
                     self.assertEqual(data["ects"], 0)
                     self.assertNotIn("240-ECTS invariant", output.getvalue())
-                    data["humRequired"] = 0
+                    data["humRequired"] = 1
                     with self.assertRaisesRegex(
                         ValueError,
                         "total and ects must be positive",
@@ -635,7 +642,6 @@ class TermIdentityTests(unittest.TestCase):
         original_program_codes = fr.PROGRAM_CODES
         original_expected_majors = fr.EXPECTED_MAJORS
         original_fetch = fr.fetch_requirements
-        original_hum_required = fr.hum_required
         original_special = fr.special_requirements
         original_validate = fr.validate_requirement_record
         original_write = fr.write_requirements_term_atomic
@@ -647,9 +653,10 @@ class TermIdentityTests(unittest.TestCase):
                 fr.PROGRAM_CODES = {"BSCS": "CS"}
                 fr.EXPECTED_MAJORS = ("CS",)
                 fr.fetch_requirements = lambda _program, _term, _offline, timeout_s=30.0: {
-                    "university": 0
+                    "university": 0,
+                    "humRequired": 1,
+                    "humRule": "any",
                 }
-                fr.hum_required = lambda _major, _university: 0
                 fr.special_requirements = lambda _major, _pools=None: {}
                 fr.validate_requirement_record = lambda _major, _record: None
                 published = []
@@ -675,7 +682,6 @@ class TermIdentityTests(unittest.TestCase):
             fr.PROGRAM_CODES = original_program_codes
             fr.EXPECTED_MAJORS = original_expected_majors
             fr.fetch_requirements = original_fetch
-            fr.hum_required = original_hum_required
             fr.special_requirements = original_special
             fr.validate_requirement_record = original_validate
             fr.write_requirements_term_atomic = original_write

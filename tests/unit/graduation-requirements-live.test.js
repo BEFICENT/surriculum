@@ -206,7 +206,7 @@ function maxPoolCredits(group, catalog) {
 }
 
 function expectedGeneratedRuleCount(req) {
-  const hum = req.humRequired >= 2 ? 2 : (req.humRequired >= 1 ? 1 : 0);
+  const hum = req.humRule === 'one200One300' ? 2 : (req.humRule === 'any' ? 1 : 0);
   const faculty = Object.keys(req.facultyReq || {}).length;
   const generated = req.groups
     ? req.groups.reduce((n, group) => n + (group.rule === 'faculty' ? faculty : 1), 0)

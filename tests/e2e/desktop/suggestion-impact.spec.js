@@ -206,28 +206,30 @@ test.describe('candidate-specific Smart Sort impacts', () => {
     expect(result.score).toBeCloseTo((18 + 0.3 + 6) * 1.2, 3);
   });
 
-  test('named SPS, HUM, and internship needs retain their tier after aggregate completion', async ({ page }) => {
+  test('named SPS, HUM, and internship needs outrank additional HUM choices', async ({ page }) => {
     const universityWithoutSps = UNIVERSITY_41
-      .filter((code) => code !== 'SPS303')
-      .concat('HUM201');
+      .filter((code) => code !== 'SPS303');
     await seedPriorCourses(page, 'CS', TERMS[2024], universityWithoutSps);
     const sps = await inspectScore(page, 'SPS303', TERMS[2024].targetCode);
-    expect(sps.totals.university).toBe(41);
+    const extraHum = await inspectScore(page, 'HUM201', TERMS[2024].targetCode);
+    expect(sps.totals.university).toBe(38);
     expect(sps.score, 'missing SPS303 remains a university-priority candidate')
-      .toBeCloseTo((36 + 0.3) * 1.2, 3);
+      .toBeCloseTo((36 + 0.3 + 6) * 1.2, 3);
+    expect(extraHum.score, 'a second HUM does not inherit the SPS303 credit gap')
+      .toBeCloseTo(0.3 * 1.2, 3);
 
     const twoHumsAtOneLevel = UNIVERSITY_41.concat('HUM201');
     await seedPriorCourses(page, 'PSY', TERMS[2024], twoHumsAtOneLevel);
     const hum = await inspectScore(page, 'HUM311', TERMS[2024].targetCode);
     expect(hum.totals.university).toBe(44);
     expect(hum.score, 'the missing 300-level HUM remains a university-priority candidate')
-      .toBeCloseTo((36 + 0.3) * 1.2, 3);
+      .toBeCloseTo((36 + 0.3 + 6) * 1.2, 3);
 
     await seedPriorCourses(page, 'CS', TERMS[2024], REQUIRED_29_WITHOUT_INTERNSHIP);
     const internship = await inspectScore(page, 'CS395', TERMS[2024].targetCode);
     expect(internship.totals.required).toBe(29);
     expect(internship.record).toMatchObject({ type: 'required', credit: 0, engineering: 5 });
     expect(internship.score, 'the zero-credit internship remains required-priority')
-      .toBeCloseTo((28 + 5) * 1.2, 3);
+      .toBeCloseTo((28 + 5 + 6) * 1.2, 3);
   });
 });
