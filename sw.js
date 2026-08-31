@@ -135,6 +135,7 @@ const APP_SHELL_PATHS = [
   'scripts/app/onboarding.js',
   'scripts/app/mobile_notice.js',
   'scripts/app/planner-preferences.js',
+  'scripts/app/planner-loading-state.js',
   'scripts/app/saved-course-restoration.js',
   'scripts/app/shell-controller.js',
   'scripts/app/program-selection-controller.js',

@@ -155,6 +155,7 @@
     <script src="scripts/app/onboarding.js" defer></script>
     <script src="scripts/app/mobile_notice.js" defer></script>
     <script src="scripts/app/planner-preferences.js" defer></script>
+    <script src="scripts/app/planner-loading-state.js" defer></script>
     <script src="scripts/app/saved-course-restoration.js" defer></script>
     <script src="scripts/app/shell-controller.js" defer></script>
     <script src="scripts/app/program-selection-controller.js" defer></script>
@@ -414,7 +415,12 @@
         </aside>
 
         <!-- Board -->
-        <main class="board" id="board" aria-label="Term planner">
+        <main class="board" id="board" aria-label="Term planner" aria-busy="true">
+            <div id="plannerLoadingState" class="planner-loading-state" data-state="loading"
+                 role="status" aria-live="polite" aria-atomic="true">
+                <span class="planner-loading-spinner" aria-hidden="true"></span>
+                <span class="planner-loading-message">Loading your semesters…</span>
+            </div>
             <!-- Semester containers will be added here dynamically -->
 
             <!-- Semester template -->

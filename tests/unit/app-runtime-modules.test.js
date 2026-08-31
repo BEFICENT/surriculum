@@ -66,12 +66,29 @@ test('main delegates each extracted app responsibility', () => {
     'appShellController.bindHeaderAndImportMenus',
   ]) assert.match(main, new RegExp(contract.replace('.', '\\.')));
   assert.doesNotMatch(main, /new XMLHttpRequest\s*\(/);
-  assert.match(main, /await Promise\.all\(requirementReadiness\)/);
+  assert.match(
+    main,
+    /const primaryCatalogReadiness = Promise\.all\(\[[\s\S]*?fetchCourseData\(major_chosen_by_user, entryTermCode\),[\s\S]*?\.\.\.requirementReadiness,[\s\S]*?\]\)/,
+    'primary catalog and requirement reads must remain concurrent',
+  );
+  assert.match(
+    main,
+    /const \[bootManifest, bootMinorTermCodes\] = await Promise\.all\(\[/,
+    'major and minor term manifests must remain concurrent',
+  );
+  assert.match(
+    main,
+    /const \[dmData, loadedMinorCatalogs\] = await Promise\.all\(\[/,
+    'double-major and minor catalog reads must remain concurrent',
+  );
   assert.match(main, /await SUrriculum\(/);
   assert.match(main, /window\.__surriculumReady\s*=\s*false/);
   assert.match(main, /window\.__surriculumPlannerReady\s*=\s*false/);
   assert.match(main, /window\.whenSurriculumPlannerReady\s*=\s*\(\)\s*=>\s*surriculumPlannerReadyPromise/);
   assert.match(main, /settleSurriculumPlannerReady\(true\)/);
+  assert.match(main, /plannerLoadingState\.start\(\)/);
+  assert.match(main, /plannerLoadingState\.finish\(\)/);
+  assert.match(main, /plannerLoadingState\.fail\(\)/);
   assert.match(main, /window\.surriculumReadyPromise\s*=\s*surriculumReadyPromise/);
   assert.match(main, /window\.whenSurriculumReady\s*=\s*\(\)\s*=>\s*surriculumReadyPromise/);
   assert.match(main, /if \(!isBootPlanAvailable\(\)\) return false/);
@@ -125,6 +142,7 @@ test('classic app modules load in dependency order immediately before main', () 
     'scripts/app/onboarding.js',
     'scripts/app/mobile_notice.js',
     'scripts/app/planner-preferences.js',
+    'scripts/app/planner-loading-state.js',
     'scripts/app/saved-course-restoration.js',
     'scripts/app/shell-controller.js',
     'scripts/app/program-selection-controller.js',
@@ -144,7 +162,7 @@ test('classic app modules load in dependency order immediately before main', () 
 test('SUrriculum keeps its callable name while async readiness stays explicit', () => {
   const main = read('main.js');
   const architecture = read('docs/architecture.md');
-  assert.match(main, /async function SUrriculum\(major_chosen_by_user, bootManifest\)/);
+  assert.match(main, /async function SUrriculum\(major_chosen_by_user, bootManifest, bootMinorTermCodes\)/);
   assert.match(main, /const surriculumReadyPromise\s*=\s*startSurriculum\(\)/);
   assert.match(main, /window\.surriculumReadyPromise\s*=\s*surriculumReadyPromise/);
   assert.match(main, /window\.whenSurriculumReady\s*=\s*\(\)\s*=>\s*surriculumReadyPromise/);

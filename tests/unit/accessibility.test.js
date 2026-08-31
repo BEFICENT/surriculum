@@ -33,6 +33,13 @@ test('static planner controls expose durable accessible names', () => {
   assert.match(HTML, /<section[^>]*aria-labelledby=["']coursePickerDefaultsTitle["']/);
   assert.match(HTML, /aria-describedby=["']coursePickerDefaultsDescription["']/);
   assert.match(HTML, /id=["']a11yStatus["'][^>]*role=["']status["']/);
+  assert.match(HTML, /<main\b(?=[^>]*\bid=["']board["'])(?=[^>]*\baria-busy=["']true["'])[^>]*>/);
+  assert.match(
+    HTML,
+    /<div\b(?=[^>]*\bid=["']plannerLoadingState["'])(?=[^>]*\bdata-state=["']loading["'])(?=[^>]*\brole=["']status["'])(?=[^>]*\baria-live=["']polite["'])(?=[^>]*\baria-atomic=["']true["'])[^>]*>/,
+  );
+  assert.match(HTML, /class=["']planner-loading-spinner["'][^>]*aria-hidden=["']true["']/);
+  assert.match(HTML, /class=["']planner-loading-message["']>Loading your semesters…</);
 });
 
 test('program selects expose stable browser form identities', () => {

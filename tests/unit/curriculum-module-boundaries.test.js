@@ -112,6 +112,48 @@ test('curriculum persistence owns its storage identity and credit parsing bounda
   assert.ok(reads.every(([, planId]) => planId === 'plan-boundary'));
 });
 
+test('returning-plan hydration batches whole-planner refresh work', () => {
+  const isolated = loadScriptsGlobals('scripts/storage/curriculum-persistence.js');
+  const state = {
+    curriculum: JSON.stringify([['CS101'], ['CS201'], ['CS300']]),
+    grades: JSON.stringify([[], [], []]),
+    dates: JSON.stringify([
+      'Fall 2024-2025',
+      'Spring 2024-2025',
+      'Fall 2025-2026',
+    ]),
+  };
+  isolated.planStorage = {
+    getSessionPlanId: () => 'returning-plan',
+    getItem: (key) => state[key] || null,
+  };
+
+  const created = [];
+  const refreshes = [];
+  isolated.createSemeter = (...args) => {
+    created.push(args);
+    return {};
+  };
+  isolated.updateCurrentTermHighlights = () => refreshes.push('current-term');
+  isolated.refreshSemesterAccessibility = () => refreshes.push('accessibility');
+  const curriculum = {
+    recalcEffectiveTypes(courseData) {
+      refreshes.push(['allocation', courseData]);
+    },
+  };
+  const courseData = [{ Major: 'CS', Code: '101' }];
+
+  isolated.reload(curriculum, courseData);
+
+  assert.equal(created.length, 3);
+  assert.ok(created.every((args) => args[7] && args[7].deferPlannerRefresh === true));
+  assert.deepEqual(refreshes, [
+    ['allocation', courseData],
+    'current-term',
+    'accessibility',
+  ]);
+});
+
 test('allocation publishes one model update through an injected controller hook', () => {
   const isolated = loadScriptsGlobals([
     'scripts/domain/curriculum-allocation.js',

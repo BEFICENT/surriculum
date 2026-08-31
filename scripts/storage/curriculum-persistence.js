@@ -131,6 +131,7 @@
     function reload(curriculum, course_data)
     {
         let data, grades, gradingBases, dates, termCodes;
+        let restoredAnySemester = false;
         const ps = (typeof window !== 'undefined') ? window.planStorage : null;
         const planId = getPlanStorageSessionId(ps);
         const get = (k) => {
@@ -167,7 +168,9 @@
                     grades && Array.isArray(grades[i]) ? grades[i] : [],
                     persistedTermName,
                     gradingBases && Array.isArray(gradingBases[i]) ? gradingBases[i] : [],
+                    { deferPlannerRefresh: true },
                 );
+                if (created) restoredAnySemester = true;
 
                 // Dates remain the human-readable label. The optional parallel
                 // termCodes array is the stable identity boundary introduced after
@@ -185,6 +188,29 @@
                 }
 
             }
+        }
+
+        // A returning plan can contain many semesters. Building each card used
+        // to recalculate the whole curriculum, rescan semester accessibility,
+        // and refresh current-term decoration once per row. The persisted plan
+        // is one atomic snapshot, so perform those whole-plan passes once after
+        // every card and canonical term code has been restored.
+        try {
+            if (curriculum && typeof curriculum.recalcEffectiveTypes === 'function') {
+                curriculum.recalcEffectiveTypes(course_data);
+            }
+        } catch (_) {}
+        if (restoredAnySemester) {
+            try {
+                if (typeof root.updateCurrentTermHighlights === 'function') {
+                    root.updateCurrentTermHighlights();
+                }
+            } catch (_) {}
+            try {
+                if (typeof root.refreshSemesterAccessibility === 'function') {
+                    root.refreshSemesterAccessibility();
+                }
+            } catch (_) {}
         }
     }
 

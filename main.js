@@ -15,6 +15,12 @@ if (!window.surriculumProgramData) {
 if (!window.surriculumAppShell || typeof window.surriculumAppShell.createController !== 'function') {
     throw new Error('scripts/app/shell-controller.js must load before main.js');
 }
+if (!window.surriculumPlannerLoadingState
+    || typeof window.surriculumPlannerLoadingState.createController !== 'function') {
+    throw new Error('scripts/app/planner-loading-state.js must load before main.js');
+}
+const plannerLoadingState = window.surriculumPlannerLoadingState.createController({ document });
+plannerLoadingState.start();
 window.surriculumAppRuntime.configure({ getInitialMajor: () => initial_major_chosen });
 window.__surriculumReady = false;
 window.__surriculumPlannerReady = false;
@@ -28,6 +34,8 @@ window.whenSurriculumPlannerReady = () => surriculumPlannerReadyPromise;
 function settleSurriculumPlannerReady(ready) {
     if (typeof resolveSurriculumPlannerReady !== 'function') return;
     window.__surriculumPlannerReady = ready === true;
+    if (ready === true) plannerLoadingState.finish();
+    else plannerLoadingState.fail();
     resolveSurriculumPlannerReady(ready === true);
     resolveSurriculumPlannerReady = null;
 }
@@ -39,7 +47,7 @@ function isBootPlanAvailable() {
 }
 
 
-async function SUrriculum(major_chosen_by_user, bootManifest) {
+async function SUrriculum(major_chosen_by_user, bootManifest, bootMinorTermCodes) {
     if (!isBootPlanAvailable()) return false;
     try { performance.mark('surriculum:planner-hydrate-start'); } catch (_) {}
     const programData = window.surriculumProgramData;
@@ -92,11 +100,13 @@ async function SUrriculum(major_chosen_by_user, bootManifest) {
     // available; otherwise fall back to the general entry terms list.
     let minorEntryTerms = entryTerms;
     try {
-        const codes = (typeof window !== 'undefined' && typeof window.loadMinorTermCodesAsync === 'function')
-            ? await window.loadMinorTermCodesAsync()
-            : ((typeof window !== 'undefined' && typeof window.loadMinorTermCodes === 'function')
-                ? window.loadMinorTermCodes()
-                : []);
+        const codes = Array.isArray(bootMinorTermCodes)
+            ? bootMinorTermCodes
+            : ((typeof window !== 'undefined' && typeof window.loadMinorTermCodesAsync === 'function')
+                ? await window.loadMinorTermCodesAsync()
+                : ((typeof window !== 'undefined' && typeof window.loadMinorTermCodes === 'function')
+                    ? window.loadMinorTermCodes()
+                    : []));
         if (Array.isArray(codes) && codes.length) {
             const names = codes.map(c => termCodeToName(String(c))).filter(Boolean);
             if (names.length) minorEntryTerms = names;
@@ -173,8 +183,13 @@ async function SUrriculum(major_chosen_by_user, bootManifest) {
     } catch (error) {
         console.error('Unable to initialize minor requirements:', error);
     }
-    await Promise.all(requirementReadiness);
-    if (!isBootPlanAvailable()) return false;
+    // The catalog and graduation rules are independent reads. Starting them
+    // together removes an avoidable network round trip from every planner
+    // reload while preserving the same join point before semester hydration.
+    const primaryCatalogReadiness = Promise.all([
+        fetchCourseData(major_chosen_by_user, entryTermCode),
+        ...requirementReadiness,
+    ]).then(([catalog]) => catalog);
 
     // Storage for the double major's course data.  It will be populated when
     // the user selects a double major via setDoubleMajor().
@@ -182,7 +197,7 @@ async function SUrriculum(major_chosen_by_user, bootManifest) {
     let doubleMajorCatalogCodeSet = new Set();
     let doubleMajorCustomCourseRecords = [];
 
-    return fetchCourseData(major_chosen_by_user, entryTermCode)
+    return primaryCatalogReadiness
     .then(async json => {
         if (!isBootPlanAvailable()) return false;
         if (!window.surriculumCustomCourseModel) {
@@ -257,44 +272,13 @@ async function SUrriculum(major_chosen_by_user, bootManifest) {
         console.error('Failed to load custom courses:', err);
     }
 
-    // Preload double major data so that courses unique to the second major
-    // are available when reloading semesters from localStorage.
+    // Read the remaining selected-program context before starting its catalog
+    // requests. Double-major and minor catalogs are independent, so hydrate
+    // them in one batch instead of adding another network waterfall.
     let savedDMPref = '';
     try {
         savedDMPref = planGetItem('doubleMajor') || '';
     } catch (_) {}
-    if (savedDMPref) {
-        const dmData = await fetchCourseData(savedDMPref, entryTermDMCode);
-        if (!isBootPlanAvailable()) return false;
-        if (Array.isArray(dmData)) {
-            doubleMajorCourseData = dmData.slice();
-        } else {
-            doubleMajorCourseData = [];
-        }
-        doubleMajorCatalogCodeSet = new Set(doubleMajorCourseData.map(function(record) {
-            return String((record && record.Major) || '') + String((record && record.Code) || '');
-        }).map(function(code) {
-            return code.toUpperCase().replace(/\s+/g, '');
-        }).filter(Boolean));
-        try {
-            const keyDM = 'customCourses_' + savedDMPref;
-            const storedDM = planGetItem(keyDM);
-            if (storedDM) {
-                const parsedDM = JSON.parse(storedDM);
-                if (Array.isArray(parsedDM)) {
-                    doubleMajorCustomCourseRecords = _activeCustomCourseRecords(
-                        normalizeCustomCourseListForStorage(savedDMPref, parsedDM),
-                        doubleMajorCatalogCodeSet
-                    );
-                    doubleMajorCourseData = doubleMajorCourseData.concat(doubleMajorCustomCourseRecords);
-                }
-            }
-        } catch (_) {}
-    }
-
-    // Preload minor course lists (up to 3). Minor catalogs are stored under
-    // courses/minors/<PROGRAM>.jsonl and are merged into the Add Course
-    // dropdown similarly to double majors.
     const minorProgramsSet = new Set();
     const minorTermsByCode = {};
     try {
@@ -318,14 +302,48 @@ async function SUrriculum(major_chosen_by_user, bootManifest) {
         }
     } catch (_) {}
     const minorPrograms = Array.from(minorProgramsSet);
+    const doubleMajorCatalogReadiness = savedDMPref
+        ? fetchCourseData(savedDMPref, entryTermDMCode)
+        : Promise.resolve([]);
+    const minorCatalogReadiness = Promise.all(minorPrograms.map(async (mp) => ({
+        program: mp,
+        data: await fetchMinorCourseData(mp, minorTermsByCode[mp] || entryTermMinor1Code),
+    }))).catch(() => []);
+    const [dmData, loadedMinorCatalogs] = await Promise.all([
+        doubleMajorCatalogReadiness,
+        minorCatalogReadiness,
+    ]);
+    if (!isBootPlanAvailable()) return false;
+
+    if (savedDMPref) {
+        doubleMajorCourseData = Array.isArray(dmData) ? dmData.slice() : [];
+        doubleMajorCatalogCodeSet = new Set(doubleMajorCourseData.map(function(record) {
+            return String((record && record.Major) || '') + String((record && record.Code) || '');
+        }).map(function(code) {
+            return code.toUpperCase().replace(/\s+/g, '');
+        }).filter(Boolean));
+        try {
+            const keyDM = 'customCourses_' + savedDMPref;
+            const storedDM = planGetItem(keyDM);
+            if (storedDM) {
+                const parsedDM = JSON.parse(storedDM);
+                if (Array.isArray(parsedDM)) {
+                    doubleMajorCustomCourseRecords = _activeCustomCourseRecords(
+                        normalizeCustomCourseListForStorage(savedDMPref, parsedDM),
+                        doubleMajorCatalogCodeSet
+                    );
+                    doubleMajorCourseData = doubleMajorCourseData.concat(doubleMajorCustomCourseRecords);
+                }
+            }
+        } catch (_) {}
+    }
+
+    // Minor catalogs are stored under courses/minors/<TERM>/<PROGRAM>.jsonl
+    // and are merged into the Add Course picker like the double-major catalog.
     const minorCourseDataByCode = {};
     const minorCatalogCodeSetsByCode = {};
     const minorCustomCourseRecordsByCode = {};
     try {
-        const loadedMinorCatalogs = await Promise.all(minorPrograms.map(async (mp) => ({
-            program: mp,
-            data: await fetchMinorCourseData(mp, minorTermsByCode[mp] || entryTermMinor1Code),
-        })));
         for (const loadedMinor of loadedMinorCatalogs) {
             const mp = loadedMinor.program;
             const data = loadedMinor.data;
@@ -864,16 +882,6 @@ async function SUrriculum(major_chosen_by_user, bootManifest) {
     // Enrichment is deliberately detached from startup. Saved metadata (or a
     // marker fallback for legacy plans) has already made every course renderable.
     void savedCourseRestoration.enrich(restoredGlobalDefinitions);
-    // After reloading existing semesters, recalculate effective categories
-    // so that the allocation respects chronological order. Guard against
-    // missing recalc function.
-    try {
-        if (typeof curriculum.recalcEffectiveTypes === 'function') {
-            curriculum.recalcEffectiveTypes(course_data);
-        }
-    } catch(err) {
-        // ignore
-    }
     // Ensure the ghost semester container is appended after reloading existing semesters
     ensureGhostSemester();
     // Capture every parallel array before the first write, then save the whole
@@ -977,13 +985,31 @@ if (!window.surriculumOnboarding || !window.surriculumMobileNotice) {
 window.surriculumOnboarding.init();
 window.surriculumMobileNotice.init();
 
-// Load the term manifest first, then await exact catalogs and requirements.
-// The program-data module owns the local file:// compatibility fallback.
+// Load the major and minor term manifests together, then await exact catalogs
+// and requirements. The data modules own the local file:// fallbacks.
 async function startSurriculum() {
-    const bootManifest = await window.surriculumProgramData.loadTermManifest();
+    const minorTermCodesReadiness = (async () => {
+        try {
+            if (typeof window.loadMinorTermCodesAsync === 'function') {
+                return await window.loadMinorTermCodesAsync();
+            }
+            if (typeof window.loadMinorTermCodes === 'function') {
+                return window.loadMinorTermCodes();
+            }
+        } catch (_) {}
+        return [];
+    })();
+    const [bootManifest, bootMinorTermCodes] = await Promise.all([
+        window.surriculumProgramData.loadTermManifest(),
+        minorTermCodesReadiness,
+    ]);
     if (!isBootPlanAvailable()) return false;
     const majorExisting = planGetItem('major');
-    return await SUrriculum(majorExisting || initial_major_chosen, bootManifest);
+    return await SUrriculum(
+        majorExisting || initial_major_chosen,
+        bootManifest,
+        bootMinorTermCodes,
+    );
 }
 
 const surriculumReadyPromise = startSurriculum();

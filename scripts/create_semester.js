@@ -1,6 +1,7 @@
-function createSemeter(aslastelement=true, courseList=[], curriculum, course_data, grade_list=[], date_custom="", grading_basis_list=[])
+function createSemeter(aslastelement=true, courseList=[], curriculum, course_data, grade_list=[], date_custom="", grading_basis_list=[], options={})
 {
     const interactiveDefault = !date_custom && arguments.length <= 4;
+    const deferPlannerRefresh = !!(options && options.deferPlannerRefresh);
     if (interactiveDefault) {
         const canonicalCode = (term) => {
             try {
@@ -279,11 +280,13 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
     {
         board.insertBefore(container, board.firstChild);
     }
-    try {
-        if (typeof window !== 'undefined' && typeof window.updateCurrentTermHighlights === 'function') {
-            window.updateCurrentTermHighlights();
-        }
-    } catch (_) {}
+    if (!deferPlannerRefresh) {
+        try {
+            if (typeof window !== 'undefined' && typeof window.updateCurrentTermHighlights === 'function') {
+                window.updateCurrentTermHighlights();
+            }
+        } catch (_) {}
+    }
 
     //adding courses:
     for(let i = 0; i < courseList.length; i++)
@@ -450,19 +453,21 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
     // beginning) are considered in chronological order when allocating core
     // and area credits. If the recalc function is not present (e.g., during
     // testing), this call is ignored.
-    try {
-        if (typeof curriculum.recalcEffectiveTypes === 'function') {
-            curriculum.recalcEffectiveTypes(course_data);
+    if (!deferPlannerRefresh) {
+        try {
+            if (typeof curriculum.recalcEffectiveTypes === 'function') {
+                curriculum.recalcEffectiveTypes(course_data);
+            }
+        } catch (err) {
+            // Silent failure if curriculum or recalc is undefined
         }
-    } catch (err) {
-        // Silent failure if curriculum or recalc is undefined
+        try {
+            const storage = (typeof window !== 'undefined') ? window.planStorage : null;
+            if (storage && typeof storage.requestSave === 'function') storage.requestSave();
+        } catch (_) {}
+        try {
+            if (typeof refreshSemesterAccessibility === 'function') refreshSemesterAccessibility();
+        } catch (_) {}
     }
-    try {
-        const storage = (typeof window !== 'undefined') ? window.planStorage : null;
-        if (storage && typeof storage.requestSave === 'function') storage.requestSave();
-    } catch (_) {}
-    try {
-        if (typeof refreshSemesterAccessibility === 'function') refreshSemesterAccessibility();
-    } catch (_) {}
     return container;
 }

@@ -14,6 +14,60 @@
     --icon-confirm-hover: url('../assets/tickb.png');
 }
 
+/* Planner hydration remains visible until persisted semester cards are ready. */
+.planner-loading-state {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 12px;
+    min-width: 100%;
+    min-height: 100%;
+    padding: 24px;
+    box-sizing: border-box;
+    background: var(--bg-main);
+    color: var(--text-secondary);
+    text-align: center;
+    pointer-events: none;
+}
+
+.planner-loading-state[hidden] {
+    display: none !important;
+}
+
+.planner-loading-spinner {
+    width: 30px;
+    height: 30px;
+    box-sizing: border-box;
+    border: 3px solid color-mix(in srgb, var(--primary) 18%, var(--border));
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: planner-loading-spin 0.8s linear infinite;
+}
+
+.planner-loading-message {
+    max-width: 32rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.planner-loading-state[data-state="error"] {
+    color: var(--state-danger);
+}
+
+.planner-loading-state[data-state="error"] .planner-loading-spinner {
+    display: none;
+}
+
+@keyframes planner-loading-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 /* Each semester column - FLEX LAYOUT USING AVAILABLE HEIGHT */
 .container_semester {
     background: var(--bg-card);
