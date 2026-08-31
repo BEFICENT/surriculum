@@ -36,9 +36,11 @@ and tagged on 2026-08-16; subsequent maintenance is recorded separately.
 
 ### Fixed
 
-- The requirements refresh handles an explicit missing Total ECTS marker on an
-  otherwise valid undergraduate SUIS summary using the established 240-ECTS
-  degree total, while malformed or incomplete summaries still fail closed.
+- The requirements refresh handles an explicit absent Total ECTS marker on an
+  otherwise valid undergraduate SUIS summary with a historical 240-ECTS
+  compatibility fallback, while malformed or incomplete summaries still fail
+  closed. Pipeline notes treat a repeated omission as a possible SUIS policy
+  change to re-audit across all majors, not automatically as a source mistake.
 - Scheduler background blur keeps its rounded corners while limiting expensive
   blur to the visible edge regions. Desktop grid geometry, repeated result
   rendering, preview/scroll interactions, and startup loading avoid unnecessary

@@ -18,6 +18,6 @@ python -m tools.data_pipeline.build_manifest
 python -m tools.release.build_pages_artifact --output path/to/output
 ```
 
-The supported commands and data-refresh sequence are documented in the root
-README. Automated refresh and release workflows use these same module entry
-points.
+The supported commands, data-refresh sequence, and provisional Total ECTS
+policy-review trigger are documented in the root README. Automated refresh and
+release workflows use these same module entry points.

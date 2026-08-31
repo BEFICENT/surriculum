@@ -122,11 +122,13 @@ def fetch_requirements(program, term, offline_dir=None, timeout_s: float = 30.0)
                 total = int(val_su) if re.fullmatch(r'\d+', val_su) else 0
                 ects = int(val_ects) if re.fullmatch(r'\d+', val_ects) else 0
                 # SUIS occasionally publishes an otherwise-valid undergraduate
-                # summary with an explicit dash in the Total ECTS cell. All UG
-                # degrees use the established 240-ECTS total. Keep this fallback
-                # deliberately narrow: a positive SU total and one dash glyph are
-                # both required, so blanks, zeroes, and malformed values still
-                # reach validation as zero and fail closed.
+                # summary with an explicit dash in the Total ECTS cell. Historical
+                # UG records use 240 ECTS, so retain that value as a deliberately
+                # narrow compatibility fallback. The dash may also be an intentional
+                # policy/display change rather than bad data; the root README defines
+                # when to re-audit all majors instead of expanding this assumption.
+                # A positive SU total and one dash glyph are both required, so blanks,
+                # zeroes, and malformed values still reach validation as zero and fail.
                 if total > 0 and _EXPLICIT_DASH_RE.fullmatch(val_ects):
                     ects = UNDERGRADUATE_TOTAL_ECTS
                     print(

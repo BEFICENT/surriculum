@@ -334,6 +334,26 @@ unrequested terms remain discoverable. Full minor-term refreshes publish only
 after every selected minor succeeds; program-limited runs merge with the
 existing snapshot instead of truncating it.
 
+### Provisional Total ECTS fallback
+
+The `202601` IE degree summary was the first observed otherwise-valid page whose
+**Total ECTS** cell contained an explicit dash while still publishing a valid
+133-SU total. That may be a deliberate change in how newer curricula publish
+requirements, not a source-data mistake. For compatibility with historical
+undergraduate records, the scraper currently supplies 240 ECTS only when the SU
+total is a valid positive integer and the ECTS cell is exactly a dash; blank,
+zero, or malformed totals still fail closed. IE/`202601` is therefore a reviewed
+baseline, not proof that Total ECTS remains a published requirement.
+
+For each newly refreshed admit term, record the set of majors whose Total ECTS
+is an explicit dash. If that set differs from the reviewed baseline—especially
+if a second `202601` major or any later admit term shows a dash—hold the generated
+data PR for manual review, inspect all 12 undergraduate major pages for that
+term, and compare them with the preceding term. If the omission is systematic,
+verify the current university policy and update the schema, validation, and UI
+to represent ECTS as unpublished or optional instead of continuing to
+synthesize 240.
+
 Scrape course pages for metadata (including prerequisite/corequisite and
 General Requirements rules, Basic Science/Engineering credit breakdowns, and
 “offered term” history):
