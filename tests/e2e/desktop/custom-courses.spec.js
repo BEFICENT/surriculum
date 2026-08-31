@@ -363,6 +363,14 @@ test.describe('editing a custom course', () => {
 });
 
 test.describe('custom course identity and destructive changes', () => {
+  // Several cases below replace a selected catalog response to exercise
+  // otherwise-unrepresentable legacy/alias states. A service worker performs
+  // its own network fetch, which Playwright cannot intercept with `page.route`,
+  // and can therefore swap the real catalog back in on reload. Keep this
+  // custom-course suite on the browser network path; dedicated service-worker
+  // specs cover the production cache and offline contract separately.
+  test.use({ serviceWorkers: 'block' });
+
   const openManage = async (page) => {
     await page.locator('.manageCustomCourses').click();
     const manage = page.locator('.custom_course_manage_overlay');

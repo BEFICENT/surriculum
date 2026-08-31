@@ -2,7 +2,7 @@
 
 const { test, expect } = require('../fixtures');
 const { seedPlan } = require('../helpers/plan');
-const plans = require('../fixtures/passing-plans-multiterm.json');
+const plans = require('../test-data/passing-plans-multiterm.json');
 
 // Characterization of the ALLOCATION's DOM rendering — the .course_type labels
 // and the per-semester workload text. No spec asserted these before (the

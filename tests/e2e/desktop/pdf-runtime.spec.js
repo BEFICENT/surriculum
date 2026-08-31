@@ -7,17 +7,24 @@ const { seedPlan } = require('../helpers/plan');
 const REPOSITORY_ROOT = path.resolve(__dirname, '..', '..', '..');
 const NORMAL_TRANSCRIPT = path.join(
   REPOSITORY_ROOT,
-  'Example Files',
+  'tests',
+  'fixtures',
+  'academic-records',
   'Academic Records Summary.pdf',
 );
 const MICROSOFT_PRINT_TO_PDF_TRANSCRIPT = path.join(
   REPOSITORY_ROOT,
-  'Example Files',
+  'tests',
+  'fixtures',
+  'academic-records',
   'Academic Records Summary_microsoft_printtopdf.pdf',
 );
 const CREDIT_DISTRIBUTION_CATALOG = path.join(
   REPOSITORY_ROOT,
-  'Pre-Conversion Files',
+  'tests',
+  'fixtures',
+  'suis',
+  'basic-science-list',
   'katalog_basic_eng_degerler_202401_yuklenen_07.05.2025.pdf',
 );
 const PAGES_URL = 'http://127.0.0.1:8001/surriculum/';

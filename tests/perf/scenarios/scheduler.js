@@ -1,5 +1,6 @@
 'use strict';
 
+const { getFixture } = require('../fixtures/plans');
 const {
   assertScenarioContext,
   recordInvariant,
@@ -8,6 +9,25 @@ const {
   settleAnimationFrames,
   waitForStableFingerprint,
 } = require('./_shared');
+
+const SCHEDULER_FIXTURE = getFixture('scheduler-heavy');
+const SCHEDULER_FIXTURE_ENTRY_TERM = SCHEDULER_FIXTURE.plan.termCodes[0];
+const SCHEDULER_FIXTURE_PROGRAM = SCHEDULER_FIXTURE.plan.major;
+const SCHEDULER_FIXTURE_SCHEDULE_TERM = SCHEDULER_FIXTURE.plan.schedulerSelectedTerm;
+
+// These are the exact first-party data files exercised by the dense Scheduler
+// journey. The runner folds them into each target fingerprint, so fixture or
+// dataset drift cannot masquerade as a runtime-only performance change.
+const SCHEDULER_TARGET_ASSETS = Object.freeze([
+  'courses/terms.jsonl',
+  `courses/${SCHEDULER_FIXTURE_ENTRY_TERM}/${SCHEDULER_FIXTURE_PROGRAM}.jsonl`,
+  `requirements/${SCHEDULER_FIXTURE_ENTRY_TERM}.jsonl`,
+  'courses/all_coursepage_info.jsonl',
+  'courses/course_instructor_history.jsonl',
+  'courses/course_section_history.jsonl',
+  'courses/schedule_subjects.json',
+  `courses/schedule/${SCHEDULER_FIXTURE_SCHEDULE_TERM}.jsonl`,
+]);
 
 function clippedRect(rect, width, height) {
   const left = Math.max(0, Math.min(width, rect.left));
@@ -404,7 +424,9 @@ module.exports = {
         }
         const startedAt = performance.now();
         const initialChecked = await control.isChecked();
-        const toggleRendersResults = selector !== '.scheduler-toggle-hover-preview';
+        // Keyed reconciliation can intentionally produce no DOM mutation when
+        // the next result order/markup is identical. The control state plus
+        // quiet-frame fingerprint is the semantic completion signal here.
         await waitForStableFingerprint(
           page,
           '.scheduler-modal',
@@ -412,7 +434,7 @@ module.exports = {
           {
             expected: { selector: `.scheduler-modal ${selector}`, checked: !initialChecked },
             mutationSelector: '.scheduler-modal .scheduler-results',
-            requireMutation: toggleRendersResults,
+            requireMutation: false,
             timeout: navigationTimeout,
           },
         );
@@ -423,7 +445,7 @@ module.exports = {
           {
             expected: { selector: `.scheduler-modal ${selector}`, checked: initialChecked },
             mutationSelector: '.scheduler-modal .scheduler-results',
-            requireMutation: toggleRendersResults,
+            requireMutation: false,
             timeout: navigationTimeout,
           },
         );
@@ -610,3 +632,4 @@ module.exports = {
 module.exports.collectBlurGeometry = collectBlurGeometry;
 module.exports.clippedRect = clippedRect;
 module.exports.openScheduler = openScheduler;
+module.exports.targetAssets = SCHEDULER_TARGET_ASSETS;

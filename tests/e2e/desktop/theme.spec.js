@@ -31,7 +31,7 @@ const DARK_PALETTE = {
   body: ['rgb(241, 245, 249)', 'rgb(15, 23, 42)'],
   header: ['linear-gradient(135deg, rgb(30, 41, 59) 0%, rgb(51, 65, 85) 100%)'],
   headerTitle: ['rgb(255, 255, 255)'],
-  primary: ['rgb(255, 255, 255)', 'rgb(59, 130, 246)'],
+  primary: ['rgb(255, 255, 255)', 'rgb(37, 99, 235)'],
   secondary: ['rgb(203, 213, 225)', 'rgb(30, 41, 59)', 'rgb(51, 65, 85)'],
   danger: ['rgb(255, 255, 255)', 'rgb(220, 38, 38)'],
   warning: ['rgb(17, 24, 39)', 'rgb(245, 158, 11)'],

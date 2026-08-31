@@ -183,15 +183,10 @@ test.describe('returning-user 3.1 update', () => {
     const routeDmCatalog = async (route) => {
       dmRequestCount += 1;
 
-      // fetchCourseData probes six paths with synchronous XHR before its
-      // asynchronous fetch fallback. Force those probes to miss so the seventh
-      // request in each DM load is genuinely asynchronous and can expose the
-      // readiness race without freezing the renderer.
-      if (dmRequestCount % 7 !== 0) {
-        await route.fulfill({ status: 404, contentType: 'application/json', body: '[]' });
-        return;
-      }
-      if (dmRequestCount === 14) {
+      // Both restored-program loads begin with the exact term catalog. Delay
+      // the second successful request directly; fallback-path counts are an
+      // implementation detail and may point at files that do not exist.
+      if (dmRequestCount === 2) {
         markSecondRequestStarted();
         await secondRequestGate;
       }

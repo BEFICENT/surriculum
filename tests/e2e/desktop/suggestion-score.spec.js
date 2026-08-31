@@ -4,10 +4,9 @@ const { test, expect } = require('../fixtures');
 const { seedPlan } = require('../helpers/plan');
 const { seedGradPlan, CS_PASSING_PLAN } = require('../helpers/passing-plan');
 
-// computeCourseSuggestionScore() — ~300 lines that order every course
-// suggestion the user sees, and previously untested. It reads window.curriculum
-// and the rendered semesters, so it can't be unit-tested; it IS a global, so
-// e2e can call it directly.
+// The pure score arithmetic has its own unit suite. These browser tests pin the
+// integration layer that builds program/progress contexts from the live plan
+// and exposes computeCourseSuggestionScore() to Planner and Scheduler.
 //
 // What it does: per program context, score = typeWeight(EL_Type) + credits*0.1,
 // plus basic-science and engineering bonuses WHILE those requirements are unmet
@@ -175,5 +174,117 @@ test.describe('course suggestion scoring', () => {
     expect(met, 'the university requirement should now be met').toBeGreaterThanOrEqual(41);
     const after = await score(page, UNIVERSITY_COURSE);
     expect(after, `score must fall once university is met in-session (${before} -> ${after})`).toBeLessThan(before);
+  });
+
+  test('the compatibility scorer reuses scoped progress and invalidates on target or plan revision', async ({ page }) => {
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: TERM_NAME,
+      curriculum: [['CS201']],
+      grades: [['A']],
+      dates: [TERM_NAME],
+      termCodes: ['202401'],
+    });
+
+    const result = await page.evaluate(() => {
+      const current = window.curriculum;
+      const original = current.getProgramProgressBeforeTermViews;
+      let allocationCalls = 0;
+      current.getProgramProgressBeforeTermViews = function (...args) {
+        allocationCalls += 1;
+        return original.apply(this, args);
+      };
+
+      const spring = {
+        progressPolicy: 'before-target',
+        targetTermCode: '202402',
+      };
+      const summer = {
+        progressPolicy: 'before-target',
+        targetTermCode: '202403',
+      };
+      const storage = window.planStorage;
+
+      // Turn the revision first so this probe cannot inherit a scorer that an
+      // unrelated render may have built before the allocator was instrumented.
+      const initialRevision = storage.getChangeRevision();
+      const primed = storage.requestSave();
+      const primedRevision = storage.getChangeRevision();
+
+      window.computeCourseSuggestionScore('CS201', spring);
+      window.computeCourseSuggestionScore('IF100', { ...spring });
+      window.computeCourseSuggestionScore('MATH101', spring);
+      const afterIdenticalOptions = allocationCalls;
+
+      window.computeCourseSuggestionScore('CS201', summer);
+      const afterTargetChange = allocationCalls;
+
+      const beforeRevisionChange = storage.getChangeRevision();
+      const revisionRequested = storage.requestSave();
+      const afterRevisionChange = storage.getChangeRevision();
+      window.computeCourseSuggestionScore('IF100', { ...summer });
+      const afterPlanRevision = allocationCalls;
+
+      storage.flushSaves();
+      current.getProgramProgressBeforeTermViews = original;
+      return {
+        primed,
+        revisionRequested,
+        initialRevision,
+        primedRevision,
+        beforeRevisionChange,
+        afterRevisionChange,
+        afterIdenticalOptions,
+        afterTargetChange,
+        afterPlanRevision,
+      };
+    });
+
+    expect(result.primed).toBe(true);
+    expect(result.primedRevision).toBe(result.initialRevision + 1);
+    expect(result.afterIdenticalOptions, 'same policy/target/plan should allocate once').toBe(1);
+    expect(result.afterTargetChange, 'a new destination term must rebuild progress').toBe(2);
+    expect(result.revisionRequested).toBe(true);
+    expect(result.afterRevisionChange).toBe(result.beforeRevisionChange + 1);
+    expect(result.afterPlanRevision, 'a new plan revision must rebuild progress').toBe(3);
+  });
+
+  test('an invalid destination fails closed after a valid scorer was cached', async ({ page }) => {
+    await emptyPlan(page);
+
+    const result = await page.evaluate(() => {
+      const validOptions = {
+        progressPolicy: 'before-target',
+        targetTermCode: '202402',
+      };
+      const validScorer = window.buildCourseSuggestionScorer(validOptions);
+      const validScore = window.computeCourseSuggestionScore('CS201', validOptions);
+      const malformedOptions = {
+        progressPolicy: 'before-target',
+        targetTermCode: 'not-a-term',
+      };
+      const malformedScorer = window.buildCourseSuggestionScorer(malformedOptions);
+      const malformedScore = window.computeCourseSuggestionScore('CS201', malformedOptions);
+      const blankScorer = window.buildCourseSuggestionScorer({
+        progressPolicy: 'before-target',
+        targetTermCode: '',
+      });
+      return {
+        validKey: validScorer.key,
+        validScore,
+        malformedKey: malformedScorer.key,
+        malformedAvailable: malformedScorer.available,
+        malformedScore,
+        blankAvailable: blankScorer.available,
+        blankScore: blankScorer.score('CS201'),
+      };
+    });
+
+    expect(result.validScore, 'the valid target proves a non-zero scorer was cached').toBeGreaterThan(0);
+    expect(result.malformedKey).not.toBe(result.validKey);
+    expect(result.malformedAvailable).toBe(false);
+    expect(result.malformedScore).toBe(0);
+    expect(result.blankAvailable).toBe(false);
+    expect(result.blankScore).toBe(0);
   });
 });

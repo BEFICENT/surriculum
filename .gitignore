@@ -1,8 +1,12 @@
-Example Files/Academic Records Summary_ex.html
+tests/fixtures/academic-records/Academic Records Summary_ex.html
 .idea/
 .claude/
 .vscode/
 surriculum.code-workspace
+.venv/
+.pytest_cache/
+.wrangler/
+tmp/
 courses/coursepage_html_cache/
 __pycache__/
 *.pyc

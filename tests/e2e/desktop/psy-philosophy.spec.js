@@ -2,7 +2,7 @@
 
 const { test, expect } = require('../fixtures');
 const { seedPlan } = require('../helpers/plan');
-const plans = require('../fixtures/passing-plans-multiterm.json');
+const plans = require('../test-data/passing-plans-multiterm.json');
 
 // PSY requires PHIL300 or PHIL301 — an alternative pair. Both are EL_Type
 // `required` in the PSY catalog, and the threshold is credit-tight:
@@ -96,7 +96,7 @@ test.describe('PSY philosophy requirement (PHIL300 / PHIL301)', () => {
   test('the flag-26 message names the philosophy courses, not physics', async ({ page }) => {
     await page.goto('/');
     const msg = await page.evaluate(async () => {
-      const { buildFlagMessages } = await import('/cases/flagMessages.js');
+      const { buildFlagMessages } = await import('/scripts/ui/graduation-flag-messages.js');
       return buildFlagMessages('PSY')[26]();
     });
     // The message table is flat — buildFlagMessages uses `major` only for the

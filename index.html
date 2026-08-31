@@ -21,8 +21,18 @@
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
     <title>SUrriculum v3.1</title>
+    <!-- First-party CSS is split by responsibility; order preserves the reviewed cascade. -->
     <link rel="stylesheet" href="styles.css" type="text/css"/>
+    <link rel="stylesheet" href="styles/planner-shell.css" type="text/css"/>
+    <link rel="stylesheet" href="styles/graduation.css" type="text/css"/>
+    <link rel="stylesheet" href="styles/planner.css" type="text/css"/>
+    <link rel="stylesheet" href="styles/scheduler-shell.css" type="text/css"/>
+    <link rel="stylesheet" href="styles/scheduler-grid.css" type="text/css"/>
+    <link rel="stylesheet" href="styles/planner-controls.css" type="text/css"/>
+    <link rel="stylesheet" href="styles/summary-overview.css" type="text/css"/>
+    <link rel="stylesheet" href="styles/summary-workspace.css" type="text/css"/>
     <link rel="stylesheet" href="mobile.css" type="text/css"/>
+    <link rel="stylesheet" href="styles/mobile-scheduler.css" type="text/css"/>
 
     <link rel="icon" href="assets/favicon.ico" type="image/ico">
     <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png">
@@ -60,31 +70,100 @@
     <!-- Core scripts -->
     <script src="scripts/version.js" defer></script>
     <script src="scripts/preferences.js" defer></script>
+    <script src="scripts/plan/ui.js" defer></script>
+    <script src="scripts/plan/import-validation.js" defer></script>
+    <script src="scripts/plan/import-export.js" defer></script>
     <script src="scripts/plan_manager.js" defer></script>
-    <script src="scripts/helper_functions.js" defer></script>
+    <script src="scripts/domain/academic-terms.js" defer></script>
+    <script src="scripts/ui/course-history-table.js" defer></script>
+    <script src="scripts/adapters/course-suggestion-scorer.js" defer></script>
+    <script src="scripts/data/course-metadata.js" defer></script>
+    <script src="scripts/storage/curriculum-persistence.js" defer></script>
     <script src="scripts/course_retakes.js" defer></script>
     <script src="scripts/registration_rules.js" defer></script>
+    <script src="scripts/requisites/expression-policy.js" defer></script>
     <script src="scripts/course_requisites.js" defer></script>
+    <script src="scripts/course-filter-offering-history.js" defer></script>
     <script src="scripts/course_filters.js" defer></script>
+    <script src="scripts/scheduler/dialogs.js" defer></script>
+    <script src="scripts/scheduler/storage.js" defer></script>
+    <script src="scripts/scheduler/meeting-model.js" defer></script>
+    <script src="scripts/scheduler/foundation.js" defer></script>
+    <script src="scripts/scheduler/course-details.js" defer></script>
+    <script src="scripts/scheduler/course-ui.js" defer></script>
+    <script src="scripts/scheduler/planner-sync.js" defer></script>
+    <script src="scripts/scheduler/results.js" defer></script>
+    <script src="scripts/scheduler/results-filtering.js" defer></script>
+    <script src="scripts/scheduler/result-card.js" defer></script>
+    <script src="scripts/scheduler/results-controller.js" defer></script>
+    <script src="scripts/scheduler/grid-geometry.js" defer></script>
+    <script src="scripts/scheduler/grid-availability.js" defer></script>
+    <script src="scripts/scheduler/grid-controller.js" defer></script>
+    <script src="scripts/scheduler/selection-controller.js" defer></script>
+    <script src="scripts/scheduler/session.js" defer></script>
+    <script src="scripts/scheduler/sidebar.js" defer></script>
+    <script src="scripts/scheduler/program-details.js" defer></script>
+    <script src="scripts/scheduler/term-context.js" defer></script>
     <script src="scripts/scheduler.js" defer></script>
     <script src="scripts/mouse_and_drag.js" defer></script>
     <script src="scripts/s_semester.js" defer></script>
     <script src="scripts/create_semester.js" defer></script>
+    <script src="scripts/planner/course-picker-layout.js" defer></script>
+    <script src="scripts/planner/course-picker-option-renderer.js" defer></script>
+    <script src="scripts/planner/course-picker.js" defer></script>
+    <script src="scripts/planner/course-commit.js" defer></script>
+    <script src="scripts/planner/course-details-controller.js" defer></script>
+    <script src="scripts/planner/grade-editor.js" defer></script>
     <script src="scripts/click.js" defer></script>
+    <script src="scripts/academic-records/parser.js" defer></script>
+    <script src="scripts/academic-records/catalog-resolution.js" defer></script>
+    <script src="scripts/academic-records/importer.js" defer></script>
     <script src="scripts/academic_records_parser.js" defer></script>
     <script src="scripts/pdf_transcript_reader.js" defer></script>
     <!-- ES modules (deferred): expose pure helpers on window for the classic scripts above. -->
     <script type="module" src="scripts/domain/credits.js"></script>
     <script type="module" src="scripts/domain/grades.js"></script>
+    <script type="module" src="scripts/domain/suggestion-ranking.js"></script>
     <script type="module" src="scripts/data/catalog.js"></script>
-    <script type="module" src="cases/flagMessages.js"></script>
+    <script type="module" src="scripts/ui/graduation-flag-messages.js"></script>
+    <script src="scripts/domain/curriculum-allocation.js" defer></script>
+    <script src="scripts/domain/curriculum-recalculation.js" defer></script>
+    <script src="scripts/domain/curriculum-progress.js" defer></script>
+    <script src="scripts/domain/requirement-engine.js" defer></script>
+    <script src="scripts/domain/suggestion-candidate-impact.js" defer></script>
+    <script src="scripts/domain/suggestion-progress-snapshot.js" defer></script>
+    <script src="scripts/ui/curriculum-view.js" defer></script>
     <script src="scripts/s_curriculum.js" defer></script>
     <script src="scripts/requirements.js" defer></script>
     <script src="scripts/minor_requirements.js" defer></script>
+    <script src="scripts/domain/minor-allocation.js" defer></script>
+    <script src="scripts/ui/graduation-results.js" defer></script>
+    <script src="scripts/ui/graduation-summary-shell.js" defer></script>
+    <script src="scripts/ui/graduation-minor-summary.js" defer></script>
     <script src="scripts/graduation_check.js" defer></script>
 
+    <script src="scripts/app/program-data.js" defer></script>
+    <script src="scripts/app/runtime.js" defer></script>
+    <script src="scripts/app/custom_course_model.js" defer></script>
+    <script src="scripts/app/custom_course_runtime.js" defer></script>
+    <script src="scripts/app/custom_course_manager.js" defer></script>
+    <script src="scripts/app/custom_course_form.js" defer></script>
+    <script src="scripts/app/custom_course_ui.js" defer></script>
+    <script src="scripts/app/academic_records_import.js" defer></script>
+    <script src="scripts/app/transcript-custom-course-review.js" defer></script>
+    <script src="scripts/app/program_context.js" defer></script>
+    <script src="scripts/app/onboarding.js" defer></script>
+    <script src="scripts/app/mobile_notice.js" defer></script>
+    <script src="scripts/app/planner-preferences.js" defer></script>
+    <script src="scripts/app/saved-course-restoration.js" defer></script>
+    <script src="scripts/app/shell-controller.js" defer></script>
+    <script src="scripts/app/program-selection-controller.js" defer></script>
     <script src="main.js" defer></script>
     <script src="theme.js" defer></script>
+    <script src="scripts/mobile/viewport-mode.js" defer></script>
+    <script src="scripts/mobile/navigation-progress.js" defer></script>
+    <script src="scripts/mobile/planner-accordion.js" defer></script>
+    <script src="scripts/mobile/scheduler-adaptation.js" defer></script>
     <script src="mobile.js" defer></script>
 </head>
 <body class="light-theme">
@@ -148,7 +227,8 @@
                         <div class="import-controls">
                             <input type="file" id="academicRecordsInput" class="import-file" accept=".html,.htm,.pdf"
                                    aria-label="Academic records file">
-                            <button id="importAcademicRecords" class="btn btn-primary btn-sm" type="button">Import</button>
+                            <button id="importAcademicRecords" class="btn btn-primary btn-sm" type="button"
+                                    disabled aria-busy="true">Import</button>
                         </div>
                         <div id="course-import-box" style="margin-top: 12px; padding: 12px; background: var(--bg-surface); border-radius: var(--radius-sm); font-size: 0.875rem; color: var(--text-primary);">
                             <strong>Choose your major and double major before importing</strong>
@@ -198,13 +278,13 @@
                         <div class="control-col-label">Admit Term</div>
                     </div>
                     <div class="control-row">
-                        <select class="select-control change_major" aria-label="Major program"></select>
-                        <select class="select-control entryTerm" aria-label="Major admit term"></select>
+                        <select class="select-control change_major" id="majorProgram" name="majorProgram" aria-label="Major program"></select>
+                        <select class="select-control entryTerm" id="majorAdmitTerm" name="majorAdmitTerm" aria-label="Major admit term"></select>
                     </div>
 
                     <div class="control-row is-hidden" id="doubleMajorControlsRow">
-                        <select class="select-control doubleMajor" aria-label="Double-major program"></select>
-                        <select class="select-control entryTermDM" aria-label="Double-major admit term"></select>
+                        <select class="select-control doubleMajor" id="doubleMajorProgram" name="doubleMajorProgram" aria-label="Double-major program"></select>
+                        <select class="select-control entryTermDM" id="doubleMajorAdmitTerm" name="doubleMajorAdmitTerm" aria-label="Double-major admit term"></select>
                     </div>
 
                     <div class="control-row" id="doubleMajorButtonRow">

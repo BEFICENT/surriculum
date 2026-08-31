@@ -2,7 +2,7 @@
 
 const { test, expect } = require('../fixtures');
 const { seedPlan } = require('../helpers/plan');
-const plans = require('../fixtures/passing-plans-multiterm.json');
+const plans = require('../test-data/passing-plans-multiterm.json');
 
 // Official SUIS rule (ME, 2025+ admits):
 //   "ME403 or ME425" is required. If both are taken, the extra counts toward

@@ -1,9 +1,11 @@
 # SUrriculum 3.1 release-readiness tracker
 
-Last updated: 2026-08-16
+Last updated: 2026-08-31
 
-This is the working backlog for the 3.1 release. Items should be handled one at
-a time and checked off only after the fix and its verification are complete.
+This is the historical record for the published 3.1 release plus the subsequent
+maintainability and performance hardening pass. Unchecked items in the original
+sections are deferred follow-ups, not blockers for the release that was already
+published on 2026-08-16.
 
 ## Decisions and constraints already recorded
 
@@ -31,7 +33,58 @@ a time and checked off only after the fix and its verification are complete.
   rolls back on failure. Whole-plan switching/import/reset/deletion may remain
   reload boundaries because they replace the active plan identity.
 
-## Verified baseline
+## Post-release maintainability and performance hardening (2026-08-31)
+
+- [x] The final deterministic verification passes 466/466 JavaScript/static unit
+  tests, 42/42 performance contracts, and the Python/data/Pages gate. The data
+  audit covers 729 deterministic runtime inputs (728 JSONL and one JSON), 23
+  term hashes, and 228,278 parsed JSONL rows.
+- [x] The complete Chromium gate passes 629/629 with retries disabled. The
+  focused Firefox/WebKit gate passes 2/2 with retries disabled, and the exact
+  WebKit planner-readiness regression passes 10 consecutive runs without a
+  retry. The final AC performance smoke passes 2/2.
+- [x] Smart Sort now evaluates the marginal requirement value a candidate can
+  still add. It reallocates only degree-eligible progress strictly before the
+  Planner destination or Scheduler term, applies independent main/double-major/
+  minor weights, and ranks definitively ready/offered candidates first while
+  failing open when requisite or offering data is unknown.
+- [x] The runtime is split across 11 responsibility-based CSS files and focused
+  app, mobile, Planner, Scheduler, academic-record, curriculum, graduation,
+  requisite, storage, and UI modules. Compatibility entry points remain small
+  orchestrators, module-size and shipped-inventory contracts protect the
+  boundaries, and `docs/architecture.md` records ownership and load order.
+- [x] The exact production artifact contains 873 files and 67,564,765 raw bytes:
+  23 app-shell/root/data/style files (373,201 bytes), 30 assets (2,916,808), 683
+  course files (62,133,073), 46 requirement files (320,047), and 91 scripts
+  (1,821,636). The builder and contracts derive these values rather than treating
+  this one measurement as a future baseline.
+- [x] A 4× CPU DevTools trace of the dense Scheduler initially recorded LCP
+  581 ms, CLS 0, Scheduler INP 79 ms, and a 165 ms forced reflow rooted at
+  `getSchedulerLayout`. The desktop invariant-geometry path removes that root;
+  the follow-up trace records INP 73 ms and CLS 0. The remaining one-time deferred
+  edge-blur measurement preserves dynamic rounded-edge geometry and is not
+  repeated by Scheduler scroll or hover work.
+- [x] The final same-machine AC comparison uses the same final harness, target
+  URL, workload hash, 1440×900 viewport, 4× CPU throttle, fixed academic date,
+  cold/service-worker-blocked state, and five retry-free samples per revision.
+  Both manifests contain every selected target hash with zero fetch errors, one
+  group is comparable, and all 9 advisory rules pass with no regressions.
+  Candidate medians improve total measured time by 2.1%, Scheduler opening by
+  8.1%, mobile edge-blur geometry by 9.7%, and the worst phase-frame p95 by
+  17.5%; network transfer is unchanged.
+- [x] The comparison host is an AMD Ryzen AI 9 365 (10 physical cores/20 logical
+  processors) with hardware-accelerated Radeon 880M graphics, Chrome 149,
+  approximately 90.09 Hz display timing, the Balanced power scheme, and stable
+  AC power at 97% during the final captures. Node 25.2.1 was used even though the
+  suite recommends Node 24.
+  Earlier alternating-order runs showed the unchanged base median moving from
+  17.107 s to 19.119 s, so they are retained as thermal/order-sensitivity
+  evidence rather than selected as the gate. The maintainer explicitly skipped
+  the battery baseline for this pass.
+- [x] This hardening work remains in the local working tree at the end of the
+  verification pass. It has not been committed, pushed, or deployed yet.
+
+## Published 3.1 baseline (2026-08-16)
 
 - [x] JavaScript/static unit gate passes: 288/288 tests.
 - [x] The current Chromium Playwright inventory is 592 tests (547 desktop and
@@ -199,9 +252,9 @@ a time and checked off only after the fix and its verification are complete.
   Total. EE `202201`-`202403` now stores Required 33 and ME `202301`-`202403`
   stores Required 32, matching the live pages' 123 category SU / 125 Total.
   Route tests cover MATH 212, MATH 201+202, either incomplete half, and the
-  separate 125-SU check. The current live `202601`-`202603` pages validate; they
-  are not local yet because the generated term window does not include them
-  before Fall 2026-2027 becomes current.
+  separate 125-SU check. The `202601` major catalogs and requirements are now
+  local following the Fall rollover. `202602` is present as schedule/term data,
+  but is not yet a complete major-catalog and requirements directory.
 - [x] Resolve the separate ME `202501`-onward source ambiguity. The structured
   numeric summary is authoritative over the inconsistent prose, so Core remains
   21 for `202501`-`202503`. Those values sum exactly to the independent 131-SU
@@ -589,12 +642,10 @@ a time and checked off only after the fix and its verification are complete.
   (which ignores warmup messages) and proves the new controller warms the active
   plan on the first upgraded visit. Completed warmups are marked per app/data
   version and plan bundle to avoid downloading the same catalogs on every load.
-- [x] Choose an explicit 3.1 deployment path. Verified on 2026-07-28: GitHub
-  Pages uses the legacy branch configuration and publishes the repository root
-  from `main`. The final release will merge `surriculum-3.1` into `main`, which
-  automatically triggers `pages-build-deployment`; pushing the feature branch
-  alone does not deploy. Use a merge commit to preserve every 3.1 commit—do not
-  squash or rebase at merge time.
+- [x] Choose an explicit 3.1 deployment path. GitHub Pages retained the legacy
+  branch configuration publishing the repository root from `main`. The
+  history-preserving merge `498ed78` triggered the 2026-08-16 deployment, the
+  public smoke checks passed, and the immutable `v3.1.0` tag was pushed.
 - [x] Prepare an optional GitHub Pages Actions deployment containing an
   allowlisted production artifact instead of the entire repository root. The
   local workflow is manual and build-only by default; deployment additionally
@@ -602,9 +653,9 @@ a time and checked off only after the fix and its verification are complete.
   the data manifest, service-worker shell, local static references, exact
   allowlist, and a live `/surriculum/` mount while excluding tests, tools,
   captured pages, PDFs, editor files, and temporary data.
-- [ ] After explicit release approval, decide whether to keep the existing
-  merge-triggered legacy Pages path for 3.1 or switch Pages to the prepared
-  Actions artifact. No Pages setting or deployment has been changed.
+- [x] Retain the merge-triggered legacy Pages path for the 3.1 publication. The
+  allowlisted Actions artifact remains an optional/manual future migration; the
+  3.1 release did not switch the Pages setting to that workflow.
 - [x] Align the daily data-refresh workflow with the chosen production branch.
   It runs from the default `main` branch and opens data-update PRs against it;
   merging one of those PRs will trigger the same legacy Pages deployment.
@@ -649,8 +700,9 @@ a time and checked off only after the fix and its verification are complete.
   The refresh PR itself is allowlisted to data paths and runs fast requirement
   validation plus the manifest check that parses every runtime JSON/JSONL row.
   Checkout credentials are not persisted through scraper/dependency execution;
-  the token is passed only to the pinned PR action. The workflow is committed
-  locally but has not run on GitHub.
+  the token is passed only to the pinned PR action. At the time this pre-release
+  entry was written, the workflow was committed locally but had not yet run on
+  GitHub; this historical tracker does not assert the current Actions state.
 - [ ] Configure any desired required-check/branch-protection settings after the
   first successful GitHub CI run; this is an external release-time action.
 

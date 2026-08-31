@@ -21,7 +21,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { loadScriptGlobals } = require('./helpers/load-script');
 
-const h = loadScriptGlobals('scripts/helper_functions.js');
+const h = loadScriptGlobals('scripts/domain/academic-terms.js');
 
 // Month is 0-indexed in the Date constructor; spelled out here so the test reads
 // as a calendar rather than as arithmetic.

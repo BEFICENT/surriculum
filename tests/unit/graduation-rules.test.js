@@ -3,14 +3,14 @@
 // The graduation rules-as-data evaluator: evaluateRules(ctx, rules) walks an
 // ordered descriptor list and returns the flag of the FIRST unmet rule (0 = all
 // met). These pin each rule type's evaluator via the real dispatch path, plus the
-// first-unmet-wins ordering. Rule tables (PROGRAM_RULES) and the wiring into
+// first-unmet-wins ordering. Requirement-record conversion and the wiring into
 // canGraduate are separate; this covers the engine.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadScriptGlobals } = require('./helpers/load-script');
+const { loadCurriculumGlobals } = require('./helpers/load-curriculum');
 
-const { evaluateRules, sumPoolCredits, graduationRulesFor, facultyRules, groupRules } = loadScriptGlobals('scripts/s_curriculum.js');
+const { evaluateRules, sumPoolCredits, graduationRulesFor, facultyRules, groupRules } = loadCurriculumGlobals();
 
 const FIELDS = { effective: 'effective_type', category: 'category' };
 
@@ -127,7 +127,7 @@ test('evaluateRules returns the FIRST unmet flag (order matters)', () => {
 // copies) — asserting them on the shared table proves both passes now enforce them.
 const ALL_MAJORS = ['CS', 'IE', 'EE', 'MAT', 'BIO', 'ME', 'ECON', 'MAN', 'PSIR', 'PSY', 'VACD', 'DSA'];
 // Each program's rules are generated from its scraped requirements record, so read
-// the real data and evaluate graduationRulesFor against it (PROGRAM_RULES is empty).
+// the real data and evaluate graduationRulesFor against it.
 const fs = require('node:fs');
 const path = require('node:path');
 const reqByMajor = Object.fromEntries(
@@ -206,7 +206,7 @@ test('groupRules maps credits (with base/pairs) and languageCap groups to evalua
   assert.equal(rules[2].max, 2);
 });
 
-test('graduationRulesFor uses groups+facultyReq when present, PROGRAM_RULES otherwise', () => {
+test('graduationRulesFor uses groups+facultyReq when present and shared rules otherwise', () => {
   // A VACD-shaped req reproduces the exact order/flags the old hard-listed table had.
   const vacdReq = {
     humRequired: 2,
@@ -223,7 +223,6 @@ test('graduationRulesFor uses groups+facultyReq when present, PROGRAM_RULES othe
   // A faculty-ticker-only program (CS) generates just the ticker from facultyReq.
   const cs = [...graduationRulesFor('CS', { humRequired: 1, facultyReq: { total: 5, math: 2, fens: 3 } }).map((r) => r.flag)];
   assert.deepEqual(cs, [11, 12, 14, 19, 16]);
-  // No special-requirement data -> only the shared university + HUM rules
-  // (PROGRAM_RULES is now empty; every program is data-driven).
+  // No special-requirement data -> only the shared university + HUM rules.
   assert.deepEqual([...graduationRulesFor('ZZZ', { humRequired: 1 }).map((r) => r.flag)], [11, 12]);
 });

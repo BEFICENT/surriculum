@@ -10,14 +10,14 @@
 // single module-level function shared by both, so it can be pinned directly here
 // rather than only through full-app e2e allocation runs.
 //
-// Loaded via the tolerant vm loader: s_curriculum.js only declares constants and
-// functions at top level, so it evaluates cleanly and exposes allocateCascade.
+// Loaded through the same classic-script compatibility stack as production so
+// the allocation module is exercised at its real boundary.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadScriptGlobals } = require('./helpers/load-script');
+const { loadCurriculumGlobals } = require('./helpers/load-curriculum');
 
-const { allocateCascade } = loadScriptGlobals('scripts/s_curriculum.js');
+const { allocateCascade } = loadCurriculumGlobals();
 
 // Convenience: fresh counters, and a helper that places a course and returns
 // both the resulting type and the mutated counters.

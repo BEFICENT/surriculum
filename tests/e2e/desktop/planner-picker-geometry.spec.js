@@ -31,10 +31,27 @@ const semesterFor = (page, term) => page.locator(
   `.container_semester:has(.date p:text-is("${term}"))`,
 );
 
-async function settleGeometry(page) {
+async function settleGeometry(page, picker) {
   await page.evaluate(() => new Promise((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(resolve));
   }));
+  if (!picker) return;
+
+  // Chromium can dispatch the viewport resize before flex layout has moved
+  // the semester row. The picker intentionally follows that later layout via
+  // ResizeObserver, so wait for the user-visible invariant instead of assuming
+  // a fixed number of animation frames covers both delivery phases.
+  await expect.poll(async () => {
+    const geometry = await pickerGeometry(picker);
+    return geometry.dropdown.top >= geometry.safeTop - 1
+      && geometry.dropdown.bottom <= geometry.safeBottom + 1
+      && geometry.anchorGap >= 4
+      && geometry.anchorGap <= 8;
+  }, {
+    message: 'course picker should settle against its search row inside the visible board',
+    timeout: 2000,
+    intervals: [16, 32, 50],
+  }).toBe(true);
 }
 
 async function openPicker(page, term) {
@@ -46,7 +63,7 @@ async function openPicker(page, term) {
   await expect(picker).toBeVisible();
   await expect(picker.locator('.course_select')).toBeFocused();
   await expect(picker.locator('.course-dropdown .course-option').first()).toBeVisible();
-  await settleGeometry(page);
+  await settleGeometry(page, picker);
   return picker;
 }
 
@@ -141,7 +158,7 @@ test.describe('planner course picker geometry (desktop)', () => {
     expect(tall.listScrolls, 'the large catalog still has one contained list scroller').toBe(true);
 
     await page.setViewportSize({ width: 1280, height: 520 });
-    await settleGeometry(page);
+    await settleGeometry(page, picker);
     const short = await pickerGeometry(picker);
     expectContained(short, 'short viewport');
     expect(short.placement).toBe('above');
@@ -152,7 +169,7 @@ test.describe('planner course picker geometry (desktop)', () => {
     expect(short.listScrolls, 'course results remain scrollable on short cards').toBe(true);
 
     await page.setViewportSize({ width: 1280, height: 1000 });
-    await settleGeometry(page);
+    await settleGeometry(page, picker);
     const restored = await pickerGeometry(picker);
     expectContained(restored, 'restored tall viewport');
     expect(restored.placement).toBe('above');
@@ -183,7 +200,7 @@ test.describe('planner course picker geometry (desktop)', () => {
       return Math.abs(element.scrollLeft - previous) > 1;
     });
     expect(didScroll, 'fixture must exercise the board-scroll positioning path').toBe(true);
-    await settleGeometry(page);
+    await settleGeometry(page, picker);
 
     const after = await pickerGeometry(picker);
     expectContained(after, 'after board scroll');
@@ -214,7 +231,7 @@ test.describe('planner course picker geometry (desktop)', () => {
       await expect.poll(() => page.evaluate(() => (
         window.visualViewport ? window.visualViewport.scale : 1
       ))).toBeGreaterThan(1.05);
-      await settleGeometry(page);
+      await settleGeometry(page, picker);
 
       const zoomed = await pickerGeometry(picker);
       expect(zoomed.visualViewport.height).toBeLessThan(zoomed.viewport.height - 40);

@@ -146,12 +146,19 @@ test.describe('responsive mobile semester headers', () => {
       await seedPlan(page, PLAN);
       await expect(page.locator('body')).toHaveClass(/is-mobile/);
 
+      const board = page.locator('.board');
+      await expect(board, 'mobile planner does not animate through a squeezed desktop sidebar offset')
+        .toHaveCSS('transition-duration', '0s');
+
       const semester = page.locator('.container_semester').first();
       const label = semester.locator('.date p');
       const grip = semester.locator('.semester_drag');
       await expect(label).toHaveText('Spring 2025-2026');
       await expect(semester.locator('.total_credit_text')).toContainText('5.5 SU (2.5 N/A)');
       await expect(grip, 'the pointer-oriented desktop drag grip stays off touch headers').toBeHidden();
+      // This is a pixel-geometry contract, so measure the final Inter and
+      // Font Awesome metrics rather than a transient fallback-font layout.
+      await page.evaluate(() => document.fonts.ready);
 
       if (await semester.evaluate((card) => card.classList.contains('m-collapsed'))) {
         await label.click();

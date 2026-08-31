@@ -10,6 +10,10 @@ let requirementsStatus = {
   doubleMajor: { term: '', available: false },
 };
 let flatRequirementsTerm = '';
+const requirementsCache = new Map();
+const requirementsInflight = new Map();
+let requirementsReadyPromise = Promise.resolve(requirements);
+let requirementsInitializationSequence = 0;
 
 const EXPECTED_REQUIREMENT_MAJORS = Object.freeze([
   'BIO', 'CS', 'DSA', 'ECON', 'EE', 'IE', 'MAN', 'MAT', 'ME', 'PSIR', 'PSY', 'VACD',
@@ -124,26 +128,92 @@ function normalizeRequirementsData(data) {
   return out;
 }
 
+function requirementPaths(termCode) {
+  return [`./requirements/${termCode}.jsonl`, `./requirements/${termCode}.json`];
+}
+
+function requirementsUseFileProtocol() {
+  try {
+    return typeof location !== 'undefined' && location && location.protocol === 'file:';
+  } catch (_) {
+    return false;
+  }
+}
+
+function readRequirementTextSynchronously(path) {
+  if (!requirementsUseFileProtocol() || typeof XMLHttpRequest !== 'function') return null;
+  try {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', path, false);
+    xhr.overrideMimeType('application/json');
+    xhr.send(null);
+    return xhr.status === 200 || xhr.status === 0 ? String(xhr.responseText || '') : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function fetchRequirementText(path) {
+  if (typeof fetch !== 'function') return null;
+  try {
+    const response = await fetch(path);
+    if (!response || !response.ok) return null;
+    return await response.text();
+  } catch (_) {
+    return null;
+  }
+}
+
+function parseRequirementsText(text) {
+  if (text === null) return null;
+  return normalizeRequirementsData(parseJsonOrJsonl(text));
+}
+
+// Compatibility reader for code that still needs an immediate result. HTTP(S)
+// never enters synchronous XHR: callers receive only a validated cached value.
+// Local file pages retain their historical synchronous sibling-file fallback.
 function loadRequirements(termCode) {
   const requestedTerm = String(termCode || '').trim();
   if (!/^\d{6}$/.test(requestedTerm)) return null;
-  const paths = [`./requirements/${requestedTerm}.jsonl`, `./requirements/${requestedTerm}.json`];
-  const tryLoad = (p) => {
-    try {
-      const xhr = new XMLHttpRequest();
-      xhr.open('GET', p, false);
-      xhr.overrideMimeType('application/json');
-      xhr.send(null);
-      if (xhr.status === 200 || xhr.status === 0) return normalizeRequirementsData(parseJsonOrJsonl(xhr.responseText));
-    } catch (_) {}
-    return null;
-  };
-  let data = null;
-  for (const p of paths) {
-    data = tryLoad(p);
-    if (data) break;
+  if (requirementsCache.has(requestedTerm)) return requirementsCache.get(requestedTerm);
+  if (!requirementsUseFileProtocol()) return null;
+  for (const path of requirementPaths(requestedTerm)) {
+    const data = parseRequirementsText(readRequirementTextSynchronously(path));
+    if (!data) continue;
+    requirementsCache.set(requestedTerm, data);
+    return data;
   }
-  return data;
+  return null;
+}
+
+function loadRequirementsAsync(termCode) {
+  const requestedTerm = String(termCode || '').trim();
+  if (!/^\d{6}$/.test(requestedTerm)) return Promise.resolve(null);
+  if (requirementsCache.has(requestedTerm)) {
+    return Promise.resolve(requirementsCache.get(requestedTerm));
+  }
+  if (requirementsInflight.has(requestedTerm)) return requirementsInflight.get(requestedTerm);
+
+  const pending = (async () => {
+    // `loadRequirements` may synchronously resolve only under file://.
+    const local = loadRequirements(requestedTerm);
+    if (local) return local;
+    for (const path of requirementPaths(requestedTerm)) {
+      const data = parseRequirementsText(await fetchRequirementText(path));
+      if (!data) continue;
+      requirementsCache.set(requestedTerm, data);
+      return data;
+    }
+    // Do not cache an empty/transient result; the next call must be able to retry.
+    return null;
+  })();
+  requirementsInflight.set(requestedTerm, pending);
+  pending.finally(() => {
+    if (requirementsInflight.get(requestedTerm) === pending) {
+      requirementsInflight.delete(requestedTerm);
+    }
+  });
+  return pending;
 }
 
 function getRequirementRecord(majorCode, termCode, source) {
@@ -159,14 +229,17 @@ function getRequirementRecord(majorCode, termCode, source) {
   return isValidRequirementRecord(all[major], major) ? all[major] : null;
 }
 
-function initializeRequirements(mainTermCode, doubleMajorTermCode) {
+function normalizeRequirementTerms(mainTermCode, doubleMajorTermCode) {
   const rawMainTerm = String(mainTermCode || '').trim();
   const mainTerm = /^\d{6}$/.test(rawMainTerm) ? rawMainTerm : '';
   const rawDMTerm = String(doubleMajorTermCode || '').trim();
   const dmTerm = !mainTerm
     ? ''
     : (!rawDMTerm ? mainTerm : (/^\d{6}$/.test(rawDMTerm) ? rawDMTerm : ''));
+  return { mainTerm, dmTerm };
+}
 
+function publishRequirementsState(mainTerm, dmTerm, loadedMain, loadedDM) {
   if (!mainTerm) {
     requirements = {};
     flatRequirementsTerm = '';
@@ -180,9 +253,6 @@ function initializeRequirements(mainTermCode, doubleMajorTermCode) {
     }
     return requirements;
   }
-
-  const loadedMain = loadRequirements(mainTerm);
-  const loadedDM = !dmTerm ? null : (dmTerm !== mainTerm ? loadRequirements(dmTerm) : loadedMain);
 
   if (dmTerm && dmTerm !== mainTerm) {
     requirements = {
@@ -206,6 +276,44 @@ function initializeRequirements(mainTermCode, doubleMajorTermCode) {
   return requirements;
 }
 
+function initializeRequirements(mainTermCode, doubleMajorTermCode) {
+  const { mainTerm, dmTerm } = normalizeRequirementTerms(mainTermCode, doubleMajorTermCode);
+  requirementsInitializationSequence += 1;
+  const loadedMain = mainTerm ? loadRequirements(mainTerm) : null;
+  const loadedDM = !dmTerm ? null : (dmTerm !== mainTerm ? loadRequirements(dmTerm) : loadedMain);
+  const result = publishRequirementsState(mainTerm, dmTerm, loadedMain, loadedDM);
+  requirementsReadyPromise = Promise.resolve(result);
+  return result;
+}
+
+function initializeRequirementsAsync(mainTermCode, doubleMajorTermCode) {
+  const { mainTerm, dmTerm } = normalizeRequirementTerms(mainTermCode, doubleMajorTermCode);
+  const sequence = ++requirementsInitializationSequence;
+  const pending = (async () => {
+    if (!mainTerm) {
+      if (sequence === requirementsInitializationSequence) {
+        publishRequirementsState('', '', null, null);
+      }
+      return requirements;
+    }
+    const [loadedMain, loadedDistinctDM] = await Promise.all([
+      loadRequirementsAsync(mainTerm),
+      dmTerm && dmTerm !== mainTerm ? loadRequirementsAsync(dmTerm) : Promise.resolve(null),
+    ]);
+    const loadedDM = !dmTerm ? null : (dmTerm === mainTerm ? loadedMain : loadedDistinctDM);
+    if (sequence === requirementsInitializationSequence) {
+      publishRequirementsState(mainTerm, dmTerm, loadedMain, loadedDM);
+    }
+    return requirements;
+  })();
+  requirementsReadyPromise = pending;
+  return pending;
+}
+
+function whenRequirementsReady() {
+  return requirementsReadyPromise;
+}
+
 // Expose the requirements object on the window in browser environments. This
 // allows other scripts to access `requirements` when modules are not
 // available (e.g., when loading files directly via the file:// scheme).
@@ -213,7 +321,10 @@ if (typeof window !== 'undefined') {
   window.requirements = requirements;
   window.requirementsStatus = requirementsStatus;
   window.loadRequirements = loadRequirements;
+  window.loadRequirementsAsync = loadRequirementsAsync;
   window.initializeRequirements = initializeRequirements;
+  window.initializeRequirementsAsync = initializeRequirementsAsync;
+  window.whenRequirementsReady = whenRequirementsReady;
   window.getRequirementRecord = getRequirementRecord;
   window.isValidRequirementRecord = isValidRequirementRecord;
   window.normalizeRequirementsData = normalizeRequirementsData;

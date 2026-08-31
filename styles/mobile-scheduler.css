@@ -1,0 +1,661 @@
+/* ============================================================
+ * HEADER MENU — plans / import records / theme presented as a full-width,
+ * scrollable top sheet instead of a cramped floating dropdown. (Overrides
+ * the shell's header-actions rule.)
+ * ============================================================ */
+body.is-mobile .header-actions {
+    position: fixed;
+    top: 56px;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-height: calc(100vh - 56px);
+    overflow-y: auto;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    padding: 14px;
+    gap: 8px;
+}
+/* Nested plan / import panels fill the sheet and drop the dropdown chrome. */
+body.is-mobile .header-actions .plan-dropdown,
+body.is-mobile .header-actions .import-dropdown {
+    box-shadow: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-surface);
+    max-height: none;
+    margin-top: 8px;
+    padding: 12px;
+}
+body.is-mobile .header-actions .plan-item {
+    padding: 10px 8px;
+}
+body.is-mobile .header-actions .plan-footer {
+    flex-wrap: wrap;
+    gap: 8px;
+}
+/* Hide a flow's toggle button while its panel is open, so it reads as the
+   button expanding into the panel rather than button + panel stacked. */
+body.is-mobile .header-actions .plan-container:has(.plan-dropdown.active) #planToggle,
+body.is-mobile .header-actions .import-container:has(.import-dropdown.active) .import-toggle {
+    display: none;
+}
+body.is-mobile .header-actions .plan-container:has(.plan-dropdown.active) .plan-dropdown,
+body.is-mobile .header-actions .import-container:has(.import-dropdown.active) .import-dropdown {
+    margin-top: 0;
+}
+
+/* ============================================================
+ * SCHEDULER — full-screen; portrait = day-at-a-time, landscape = week grid.
+ * Reuses the scheduler's own grid (one .scheduler-day-col per day); we only
+ * pick which column shows and inject a day selector.
+ * ============================================================ */
+body.is-mobile .scheduler-modal.m-scheduler {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+}
+body.is-mobile .scheduler-modal.m-scheduler .scheduler-body,
+body.is-mobile .scheduler-modal.m-scheduler .scheduler-layout {
+    flex: 1;
+    min-height: 0;
+}
+
+/* Surface the Fullscreen toggle directly in the mobile scheduler header. It's
+   otherwise collapsed into the "..." menu (easy to miss), and it's what reclaims
+   the browser URL bar so the grid gets the whole screen. */
+body.is-mobile .scheduler-modal.m-scheduler .scheduler-header-actions .scheduler-fullscreen {
+    display: inline-flex;
+}
+/* Same for Block hours — a one-tap in/out toggle beats digging through the menu
+   or the Add-courses sheet. It carries .is-active while blocking; make that state
+   unmistakable so it's obvious you're in block mode (drag to add, tap to remove). */
+body.is-mobile .scheduler-modal.m-scheduler .scheduler-header-actions .scheduler-block-mode {
+    display: inline-flex;
+}
+body.is-mobile .scheduler-modal.m-scheduler .scheduler-header-actions .scheduler-block-mode.is-active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: var(--color-white);
+}
+/* Landscape-only compact/tall toggle (injected by scheduler-adaptation.js). Hidden by default;
+   the landscape block below opts it in. Highlights while tall is active. */
+body.is-mobile .scheduler-modal.m-scheduler .scheduler-header-actions .m-sched-tall-toggle {
+    display: none;
+}
+body.is-mobile .scheduler-modal.m-scheduler .scheduler-header-actions .m-sched-tall-toggle.is-active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: var(--color-white);
+}
+
+/* Drop the "Course color" legend entry (always the first item) in the mobile
+   scheduler — it's self-evident (blocks are colored) and the least useful of the
+   four, so hiding it reclaims valuable header width in both orientations. */
+body.is-mobile .scheduler-modal.m-scheduler .scheduler-legend-item:first-child {
+    display: none;
+}
+
+/* Injected day selector (portrait only). */
+.m-sched-days { display: none; }
+.m-sched-day {
+    position: relative;
+    flex: 1;
+    min-height: 44px;
+    padding: 10px 0;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+.m-sched-day.active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+}
+/* During preview, a dot marks each day the previewed section meets. */
+.m-sched-day.m-day-affected::after {
+    content: "";
+    position: absolute;
+    top: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--primary);
+}
+
+/* "Add courses" sheet + its floating triggers — portrait only (rules below opt them in). */
+.m-sched-fab { display: none; }
+.m-sched-done-fab { display: none; }
+.m-sched-sheet-bar { display: none; }
+.m-sched-preview-bar { display: none; }
+.m-sched-sheet-close { display: none; } /* shown only for the landscape side-panel */
+.m-sched-sheet-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+}
+/* Toggles that make no sense on touch (e.g. Hover preview) are dropped. */
+body.is-mobile .scheduler-modal.m-scheduler .m-sched-hidden-row { display: none; }
+
+/* The Schedules picker footer has five actions; on a phone-width panel the
+   nowrap flex row overflowed past the panel edge. Tighten it and let it wrap. */
+body.is-mobile .scheduler-picker-modal .app-modal-footer {
+    flex-wrap: wrap;
+    gap: 4px;
+}
+body.is-mobile .scheduler-picker-modal .app-modal-footer .btn {
+    padding-left: 8px;
+    padding-right: 8px;
+}
+
+/* Course-history tables (shared: scheduler + planner "Course Details"). The
+   layout is term | (section/instructor | seats). On a phone the fixed term +
+   seats columns leave the section/instructor column too narrow, so names wrap
+   word-by-word into very tall rows. Rather than force a wide table (which just
+   overflowed and cut off the CRNs/seats), reclaim width for the middle column:
+   shrink the term + seats columns, the cell padding, and the font so it fits
+   within the modal without any horizontal scroll. */
+body.is-mobile .course-history-table {
+    font-size: 0.8rem;
+    min-width: 0;
+}
+body.is-mobile .course-history-cell {
+    padding: 5px 6px;
+}
+/* term column (rows are grid: term + rest) */
+body.is-mobile .course-history-row {
+    grid-template-columns: minmax(54px, 76px) minmax(0, 1fr);
+}
+/* the seats (A/C) column lives in the nested section row */
+body.is-mobile .course-history-section-row {
+    grid-template-columns: minmax(0, 1fr) minmax(46px, 58px);
+}
+body.is-mobile .course-history-cell--number {
+    padding-left: 4px;
+    padding-right: 4px;
+}
+/* Reclaim the nested horizontal padding around the table (scheduler details
+   modal) so the middle column isn't starved. */
+body.is-mobile .scheduler-details-card,
+body.is-mobile .scheduler-details-disclosure-body {
+    padding-left: 6px;
+    padding-right: 6px;
+}
+
+@media (orientation: portrait) {
+    /* Header polish: desktop's narrow layout stacks title / actions / legend on
+       three full-width rows (~149px). Put the title and ⋮/× actions on one row,
+       and collapse the wrapping legend into a single compact scrollable line. */
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-header {
+        flex-wrap: wrap;
+        justify-content: flex-start;
+        padding: 10px 12px;
+        row-gap: 4px;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-title {
+        width: auto;
+        flex: 1 1 0;
+        min-width: 0;
+        order: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-header-actions {
+        width: auto;
+        order: 2;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-legend {
+        order: 3;
+        width: 100%;
+        flex-wrap: nowrap;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: 2px;
+        padding-bottom: 2px;
+        overflow-x: auto;
+        font-size: 0.68rem;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-legend::-webkit-scrollbar {
+        display: none;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-legend-item { gap: 5px; }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-legend-dot { width: 10px; height: 10px; }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-legend-badge { width: 11px; height: 11px; }
+
+    body.is-mobile .scheduler-modal.m-scheduler .m-sched-days {
+        display: flex;
+        flex-shrink: 0;
+        background: var(--bg-card);
+        border-bottom: 1px solid var(--border);
+    }
+}
+
+/* ---- Add-courses sheet + floating triggers + tap-to-preview.
+   BOTH orientations hide the desktop sidebar and add via this slide-up sheet
+   (portrait = day-at-a-time grid, landscape = full-week grid behind it). ---- */
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-sidebar {
+        position: fixed;
+        inset: 0;
+        z-index: 60;
+        width: 100%;
+        max-width: none;
+        background: var(--bg-card);
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        transform: translateY(100%);
+        padding-bottom: 84px; /* clearance so the last course clears the Done floater */
+    }
+    /* Slide only for user-driven opens/closes. mobilize() adds .m-sheet-ready a
+       couple frames after .m-scheduler, so the sheet's *initial* hide snaps off
+       instead of animating from its visible desktop position (which looked like
+       the Add-courses panel flashing open then closing when the scheduler opens). */
+    body.is-mobile .scheduler-modal.m-scheduler.m-sheet-ready .scheduler-sidebar {
+        transition: transform 0.26s ease;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler.m-sheet-open .scheduler-sidebar {
+        transform: translateY(0);
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .m-sched-sheet-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        padding: 12px 16px;
+        background: var(--bg-card);
+        border-bottom: 1px solid var(--border);
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .m-sched-fab {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        z-index: 55;
+        padding: 12px 18px;
+        border: none;
+        border-radius: 999px;
+        background: var(--primary);
+        color: var(--color-white);
+        font-family: inherit;
+        font-size: 0.85rem;
+        font-weight: 600;
+        box-shadow: 0 4px 14px var(--alpha-black-30);
+        cursor: pointer;
+    }
+    /* While the sheet is open, the "Done" floater replaces the "Add courses"
+       one in the same corner (it must sit above the sheet's own z-index:60). */
+    body.is-mobile .scheduler-modal.m-scheduler.m-sheet-open .m-sched-fab { display: none; }
+    body.is-mobile .scheduler-modal.m-scheduler.m-sheet-open .m-sched-done-fab {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        z-index: 65;
+        padding: 12px 20px;
+        border: none;
+        border-radius: 999px;
+        background: var(--primary);
+        color: var(--color-white);
+        font-family: inherit;
+        font-size: 0.85rem;
+        font-weight: 600;
+        box-shadow: 0 4px 14px var(--alpha-black-30);
+        cursor: pointer;
+    }
+
+    /* Tap-to-preview: the sheet drops away to reveal the grid, and this bar
+       (course label + Back / Add) floats at the bottom above everything. */
+    body.is-mobile .scheduler-modal.m-scheduler.m-preview .m-sched-fab { display: none; }
+    body.is-mobile .scheduler-modal.m-scheduler.m-preview .m-sched-preview-bar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 62;
+        padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
+        background: var(--bg-card);
+        border-top: 1px solid var(--border);
+    }
+    body.is-mobile .scheduler-modal.m-scheduler.m-preview .m-prev-label {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 600;
+        font-size: 0.85rem;
+        color: var(--text-primary);
+    }
+    body.is-mobile .scheduler-modal.m-scheduler.m-preview .m-prev-back,
+    body.is-mobile .scheduler-modal.m-scheduler.m-preview .m-prev-add {
+        flex: 0 0 auto;
+        border: none;
+        border-radius: 8px;
+        padding: 8px 14px;
+        font-family: inherit;
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: pointer;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler.m-preview .m-prev-back {
+        background: var(--bg-surface);
+        color: var(--text-secondary);
+    }
+    body.is-mobile .scheduler-modal.m-scheduler.m-preview .m-prev-add {
+        background: var(--primary);
+        color: var(--color-white);
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-grid-wrap {
+        width: 100%;
+        flex: 1;
+        min-width: 0;
+    }
+
+@media (orientation: portrait) {
+    /* Portrait = one day at a time: drop the week header, hide all other day
+       columns, collapse the template to the time gutter + one day, and slim
+       the gutter (labels are right-aligned, so 64px left a wide empty strip). */
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-grid-header { display: none; }
+    body.is-mobile .scheduler-modal.m-scheduler[data-m-day="M"] .scheduler-day-col:not([data-day="M"]),
+    body.is-mobile .scheduler-modal.m-scheduler[data-m-day="T"] .scheduler-day-col:not([data-day="T"]),
+    body.is-mobile .scheduler-modal.m-scheduler[data-m-day="W"] .scheduler-day-col:not([data-day="W"]),
+    body.is-mobile .scheduler-modal.m-scheduler[data-m-day="R"] .scheduler-day-col:not([data-day="R"]),
+    body.is-mobile .scheduler-modal.m-scheduler[data-m-day="F"] .scheduler-day-col:not([data-day="F"]),
+    body.is-mobile .scheduler-modal.m-scheduler[data-m-day="S"] .scheduler-day-col:not([data-day="S"]),
+    body.is-mobile .scheduler-modal.m-scheduler[data-m-day="U"] .scheduler-day-col:not([data-day="U"]) {
+        display: none;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-grid {
+        grid-template-columns: 50px 1fr;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-time-row {
+        padding-right: 8px;
+    }
+}
+
+@media (orientation: landscape) {
+    /* Landscape = full-week overview: the sidebar is hidden (sheeted via the
+       shared rules above) so the week grid gets the whole width; slim the
+       header to a single row (title + legend + actions inline). */
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-header {
+        flex-wrap: nowrap;
+        justify-content: space-between;
+        gap: clamp(4px, 1.2vw, 12px);
+        padding: clamp(4px, 1.4dvh, 8px) 10px;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-title {
+        flex: 0 1 auto;
+        width: auto;
+        order: initial;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-legend {
+        width: auto;
+        order: initial;
+        flex-wrap: nowrap;
+        justify-content: flex-start;
+        overflow-x: auto;
+        gap: clamp(6px, 1.4vw, 12px);
+        margin-top: 0;
+        scrollbar-width: none;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-header-actions {
+        width: auto;
+        order: initial;
+        flex: 0 0 auto;
+        justify-content: flex-end;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-legend::-webkit-scrollbar {
+        display: none;
+    }
+    /* Fit the visible day span into the grid so the entire week is visible at
+       once (no vertical scroll). scheduler-adaptation.js maintains --m-fit-ppm (px per minute)
+       from the viewport height; the scheduler reads --scheduler-minute live when
+       it renders. NB: scope to .scheduler-modal (not .m-scheduler) — the hour
+       lines are drawn during the modal build, before mobilize() adds the
+       .m-scheduler class, so the var must already apply then or the lines bake
+       in at the default scale while the blocks compress. Also centre the hour
+       labels in the gutter (they hugged the right edge). */
+    body.is-mobile .scheduler-modal .scheduler-grid {
+        --scheduler-minute: var(--m-fit-ppm, 0.42px);
+        --scheduler-top-gap: 8px;
+        --scheduler-block-gap: 2px;
+    }
+    body.is-mobile .scheduler-modal .scheduler-time-row {
+        justify-content: center;
+        padding: 0;
+    }
+
+    /* Add courses in landscape is a LEFT side-panel (full-screen would cover the
+       whole week and stretch the cards). It slides in from the left, keeping the
+       week visible on the right; opened by the top-left corner search button and
+       closed by the × in its header — so the bottom FAB/Done floaters are hidden. */
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-sidebar {
+        inset: 0 auto 0 0;
+        width: clamp(300px, 46vw, 420px);
+        max-width: calc(100vw - 80px);
+        transform: translateX(-100%);
+        border-right: 1px solid var(--border);
+        box-shadow: 4px 0 18px var(--alpha-black-28);
+        padding-bottom: 0;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler.m-sheet-open .scheduler-sidebar {
+        transform: translateX(0);
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .m-sched-fab,
+    body.is-mobile .scheduler-modal.m-scheduler.m-sheet-open .m-sched-done-fab {
+        display: none;
+    }
+    /* Search button living in the top-left grid corner (replaces the dead toggle). */
+    body.is-mobile .scheduler-modal.m-scheduler .m-sched-corner-search {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        border: none;
+        background: var(--primary);
+        color: var(--color-white);
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 72%, var(--color-white));
+        cursor: pointer;
+        font-size: 0.95rem;
+        transition: background 0.15s ease, box-shadow 0.15s ease;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .m-sched-corner-search:hover {
+        background: var(--primary-hover);
+        color: var(--color-white);
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .m-sched-corner-search:active {
+        background: var(--primary-active);
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 62%, var(--color-white));
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .m-sched-sheet-close {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 44px;
+        height: 44px;
+        border: none;
+        background: none;
+        color: var(--text-secondary);
+        font-size: 1rem;
+        cursor: pointer;
+        padding: 0;
+    }
+
+    /* Scale fixed chrome with the short side of the phone. The grid and header
+       use the same gutter so their day columns remain perfectly aligned. */
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-grid-header,
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-grid {
+        grid-template-columns: clamp(42px, 7vw, 56px) repeat(var(--scheduler-day-count, 5), minmax(0, 1fr));
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-grid-corner,
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-grid-day {
+        height: clamp(34px, 10dvh, 44px);
+    }
+
+    /* Compressed week → tiny blocks. Give the course name the room: tighten the
+       padding, drop the time (the grid position already shows it), clamp to two
+       lines, and add a shadow so the name reads on any block colour / under the
+       red conflict outline. */
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-block {
+        padding: 1px 4px;
+        border-radius: 6px;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-block-time {
+        display: none;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-block-title {
+        font-size: 0.66rem;
+        font-weight: 600; /* 800 is too wide for the compressed blocks */
+        text-shadow: 0 1px 2px var(--alpha-black-60);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* Reveal the compact/tall toggle (portrait has no week to scale). */
+    body.is-mobile .scheduler-modal.m-scheduler .scheduler-header-actions .m-sched-tall-toggle {
+        display: inline-flex;
+    }
+
+    /* Tall mode: cards regain their portrait/desktop size (scheduler-adaptation.js scales the
+       grid so the week overflows and the grid scrolls). Undo the compressed-week
+       shrink — restore padding, the bigger title, and the meeting time. */
+    body.is-mobile .scheduler-modal.m-scheduler.m-sched-tall .scheduler-block {
+        padding: 6px 8px;
+        border-radius: 10px;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler.m-sched-tall .scheduler-block-title {
+        font-size: 0.78rem;
+        white-space: normal;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler.m-sched-tall .scheduler-block-time {
+        display: block;
+    }
+
+    /* Compact preview bar (no safe-area inset in landscape) so less of the week
+       scrolls off while previewing; reserve room for it so the fixed bar never
+       covers the last grid row. */
+    body.is-mobile .scheduler-modal.m-scheduler.m-preview .m-sched-preview-bar {
+        padding: 6px 14px;
+    }
+    body.is-mobile .scheduler-modal.m-scheduler.m-preview .scheduler-grid-wrap {
+        padding-bottom: 48px;
+    }
+}
+
+/* On the shortest landscape phones, one pixel of vertical separation keeps a
+   50-minute class tall enough to show its single compact title line. This must
+   stay a resolved px value because scheduler.js reads it with parseFloat(). */
+@media (orientation: landscape) and (max-height: 380px) {
+    body.is-mobile .scheduler-modal .scheduler-grid {
+        --scheduler-block-gap: 1px;
+    }
+}
+
+.m-progress .m-prog-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: var(--text-primary);
+}
+.m-progress .m-prog-barrow {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 5px;
+}
+.m-progress .m-prog-bar {
+    height: 8px;
+    background: var(--bg-surface);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 12px;
+}
+
+.m-progress .m-prog-bar.is-segmented {
+    display: flex;
+}
+.m-progress .m-prog-fill {
+    height: 100%;
+    background: var(--primary);
+}
+.m-progress .m-prog-fill.is-earned { background: var(--state-complete); }
+.m-progress .m-prog-fill.is-current { background: var(--state-current); }
+.m-progress .m-prog-fill.is-future { background: var(--state-projected); }
+.m-progress .m-prog-fill.is-unverified { background: var(--state-unverified); }
+.m-progress .m-prog-breakdown {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px 9px;
+    margin: -7px 0 12px;
+    font-size: 0.66rem;
+    color: var(--text-secondary);
+}
+.m-progress .m-prog-breakdown .is-earned { color: var(--text-primary); }
+.m-progress .m-prog-breakdown .is-current { color: var(--state-current-text); }
+.m-progress .m-prog-breakdown .is-future { color: var(--state-projected-text); }
+.m-progress .m-prog-breakdown .is-unverified { color: var(--state-unverified-text); }
+.m-progress .m-prog-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+.m-progress .m-prog-stat {
+    background: var(--bg-surface);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+}
+.m-progress .m-prog-lbl {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+}
+.m-progress .m-prog-val {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+.m-progress .m-prog-stat.is-met .m-prog-val {
+    color: var(--accent);
+}
+.m-progress .m-prog-stat.is-projected-met .m-prog-val { color: var(--state-projected-text); }
+.m-progress .m-prog-stat .m-prog-val .is-earned { color: var(--text-primary); }
+.m-progress .m-prog-empty {
+    padding: 28px 16px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}

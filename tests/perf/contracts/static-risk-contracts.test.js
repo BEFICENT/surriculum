@@ -2,11 +2,9 @@
 
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const path = require('node:path');
 const test = require('node:test');
 
 const {
-  ROOT,
   assertInventoryDoesNotGrow,
   countCallsWithLiteralFalseThirdArgument,
   declarationsForSelector,
@@ -14,13 +12,14 @@ const {
   inventoryMatches,
   loadBaseline,
   parseCssBlocks,
-  readRepositoryFile,
   relativePath,
+  runtimeCssFiles,
   runtimeJavaScriptFiles
 } = require('./helpers');
 
 const baseline = loadBaseline();
 const runtimeFiles = runtimeJavaScriptFiles();
+const cssFiles = runtimeCssFiles();
 
 test('synchronous call scanner handles multiline and nested URL arguments', () => {
   const sample = `
@@ -50,9 +49,6 @@ test('first-party runtime does not add synchronous XMLHttpRequest sites', () => 
 });
 
 test('known static main-thread risk patterns only move downward', () => {
-  const cssFiles = ['styles.css', 'mobile.css']
-    .map((file) => path.join(ROOT, file))
-    .filter((file) => fs.existsSync(file));
   const risks = [
     {
       label: 'setInterval inventory',
@@ -87,12 +83,11 @@ test('known static main-thread risk patterns only move downward', () => {
 });
 
 test('backdrop blur declarations remain on the reviewed selector allowlist', () => {
-  const cssFiles = ['styles.css', 'mobile.css'];
   const found = [];
   const fullViewport = [];
 
   for (const file of cssFiles) {
-    const blocks = parseCssBlocks(readRepositoryFile(file));
+    const blocks = parseCssBlocks(fs.readFileSync(file, 'utf8'));
     for (const block of blocks) {
       const hasBlur = /(?:^|;)\s*(?:-webkit-)?backdrop-filter\s*:\s*(?!none\b)[^;]*\bblur\s*\(/i.test(block.body);
       if (!hasBlur) continue;
@@ -128,7 +123,7 @@ test('backdrop blur declarations remain on the reviewed selector allowlist', () 
 });
 
 test('Scheduler disables inherited full-screen blur and uses bounded edge and corner surfaces', () => {
-  const stylesheet = readRepositoryFile('styles.css');
+  const stylesheet = cssFiles.map((file) => fs.readFileSync(file, 'utf8')).join('\n');
   const blocks = parseCssBlocks(stylesheet);
   const overlay = declarationsForSelector(blocks, '.scheduler-overlay');
   assert.match(overlay, /(?:^|;)\s*backdrop-filter\s*:\s*none\b/i);
@@ -140,7 +135,13 @@ test('Scheduler disables inherited full-screen blur and uses bounded edge and co
   assert.match(edgeBase, /(?:^|;)\s*(?:-webkit-)?backdrop-filter\s*:[^;]*\bblur\s*\(/i);
   assert.doesNotMatch(edgeBase, /(?:^|;)\s*inset\s*:\s*0(?:\D|$)/i);
 
-  const schedulerSource = readRepositoryFile('scripts/scheduler.js');
+  const schedulerSource = runtimeFiles
+    .filter((file) => {
+      const relative = relativePath(file);
+      return relative === 'scripts/scheduler.js' || relative.startsWith('scripts/scheduler/');
+    })
+    .map((file) => fs.readFileSync(file, 'utf8'))
+    .join('\n');
   assert.match(
     schedulerSource,
     /\[\s*['"]top['"]\s*,\s*['"]right['"]\s*,\s*['"]bottom['"]\s*,\s*['"]left['"]\s*\]/,

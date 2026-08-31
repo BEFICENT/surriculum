@@ -2,9 +2,9 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadScriptGlobals } = require('./helpers/load-script');
+const { loadCurriculumGlobals } = require('./helpers/load-curriculum');
 
-const g = loadScriptGlobals('scripts/s_curriculum.js');
+const g = loadCurriculumGlobals();
 
 const course = (code, grade, effective, extras = {}) => ({
   code,

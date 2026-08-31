@@ -63,7 +63,8 @@ test('validated Pages artifact stays within reviewed file and byte budgets', { t
     const build = spawnSync(
       python.command,
       python.prefix.concat([
-        path.join(ROOT, 'scripts', 'build_pages_artifact.py'),
+        '-m',
+        'tools.release.build_pages_artifact',
         '--output', output,
         '--skip-mounted-smoke'
       ]),

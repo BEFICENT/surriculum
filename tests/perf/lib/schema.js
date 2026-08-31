@@ -58,9 +58,12 @@ function validateIterationRecord(record) {
 }
 
 /** Stable comparison key; excludes commit/run identifiers by design. */
-function comparisonKey(record) {
+function comparisonKey(record, options = {}) {
   const viewport = record?.metadata?.viewport || record?.browser?.viewport || {};
   const power = record?.metadata?.powerSource || record?.environment?.power?.source || 'unknown';
+  const workload = options.ignoreWorkloadHash
+    ? 'workload-provenance-override'
+    : record?.metadata?.workloadHash || 'missing-workload-provenance';
   return [
     record?.scenarioId || 'unknown-scenario',
     record?.environmentKey || 'unkeyed-environment',
@@ -68,6 +71,7 @@ function comparisonKey(record) {
     record?.browser?.id || record?.browser?.name || 'unknown-browser',
     record?.fixtureId || 'no-fixture',
     record?.metadata?.fixtureHash || 'unknown-fixture-hash',
+    workload,
     `${viewport.width || 0}x${viewport.height || 0}@${viewport.deviceScaleFactor || 1}`,
     power,
     record?.metadata?.cache || 'unknown-cache',

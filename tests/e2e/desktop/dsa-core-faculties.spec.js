@@ -2,7 +2,7 @@
 
 const { test, expect } = require('../fixtures');
 const { seedPlan } = require('../helpers/plan');
-const plans = require('../fixtures/passing-plans-multiterm.json');
+const plans = require('../test-data/passing-plans-multiterm.json');
 
 // DSA's core electives must include at least 3 courses from each of FENS, FASS
 // and SBS (flags 27/28/29).

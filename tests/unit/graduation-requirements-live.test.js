@@ -20,14 +20,15 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { loadScriptGlobals, REPO_ROOT } = require('./helpers/load-script');
+const { REPO_ROOT } = require('./helpers/load-script');
+const { loadCurriculumGlobals } = require('./helpers/load-curriculum');
 
 const {
   evaluateRules,
   facultyRules,
   graduationRulesFor,
   groupRules,
-} = loadScriptGlobals('scripts/s_curriculum.js');
+} = loadCurriculumGlobals();
 
 const MAJORS = ['BIO', 'CS', 'DSA', 'ECON', 'EE', 'IE', 'MAN', 'MAT', 'ME', 'PSIR', 'PSY', 'VACD'];
 const GROUP_RULES = new Set([

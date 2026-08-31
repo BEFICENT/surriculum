@@ -2,7 +2,7 @@
 
 const { test, expect } = require('../fixtures');
 const { seedPlan, hoist } = require('../helpers/plan');
-const plans = require('../fixtures/passing-plans-multiterm.json');
+const plans = require('../test-data/passing-plans-multiterm.json');
 
 // Two PSY rules that SUIS states and the engine never checked. Both are
 // omissions rather than wrong logic, so no test could have found them — only
@@ -109,7 +109,7 @@ test.describe('PSY area + free elective rules', () => {
   test('both PSY rule flags have messages', async ({ page }) => {
     await page.goto('/');
     const msgs = await page.evaluate(async () => {
-      const { buildFlagMessages } = await import('/cases/flagMessages.js');
+      const { buildFlagMessages } = await import('/scripts/ui/graduation-flag-messages.js');
       const m = buildFlagMessages('PSY');
       return { 39: m[39] && m[39](), 40: m[40] && m[40]() };
     });

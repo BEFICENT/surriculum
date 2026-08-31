@@ -13,27 +13,27 @@ function assert(condition, message) {
 }
 
 const repoRoot = path.resolve(__dirname, '..');
-const mainJsPath = path.join(repoRoot, 'main.js');
-const mainJs = fs.readFileSync(mainJsPath, 'utf8');
+const programContextPath = path.join(repoRoot, 'scripts', 'app', 'program_context.js');
+const programContextJs = fs.readFileSync(programContextPath, 'utf8');
 
 // Regression: setDoubleMajor() used to do:
 //   doubleMajorCourseData = doubleMajorCourseData.concat(dmCustomCourses);
 // which breaks the shared reference with curriculum.doubleMajorCourseData and
 // causes DM custom courses to disappear from detailed summary course lists.
 assert(
-  !mainJs.includes('doubleMajorCourseData = doubleMajorCourseData.concat(dmCustomCourses)'),
-  'Regression: setDoubleMajor() reassigns doubleMajorCourseData via concat(dmCustomCourses). Use push() to keep references.'
+  !programContextJs.includes('setDoubleMajorCourseData(getDoubleMajorCourseData().concat(dmCustomCourses))'),
+  'Regression: setDoubleMajor() replaces the shared double-major array via concat(). Use push() to keep references.'
 );
 
 // Ensure we keep the safer Array.isArray() guard.
 assert(
-  mainJs.includes('doubleMajorCourseData = Array.isArray(jsonDM) ? jsonDM : [];'),
+  programContextJs.includes('setDoubleMajorCourseData(Array.isArray(jsonDM) ? jsonDM : []);'),
   'Expected setDoubleMajor() to assign doubleMajorCourseData using Array.isArray(jsonDM) guard.'
 );
 
 // Ensure we actually append DM custom courses without reassignment.
 assert(
-  mainJs.includes('doubleMajorCourseData.push(dmCustomCourses[i])'),
+  programContextJs.includes('getDoubleMajorCourseData().push(dmCustomCourses[i])'),
   'Expected setDoubleMajor() to append dmCustomCourses entries via push().'
 );
 

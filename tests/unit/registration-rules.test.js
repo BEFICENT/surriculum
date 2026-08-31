@@ -6,6 +6,7 @@ const { loadScriptsGlobals } = require('./helpers/load-script');
 
 const globals = loadScriptsGlobals([
   'scripts/registration_rules.js',
+  'scripts/requisites/expression-policy.js',
   'scripts/course_requisites.js',
 ]);
 const rules = globals.registrationRules;

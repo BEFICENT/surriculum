@@ -18,7 +18,7 @@ from unittest import mock
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-import scrape_coursepages as scraper  # noqa: E402
+from tools.data_pipeline import scrape_coursepages as scraper  # noqa: E402
 
 
 def write_jsonl(path: Path, rows):
@@ -378,7 +378,7 @@ class CatalogFallbackMergeTests(unittest.TestCase):
             all_info = output_dir / "all.jsonl"
             basic_science = output_dir / "basic.jsonl"
             argv = [
-                "scrape_coursepages.py",
+                "tools.data_pipeline.scrape_coursepages",
                 "--courses-dir", str(root),
                 "--out-all-info", str(all_info),
                 "--out-basic-science", str(basic_science),

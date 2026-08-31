@@ -1,0 +1,333 @@
+.scheduler-grid-wrap {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    container-type: inline-size;
+    container-name: scheduler-grid-area;
+}
+
+.scheduler-grid-header {
+    display: grid;
+    grid-template-columns: var(--scheduler-time-gutter) repeat(var(--scheduler-day-count, 5), minmax(0, 1fr));
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-card);
+    box-sizing: border-box;
+    padding-right: var(--scheduler-scrollbar-w, 0px);
+}
+
+.scheduler-grid-corner {
+    height: var(--scheduler-day-header-height);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-right: 1px solid var(--border);
+}
+
+.scheduler-corner-btn {
+    width: 34px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+.scheduler-corner-btn:hover {
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+
+.scheduler-body.is-sidebar-collapsed .scheduler-sidebar {
+    display: none;
+}
+
+.scheduler-grid-day {
+    height: var(--scheduler-day-header-height);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    color: var(--text-primary);
+    border-left: 1px solid var(--border);
+}
+
+.scheduler-grid-day[hidden],
+.scheduler-day-col[hidden] {
+    display: none !important;
+}
+
+.scheduler-grid {
+    --scheduler-minute: 1.05px;
+    --scheduler-top-gap: 14px;
+    --scheduler-block-gap: 6px;
+    --scheduler-total-minutes: 660;
+    display: grid;
+    grid-template-columns: var(--scheduler-time-gutter) repeat(var(--scheduler-day-count, 5), minmax(0, 1fr));
+    gap: 0;
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    background: var(--bg-main);
+}
+
+.scheduler-times {
+    padding-top: var(--scheduler-top-gap);
+    border-right: 1px solid var(--border);
+    background: var(--bg-card);
+}
+
+.scheduler-time-row {
+    height: calc(var(--scheduler-minute) * 60);
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
+    padding: 0 clamp(6px, 0.65vw, 10px) 0 0;
+    font-size: clamp(0.7rem, 0.67rem + 0.08vw, 0.78rem);
+    color: var(--text-secondary);
+    box-sizing: border-box;
+}
+
+.scheduler-day-col {
+    position: relative;
+    min-height: calc(var(--scheduler-minute) * var(--scheduler-total-minutes) + var(--scheduler-top-gap));
+    border-left: 1px solid var(--border);
+    background: linear-gradient(to bottom, var(--alpha-black-02) 0%, var(--alpha-black-02) 100%);
+}
+
+.scheduler-hour-line {
+    position: absolute;
+    left: var(--scheduler-block-inset);
+    right: var(--scheduler-block-inset);
+    height: 1px;
+    border-top: none;
+    background-image: repeating-linear-gradient(
+        to right,
+        color-mix(in srgb, var(--text-secondary) 25%, transparent) 0 2px,
+        transparent 2px 6px
+    );
+    pointer-events: none;
+    z-index: 6;
+}
+
+.scheduler-block {
+    position: absolute;
+    left: var(--scheduler-block-inset);
+    right: var(--scheduler-block-inset);
+    border: none;
+    border-radius: clamp(7px, 0.7vw, 10px);
+    color: var(--alpha-white-92);
+    padding: clamp(4px, 0.75vh, 8px) clamp(5px, 0.65vw, 10px);
+    text-align: left;
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    z-index: 2;
+}
+
+.scheduler-block.scheduler-block-bg {
+    z-index: 1;
+    pointer-events: none;
+    color: var(--alpha-white-85);
+    background: var(--scheduler-blocked-bg);
+}
+
+.scheduler-modal.is-block-mode .scheduler-block.scheduler-block-bg {
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+.scheduler-modal.is-block-mode .scheduler-block.scheduler-block-bg:hover {
+    filter: brightness(1.06);
+}
+
+.scheduler-block.is-blocked-conflict {
+    outline: 2px solid var(--tone-warning-500);
+    box-shadow: 0 0 0 4px var(--alpha-warning-20);
+}
+
+.scheduler-block.is-preview {
+    opacity: 0.38;
+    pointer-events: none;
+    filter: saturate(1.05);
+    outline: 2px dashed var(--alpha-white-55);
+    transform: scale(1.1);
+    transform-origin: center;
+    z-index: 3;
+}
+
+.scheduler-block.scheduler-block-ghost {
+    z-index: 4;
+    opacity: 0.55;
+    background: var(--scheduler-blocked-preview-bg);
+}
+
+.scheduler-block.is-preview.is-preview-conflict {
+    outline-color: var(--alpha-warning-85);
+}
+
+.scheduler-block.is-hover-highlight {
+    outline: 2px solid var(--tone-success-500);
+    box-shadow: 0 0 0 4px var(--alpha-bright-success-20), var(--shadow-sm);
+}
+
+.scheduler-block.is-conflict {
+    outline: 2px solid var(--tone-danger-500);
+    box-shadow: 0 0 0 4px var(--alpha-vivid-danger-20);
+}
+
+.scheduler-block.is-conflict.is-hover-highlight {
+    box-shadow: 0 0 0 4px var(--alpha-vivid-danger-20), 0 0 0 8px var(--alpha-bright-success-12);
+}
+
+.scheduler-block.is-missing-coreq {
+    outline: 2px solid var(--tone-warning-500);
+    box-shadow: 0 0 0 4px var(--alpha-warning-20);
+}
+
+.scheduler-block-title {
+    font-weight: 800;
+    font-size: clamp(0.7rem, 0.64rem + 0.12vw, 0.82rem);
+    line-height: 1.1;
+}
+
+.scheduler-block-time {
+    margin-top: clamp(2px, 0.4vh, 4px);
+    font-size: clamp(0.66rem, 0.62rem + 0.1vw, 0.76rem);
+    opacity: 0.92;
+}
+
+.scheduler-header-btn.is-active {
+    background: var(--bg-surface);
+    border-color: var(--border-hover);
+    color: var(--text-primary);
+}
+
+.scheduler-modal.is-block-mode .scheduler-day-col {
+    cursor: crosshair;
+}
+
+.scheduler-legend-blocked {
+    border-color: var(--alpha-blocked-65);
+    background: var(--alpha-blocked-22);
+}
+
+.scheduler-blocked-hint {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    line-height: 1.25;
+    margin-bottom: 10px;
+}
+
+.scheduler-blocked-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.scheduler-blocked-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    box-shadow: var(--shadow-sm);
+}
+
+.scheduler-blocked-label {
+    font-size: 0.82rem;
+    color: var(--text-primary);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.scheduler-blocked-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+@media (min-width: 641px) and (max-width: 960px) {
+    .scheduler-modal {
+        --scheduler-sidebar-size: clamp(250px, 28vw, 268px);
+        --scheduler-time-gutter: clamp(46px, 5vw, 52px);
+    }
+
+    .scheduler-header {
+        gap: 8px;
+    }
+
+    .scheduler-header-actions .scheduler-action-optional {
+        display: none;
+    }
+
+    .scheduler-header .scheduler-more {
+        display: inline-flex;
+    }
+
+    .scheduler-legend {
+        gap: 6px 9px;
+        font-size: 0.72rem;
+    }
+}
+
+/* When the timetable itself is narrow, preserve course identity instead of
+   wrapping it into unreadable fragments. Phone layouts have their own rules. */
+@container scheduler-grid-area (max-width: 760px) {
+    body:not(.is-mobile) .scheduler-block {
+        left: 4px;
+        right: 4px;
+        padding: 4px 5px;
+        border-radius: 7px;
+    }
+
+    body:not(.is-mobile) .scheduler-hour-line {
+        left: 4px;
+        right: 4px;
+    }
+
+    body:not(.is-mobile) .scheduler-block-title,
+    body:not(.is-mobile) .scheduler-block-time {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    body:not(.is-mobile) .scheduler-block-title {
+        font-size: 0.7rem;
+    }
+
+    body:not(.is-mobile) .scheduler-block-time {
+        margin-top: 2px;
+        font-size: 0.65rem;
+    }
+
+    body:not(.is-mobile) .scheduler-grid-day {
+        font-size: 0.76rem;
+    }
+}
+
+.course_info .course_type .ct-sep {
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
+.course_info .course_credit {
+    color: var(--text-muted);
+}
+
+.course_info .course_bs_credit {
+    color: var(--text-muted);
+}

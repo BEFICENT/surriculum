@@ -20,6 +20,19 @@ async function seedScheduler(page, selected = {}, blocked = [], term = TERM) {
   });
 }
 
+async function expectScrollbarCompensation(modal) {
+  await expect.poll(async () => modal.evaluate((root) => {
+    const body = root.querySelector('.scheduler-body');
+    const grid = root.querySelector('.scheduler-grid');
+    if (!body || !grid) return Infinity;
+    const actual = Number.parseFloat(
+      body.style.getPropertyValue('--scheduler-scrollbar-w'),
+    );
+    const expected = Math.max(0, grid.offsetWidth - grid.clientWidth);
+    return Number.isFinite(actual) ? Math.abs(actual - expected) : Infinity;
+  })).toBeLessThan(0.1);
+}
+
 test.describe('scheduler dynamic weekend and late grid (desktop)', () => {
   test('off-grid results extend only while their exact section is previewed', async ({ page }) => {
     await seedScheduler(page);
@@ -30,6 +43,7 @@ test.describe('scheduler dynamic weekend and late grid (desktop)', () => {
     await expect(modal).toHaveAttribute('data-grid-days', 'MTWRF');
     await expect(modal).toHaveAttribute('data-grid-minutes', '660');
     await expect(modal.locator('.scheduler-grid-day[data-day="S"]')).toBeHidden();
+    await expectScrollbarCompensation(modal);
 
     await modal.locator('.scheduler-search').fill('DA519');
     const card = modal.locator('.scheduler-course[data-course="DA519"]');
@@ -42,11 +56,13 @@ test.describe('scheduler dynamic weekend and late grid (desktop)', () => {
     await expect(modal.locator('.scheduler-grid-day[data-day="S"]')).toBeVisible();
     await expect(modal.locator('.scheduler-day-col[data-day="W"] .scheduler-block.is-preview[data-end="1320"]')).toHaveCount(1);
     await expect(modal.locator('.scheduler-day-col[data-day="S"] .scheduler-block.is-preview')).toHaveCount(1);
+    await expectScrollbarCompensation(modal);
 
     await modal.locator('.scheduler-results').dispatchEvent('mouseleave');
     await expect(modal.locator('.scheduler-block.is-preview')).toHaveCount(0);
     await expect(modal).toHaveAttribute('data-grid-days', 'MTWRF');
     await expect(modal).toHaveAttribute('data-grid-minutes', '660');
+    await expectScrollbarCompensation(modal);
   });
 
   test('a selected Saturday section keeps the extension until removal', async ({ page }) => {

@@ -18,6 +18,18 @@ async function seedPlan(page, state) {
   await page.goto('/');
   await page.waitForFunction(() => !!(window.planStorage && window.planStorage.importPlanObject));
 
+  // Do not replace the throwaway/default document while its catalog fetch is
+  // still in flight. WebKit reports a navigation-cancelled same-origin fetch
+  // as an uncaught "due to access control checks" page error, which can hide a
+  // real cross-browser regression behind a retry. Waiting for the public boot
+  // promise also makes the import begin from the same settled state a person
+  // sees before using the plan controls.
+  await page.waitForFunction(() => typeof window.whenSurriculumPlannerReady === 'function', null, {
+    timeout: 15000,
+  });
+  const initialBooted = await page.evaluate(() => window.whenSurriculumPlannerReady());
+  if (initialBooted !== true) throw new Error('The initial planner document did not finish booting.');
+
   await page.evaluate((s) => {
     // Keep most fixtures on v1 so every test exercises migration. Grading
     // bases require v2; global transcript metadata was added in v3; canonical
@@ -30,6 +42,24 @@ async function seedPlan(page, state) {
   }, state);
 
   await page.reload();
+
+  // Static planner controls and planStorage are available before the
+  // asynchronous requirements/catalog hydration completes. Wait on the app's
+  // canonical planner-hydration promise for every plan shape, including an
+  // intentionally empty curriculum where there is no rendered course selector
+  // to wait for.
+  await page.waitForFunction(() => typeof window.whenSurriculumPlannerReady === 'function', null, {
+    timeout: 15000,
+  });
+  const booted = await page.evaluate(() => window.whenSurriculumPlannerReady());
+  if (booted !== true) throw new Error('The seeded planner document did not finish booting.');
+  await page.waitForFunction(
+    () => window.__surriculumPlannerReady === true
+      && !!window.curriculum
+      && Array.isArray(window.curriculum.semesters),
+    null,
+    { timeout: 15000 },
+  );
 
   const expectsCourses = Array.isArray(state.curriculum) && state.curriculum.some((sem) => sem && sem.length);
   if (expectsCourses) {

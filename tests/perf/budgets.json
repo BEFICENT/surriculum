@@ -66,7 +66,7 @@
   "comparisonRules": [
     {
       "id": "action-duration-regression",
-      "path": "metrics.timings.*",
+      "path": "metrics.timings.**",
       "comparator": "regression",
       "direction": "increase",
       "relativeThreshold": 0.15,

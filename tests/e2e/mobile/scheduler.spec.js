@@ -26,9 +26,12 @@ async function openMobileScheduler(page) {
 }
 
 async function tapCoursePreview(modal, courseId) {
-  const portraitFab = modal.locator('.m-sched-fab');
-  if (await portraitFab.isVisible()) await portraitFab.click();
-  else await modal.locator('.m-sched-corner-search').click();
+  const sheetOpen = await modal.evaluate(root => root.classList.contains('m-sheet-open'));
+  if (!sheetOpen) {
+    const portraitFab = modal.locator('.m-sched-fab');
+    if (await portraitFab.isVisible()) await portraitFab.click();
+    else await modal.locator('.m-sched-corner-search').click();
+  }
 
   await modal.locator('.scheduler-search').fill(courseId);
   const card = modal.locator(`.scheduler-course[data-course="${courseId}"]`);
@@ -51,6 +54,30 @@ async function waitForLandscapeFit(modal) {
   // value is rounded to three decimals, so this means "settled" rather than
   // requiring mathematical identity with the target.
   })).toBeLessThan(0.005);
+}
+
+async function expectBlockMatchesCurrentLayout(block) {
+  await expect.poll(async () => block.evaluate((node) => {
+    const grid = node.closest('.scheduler-grid');
+    if (!grid) return Infinity;
+    const styles = getComputedStyle(grid);
+    const ppm = Number.parseFloat(styles.getPropertyValue('--scheduler-minute'));
+    const topGap = Number.parseFloat(styles.getPropertyValue('--scheduler-top-gap'));
+    const blockGap = Number.parseFloat(styles.getPropertyValue('--scheduler-block-gap'));
+    const start = Number.parseFloat(node.getAttribute('data-display-start'));
+    const end = Number.parseFloat(node.getAttribute('data-display-end'));
+    const actualTop = Number.parseFloat(node.style.top);
+    const actualHeight = Number.parseFloat(node.style.height);
+    if (![ppm, topGap, blockGap, start, end, actualTop, actualHeight].every(Number.isFinite)) {
+      return Infinity;
+    }
+    const expectedTop = topGap + ((start - 520) * ppm) + blockGap;
+    const expectedHeight = Math.max(8, ((end - start) * ppm) - (2 * blockGap));
+    return Math.max(
+      Math.abs(actualTop - expectedTop),
+      Math.abs(actualHeight - expectedHeight),
+    );
+  })).toBeLessThan(0.75);
 }
 
 test.describe('mobile scheduler', () => {
@@ -246,6 +273,41 @@ test.describe('mobile scheduler', () => {
     );
     expect(ppm).not.toBe('');
     expect(parseFloat(ppm)).toBeGreaterThan(0);
+  });
+
+  test('fresh landscape previews use tall-mode and compact-height layout metrics', async ({ page }) => {
+    await page.setViewportSize({ width: 915, height: 412 });
+    await seedScheduler(page);
+    const modal = await openMobileScheduler(page);
+    await waitForLandscapeFit(modal);
+
+    const tallToggle = modal.locator('.m-sched-tall-toggle');
+    await expect(tallToggle).toBeVisible();
+    await tallToggle.click();
+    await expect(modal).toHaveClass(/m-sched-tall/);
+
+    await tapCoursePreview(modal, 'DA519');
+    let preview = modal.locator('.scheduler-block.is-preview[data-course="DA519"]').first();
+    await expect(preview).toBeVisible();
+    await expectBlockMatchesCurrentLayout(preview);
+    await modal.locator('.m-prev-back').click();
+    await expect(modal.locator('.scheduler-block.is-preview')).toHaveCount(0);
+
+    // Crossing the short-landscape media query changes only the block gap.
+    // The next preview must not reuse the cached 2px value from the taller view.
+    await page.setViewportSize({ width: 844, height: 360 });
+    await expect(page.locator('body')).toHaveClass(/is-mobile/);
+    await expect.poll(async () => modal.evaluate((root) => {
+      const grid = root.querySelector('.scheduler-grid');
+      return grid
+        ? Number.parseFloat(getComputedStyle(grid).getPropertyValue('--scheduler-block-gap'))
+        : NaN;
+    })).toBe(1);
+
+    await tapCoursePreview(modal, 'DA519');
+    preview = modal.locator('.scheduler-block.is-preview[data-course="DA519"]').first();
+    await expect(preview).toBeVisible();
+    await expectBlockMatchesCurrentLayout(preview);
   });
 
   test('portrait adds Saturday only while a selected section needs it', async ({ page }) => {

@@ -7,7 +7,7 @@ behaviour-preserving, and a future page-format change that broke the parse would
 fail here rather than silently blanking a graduation pool.
 
 Runs against the committed Fall 2025-2026 pages in
-'Degree Detail Pages (for inspect)/', so it needs no network. It runs through
+`tests/fixtures/suis/degree-details/major/`, so it needs no network. It runs through
 ``npm run test:python`` and can also be run directly:
 
     python tests/scrape_groups_test.py
@@ -21,7 +21,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-import fetch_requirements as fr  # noqa: E402
+from tools.data_pipeline import fetch_requirements as fr  # noqa: E402
 
 # program code -> the two offline pages that carry enumerated Core-Elective pools.
 PROGRAMS = {"BAVACD": "VACD", "BAPSIR": "PSIR"}

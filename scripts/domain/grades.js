@@ -238,6 +238,13 @@ export function evaluateGrade(rawGrade, basisOrOptions) {
   });
 }
 
+// Compatibility name retained for the planner's mutable credit/GPA update
+// paths. It delegates to the canonical policy so the legacy consumers cannot
+// drift into a second grade table.
+export function evaluateGradeForLegacyTotals(rawGrade, gradingBasis) {
+  return evaluateGrade(rawGrade, gradingBasis);
+}
+
 export const gradePolicy = Object.freeze({
   GRADING_BASIS,
   LETTER_GRADE_POINTS,
@@ -254,4 +261,5 @@ export const gradePolicy = Object.freeze({
 // exports directly; legacy consumers can read the same policy at call time.
 if (typeof window !== 'undefined') {
   window.gradePolicy = gradePolicy;
+  window.evaluateGradeForLegacyTotals = evaluateGradeForLegacyTotals;
 }

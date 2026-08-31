@@ -3,6 +3,16 @@
 const { test, expect } = require('../fixtures');
 const { seedPlan } = require('../helpers/plan');
 
+async function setSchedulerToggle(modal, selector, checked) {
+  const toggle = modal.locator(selector);
+  if ((await toggle.isChecked()) === checked) return;
+  const label = toggle.locator('xpath=ancestor::label[1]');
+  await expect(label).toBeVisible();
+  await label.click();
+  if (checked) await expect(toggle).toBeChecked();
+  else await expect(toggle).not.toBeChecked();
+}
+
 test.describe('scheduler (desktop)', () => {
   test('opens and lists offered courses for the term', async ({ page, browserErrors }) => {
     await page.goto('/');
@@ -19,6 +29,76 @@ test.describe('scheduler (desktop)', () => {
     await expect(modal.locator('.scheduler-course').first()).toBeVisible({ timeout: 15000 });
     expect(await modal.locator('.scheduler-course').count()).toBeGreaterThan(0);
 
+    expect(browserErrors, browserErrors.join('\n')).toEqual([]);
+  });
+
+  test('loads independent Scheduler data concurrently and abandons a closed modal', async ({ page, browserErrors }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => (
+      typeof window.openSchedulerModal === 'function'
+      && typeof window.loadCoursePageInfoIndex === 'function'
+    ));
+
+    // Let any app-start enrichment settle, then force this opening to perform
+    // fresh reads that the route gates below can observe.
+    await page.evaluate(async () => {
+      try { if (window.__courseOfferingsPromise) await window.__courseOfferingsPromise; } catch (_) {}
+      try { if (window.__coursePageInfoPromise) await window.__coursePageInfoPromise; } catch (_) {}
+      window.__scheduleIndexPromise = null;
+      window.__scheduleIndexTerm = '';
+      window.__coursePageInfoPromise = null;
+      window.__courseOfferingsJsonlText = '';
+      window.coursePageInfoByCode = null;
+      try { performance.clearMarks('surriculum:scheduler-ready'); } catch (_) {}
+    });
+
+    let releaseLoads;
+    const loadGate = new Promise((resolve) => { releaseLoads = resolve; });
+    const started = new Set();
+    let resolveBothStarted;
+    const bothStarted = new Promise((resolve) => { resolveBothStarted = resolve; });
+    const markStarted = (name) => {
+      started.add(name);
+      if (started.size === 2) resolveBothStarted();
+    };
+
+    await page.route('**/courses/schedule/202403.jsonl', async (route) => {
+      markStarted('schedule');
+      await loadGate;
+      await route.continue();
+    });
+    await page.route('**/courses/all_coursepage_info.jsonl', async (route) => {
+      markStarted('course-info');
+      await loadGate;
+      await route.continue();
+    });
+
+    try {
+      await page.evaluate(() => { window.openSchedulerModal('202403'); });
+      const modal = page.locator('.scheduler-modal');
+      await expect(modal).toBeVisible({ timeout: 15000 });
+
+      // Both requests must reach their gates before either one is released. If
+      // startup serializes them, the second request can never reach this point.
+      await Promise.race([
+        bothStarted,
+        new Promise((_, reject) => setTimeout(() => reject(new Error(
+          `Timed out waiting for concurrent Scheduler reads; started: ${Array.from(started).join(', ')}`,
+        )), 5000)),
+      ]);
+
+      await modal.locator('.scheduler-close').click();
+      await expect(page.locator('.scheduler-overlay')).toHaveCount(0);
+    } finally {
+      releaseLoads();
+      await page.unrouteAll({ behavior: 'wait' });
+    }
+
+    await page.waitForTimeout(150);
+    await expect(page.locator('.scheduler-overlay')).toHaveCount(0);
+    expect(await page.evaluate(() => (
+      performance.getEntriesByName('surriculum:scheduler-ready').length
+    ))).toBe(0);
     expect(browserErrors, browserErrors.join('\n')).toEqual([]);
   });
 
@@ -49,6 +129,62 @@ test.describe('scheduler (desktop)', () => {
     await expect(modal.locator('.scheduler-course[data-course="MATH102"]')).toHaveCount(1);
     // MATH203 is planned only in a later term and also remains visible.
     await expect(modal.locator('.scheduler-course[data-course="MATH203"]')).toHaveCount(1);
+  });
+
+  test('legacy CS210 search finds DSA210 and an earlier legacy plan entry hides it', async ({ page }) => {
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: 'Fall 2024-2025',
+      curriculum: [['CS210'], []],
+      grades: [['A'], []],
+      dates: ['Fall 2024-2025', 'Spring 2024-2025'],
+      termCodes: ['202401', '202402'],
+      schedulerSelectedTerm: '202402',
+    });
+
+    await page.evaluate(() => {
+      window.hideTakenCourses = false;
+      window.preferenceStorage.setItem('hideTakenCourses', 'false');
+      window.preferenceStorage.setItem('schedulerCheckPrereqs', 'false');
+      window.openSchedulerModal();
+    });
+    const modal = page.locator('.scheduler-modal');
+    await expect(modal).toBeVisible({ timeout: 15000 });
+    await modal.locator('.scheduler-search').fill('CS210');
+
+    const canonical = modal.locator('.scheduler-course[data-course="DSA210"]');
+    await expect(canonical).toHaveCount(1, { timeout: 15000 });
+    await expect(canonical).toBeVisible();
+
+    await modal.locator('.scheduler-filter-btn').click();
+    await expect(modal.locator('.scheduler-filter-menu')).toBeVisible();
+    await setSchedulerToggle(modal, '.scheduler-toggle-hide-taken', true);
+    await expect(canonical).toHaveCount(0);
+  });
+
+  test('a same-term legacy CS210 plan entry keeps canonical DSA210 schedulable', async ({ page }) => {
+    await seedPlan(page, {
+      major: 'CS',
+      entryTerm: 'Fall 2024-2025',
+      curriculum: [['CS210']],
+      grades: [['']],
+      dates: ['Spring 2024-2025'],
+      termCodes: ['202402'],
+      schedulerSelectedTerm: '202402',
+    });
+
+    await page.evaluate(() => {
+      window.hideTakenCourses = true;
+      window.preferenceStorage.setItem('hideTakenCourses', 'true');
+      window.preferenceStorage.setItem('schedulerCheckPrereqs', 'false');
+      window.openSchedulerModal();
+    });
+    const modal = page.locator('.scheduler-modal');
+    await expect(modal).toBeVisible({ timeout: 15000 });
+    await modal.locator('.scheduler-search').fill('CS210');
+
+    await expect(modal.locator('.scheduler-course[data-course="DSA210"]'))
+      .toBeVisible({ timeout: 15000 });
   });
 
   test('shared prerequisite evaluator still marks unmet scheduler courses', async ({ page }) => {

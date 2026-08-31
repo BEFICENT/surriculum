@@ -194,7 +194,7 @@ test.describe('planner course filters (desktop)', () => {
     await expect(courseOption(picker, 'CS201')).toHaveCount(0);
   });
 
-  test('hide-taken canonicalizes a stored CS210 plan entry to catalog DSA210', async ({ page }) => {
+  test('legacy CS210 search resolves DSA210 and hide-taken uses the canonical identity', async ({ page }) => {
     await seedPlan(page, {
       major: 'CS',
       entryTerm: 'Fall 2024-2025',
@@ -205,13 +205,19 @@ test.describe('planner course filters (desktop)', () => {
     });
 
     const picker = await openPicker(page, 'Spring 2024-2025');
-    await picker.locator('.course_select').fill('DSA210');
     const { menu } = await openFilters(picker);
     const hideTaken = menu.locator('.planner-filter-hide-taken');
+    await setChecked(hideTaken, false);
+
+    await picker.locator('.course_select').fill('CS210');
+    await expect(courseOption(picker, 'DSA210')).toHaveCount(1);
+    await expect(courseOption(picker, 'DSA210')).toBeVisible();
+
     await setChecked(hideTaken, true);
     await expect(courseOption(picker, 'DSA210')).toHaveCount(0);
 
     await setChecked(hideTaken, false);
+    await picker.locator('.course_select').fill('DSA210');
     await expect(courseOption(picker, 'DSA210')).toBeVisible();
   });
 

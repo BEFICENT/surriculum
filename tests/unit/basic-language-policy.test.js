@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadScriptGlobals } = require('./helpers/load-script');
+const { loadCurriculumGlobals } = require('./helpers/load-curriculum');
 
 const {
   combinedDegreeMetricsFromAllocations,
@@ -12,7 +12,7 @@ const {
   normalizedLanguageLevel,
   programUnionGenericRecords,
   totalsForGenericRecords,
-} = loadScriptGlobals('scripts/s_curriculum.js');
+} = loadCurriculumGlobals();
 
 const KNOWN_BASIC = [
   'ARA110', 'ARA120', 'CHI110', 'CHI120', 'FRE110', 'FRE120',

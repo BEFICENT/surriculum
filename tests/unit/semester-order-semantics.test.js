@@ -2,15 +2,18 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadScriptGlobals } = require('./helpers/load-script');
+const { loadScriptGlobals, loadScriptsGlobals } = require('./helpers/load-script');
 
-const { courseRequisites } = loadScriptGlobals('scripts/course_requisites.js');
+const { courseRequisites } = loadScriptsGlobals([
+  'scripts/requisites/expression-policy.js',
+  'scripts/course_requisites.js',
+]);
 const { courseRetakes } = loadScriptGlobals('scripts/course_retakes.js');
 const {
   semesterTermCode,
   compareSemesterTerms,
   hasDuplicateSemesterTerm,
-} = loadScriptGlobals('scripts/helper_functions.js');
+} = loadScriptGlobals('scripts/domain/academic-terms.js');
 
 const course = (code, grade = '', credit = 3) => ({
   code,

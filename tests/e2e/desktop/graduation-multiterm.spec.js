@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { test, expect } = require('../fixtures');
 const { seedPlan } = require('../helpers/plan');
-const plans = require('../fixtures/passing-plans-multiterm.json');
+const plans = require('../test-data/passing-plans-multiterm.json');
 
 const ROOT = path.resolve(__dirname, '..', '..', '..');
 const readReqs = (term) => Object.fromEntries(

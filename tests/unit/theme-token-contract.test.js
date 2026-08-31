@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { readFirstPartyStylesheets } = require('../helpers/runtime-css');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const STYLES_PATH = path.join(REPO_ROOT, 'styles.css');
@@ -153,7 +154,7 @@ function literalFindings(relativePath, source, options = {}) {
     const lineStart = stripped.lastIndexOf('\n', match.index) + 1;
     const lineEnd = stripped.indexOf('\n', match.index);
     const line = stripped.slice(lineStart, lineEnd < 0 ? stripped.length : lineEnd);
-    const isSchedulerCourseVisualization = relativePath === 'scripts/scheduler.js'
+    const isSchedulerCourseVisualization = /^scripts\/scheduler(?:\.js|\/[^/]+\.js)$/.test(relativePath)
       && /^hsl/i.test(match[0])
       && /var\(--scheduler-course-[^)]+\)/.test(line);
     if (isSchedulerCourseVisualization) continue;
@@ -229,18 +230,18 @@ test('every declared theme implements the same centralized token contract', () =
 });
 
 test('first-party runtime UI has no literal colors outside the centralized token section', () => {
-  const styles = read('styles.css');
-  const { withoutSection } = themeTokenSection(styles);
+  const stylesheets = readFirstPartyStylesheets(REPO_ROOT);
   const sources = new Map([
-    ['styles.css', withoutSection],
-    ['mobile.css', read('mobile.css')],
+    ...stylesheets.map(({ relative, source }) => [
+      relative,
+      relative === 'styles.css' ? themeTokenSection(source).withoutSection : source,
+    ]),
     ['index.html', read('index.html')],
     ['main.js', read('main.js')],
     ['mobile.js', read('mobile.js')],
     ['theme.js', read('theme.js')],
     ['sw.js', read('sw.js')],
     ...runtimeJavaScriptFiles('scripts').map((file) => [file, read(file)]),
-    ...runtimeJavaScriptFiles('cases').map((file) => [file, read(file)]),
   ]);
 
   const findings = [];
@@ -257,9 +258,11 @@ test('first-party runtime UI has no literal colors outside the centralized token
 });
 
 test('component code does not branch on a particular theme', () => {
-  const styles = read('styles.css');
-  const { withoutSection } = themeTokenSection(styles);
-  const componentCss = stripComments(withoutSection + '\n' + read('mobile.css'));
+  const componentCss = stripComments(readFirstPartyStylesheets(REPO_ROOT)
+    .map(({ relative, source }) => (
+      relative === 'styles.css' ? themeTokenSection(source).withoutSection : source
+    ))
+    .join('\n'));
   assert.doesNotMatch(
     componentCss,
     /(?:html|:root)\s*\[\s*data-theme\s*=/,
@@ -275,7 +278,6 @@ test('component code does not branch on a particular theme', () => {
     ['main.js', read('main.js')],
     ['mobile.js', read('mobile.js')],
     ...runtimeJavaScriptFiles('scripts').map((file) => [file, read(file)]),
-    ...runtimeJavaScriptFiles('cases').map((file) => [file, read(file)]),
   ];
   const branches = nonThemeRuntime.flatMap(([file, source]) => (
     /(?:dark|light)-theme|dataset\.theme\b|(?:get|set|has|remove)Attribute\(\s*["']data-theme["']/.test(stripComments(source))

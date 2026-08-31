@@ -13,9 +13,9 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadScriptGlobals } = require('./helpers/load-script');
+const { loadCurriculumGlobals } = require('./helpers/load-curriculum');
 
-const { tallyFacultyCourses, tallyFacultyAreas } = loadScriptGlobals('scripts/s_curriculum.js');
+const { tallyFacultyCourses, tallyFacultyAreas } = loadCurriculumGlobals();
 
 const course = (code, pool, effective_type, effective_type_dm) =>
   ({ code, Faculty_Course: pool, effective_type, effective_type_dm });

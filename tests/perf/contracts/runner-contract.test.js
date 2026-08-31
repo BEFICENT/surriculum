@@ -148,6 +148,15 @@ test('navigation frame samples are unavailable instead of reporting false zero-j
   assert.match(result.unavailableReason, /navigation/);
 });
 
+test('frame summaries discard every non-finite or negative delta', () => {
+  const result = frameSummary([-12, Number.NaN, Number.POSITIVE_INFINITY, 0, 16, 32], 16);
+  assert.equal(result.available, true);
+  assert.equal(result.count, 3);
+  assert.equal(result.min, 0);
+  assert.equal(result.max, 32);
+  assert.ok(result.min >= 0);
+});
+
 test('comparison identity separates cache, service-worker, throttle, and browser presentation modes', () => {
   const base = {
     scenarioId: 'scheduler',
@@ -157,6 +166,7 @@ test('comparison identity separates cache, service-worker, throttle, and browser
     fixtureId: 'scheduler-heavy',
     metadata: {
       fixtureHash: 'fixture',
+      workloadHash: 'workload',
       viewport: { width: 1440, height: 900, deviceScaleFactor: 1 },
       powerSource: 'ac',
       cache: 'cold',
@@ -169,6 +179,7 @@ test('comparison identity separates cache, service-worker, throttle, and browser
     { metadata: { cache: 'warm' } },
     { metadata: { serviceWorkers: 'allow' } },
     { metadata: { cpuThrottle: 1 } },
+    { metadata: { workloadHash: 'different-workload' } },
     { browser: { headless: false } },
   ]) {
     assert.notEqual(comparisonKey({

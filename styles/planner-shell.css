@@ -1,0 +1,815 @@
+/* === SEMESTER CONTAINER - FILL AVAILABLE HEIGHT === */
+.semester-container {
+    width: var(--semester-width);
+    margin: 20px;
+    flex-shrink: 0;
+}
+
+.semester {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    /* Allow dropdowns to extend outside the semester card */
+    overflow: visible;
+    height: 95%; /* Take remaining height between header and footer */
+    display: flex;
+    flex-direction: column;
+    min-height: 300px;
+}
+
+.semester-header {
+    background: var(--accent);
+    color: var(--text-inverse);
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 600;
+    flex-shrink: 0; /* Prevent header from shrinking */
+}
+
+.semester-header input {
+    background: var(--alpha-white-20);
+    border: none;
+    color: var(--text-inverse);
+    font-weight: 600;
+    font-size: 1rem;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    width: 150px;
+}
+
+.semester-header input::placeholder {
+    color: var(--alpha-white-70);
+}
+
+.semester-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.semester-action-btn {
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: var(--alpha-white-20);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease;
+}
+
+.semester-action-btn:hover {
+    background: var(--alpha-white-30);
+}
+
+/* === SCROLLABLE COURSE CONTAINER - KEY FIX === */
+.semester-courses {
+    flex: 1; /* Take remaining space */
+    padding: 16px;
+    overflow-y: auto; /* Enable vertical scrolling */
+    overflow-x: hidden;
+    min-height: 0; /* Allow shrinking below content size */
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* === SEMESTER TOTALS STYLING === */
+.semester-totals {
+    background: var(--bg-surface);
+    border-top: 1px solid var(--border);
+    padding: 12px 16px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    flex-shrink: 0; /* Prevent totals from shrinking */
+}
+
+.semester-totals-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 16px;
+}
+
+.semester-total-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+}
+
+.semester-total-label {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.semester-total-value {
+    font-weight: 600;
+    color: var(--primary);
+    background: var(--bg-card);
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+}
+
+/* === COURSE CARDS === */
+.course-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    margin-bottom: 12px;
+    overflow: visible;
+    transition: all 0.15s ease;
+    flex-shrink: 0; /* Prevent individual cards from shrinking */
+}
+
+.course-card:hover {
+    border-color: var(--border-hover);
+    box-shadow: var(--shadow-sm);
+}
+
+.course-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-surface);
+}
+
+.course-code {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+}
+
+.course-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+/* === GRADE STYLING === */
+.grade {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-family: inherit;
+    line-height: 1.2;
+    transition: all 0.15s ease;
+    min-width: 32px;
+    text-align: center;
+}
+
+.grade:hover {
+    border-color: var(--primary);
+    background: var(--bg-surface);
+}
+
+.grade:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px var(--alpha-legacy-success-20);
+}
+
+.grade option {
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+
+.course-delete {
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    transition: all 0.15s ease;
+}
+
+.course-delete:hover {
+    background: var(--tone-danger-100);
+    color: var(--tone-danger-600);
+}
+
+.course-body {
+    padding: 12px 16px;
+}
+
+.course-name {
+    font-size: 0.875rem;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+    font-weight: 500;
+    line-height: 1.3;
+}
+
+.course-details {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.course-meta {
+    display: flex;
+    gap: 12px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    flex-wrap: wrap;
+}
+
+.course-meta span {
+    background: var(--bg-surface);
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    font-weight: 500;
+}
+
+/* === ADD COURSE === */
+.add-course {
+    padding: 12px;
+    text-align: center;
+    color: var(--primary);
+    cursor: pointer;
+    border-top: 1px dashed var(--border);
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: all 0.15s ease;
+    flex-shrink: 0; /* Keep add button visible */
+    background: var(--bg-card);
+}
+
+.add-course:hover {
+    background: var(--bg-surface);
+    color: var(--primary-hover);
+}
+
+.add-course-form {
+    padding: 16px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-surface);
+}
+
+.add-course-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.875rem;
+    margin-bottom: 12px;
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+
+.add-course-input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--alpha-primary-10);
+}
+
+.add-course-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+/* === IMPORT DROPDOWN === */
+.import-container {
+    position: relative;
+}
+
+.import-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 400px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    padding: 20px;
+    z-index: 50;
+    display: none;
+}
+
+.import-dropdown.active {
+    display: block;
+}
+
+.import-title {
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--text-primary);
+}
+
+.import-instructions {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+}
+
+.import-instructions ol {
+    margin: 8px 0;
+    padding-left: 20px;
+}
+
+.import-instructions li {
+    margin: 4px 0;
+}
+
+.import-controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    width: 100%;
+}
+
+.import-file {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none;
+}
+
+/* shared divider for dropdown panels */
+/* === PLAN DROPDOWN === */
+.plan-container {
+    position: relative;
+}
+
+.plan-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 360px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    padding: 16px;
+    z-index: 55;
+    display: none;
+}
+
+.plan-dropdown.active {
+    display: block;
+}
+
+.plan-title {
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--text-primary);
+}
+
+.plan-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 340px;
+    overflow: auto;
+    padding-right: 4px;
+}
+
+.plan-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-surface);
+}
+
+.plan-item.active {
+    border-color: var(--primary);
+}
+
+.plan-item.dragging {
+    opacity: 0.7;
+}
+
+.plan-grip {
+    color: var(--text-secondary);
+    cursor: grab;
+    width: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.plan-move-controls,
+.semester-move-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.plan-move {
+    min-width: 24px;
+    min-height: 28px;
+    padding: 3px 5px;
+}
+
+.plan-move:disabled,
+.semester_move:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.plan-select {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    text-align: left;
+    cursor: pointer;
+    padding: 2px 0;
+}
+
+.plan-select:hover {
+    color: var(--text-primary);
+}
+
+.plan-actions {
+    display: inline-flex;
+    gap: 4px;
+}
+
+.btn-icon {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-secondary);
+    padding: 4px 6px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    min-height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-icon:hover {
+    background: var(--bg-card);
+    border-color: var(--border);
+}
+
+.btn-icon.danger {
+    color: var(--tone-danger-600);
+}
+
+.plan-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 12px 0;
+}
+
+.plan-footer {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+/* === MODALS === */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--alpha-black-50);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* Keep app modals above custom dropdowns, summary overlays, and scheduler. */
+    z-index: 3000;
+}
+
+.modal {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    max-width: 90vw;
+    max-height: 90vh;
+    overflow: auto;
+}
+
+.app-modal {
+    width: 520px;
+    max-width: 92vw;
+    padding: 18px 18px 14px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.app-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.app-modal-title {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+.app-modal-close {
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: var(--radius-sm);
+    padding: 6px 8px;
+    cursor: pointer;
+    min-height: 28px;
+}
+
+.app-modal-close:hover {
+    background: var(--bg-surface);
+    border-color: var(--border);
+}
+
+.app-modal-body {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.35;
+    overflow-y: auto;
+    min-height: 0;
+    padding-right: 2px;
+}
+
+.app-modal-body p {
+    margin: 0 0 10px 0;
+}
+
+.app-modal-body ol {
+    margin: 6px 0 10px 18px;
+}
+
+.app-modal-body li {
+    margin: 4px 0;
+}
+
+.app-modal-input {
+    width: 100%;
+    margin-top: 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+
+.app-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-card);
+    flex-shrink: 0;
+}
+
+/* === RELEASE UPDATE === */
+.release-update-modal {
+    width: min(620px, 92vw);
+    max-height: min(720px, 90vh);
+}
+
+.release-update-modal-body {
+    padding-right: 6px;
+    overscroll-behavior: contain;
+}
+
+.release-update-guide {
+    color: var(--text-secondary);
+}
+
+.release-update-lead {
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.release-update-list {
+    margin: 12px 0;
+    padding-left: 22px;
+}
+
+.release-update-list li {
+    margin: 10px 0;
+}
+
+.release-update-list strong {
+    color: var(--text-primary);
+}
+
+.release-update-note {
+    margin-bottom: 0;
+    padding: 10px 12px;
+    border-left: 3px solid var(--state-warning);
+    border-radius: var(--radius-sm);
+    background: var(--planner-warning-bg);
+    color: var(--planner-warning-text);
+}
+
+.release-update-modal .app-modal-footer .btn {
+    min-height: 44px;
+}
+
+/* === HELP & INFORMATION === */
+.help-info-modal {
+    width: min(960px, 94vw);
+    height: min(760px, 90vh);
+}
+
+.help-info-modal-body {
+    padding-right: 6px;
+    overscroll-behavior: contain;
+}
+
+.help-info-guide {
+    color: var(--text-secondary);
+}
+
+.help-info-disclaimer {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding: 12px 14px;
+    border: 1px solid var(--state-warning);
+    border-radius: var(--radius-md);
+    background: var(--planner-warning-bg);
+    color: var(--planner-warning-text);
+}
+
+.help-info-disclaimer > i {
+    flex: 0 0 auto;
+    margin-top: 3px;
+}
+
+.help-info-layout {
+    display: grid;
+    grid-template-columns: minmax(170px, 210px) minmax(0, 1fr);
+    align-items: start;
+    gap: 18px;
+}
+
+.help-info-nav {
+    position: sticky;
+    top: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-surface);
+}
+
+.help-info-nav-link {
+    display: block;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-weight: 600;
+    line-height: 1.25;
+    text-decoration: none;
+}
+
+.help-info-nav-link:hover {
+    background: var(--bg-card);
+    color: var(--primary);
+}
+
+.help-info-content {
+    min-width: 0;
+}
+
+.help-info-section {
+    scroll-margin-top: 8px;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+}
+
+.help-info-section + .help-info-section {
+    margin-top: 14px;
+}
+
+.help-info-section h4 {
+    margin: 0 0 10px;
+    color: var(--text-primary);
+    font-size: 1.05rem;
+    line-height: 1.3;
+}
+
+.help-info-section h5 {
+    margin: 14px 0 5px;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    line-height: 1.3;
+}
+
+.help-info-section h4 + h5 {
+    margin-top: 0;
+}
+
+.help-info-section p:last-child,
+.help-info-section ol:last-child,
+.help-info-section ul:last-child {
+    margin-bottom: 0;
+}
+
+.help-info-section ol,
+.help-info-section ul {
+    padding-left: 4px;
+}
+
+.help-info-section a {
+    color: var(--primary);
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.help-info-section a:hover {
+    color: var(--primary-hover);
+}
+
+.help-info-tip {
+    padding: 10px 12px;
+    border-left: 3px solid var(--primary);
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface);
+}
+
+.admit-term-help-modal {
+    width: min(580px, 92vw);
+    max-height: min(680px, 90vh);
+}
+
+.admit-term-help-modal-body {
+    padding-right: 5px;
+    overscroll-behavior: contain;
+}
+
+.admit-term-help-guide {
+    color: var(--text-secondary);
+}
+
+.admit-term-policy-list {
+    margin: 8px 0 12px;
+    padding-left: 22px;
+}
+
+.admit-term-policy-list li + li {
+    margin-top: 8px;
+}
+
+.admit-term-verification {
+    margin-bottom: 0;
+    padding: 10px 12px;
+    border-left: 3px solid var(--primary);
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface);
+    color: var(--text-primary);
+}
+
+.admit-term-help-summary > strong:first-child {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--text-primary);
+}
+
+/* === FOOTER === */
+.footer {
+    background: var(--bg-header);
+    color: var(--color-white);
+    padding: 16px 24px;
+    text-align: center;
+    font-size: 0.875rem;
+    opacity: 0.9;
+    flex-shrink: 0;
+}

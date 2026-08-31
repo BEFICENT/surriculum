@@ -144,7 +144,15 @@ independently from Scheduler choices.
 
 ### How “Smart Sort” works
 
-Each course is scored based on how helpful it is for your selected programs, then the dropdown is sorted by that score.
+Each course is scored based on how helpful it is for your selected programs. The
+score uses the course's **marginal** value: alternatives, exclusions, named
+requirements, and already-filled pools are applied first, so a course receives
+the value of the highest requirement pool it can still advance. A catalog type
+of `None`, `N/A`, or an unknown value contributes no type points.
+Planner scoring counts only degree-eligible courses in semesters strictly before
+the destination semester. Scheduler uses the same rule against its selected
+term, even when that differs from the app's current term. This keeps later and
+same-term plans from prematurely satisfying a requirement.
 
 Base points (by course type, per program):
 
@@ -157,6 +165,9 @@ Base points (by course type, per program):
 Extra points:
 
 - `+ 0.1 × (SU credits)` per course
+- `+ 6` when the course belongs to a named or predicate-based requirement group
+  that is not yet fulfilled before the selected semester. Named/group candidates
+  keep their published category value while that requirement remains useful.
 - For **engineering majors only** (Data Science is not treated as engineering):
   - `+ 2 × (Basic Science credits)` only if your Basic Science requirement is **not fulfilled yet**
   - `+ 1 × (Engineering credits)` only if your Engineering requirement is **not fulfilled yet**
@@ -164,9 +175,17 @@ Extra points:
 
 Program weighting:
 
-- Main major: `× 1.0`
+- Main major: `× 1.2`
 - Double major: `× 0.8`
 - Each minor: `× 0.5` (minors contribute at half weight)
+
+Before comparing scores, Smart Sort puts courses that are actionable in the
+selected semester first. When prerequisite checking is enabled, a course with a
+definitively unmet prerequisite or prior-SU rule is placed after ready courses;
+a corequisite-only warning does not lower it. In Planner, courses known not to be
+offered in that exact semester follow known/unknown available courses. Missing,
+unknown, and manual-review data fail open. Courses within the same actionability
+group are ordered by score and then alphabetically.
 
 Equivalences:
 
@@ -253,7 +272,7 @@ Schedule data files:
 - The scheduler reads from `courses/schedule/<TERM>.jsonl`.
 - Course details also lazily read `courses/course_instructor_history.jsonl`, which is derived from all saved schedule files.
 - Course details can also read `courses/course_section_history.jsonl` for per-section instructors and seat counts.
-- Generate/update these files using `python fetch_schedule.py` (defaults to all terms from the current term onward, reconciles those offerings into `courses/all_coursepage_info.jsonl`, and rebuilds derived history automatically).
+- Generate/update these files using `python -m tools.data_pipeline.fetch_schedule` (defaults to all terms from the current term onward, reconciles those offerings into `courses/all_coursepage_info.jsonl`, and rebuilds derived history automatically).
 
 Mobile note:
 
@@ -279,7 +298,15 @@ Mobile note:
 
 ## Updating data (for maintainers)
 
+Runtime ownership, module load order, state invariants, and the checklist for
+adding a shipped script are documented in
+[`docs/architecture.md`](docs/architecture.md). Keep `index.html`, the
+service-worker shell, and the Pages artifact allowlist in sync.
+
 Data is stored as `.jsonl` under `courses/` and `requirements/`.
+The active pipeline, release builder, and retained legacy utilities are grouped
+under [`tools/`](tools/README.md) and are invoked as Python modules from the
+repository root.
 
 Install dependencies:
 
@@ -290,13 +317,13 @@ pip install -r requirements.txt
 Update course catalogs:
 
 ```bash
-python fetch_courses.py
+python -m tools.data_pipeline.fetch_courses
 ```
 
 Update requirement rules:
 
 ```bash
-python fetch_requirements.py
+python -m tools.data_pipeline.fetch_requirements
 ```
 
 The degree-detail scrapers reject successful HTTP responses unless the page's
@@ -312,7 +339,7 @@ General Requirements rules, Basic Science/Engineering credit breakdowns, and
 “offered term” history):
 
 ```bash
-python scrape_coursepages.py
+python -m tools.data_pipeline.scrape_coursepages
 ```
 
 The same step also uses the newest program/minor catalog snapshots to fill
@@ -322,7 +349,7 @@ and clears any that cannot be verified. Program-specific classification fields
 such as `EL_Type` and `Faculty_Course` remain in their program and admit-term
 catalogs; they are never copied into the global course-page index.
 
-Use `python scrape_coursepages.py --refresh` for a genuine full refresh of
+Use `python -m tools.data_pipeline.scrape_coursepages --refresh` for a genuine full refresh of
 existing records. Full refreshes bypass the local HTML cache; the automated data
 workflow performs one every Monday and remains incremental on other days.
 
@@ -332,50 +359,50 @@ service-worker cache — so returning users automatically pick up changed data, 
 no manual cache bump:
 
 ```bash
-python build_manifest.py
+python -m tools.data_pipeline.build_manifest
 ```
 
 Update schedule data from the current term onward:
 
 ```bash
-python fetch_schedule.py
+python -m tools.data_pipeline.fetch_schedule
 ```
 
 Daily schedule refreshes update section seat history in delta mode by default; use full mode when you explicitly want to refresh every current/future primary section detail page:
 
 ```bash
-python fetch_schedule.py --section-history-mode full
+python -m tools.data_pipeline.fetch_schedule --section-history-mode full
 ```
 
 Scrape one specific term (or a custom list) instead:
 
 ```bash
-python fetch_schedule.py --term 202502
-python fetch_schedule.py --terms 202502,202503,202601
+python -m tools.data_pipeline.fetch_schedule --term 202502
+python -m tools.data_pipeline.fetch_schedule --terms 202502,202503,202601
 ```
 
 Backfill historical schedule terms once (for example from Fall 2019 through the current term):
 
 ```bash
-python fetch_schedule.py --from-term 201901
+python -m tools.data_pipeline.fetch_schedule --from-term 201901
 ```
 
 Rebuild instructor history from already-downloaded schedule files without making any network requests:
 
 ```bash
-python build_course_instructor_history.py
+python -m tools.data_pipeline.build_course_instructor_history
 ```
 
 Backfill section-level seat history from already-downloaded schedule CRNs:
 
 ```bash
-python build_course_section_history.py --all-terms --workers 8 --max-inflight 4
+python -m tools.data_pipeline.build_course_section_history --all-terms --workers 8 --max-inflight 4
 ```
 
 Legacy JSON → JSONL migration (only needed if you still have `.json` files):
 
 ```bash
-python migrate_to_jsonl.py --delete-json
+python -m tools.legacy.migrate_to_jsonl --delete-json
 ```
 
 ## Known limitations (v3.1)

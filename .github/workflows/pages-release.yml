@@ -43,7 +43,7 @@ jobs:
           python tests/manifest_integrity_test.py
 
       - name: Build and smoke-test the allowlisted Pages artifact
-        run: python scripts/build_pages_artifact.py --output "${{ runner.temp }}/surriculum-pages"
+        run: python -m tools.release.build_pages_artifact --output "${{ runner.temp }}/surriculum-pages"
 
       - name: Upload build-only bundle for inspection
         if: ${{ !inputs.deploy }}

@@ -18,6 +18,33 @@ test.describe('mobile shell', () => {
     await expect(nav.locator('.m-nav-item[data-mtab="planner"]'))
       .toHaveAttribute('aria-current', 'page');
     await expect(nav.locator('.m-nav-item[aria-current="page"]')).toHaveCount(1);
+
+    const moduleContract = await page.evaluate(() => {
+      const modules = window.SurriculumMobileModules || {};
+      const names = [
+        'viewportMode',
+        'navigationProgress',
+        'plannerAccordion',
+        'schedulerAdaptation',
+      ];
+      return {
+        entryFrozen: Object.isFrozen(window.SurriculumMobile),
+        modules: names.map((name) => ({
+          name,
+          frozen: Object.isFrozen(modules[name]),
+          keys: modules[name] ? Object.keys(modules[name]) : [],
+        })),
+      };
+    });
+    expect(moduleContract).toEqual({
+      entryFrozen: true,
+      modules: [
+        { name: 'viewportMode', frozen: true, keys: ['init'] },
+        { name: 'navigationProgress', frozen: true, keys: ['init'] },
+        { name: 'plannerAccordion', frozen: true, keys: ['init'] },
+        { name: 'schedulerAdaptation', frozen: true, keys: ['init'] },
+      ],
+    });
   });
 
   test('bottom-nav tabs switch the active screen', async ({ page }) => {

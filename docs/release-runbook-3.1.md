@@ -61,7 +61,7 @@ If any checked-in runtime data changed intentionally, regenerate and recheck the
 manifest before committing:
 
 ```bash
-python build_manifest.py
+python -m tools.data_pipeline.build_manifest
 python tests/manifest_integrity_test.py
 ```
 

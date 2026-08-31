@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { test, expect } = require('../fixtures');
 const { seedPlan, hoist } = require('../helpers/plan');
-const plans = require('../fixtures/passing-plans-multiterm.json');
+const plans = require('../test-data/passing-plans-multiterm.json');
 
 // The double-major allocation pass (recalcEffectiveTypesDouble) is a parallel
 // copy of the main-major one, and it had drifted: every alternative-course rule

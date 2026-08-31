@@ -45,13 +45,14 @@ test('vendored PDF.js files exactly match the audited 6.2.108 package', () => {
 test('PDF.js is lazy-loaded locally as an exact matched main/worker pair', () => {
   const indexHtml = read('index.html');
   const mainJs = read('main.js');
+  const academicImportJs = read('scripts/app/academic_records_import.js');
   const readerJs = read('scripts/pdf_transcript_reader.js');
 
   assert.doesNotMatch(indexHtml, /unpkg\.com\/pdfjs-dist/i);
   assert.doesNotMatch(indexHtml, /<script[^>]+pdf(?:\.min)?\.m?js/i);
   assert.match(indexHtml, /scripts\/pdf_transcript_reader\.js/);
-  assert.doesNotMatch(indexHtml + mainJs + readerJs, /\bpdfjsLib\b/);
-  assert.match(mainJs, /pdfTranscriptReader\.extractText\(file\)/);
+  assert.doesNotMatch(indexHtml + mainJs + academicImportJs + readerJs, /\bpdfjsLib\b/);
+  assert.match(academicImportJs, /pdfReader\.extractText\(file\)/);
   assert.match(readerJs, /assets\/vendor\/pdfjs-6\.2\.108\/pdf\.min\.mjs/);
   assert.match(readerJs, /assets\/vendor\/pdfjs-6\.2\.108\/pdf\.worker\.min\.mjs/);
   assert.match(readerJs, /useWasm:\s*false/);

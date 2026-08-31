@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { test, expect } = require('../fixtures');
 const { seedPlan } = require('../helpers/plan');
-const plans = require('../fixtures/passing-plans-multiterm.json');
+const plans = require('../test-data/passing-plans-multiterm.json');
 
 // Captured from the official Fall 2025-2026 SUIS Required Courses pages on
 // 2026-07-23. CS395 already has a dedicated branch test; these are the other six

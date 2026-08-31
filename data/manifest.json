@@ -1,7 +1,7 @@
 {
   "dataVersion": "7645ed5f738adf05",
-  "generatedAt": "2026-08-29T10:48:19Z",
-  "generatedBy": "build_manifest.py",
+  "generatedAt": "2026-08-31T16:31:48Z",
+  "generatedBy": "tools.data_pipeline.build_manifest",
   "inputs": {
     "jsonl": {
       "count": 728,

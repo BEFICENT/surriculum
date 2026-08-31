@@ -2,6 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { firstPartyStylesheetPaths } = require('../../helpers/runtime-css');
 
 const ROOT = path.resolve(__dirname, '..', '..', '..');
 const BASELINE_PATH = path.join(__dirname, 'baseline.json');
@@ -34,9 +35,14 @@ function runtimeJavaScriptFiles() {
     .map((file) => path.join(ROOT, file))
     .filter((file) => fs.existsSync(file));
   return rootFiles.concat(
-    walkFiles('scripts', (file) => /\.(?:js|mjs)$/i.test(file)),
-    walkFiles('cases', (file) => /\.(?:js|mjs)$/i.test(file))
+    walkFiles('scripts', (file) => /\.(?:js|mjs)$/i.test(file))
   );
+}
+
+function runtimeCssFiles() {
+  return firstPartyStylesheetPaths(ROOT).map((relative) => (
+    path.join(ROOT, ...relative.split('/'))
+  ));
 }
 
 function countMatches(source, expression) {
@@ -185,6 +191,7 @@ module.exports = {
   parseCssBlocks,
   readRepositoryFile,
   relativePath,
+  runtimeCssFiles,
   runtimeJavaScriptFiles,
   walkFiles
 };

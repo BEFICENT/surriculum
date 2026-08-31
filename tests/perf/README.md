@@ -30,6 +30,18 @@ The equivalent package commands are `npm run perf:contracts`,
 `node tests/perf/run.js --help` before a focused or reference-device run; the
 help output is the source of truth for optional filters and repetition flags.
 
+The runner keeps browser iteration and CLI orchestration in `run.js`. Pure
+metric aggregation, power validation/sample attachment, workload/target
+provenance, optional trace/profile reruns, and CLI/profile/scenario
+configuration live in `lib/aggregation.js`, `lib/power-validation.js`,
+`lib/provenance.js`, `lib/diagnostic-runner.js`, and
+`lib/runner-configuration.js`. `run.js` re-exports their established helper APIs
+so existing contracts and tooling do not depend on the internal split.
+Target-asset provenance reads use a small bounded worker pool and retain sorted
+path order, so a large modular shell cannot overwhelm a constrained local
+server or leave otherwise valid comparison evidence full of transient fetch
+errors.
+
 Every timing command is single-worker and has zero retries. A retry can hide a
 real outlier and makes the resulting distribution harder to interpret.
 
@@ -37,7 +49,7 @@ real outlier and makes the resulting distribution harder to interpret.
 
 - `local-source` serves the checkout under the Pages-style `/surriculum/`
   mount. It is intended for fast diagnosis.
-- `local-artifact` builds with `scripts/build_pages_artifact.py` and serves the
+- `local-artifact` builds with `python -m tools.release.build_pages_artifact` and serves the
   exact allowlisted production bundle. This is the primary regression target.
 - `live` targets the deployed GitHub Pages application. It is a deployment/CDN
   observation and must not block a pull request on timing alone.
@@ -50,6 +62,13 @@ target IDs are derived from that URL. Two distinct base/candidate URLs produce
 different target IDs and intentionally will not compare. Do not pass distinct
 URLs together through `--targets` and expect the comparison tool to reinterpret
 them as base and candidate roles.
+
+If a change edits `tests/perf/` itself, ordinary base-checkout versus
+candidate-checkout runs will intentionally have different workload hashes. For
+a valid app comparison, run both staged app builds through one unchanged final
+harness revision (for example, swap builds behind the same custom URL), or
+establish a fresh baseline after the harness change. Do not waive a real
+harness mismatch merely to recover a gate.
 
 Service-worker/cache states are separate populations:
 
@@ -70,9 +89,13 @@ cost is visible without being mistaken for interaction cost.
 
 Never average cold and warm runs together. The result records the target URL,
 commit, browser, service-worker state, exact fixture hash, selected artifact
-hashes (including `data/manifest.json`), viewport, and environment. Comparison
-keys keep browser/hardware, viewport, cache, service-worker, CPU-throttle,
-headed/headless, fixture, and power populations separate by default.
+hashes (including linked first-party scripts/styles, `data/manifest.json`, and
+scenario-declared data inputs), viewport, and environment. Each scenario also
+records a composite SHA-256 over the runner, scenario, recursively discovered
+CommonJS helpers/fixtures, dependency lockfile, and platform samplers.
+Comparison keys keep that workload hash, browser/hardware, viewport, cache,
+service-worker, CPU-throttle, headed/headless, fixture, and power populations
+separate by default.
 
 ## Test lanes
 
@@ -115,6 +138,12 @@ regenerated automatically:
 - The artifact test invokes the production Pages builder, then checks total,
   top-level group, and selected large-file byte/count budgets. It measures raw
   shipped bytes, not an optimistic gzip estimate.
+
+The 3.1 runtime-split review deliberately raised the script-count ceiling to
+accommodate focused controller/domain files while retaining a separate raw-byte
+ceiling, so modularity cannot conceal aggregate JavaScript growth. The builder
+contract computes the current exact inventory on every run; do not copy a
+one-time local artifact count into a future performance claim.
 
 These checks intentionally avoid fragile wall-clock assertions. They answer
 questions such as “did another synchronous loader appear?” and “did the
@@ -189,13 +218,17 @@ score:
   interactions, Scheduler work, Summary cycles, transcript parsing, persistence,
   responsive reflow, offline restore, and memory churn.
 - FCP, LCP, CLS, browser-emitted Event Timing/INP-like latency, long tasks,
-  Long Animation Frames, and total blocking time. Programmatic controls that
-  do not receive Event Timing still retain phase, CDP, frame, and long-task
-  measurements.
+  Long Animation Frames, and total blocking time. Long-task evidence includes
+  count, total/mean/p95/max duration, and counts above 100 ms and 200 ms for
+  each phase and the full measured journey. Programmatic controls that do not
+  receive Event Timing still retain phase, CDP, frame, and long-task measurements.
 - Animation-frame median/p95/worst and counts above 20, 32, and 50 ms for
   in-document interaction phases. Navigation/reload phases are explicitly
   marked unavailable because a document change resets `requestAnimationFrame`;
-  their CDP and PerformanceObserver evidence remains valid.
+  their CDP and PerformanceObserver evidence remains valid. A browser may emit
+  a first rAF timestamp just before the sampler's `performance.now()` anchor;
+  that invalid negative clock-edge delta is discarded, and persisted frame
+  summaries accept only finite, non-negative durations.
 - CDP task, script, style and layout duration/count deltas, documents, nodes,
   listeners, frames, and JS heap values.
 - Request count, encoded transfer bytes, cache/service-worker source, duplicate
@@ -245,6 +278,17 @@ Exact invariants—new errors, failed local requests, duplicated schedule loads,
 fixture mismatch, leaked overlays/listeners, or deterministic budget excess—can
 fail immediately. Timing budgets should run advisory for several calibration
 runs before becoming required.
+
+Workload provenance is required even in advisory mode. A missing workload hash
+makes the comparison unavailable, while different hashes form different groups
+and therefore cannot silently mix changed scenario/harness implementations.
+For a pre-provenance artifact only, the explicit
+`--allow-missing-workload-provenance` escape hatch disables workload matching
+and emits a prominent warning. Label that output historical/advisory; never use
+it as a release gate. Establish a new fully provenanced base/candidate pair for
+future enforced comparisons. The runner never invents or backfills a hash for
+an old record, and the comparison CLI prints the override warning to stderr even
+when its JSON result is redirected with `--out`.
 
 ## Real-device AC and battery protocol
 
@@ -307,9 +351,17 @@ test-results/perf/<run-id>/
   diagnostics/
 ```
 
+Playwright correctness runs write only to `test-results/playwright/`. Keep that
+separation: Playwright clears its output directory on startup, so pointing it at
+the shared `test-results/` root would erase retained performance populations.
+
 An iteration record is appended as soon as that iteration completes, so an
 interrupted battery run remains useful. CI uploads `test-results/perf/` with
 `if: always()` for both successful and failed browser runs.
+
+Markdown and HTML reports include a per-metric `Samples` column. Check it before
+interpreting a median or p95: a row with fewer samples than the group's recorded
+iteration count is valid sparse evidence, not a full-population statistic.
 
 ## Updating a contract or timing baseline
 

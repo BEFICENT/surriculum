@@ -28,6 +28,12 @@ test('exports one canonical, immutable token list and browser policy', () => {
   assert.equal(grades.GRADE_UI_OPTIONS.every(Object.isFrozen), true);
   assert.equal(browserBridge.gradePolicy, grades.gradePolicy);
   assert.equal(browserBridge.gradePolicy.evaluateGrade, grades.evaluateGrade);
+  assert.equal(browserBridge.evaluateGradeForLegacyTotals,
+    grades.evaluateGradeForLegacyTotals);
+  assert.deepEqual(
+    grades.evaluateGradeForLegacyTotals('B+', grades.GRADING_BASIS.LETTER),
+    grades.evaluateGrade('B+', grades.GRADING_BASIS.LETTER),
+  );
 });
 
 test('normalizes blank and Registered without accepting unknown grades', () => {

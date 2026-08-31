@@ -10,9 +10,9 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadScriptGlobals } = require('./helpers/load-script');
+const { loadCurriculumGlobals } = require('./helpers/load-curriculum');
 
-const { groupProgressFor, facultyProgress } = loadScriptGlobals('scripts/s_curriculum.js');
+const { groupProgressFor, facultyProgress } = loadCurriculumGlobals();
 
 const FIELDS = {
   effective: 'effective_type',

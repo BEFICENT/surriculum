@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { test, expect } = require('../fixtures');
 const { seedPlan } = require('../helpers/plan');
-const plans = require('../fixtures/passing-plans-202401.json');
+const plans = require('../test-data/passing-plans-202401.json');
 
 // Requirement thresholds per major (frozen term 202401).
 const REQS = Object.fromEntries(

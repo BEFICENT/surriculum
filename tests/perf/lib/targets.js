@@ -27,8 +27,12 @@ function resolveTarget(input = 'local-artifact', options = {}) {
 
 function runArtifactBuild(repoRoot, outputDirectory, options = {}) {
   const python = options.python || process.env.PYTHON || 'python';
-  const script = path.join(repoRoot, 'scripts', 'build_pages_artifact.py');
-  const result = spawnSync(python, [script, '--output', outputDirectory, '--skip-mounted-smoke'], {
+  const result = spawnSync(python, [
+    '-m',
+    'tools.release.build_pages_artifact',
+    '--output', outputDirectory,
+    '--skip-mounted-smoke',
+  ], {
     cwd: repoRoot,
     encoding: 'utf8',
     windowsHide: true,

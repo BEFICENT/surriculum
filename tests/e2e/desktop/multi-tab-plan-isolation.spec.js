@@ -107,7 +107,7 @@ test('a tab stays bound to its rendered plan after another tab switches the shar
     });
     expect(copiedFrom).toBe(ids.a);
 
-    // helper_functions.js must read A's planner arrays and write A's metadata.
+    // The course-metadata service must read A's planner arrays and write A's metadata.
     const reloaded = await page.evaluate(() => {
       const calls = [];
       const original = window.createSemeter;

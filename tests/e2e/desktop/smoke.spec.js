@@ -6,6 +6,16 @@ test.describe('app shell (desktop)', () => {
   test('loads with v3.1 branding, core controls, and no browser errors', async ({ page, browserErrors }) => {
     const requestedUrls = [];
     page.on('request', request => requestedUrls.push(request.url()));
+    await page.addInitScript(() => {
+      window.__surriculumSyncXhrCalls = [];
+      const originalOpen = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function monitoredOpen(method, url, asyncFlag, ...rest) {
+        if (asyncFlag === false) {
+          window.__surriculumSyncXhrCalls.push(String(url || ''));
+        }
+        return Reflect.apply(originalOpen, this, [method, url, asyncFlag, ...rest]);
+      };
+    });
     await page.goto('/');
 
     await expect(page).toHaveTitle('SUrriculum v3.1');
@@ -35,6 +45,7 @@ test.describe('app shell (desktop)', () => {
     expect(requirementState.status.term).toBe(requirementState.curriculumTerm);
     expect(requirementState.recordAvailable).toBe(true);
     expect(requestedUrls.some(url => /\/requirements\/default\.(?:jsonl|json)(?:[?#]|$)/.test(url))).toBe(false);
+    expect(await page.evaluate(() => window.__surriculumSyncXhrCalls)).toEqual([]);
 
     expect(browserErrors, browserErrors.join('\n')).toEqual([]);
   });

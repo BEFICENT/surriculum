@@ -2,7 +2,7 @@
 
 const { test, expect } = require('../fixtures');
 const { seedPlan } = require('../helpers/plan');
-const plans = require('../fixtures/passing-plans-multiterm.json');
+const plans = require('../test-data/passing-plans-multiterm.json');
 
 // The major-specific rules that the multi-term sweep only ever touched at ONE
 // point each: it pins the FIRST unmet flag, which says nothing about the checks
@@ -90,7 +90,7 @@ test.describe('ECON mathematics requirement', () => {
   test('the flag-25 message lists all four alternatives', async ({ page }) => {
     await page.goto('/');
     const msg = await page.evaluate(async () => {
-      const { buildFlagMessages } = await import('/cases/flagMessages.js');
+      const { buildFlagMessages } = await import('/scripts/ui/graduation-flag-messages.js');
       return buildFlagMessages('ECON')[25]();
     });
     for (const c of MATHS) {

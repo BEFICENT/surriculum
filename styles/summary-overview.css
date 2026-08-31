@@ -1,0 +1,401 @@
+/* Title for the summary modal */
+.summary_modal_title {
+    text-align: center;
+    font-weight: bold;
+}
+
+/* Rows within the summary modal */
+.summary_modal_child {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 5px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.summary_metric_legacy {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.summary_metric_head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 0.94rem;
+}
+
+.summary_metric_equation {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.summary_gpa_warning {
+    padding: 7px 9px;
+    border: 1px solid var(--alpha-danger-45);
+    border-radius: var(--radius-sm);
+    background: var(--alpha-danger-08);
+    color: var(--state-gpa-warning-text);
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.summary_part.is-earned { color: var(--text-primary); }
+.summary_part.is-current { color: var(--state-current-text); }
+.summary_part.is-future { color: var(--state-projected-text); }
+.summary_part.is-unverified { color: var(--state-unverified-text); }
+
+.summary_segment_track {
+    display: flex;
+    width: 100%;
+    height: 7px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--bg-surface);
+}
+
+.summary_segment { display: block; height: 100%; }
+.summary_segment.is-earned { background: var(--tone-success-600); }
+.summary_segment.is-current { background: var(--tone-blue-600); }
+.summary_segment.is-future { background: var(--tone-projected-600); }
+.summary_segment.is-unverified { background: var(--tone-warning-600); }
+
+.summary_modal_child:last-child {
+    border-bottom: none;
+}
+
+/* Desktop Summary dashboard -------------------------------------------------
+   The mobile Progress view proved that one program at a time is much easier
+   to scan than several tall cards sharing a scrollbar. Desktop keeps that
+   model, with a persistent tab rail and a denser metric dashboard. */
+body:not(.is-mobile) .summary_overlay_content {
+    width: min(1180px, 100%);
+    height: min(900px, 100%);
+    background:
+        linear-gradient(180deg, color-mix(in srgb, var(--primary) 4%, transparent), transparent 150px),
+        var(--bg-card);
+}
+
+body:not(.is-mobile) .summary_header_row {
+    padding: clamp(14px, 1.5vw, 20px) clamp(16px, 2.1vw, 28px);
+    border-bottom: 0;
+}
+
+body:not(.is-mobile) .summary_surface_close {
+    width: 40px;
+    height: 40px;
+}
+
+body:not(.is-mobile) .summary_program_tabs {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 8px;
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0 clamp(16px, 2.1vw, 28px) 12px;
+    border-bottom: 1px solid var(--border);
+    scrollbar-width: thin;
+    box-sizing: border-box;
+    scroll-snap-type: x proximity;
+}
+
+body.is-mobile .summary_program_tabs {
+    display: none;
+}
+
+body:not(.is-mobile) .summary_program_tab {
+    flex: 0 0 clamp(168px, 18vw, 220px);
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+        "role status"
+        "identity identity";
+    align-items: center;
+    gap: 5px 9px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--bg-surface) 82%, transparent);
+    color: var(--text-primary);
+    text-align: left;
+    cursor: pointer;
+    scroll-snap-align: start;
+    transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+
+body:not(.is-mobile) .summary_program_tab:hover {
+    border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
+}
+
+body:not(.is-mobile) .summary_program_tab.is-active {
+    border-color: var(--primary);
+    background: color-mix(in srgb, var(--primary) 9%, var(--bg-card));
+    box-shadow: inset 0 -3px 0 var(--primary);
+}
+
+.summary_program_tab_role {
+    grid-area: role;
+    color: var(--text-secondary);
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.summary_program_tab_identity {
+    grid-area: identity;
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+}
+
+.summary_program_tab_identity strong {
+    flex: 0 0 auto;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+
+.summary_program_tab_identity > span {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.summary_program_tab_status {
+    grid-area: status;
+    width: max-content;
+    height: auto;
+    padding: 3px 6px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--text-secondary) 12%, transparent);
+    color: var(--text-secondary);
+    font-size: 0.58rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.summary_program_tab_status.is-complete { background: var(--alpha-success-13); color: var(--state-program-complete-text); }
+.summary_program_tab_status.is-projected { background: var(--alpha-projected-13); color: var(--state-projected-text); }
+.summary_program_tab_status.is-in-progress { background: var(--alpha-blue-12); color: var(--state-program-progress-text); }
+.summary_program_tab_status.is-unavailable { background: var(--alpha-warning-fill-13); color: var(--state-unverified-text); }
+
+body:not(.is-mobile) .summary_cards_row {
+    display: grid;
+    grid-template-columns: minmax(0, 1080px);
+    align-content: start;
+    justify-content: center;
+    padding: clamp(14px, 2vw, 26px);
+}
+
+body:not(.is-mobile) .summary_program_section,
+body:not(.is-mobile) .summary_program_grid {
+    display: contents;
+}
+
+body:not(.is-mobile) .summary_program_section_title {
+    display: none;
+}
+
+body:not(.is-mobile) .summary_program_section + .summary_program_section {
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+body:not(.is-mobile) .summary_program_card {
+    display: none;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    max-height: none;
+    overflow: visible;
+    padding: clamp(16px, 2vw, 24px);
+    border: 1px solid color-mix(in srgb, var(--primary) 16%, var(--border));
+    border-radius: var(--radius-lg);
+    background: var(--bg-card);
+    box-shadow: 0 14px 36px var(--alpha-black-08);
+    box-sizing: border-box;
+}
+
+body:not(.is-mobile) .summary_program_card.is-active {
+    display: grid;
+}
+
+body:not(.is-mobile) .summary_degree_overview_card,
+body:not(.is-mobile) .summary_minor_overview_card {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 12px;
+    font-size: 1rem;
+}
+
+body:not(.is-mobile) .summary_program_card_heading,
+body:not(.is-mobile) .summary_program_card_context,
+body:not(.is-mobile) .summary_metric_hero,
+body:not(.is-mobile) .summary_minor_categories,
+body:not(.is-mobile) .summary_minor_unavailable,
+body:not(.is-mobile) .summary_program_card_footer {
+    grid-column: 1 / -1;
+}
+
+body:not(.is-mobile) .summary_program_card_heading {
+    padding-bottom: 14px;
+    order: -30;
+}
+
+body:not(.is-mobile) .summary_program_card_heading .summary_modal_title {
+    font-size: clamp(1.05rem, 0.96rem + 0.38vw, 1.32rem);
+}
+
+body:not(.is-mobile) .summary_program_card_context {
+    min-height: 26px;
+    padding-bottom: 2px;
+    order: -29;
+}
+
+body:not(.is-mobile) .summary_program_card > .summary_modal_child,
+body:not(.is-mobile) .summary_minor_metric {
+    min-width: 0;
+    min-height: 92px;
+    justify-content: flex-start;
+    gap: 7px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-surface);
+    box-sizing: border-box;
+}
+
+body:not(.is-mobile) .summary_program_card > .summary_metric_hero {
+    min-height: 112px;
+    padding: 16px 18px;
+    border-color: color-mix(in srgb, var(--primary) 28%, var(--border));
+    background: color-mix(in srgb, var(--primary) 7%, var(--bg-card));
+    order: -20;
+}
+
+body:not(.is-mobile) .summary_metric_hero .summary_metric_head {
+    align-items: baseline;
+    font-size: 1.02rem;
+}
+
+body:not(.is-mobile) .summary_metric_hero .summary_metric_head strong {
+    font-size: 1.22rem;
+}
+
+body:not(.is-mobile) .summary_program_card .summary_metric_head {
+    align-items: flex-start;
+    gap: 8px;
+}
+
+body:not(.is-mobile) .summary_program_card .summary_metric_head > span {
+    color: var(--text-secondary);
+    font-size: 0.74rem;
+    font-weight: 700;
+}
+
+body:not(.is-mobile) .summary_program_card .summary_metric_head > strong {
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+body:not(.is-mobile) .summary_program_card .summary_metric_equation {
+    gap: 3px 7px;
+    font-size: 0.68rem;
+    line-height: 1.35;
+}
+
+body:not(.is-mobile) .summary_program_card .summary_segment_track {
+    height: 8px;
+    margin-top: auto;
+    background: color-mix(in srgb, var(--border) 58%, transparent);
+}
+
+body:not(.is-mobile) .summary_program_card .summary_metric_hero .summary_segment_track {
+    height: 10px;
+}
+
+body:not(.is-mobile) .summary_minor_categories {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    padding: 0;
+    background: transparent;
+}
+
+body:not(.is-mobile) .summary_minor_category {
+    align-items: flex-start;
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-surface);
+}
+
+body:not(.is-mobile) .summary_program_card_footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 2px;
+    padding-top: 2px;
+    order: 100;
+}
+
+body:not(.is-mobile) .summary_program_card_footer .summary_detail_btn {
+    width: auto;
+    min-width: 210px;
+}
+
+body:not(.is-mobile) .summary_major_panel,
+body:not(.is-mobile) .summary_minor_panel {
+    scrollbar-gutter: stable;
+}
+
+/* The persistent program rail replaces the older duplicate switch row inside
+   desktop detail panels. Keep the row in the DOM for mobile's adapter. */
+body:not(.is-mobile) .summary_major_panel .summary_minor_switch_row,
+body:not(.is-mobile) .summary_minor_panel .summary_minor_switch_row {
+    display: none;
+}
+
+@media (min-width: 900px) and (max-width: 1179px) {
+    body:not(.is-mobile) .summary_degree_overview_card,
+    body:not(.is-mobile) .summary_minor_overview_card {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    body:not(.is-mobile) .summary_minor_categories {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (min-width: 821px) and (max-width: 899px) {
+    body:not(.is-mobile) .summary_degree_overview_card,
+    body:not(.is-mobile) .summary_minor_overview_card {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    body:not(.is-mobile) .summary_minor_categories {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    body:not(.is-mobile) .summary_program_tab {
+        flex-basis: 176px;
+    }
+}

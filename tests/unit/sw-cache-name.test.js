@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const fs = require('node:fs');
 const path = require('node:path');
+const { readFirstPartyStylesheets } = require('../helpers/runtime-css');
 
 const ROOT = path.join(__dirname, '..', '..');
 const SW_SRC = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
@@ -191,7 +192,7 @@ test('the app shell covers every local page resource and planner image', () => {
   ).filter(ref => !/^(?:https?:|data:|#)/i.test(ref));
 
   const referencedAssetSources = [
-    fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8'),
+    ...readFirstPartyStylesheets(ROOT).map(({ source }) => source),
     fs.readFileSync(path.join(ROOT, 'scripts', 'click.js'), 'utf8'),
     fs.readFileSync(path.join(ROOT, 'scripts', 'mouse_and_drag.js'), 'utf8'),
   ].join('\n');

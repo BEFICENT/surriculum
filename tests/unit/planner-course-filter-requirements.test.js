@@ -2,9 +2,12 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadScriptGlobals } = require('./helpers/load-script');
+const { loadScriptsGlobals } = require('./helpers/load-script');
 
-const { courseRequisites: req } = loadScriptGlobals('scripts/course_requisites.js');
+const { courseRequisites: req } = loadScriptsGlobals([
+  'scripts/requisites/expression-policy.js',
+  'scripts/course_requisites.js',
+]);
 
 const semester = (termCode, courses = []) => ({ termCode, courses });
 const course = (code, grade = 'A', SU_credit = 3) => ({

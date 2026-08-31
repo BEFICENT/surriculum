@@ -2,7 +2,7 @@
 
 const { test, expect } = require('../fixtures');
 const { seedPlan } = require('../helpers/plan');
-const plans = require('../fixtures/passing-plans-multiterm.json');
+const plans = require('../test-data/passing-plans-multiterm.json');
 
 const warning = (page, courseCode, kind) => page.locator(
   `.course:has(.course_code:text-is("${courseCode}")) .planner-requisite-warning[data-warning-kind="${kind}"]`,

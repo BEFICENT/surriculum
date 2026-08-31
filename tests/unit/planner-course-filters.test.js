@@ -6,11 +6,47 @@ const { loadScriptsGlobals } = require('./helpers/load-script');
 
 const globals = loadScriptsGlobals([
   'scripts/registration_rules.js',
+  'scripts/requisites/expression-policy.js',
   'scripts/course_requisites.js',
+  'scripts/course-filter-offering-history.js',
   'scripts/course_filters.js',
 ]);
 const filters = globals.courseFilters;
 const req = globals.courseRequisites;
+
+test('courseFilters preserves its frozen public API after policy extraction', () => {
+  assert.equal(Object.isFrozen(filters), true);
+  assert.deepEqual(Object.keys(filters), [
+    'normalizeCourseCode',
+    'normalizeCategory',
+    'normalizeProgram',
+    'normalizeLevel',
+    'normalizeFilters',
+    'courseLevelForCode',
+    'buildCandidates',
+    'buildProgramProfiles',
+    'supplementalGuidanceItems',
+    'buildTargetContext',
+    'membershipsForProgram',
+    'matchesSearch',
+    'matchesProgram',
+    'matchesCategory',
+    'matchesLevel',
+    'matchesNumeric',
+    'plannedStateForTarget',
+    'offeringState',
+    'deriveOfferingPattern',
+    'offeringHistoryForCandidate',
+    'contextualOfferingAdvisories',
+    'evaluateCandidate',
+    'evaluateCandidates',
+    'filterCandidates',
+    'candidateRequirementIsBlocking',
+    'candidateActionabilityRank',
+    'compareCandidateActionability',
+    'countActiveFilters',
+  ]);
+});
 
 const record = (Major, Code, Course_Name, EL_Type, values = {}) => ({
   Major,
@@ -156,6 +192,9 @@ test('canonical DSA210 metadata wins when a legacy CS210 alias appears first', (
     type: 'core',
   });
   assert.equal(aliases[0].records.main, canonical);
+  assert.equal(filters.matchesSearch(aliases[0], 'CS210'), true);
+  assert.equal(filters.matchesSearch(aliases[0], 'CS 210'), true);
+  assert.equal(filters.matchesSearch(aliases[0], 'DSA210'), true);
   assert.deepEqual([legacy, canonical], before);
 });
 
@@ -661,6 +700,49 @@ test('hide-unmet filters definitive ENS491 misses but keeps mixed-program review
   assert.equal(mixed.requirements.status, 'review');
   assert.equal(mixed.requirements.filterBlocking, false);
   assert.equal(mixed.visible, true, 'mixed program guidance fails open');
+});
+
+test('Smart Sort actionability treats only definitive prerequisite failures as blocking', () => {
+  const blocking = filters.candidateRequirementIsBlocking;
+
+  assert.equal(blocking(null), false);
+  assert.equal(blocking({ status: 'unknown' }), false);
+  assert.equal(blocking({ status: 'review', filterBlocking: false }), false);
+  assert.equal(blocking({ corequisite: { missing: ['EE202'] } }), false);
+  assert.equal(blocking({ prerequisite: { missing: ['MATH101'] } }), true);
+  assert.equal(blocking({ priorSuRequirement: { actual: 20, required: 58 } }), true);
+  assert.equal(blocking({
+    supplemental: { hasRule: true, definitiveUnmet: false },
+    filterBlocking: false,
+    prerequisite: { missing: ['MATH101'] },
+  }), false, 'review-only supplemental guidance must fail open');
+  assert.equal(blocking({
+    supplemental: { hasRule: true, definitiveUnmet: true },
+    filterBlocking: false,
+  }), true);
+});
+
+test('Smart Sort actionability orders ready and offered candidates before blocked or absent ones', () => {
+  const ready = { requirements: { status: 'met' }, offering: { state: 'offered' } };
+  const blocked = {
+    requirements: { prerequisite: { missing: ['MATH101'] } },
+    offering: { state: 'offered' },
+  };
+  const absent = { requirements: { status: 'met' }, offering: { state: 'not-offered' } };
+  const unknown = { requirements: { status: 'unknown' }, offering: { state: 'unknown' } };
+
+  assert.ok(filters.compareCandidateActionability(ready, blocked, {
+    checkPrerequisites: true,
+  }) < 0);
+  assert.ok(filters.compareCandidateActionability(ready, absent, {
+    checkPrerequisites: true,
+  }) < 0);
+  assert.equal(filters.compareCandidateActionability(ready, unknown, {
+    checkPrerequisites: true,
+  }), 0, 'unknown offering and requirement data must fail open');
+  assert.equal(filters.compareCandidateActionability(ready, blocked, {
+    checkPrerequisites: false,
+  }), 0, 'disabled prerequisite checking must not affect ordering');
 });
 
 test('active-filter count excludes search and annotation-only prerequisite checking', () => {

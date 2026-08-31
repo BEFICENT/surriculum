@@ -1,3 +1,17 @@
+function getAncestor(element, ancestor_class)
+{
+    let parent = element ? element.parentNode : null;
+    while(parent)
+    {
+        // The walk ends at Document, which has no classList. An unmatched
+        // search must return null instead of throwing during an outside drop.
+        if(parent.classList && parent.classList.contains(ancestor_class))
+        {return parent;}
+        else{parent = parent.parentNode;}
+    }
+    return null;
+}
+
 function mouseover(e)
 {
     const courseDragHandle = e.target && e.target.closest ? e.target.closest('.course_drag') : null;

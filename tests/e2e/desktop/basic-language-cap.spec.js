@@ -2,7 +2,7 @@
 
 const { test, expect } = require('../fixtures');
 const { seedPlan, hoist } = require('../helpers/plan');
-const plans = require('../fixtures/passing-plans-multiterm.json');
+const plans = require('../test-data/passing-plans-multiterm.json');
 
 // SUIS states the same free-elective language cap on every non-engineering
 // major, in near-identical words (maintainer supplied all five verbatim):

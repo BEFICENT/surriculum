@@ -2,12 +2,14 @@
 """Offline regressions for SUIS response identity and atomic publication."""
 
 import datetime
+import io
 import json
 import os
 import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 
 from bs4 import BeautifulSoup
@@ -15,18 +17,22 @@ from bs4 import BeautifulSoup
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-import fetch_courses as fc  # noqa: E402
-import fetch_minors as fm  # noqa: E402
-import fetch_requirements as fr  # noqa: E402
-from term_utils import generate_terms, term_code_from_date, term_name_from_date  # noqa: E402
-from suis_page_validation import (  # noqa: E402
+from tools.data_pipeline import fetch_courses as fc  # noqa: E402
+from tools.data_pipeline import fetch_minors as fm  # noqa: E402
+from tools.data_pipeline import fetch_requirements as fr  # noqa: E402
+from tools.data_pipeline.term_utils import (  # noqa: E402
+    generate_terms,
+    term_code_from_date,
+    term_name_from_date,
+)
+from tools.data_pipeline.suis_page_validation import (  # noqa: E402
     DegreePageTermMismatch,
     require_matching_admit_term,
     validate_suis_term_code,
 )
 
 
-def degree_page(admit_heading):
+def degree_page(admit_heading, total_ects="240", total_su="132"):
     heading = "" if admit_heading is None else f"<h3>{admit_heading}</h3>"
     # The rest deliberately looks complete. SUIS fallback responses can carry
     # real current-term summary/course data even though the requested term was
@@ -41,7 +47,7 @@ def degree_page(admit_heading):
             <tr><td>Core Electives</td><td>-</td><td>27</td></tr>
             <tr><td>Area Electives</td><td>-</td><td>9</td></tr>
             <tr><td>Free Electives</td><td>-</td><td>15</td></tr>
-            <tr><td>Total</td><td>240</td><td>132</td></tr>
+            <tr><td>Total</td><td>{total_ects}</td><td>{total_su}</td></tr>
           </table>
           <a name="CS_REQ"></a>
           <table><tr><th></th><th>Course</th><th>Name</th><th>ECTS</th><th>SU Credits</th></tr>
@@ -132,6 +138,69 @@ class TermIdentityTests(unittest.TestCase):
         finally:
             fr._session = original_session
 
+    def test_requirements_use_ug_ects_invariant_for_explicit_total_dash(self):
+        original_session = fr._session
+        try:
+            for dash in ("-", "\u2013", "\u2014"):
+                with self.subTest(dash=dash):
+                    fr._session = FakeSession(
+                        degree_page(
+                            "Admit Term: Fall 2026-2027",
+                            total_ects=dash,
+                            total_su="133",
+                        )
+                    )
+                    output = io.StringIO()
+                    with redirect_stdout(output):
+                        data = fr.fetch_requirements("BSMS", "202601")
+
+                    self.assertEqual(data["total"], 133)
+                    self.assertEqual(data["ects"], 240)
+                    self.assertIn(
+                        "Warning: IE 202601 Total ECTS is shown as",
+                        output.getvalue(),
+                    )
+                    self.assertIn("240-ECTS invariant", output.getvalue())
+        finally:
+            fr._session = original_session
+
+    def test_requirements_do_not_fallback_for_missing_or_malformed_total(self):
+        original_session = fr._session
+        rejected_cells = (
+            ("", "133"),
+            ("pending", "133"),
+            ("240 ECTS", "133"),
+            ("0", "133"),
+            ("-", ""),
+            ("-", "pending"),
+            ("-", "133 SU"),
+            ("-", "0"),
+        )
+        try:
+            for total_ects, total_su in rejected_cells:
+                with self.subTest(total_ects=total_ects, total_su=total_su):
+                    fr._session = FakeSession(
+                        degree_page(
+                            "Admit Term: Fall 2026-2027",
+                            total_ects=total_ects,
+                            total_su=total_su,
+                        )
+                    )
+                    output = io.StringIO()
+                    with redirect_stdout(output):
+                        data = fr.fetch_requirements("BSMS", "202601")
+
+                    self.assertEqual(data["ects"], 0)
+                    self.assertNotIn("240-ECTS invariant", output.getvalue())
+                    data["humRequired"] = 0
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        "total and ects must be positive",
+                    ):
+                        fr.validate_requirement_record("IE", data)
+        finally:
+            fr._session = original_session
+
     def test_course_catalog_rejects_fallback_before_parsing(self):
         original_fetch = fc.fetch_html
         calls = []
@@ -211,7 +280,7 @@ class TermIdentityTests(unittest.TestCase):
 
                 fm.load_minor_detail_html = load_detail
                 fm.load_coursepage_credit_lookup = lambda: {}
-                sys.argv = ["fetch_minors.py", "--terms", "202601", "--workers", "1"]
+                sys.argv = ["tools.data_pipeline.fetch_minors", "--terms", "202601", "--workers", "1"]
 
                 self.assertEqual(fm.main(), 1)
                 self.assertEqual(requirement_path.read_text(encoding="utf-8"), requirement_before)
@@ -273,7 +342,7 @@ class TermIdentityTests(unittest.TestCase):
                 )
                 fm.load_coursepage_credit_lookup = lambda: {}
                 sys.argv = [
-                    "fetch_minors.py", "--terms", "202601", "--max-programs", "1", "--workers", "1"
+                    "tools.data_pipeline.fetch_minors", "--terms", "202601", "--max-programs", "1", "--workers", "1"
                 ]
 
                 self.assertEqual(fm.main(), 0)
@@ -327,7 +396,7 @@ class TermIdentityTests(unittest.TestCase):
                 target = Path(tmp, "202601.jsonl")
                 target.write_text("last-known-good\n", encoding="utf-8")
                 fr._session = FakeSession(FALLBACK_PAGE)
-                sys.argv = ["fetch_requirements.py", "--terms", "202601", "--skip-minors"]
+                sys.argv = ["tools.data_pipeline.fetch_requirements", "--terms", "202601", "--skip-minors"]
 
                 self.assertEqual(fr.main(), 1)
                 self.assertEqual(target.read_text(encoding="utf-8"), "last-known-good\n")
@@ -347,7 +416,7 @@ class TermIdentityTests(unittest.TestCase):
                 fc.COURSES_DIR = str(out_dir)
                 fc.get_program_codes = lambda: self.fail("program discovery must not run")
                 sys.argv = [
-                    "fetch_courses.py", "--terms", "999999", "--skip-minors", "--skip-coursepages"
+                    "tools.data_pipeline.fetch_courses", "--terms", "999999", "--skip-minors", "--skip-coursepages"
                 ]
                 with self.assertRaises(ValueError):
                     fc.main()
@@ -373,7 +442,7 @@ class TermIdentityTests(unittest.TestCase):
                 fc.COURSES_DIR = str(out_dir)
                 fc.get_program_codes = lambda: {}
                 sys.argv = [
-                    "fetch_courses.py", "--terms", "202601", "--skip-minors", "--skip-coursepages"
+                    "tools.data_pipeline.fetch_courses", "--terms", "202601", "--skip-minors", "--skip-coursepages"
                 ]
                 with self.assertRaises(RuntimeError):
                     fc.main()
@@ -410,7 +479,7 @@ class TermIdentityTests(unittest.TestCase):
                     DegreePageTermMismatch("fallback page")
                 )
                 sys.argv = [
-                    "fetch_courses.py", "--terms", "202601", "--workers", "1",
+                    "tools.data_pipeline.fetch_courses", "--terms", "202601", "--workers", "1",
                     "--skip-minors", "--skip-coursepages",
                 ]
 
@@ -456,7 +525,7 @@ class TermIdentityTests(unittest.TestCase):
 
                 fc.crawl_program = crawl
                 sys.argv = [
-                    "fetch_courses.py", "--terms", "202501,202502", "--workers", "1",
+                    "tools.data_pipeline.fetch_courses", "--terms", "202501,202502", "--workers", "1",
                     "--skip-minors", "--skip-coursepages",
                 ]
 
@@ -501,7 +570,7 @@ class TermIdentityTests(unittest.TestCase):
                     calls.append(term) or [{"Major": "CS", "Code": "201"}]
                 )
                 sys.argv = [
-                    "fetch_courses.py", "--terms", "202501,202502", "--max-terms", "1",
+                    "tools.data_pipeline.fetch_courses", "--terms", "202501,202502", "--max-terms", "1",
                     "--workers", "1", "--skip-minors", "--skip-coursepages",
                 ]
 
@@ -546,13 +615,13 @@ class TermIdentityTests(unittest.TestCase):
 
                 fc.subprocess.run = fail_minor_refresh
                 sys.argv = [
-                    "fetch_courses.py", "--terms", "202601", "--workers", "1",
+                    "tools.data_pipeline.fetch_courses", "--terms", "202601", "--workers", "1",
                     "--skip-coursepages",
                 ]
 
                 self.assertEqual(fc.main(), 1)
                 self.assertEqual(len(calls), 1)
-                self.assertIn("fetch_minors.py", calls[0])
+                self.assertIn("tools.data_pipeline.fetch_minors", calls[0])
         finally:
             fc.COURSES_DIR = original_dir
             fc.get_program_codes = original_get_programs
@@ -595,12 +664,12 @@ class TermIdentityTests(unittest.TestCase):
                     raise subprocess.CalledProcessError(1, command)
 
                 fr.subprocess.run = fail_minor_refresh
-                sys.argv = ["fetch_requirements.py", "--terms", "202601"]
+                sys.argv = ["tools.data_pipeline.fetch_requirements", "--terms", "202601"]
 
                 self.assertEqual(fr.main(), 1)
                 self.assertEqual(len(published), 1)
                 self.assertEqual(len(calls), 1)
-                self.assertIn("fetch_minors.py", calls[0])
+                self.assertIn("tools.data_pipeline.fetch_minors", calls[0])
         finally:
             fr.REQUIREMENTS_DIR = original_dir
             fr.PROGRAM_CODES = original_program_codes

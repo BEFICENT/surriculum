@@ -1,5 +1,28 @@
 'use strict';
 
+const { percentile } = require('./stats');
+
+function summarizeLongTaskDurations(values) {
+  const durations = (Array.isArray(values) ? values : [])
+    .map((value) => (value && typeof value === 'object' ? value.duration : value))
+    .filter(Number.isFinite);
+  const count = durations.length;
+  const totalDuration = durations.reduce((sum, duration) => sum + duration, 0);
+  return {
+    totalBlockingTime: durations.reduce(
+      (sum, duration) => sum + Math.max(0, duration - 50),
+      0,
+    ),
+    longTaskCount: count,
+    longTaskTotalDuration: totalDuration,
+    longTaskMeanDuration: count ? totalDuration / count : null,
+    longTaskP95Duration: percentile(durations, 0.95),
+    longTaskMaxDuration: count ? Math.max(...durations) : null,
+    longTaskOver100msCount: durations.filter((duration) => duration > 100).length,
+    longTaskOver200msCount: durations.filter((duration) => duration > 200).length,
+  };
+}
+
 function observerBootstrap(options = {}) {
   const key = '__surriculumPerformance';
   const previous = window[key];
@@ -144,7 +167,13 @@ async function beginFrameSampling(page, label = 'default') {
     state.frameSamples[sampleLabel] = sample;
     const tick = (now) => {
       if (!sample.active) return;
-      sample.deltas.push(now - sample.previous);
+      const delta = now - sample.previous;
+      // A first rAF timestamp can describe a frame that began just before the
+      // performance.now() call above. That clock-domain edge yields a small
+      // negative interval, which is not a frame duration and would dilute the
+      // over-budget shares. Keep a real first-frame stall, but discard only
+      // non-finite or negative samples.
+      if (Number.isFinite(delta) && delta >= 0) sample.deltas.push(delta);
       sample.previous = now;
       requestAnimationFrame(tick);
     };
@@ -167,14 +196,13 @@ async function endFrameSampling(page, label = 'default') {
 
 /** Read raw entries plus derived lab metrics without destroying the observers. */
 async function readObservers(page) {
-  return page.evaluate(() => {
+  const snapshot = await page.evaluate(() => {
     const state = window.__surriculumPerformance;
     if (!state) return null;
     const clone = Object.fromEntries(Object.entries(state.entries).map(([name, values]) => [name, values.slice()]));
     const lcpEntries = clone.largestContentfulPaint;
     const lcp = lcpEntries.length ? lcpEntries[lcpEntries.length - 1].startTime : null;
     const eventDurations = clone.events.map((entry) => entry.duration);
-    const longTaskBlocking = clone.longTasks.reduce((sum, entry) => sum + Math.max(0, entry.duration - 50), 0);
     return {
       installedAt: state.installedAt,
       timeOrigin: performance.timeOrigin,
@@ -183,13 +211,17 @@ async function readObservers(page) {
         cls: state.cls,
         lcp,
         longestEvent: eventDurations.length ? Math.max(...eventDurations) : null,
-        totalBlockingTime: longTaskBlocking,
-        longTaskCount: clone.longTasks.length,
         longAnimationFrameCount: clone.longAnimationFrames.length,
       },
       entries: clone,
     };
   });
+  if (!snapshot) return null;
+  snapshot.derived = {
+    ...snapshot.derived,
+    ...summarizeLongTaskDurations(snapshot.entries.longTasks),
+  };
+  return snapshot;
 }
 
 module.exports = {
@@ -198,4 +230,5 @@ module.exports = {
   installObservers,
   readObservers,
   resetObservers,
+  summarizeLongTaskDurations,
 };

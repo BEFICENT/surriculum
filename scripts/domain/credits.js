@@ -5,7 +5,7 @@
 // they touch nothing but their arguments (no DOM, no globals).
 //
 // Shipped as a real ES module (<script type="module"> in index.html) with a
-// window bridge at the bottom, following cases/flagMessages.js: classic
+// window bridge at the bottom, following graduation-flag-messages.js: classic
 // (non-module) scripts still read window.parseCreditValue etc. at call time,
 // while new module code can `import` these directly. The bridge is removed once
 // the last classic consumer is migrated.

@@ -41,7 +41,7 @@ test.describe('graduation check + credit/GPA math (desktop)', () => {
     await seedPlan(page, PLAN);
 
     // canGraduate() returns 0 when all requirements are met, else a positive
-    // flag code for the first unmet one (see flagMessages.js). This 3-course
+    // flag code for the first unmet one (see graduation-flag-messages.js). This 3-course
     // plan is far from done, so it must be a positive flag.
     const flag = await page.evaluate(() => window.curriculum.canGraduate());
     expect(flag).toBeGreaterThan(0);

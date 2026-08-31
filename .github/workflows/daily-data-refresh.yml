@@ -35,11 +35,11 @@ jobs:
 
       - name: Refresh course catalogs (and minors)
         run: |
-          python fetch_courses.py --workers 1 --max-inflight 1 --skip-coursepages
+          python -m tools.data_pipeline.fetch_courses --workers 1 --max-inflight 1 --skip-coursepages
 
       - name: Refresh requirement rules
         run: |
-          python fetch_requirements.py --skip-minors
+          python -m tools.data_pipeline.fetch_requirements --skip-minors
 
       - name: Refresh course page info (credits + offered-term history)
         run: |
@@ -50,7 +50,7 @@ jobs:
           else
             echo "Course page mode: incremental"
           fi
-          python scrape_coursepages.py "${args[@]}"
+          python -m tools.data_pipeline.scrape_coursepages "${args[@]}"
 
       - name: Refresh schedule data (best-effort)
         run: |
@@ -59,7 +59,7 @@ jobs:
             mode="full"
           fi
           echo "Section history mode: $mode"
-          python fetch_schedule.py --section-history-mode "$mode"
+          python -m tools.data_pipeline.fetch_schedule --section-history-mode "$mode"
         continue-on-error: true
 
       - name: Normalize known-order JSONL files
@@ -90,7 +90,7 @@ jobs:
       - name: Rebuild the data cache manifest when data changed
         run: |
           if [ -n "$(git status --porcelain -- courses requirements)" ]; then
-            python build_manifest.py
+            python -m tools.data_pipeline.build_manifest
           else
             echo "Data files unchanged; keeping the existing manifest."
           fi

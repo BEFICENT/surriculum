@@ -45,12 +45,14 @@ tests/
     *.test.js              node:test unit tests for pure helpers
   e2e/
     fixtures.js            shared Playwright fixtures (browserErrors collector)
+    helpers/*.js           deterministic plan and feature-specific setup helpers
     cross-browser/*.spec.js focused Firefox/WebKit release-critical flow
-    desktop/*.spec.js      desktop-viewport flows
+    desktop/*.spec.js      behavior-focused desktop-viewport flows
     mobile/*.spec.js       phone-viewport flows (body.is-mobile layer)
   perf/
     README.md              performance lanes, metrics, and AC/battery protocol
-    run.js                 isolated browser journey runner
+    run.js                 isolated browser-journey orchestrator
+    lib/                   metrics, provenance, power, diagnostics, and reports
     compare.js             environment-safe regression and power comparison
     contracts/*.test.js    deterministic performance regression guards
   coursepage_requirements_data_test.py  reviewed General Requirements schema/data
@@ -59,18 +61,18 @@ tests/
 
 ## Philosophy
 
-The codebase has no module exports yet (browser globals + closures), and a
-refactor for maintainability is coming. So the primary safety net is
+The runtime deliberately combines compatibility globals and focused classic
+modules with a smaller set of pure ES modules. The primary safety net is
 **end-to-end tests that drive the real app in a real browser** — they pin
 behaviour at the UI boundary, which the refactor must preserve, so they survive
 internal restructuring. Unit tests are a second layer for pure logic only.
 
-- **`unit/helpers/load-script.js`** loads a real browser script (e.g.
-  `helper_functions.js`) inside a tolerant `vm` sandbox and returns the functions
+- **`unit/helpers/load-script.js`** loads real classic browser scripts (for
+  example, `scripts/data/course-metadata.js`) inside a tolerant `vm` sandbox and returns the functions
   it puts on `window`, so pure helpers can be unit-tested today without a build
   step. Use it only for logic that doesn't touch the DOM; anything needing layout
-  or real elements belongs in an e2e test. When the code is modularised, these
-  can switch to plain `import` and the shim goes away.
+  or real elements belongs in an e2e test. New pure modules should use plain
+  `import`; the shim remains for classic scripts until they are extracted.
 - **`e2e/fixtures.js`** exposes a `browserErrors` array (uncaught `pageerror` +
   `console.error`) so a test can assert the app logged nothing unexpected —
   catching silent regressions the app would otherwise swallow in try/catch.

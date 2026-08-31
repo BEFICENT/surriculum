@@ -330,8 +330,13 @@ test.describe('scheduler to planner transaction (desktop)', () => {
         DSA210: { course_id: 'DSA210', crn: '22814' },
       }),
     });
-    const before = await plannerState(page);
     await openScheduler(page);
+    // CS210 is a historical alias rather than a row in the current CS catalog.
+    // Opening Scheduler completes the shared course-page index load, which may
+    // legitimately enrich its saved zero-credit placeholder in the background.
+    // Snapshot after that readiness boundary so this assertion isolates the
+    // fail-closed transaction instead of racing independent metadata hydration.
+    const before = await plannerState(page);
 
     await confirmPlannerReplacement(page);
     const failure = page.getByRole('dialog', { name: 'Update failed' });

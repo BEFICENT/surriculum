@@ -1,6 +1,6 @@
 'use strict';
 
-// Unit tests for the term-name <-> term-code helpers in helper_functions.js.
+// Unit tests for the term-name <-> term-code academic-term policy.
 // These are pure and dependency-free, and the ordering property they encode is
 // load-bearing: the scheduler's prereq check and earlier-planned filter both
 // compare numeric term codes to decide what counts as past / current / future.
@@ -9,7 +9,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { loadScriptGlobals } = require('./helpers/load-script');
 
-const h = loadScriptGlobals('scripts/helper_functions.js');
+const h = loadScriptGlobals('scripts/domain/academic-terms.js');
 
 const indicatorStub = () => {
   const classes = new Set();

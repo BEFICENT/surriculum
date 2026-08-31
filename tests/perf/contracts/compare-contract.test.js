@@ -6,7 +6,8 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const test = require('node:test');
-const { compareRuns } = require('../compare');
+const { compareRuns, parseArguments } = require('../compare');
+const { patternRegex } = require('../lib/budgets');
 
 const config = {
   requireSameEnvironment: true,
@@ -34,6 +35,23 @@ const config = {
   ],
 };
 
+test('production action-duration rule reaches nested scenario timings', () => {
+  const production = JSON.parse(fs.readFileSync(
+    path.join(__dirname, '..', 'budgets.json'),
+    'utf8',
+  ));
+  const rule = production.comparisonRules.find((entry) => (
+    entry.id === 'action-duration-regression'
+  ));
+  assert.ok(rule, 'the production action-duration comparison rule is missing');
+  assert.equal(rule.path, 'metrics.timings.**');
+
+  const matcher = patternRegex(rule.path);
+  assert.equal(matcher.test('metrics.timings.scheduler.search-and-filter-stress'), true);
+  assert.equal(matcher.test('metrics.timings.startup.load-and-settle'), true);
+  assert.equal(matcher.test('metrics.phases.scheduler.frames.p95'), false);
+});
+
 function record(value, iteration, environmentKey = 'same-machine-and-power') {
   return {
     status: 'passed',
@@ -47,6 +65,7 @@ function record(value, iteration, environmentKey = 'same-machine-and-power') {
     metadata: {
       viewport: { width: 1440, height: 900, deviceScaleFactor: 1 },
       powerSource: 'ac',
+      workloadHash: 'workload-v1',
     },
     metrics: {
       timings: { interaction: value },
@@ -118,6 +137,94 @@ test('different or missing environments are never compared', () => {
   assert.equal(result.comparisonUnavailable, true);
   assert.equal(result.environmentSafety.excludedBaselineIterations.length, 1);
   assert.equal(result.environmentSafety.excludedCandidateIterations.length, 1);
+});
+
+test('different workload fingerprints never share a comparison group', () => {
+  const baseline = [record(100, 0)];
+  const candidate = [record(110, 0)];
+  candidate[0].metadata.workloadHash = 'workload-v2';
+
+  const result = compareRuns(baseline, candidate, {
+    config,
+    mode: 'advisory',
+    bootstrap: 25,
+  });
+
+  assert.equal(result.comparable, false);
+  assert.equal(result.comparisons.length, 0);
+  assert.equal(result.comparisonUnavailable, true);
+  assert.equal(result.passed, false);
+  assert.equal(result.workloadSafety.mismatchedScenarios.length, 1);
+  assert.match(result.warnings.join('\n'), /workload fingerprints differ/);
+});
+
+test('missing workload provenance fails closed even in advisory mode', () => {
+  const baseline = [record(100, 0)];
+  const candidate = [record(110, 0)];
+  delete baseline[0].metadata.workloadHash;
+  delete candidate[0].metadata.workloadHash;
+
+  const result = compareRuns(baseline, candidate, {
+    config,
+    mode: 'advisory',
+    bootstrap: 25,
+  });
+
+  assert.equal(result.comparable, false);
+  assert.equal(result.comparisonUnavailable, true);
+  assert.equal(result.passed, false);
+  assert.equal(result.workloadSafety.requireWorkloadProvenance, true);
+  assert.equal(result.workloadSafety.excludedBaselineIterations.length, 1);
+  assert.equal(result.workloadSafety.excludedCandidateIterations.length, 1);
+  assert.match(result.warnings.join('\n'), /without workload provenance/);
+
+  baseline[0].environmentKey = null;
+  const missingBoth = compareRuns(baseline, candidate, {
+    config,
+    mode: 'advisory',
+    bootstrap: 25,
+  });
+  assert.equal(missingBoth.comparisonUnavailable, true);
+  assert.equal(
+    missingBoth.workloadSafety.excludedBaselineIterations[0].reason,
+    'missing workloadHash',
+  );
+});
+
+test('legacy provenance override is explicit, comparable, and visibly warned', () => {
+  const baseline = [record(100, 0)];
+  const candidate = [record(110, 0)];
+  delete baseline[0].metadata.workloadHash;
+
+  const result = compareRuns(baseline, candidate, {
+    config,
+    mode: 'advisory',
+    bootstrap: 25,
+    allowMissingWorkloadProvenance: true,
+  });
+
+  assert.equal(result.comparable, true);
+  assert.equal(result.comparisonUnavailable, false);
+  assert.equal(result.workloadSafety.requireWorkloadProvenance, false);
+  assert.equal(result.workloadSafety.legacyOverrideEnabled, true);
+  assert.match(result.warnings.join('\n'), /LEGACY WORKLOAD-PROVENANCE OVERRIDE ENABLED/);
+  assert.match(result.warnings.join('\n'), /historical\/advisory/);
+  assert.equal(parseArguments([
+    '--base', 'old.json',
+    '--candidate', 'new.json',
+    '--allow-missing-workload-provenance',
+  ]).allowMissingWorkloadProvenance, true);
+
+  const attemptedGate = compareRuns(baseline, candidate, {
+    config,
+    mode: 'enforce',
+    bootstrap: 25,
+    allowMissingWorkloadProvenance: true,
+  });
+  assert.equal(attemptedGate.comparisonUnavailable, true);
+  assert.equal(attemptedGate.passed, false);
+  assert.equal(attemptedGate.workloadSafety.enforceable, false);
+  assert.match(attemptedGate.warnings.join('\n'), /cannot produce an enforceable comparison/);
 });
 
 test('power axis compares AC and battery only when captured hardware identity matches', () => {
@@ -371,6 +478,7 @@ test('CLI writes output and exits nonzero only for an enforced threshold regress
   const baselinePath = path.join(directory, 'baseline.json');
   const candidatePath = path.join(directory, 'candidate.json');
   const outputPath = path.join(directory, 'nested', 'comparison.json');
+  const legacyOutputPath = path.join(directory, 'nested', 'legacy-comparison.json');
   const baseline = [100, 100, 100].map((value, index) => record(value, index));
   const candidate = [170, 170, 170].map((value, index) => record(value, index));
   fs.writeFileSync(baselinePath, JSON.stringify(baseline));
@@ -390,6 +498,20 @@ test('CLI writes output and exits nonzero only for an enforced threshold regress
     const output = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
     assert.equal(output.mode, 'enforce');
     assert.equal(output.passed, false);
+
+    const legacyRun = spawnSync(process.execPath, [
+      script,
+      '--base', baselinePath,
+      '--candidate', candidatePath,
+      '--mode', 'advisory',
+      '--allow-missing-workload-provenance',
+      '--out', legacyOutputPath,
+    ], { encoding: 'utf8' });
+    assert.equal(legacyRun.status, 0, legacyRun.stderr);
+    assert.match(legacyRun.stderr, /WARNING: legacy workload-provenance override enabled/);
+    const legacyOutput = JSON.parse(fs.readFileSync(legacyOutputPath, 'utf8'));
+    assert.equal(legacyOutput.workloadSafety.legacyOverrideEnabled, true);
+    assert.match(legacyOutput.warnings.join('\n'), /historical\/advisory/);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }

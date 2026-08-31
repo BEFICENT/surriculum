@@ -5,7 +5,7 @@
 // lazily at call time so this stays a pure function of its inputs plus whatever
 // program context is live.
 //
-// Shipped as an ES module with a window bridge (see cases/flagMessages.js and
+// Shipped as an ES module with a window bridge (see graduation-flag-messages.js and
 // scripts/domain/credits.js): classic scripts call window.getInfo /
 // window.isCourseValid; new module code can `import` them.
 

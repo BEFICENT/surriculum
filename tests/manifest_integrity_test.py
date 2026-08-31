@@ -9,7 +9,7 @@ import tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-import build_manifest  # noqa: E402
+from tools.data_pipeline import build_manifest  # noqa: E402
 
 
 def validate_canonical_newline_hashing():
@@ -72,15 +72,18 @@ def main():
         actual = json.load(handle)
 
     assert actual.get("dataVersion") == expected["dataVersion"], (
-        "data/manifest.json has a stale dataVersion; run python build_manifest.py"
+        "data/manifest.json has a stale dataVersion; run "
+        "python -m tools.data_pipeline.build_manifest"
     )
     assert actual.get("terms") == expected["terms"], (
-        "data/manifest.json has stale term hashes; run python build_manifest.py"
+        "data/manifest.json has stale term hashes; run "
+        "python -m tools.data_pipeline.build_manifest"
     )
     assert actual.get("inputs") == expected["inputs"], (
-        "data/manifest.json has stale input metadata; run python build_manifest.py"
+        "data/manifest.json has stale input metadata; run "
+        "python -m tools.data_pipeline.build_manifest"
     )
-    assert actual.get("generatedBy") == "build_manifest.py"
+    assert actual.get("generatedBy") == "tools.data_pipeline.build_manifest"
 
     # Exceptional JSON runtime inputs must not be lost merely because the
     # dominant data format is JSONL.

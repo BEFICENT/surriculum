@@ -65,9 +65,9 @@ function renderMarkdown(summary) {
     }
   }
   for (const group of summary.groups) {
-    lines.push(`## ${group.key}`, '', `Recorded iterations: ${group.records}`, '', '| Metric | Median | p95 | MAD | Min | Max |', '| --- | ---: | ---: | ---: | ---: | ---: |');
+    lines.push(`## ${group.key}`, '', `Recorded iterations: ${group.records}`, '', '| Metric | Samples | Median | p95 | MAD | Min | Max |', '| --- | ---: | ---: | ---: | ---: | ---: | ---: |');
     for (const [metric, stats] of Object.entries(group.metrics)) {
-      lines.push(`| ${metric} | ${stats.median} | ${stats.p95} | ${stats.mad} | ${stats.min} | ${stats.max} |`);
+      lines.push(`| ${metric} | ${stats.count} | ${stats.median} | ${stats.p95} | ${stats.mad} | ${stats.min} | ${stats.max} |`);
     }
     lines.push('');
   }
@@ -80,9 +80,9 @@ function renderHtml(summary) {
   )).join('');
   const groups = summary.groups.map((group) => {
     const rows = Object.entries(group.metrics).map(([metric, stats]) => (
-      `<tr><td>${escapeHtml(metric)}</td><td>${stats.median}</td><td>${stats.p95}</td><td>${stats.mad}</td><td>${stats.min}</td><td>${stats.max}</td></tr>`
+      `<tr><td>${escapeHtml(metric)}</td><td>${stats.count}</td><td>${stats.median}</td><td>${stats.p95}</td><td>${stats.mad}</td><td>${stats.min}</td><td>${stats.max}</td></tr>`
     )).join('');
-    return `<section><h2>${escapeHtml(group.key)}</h2><p>${group.records} recorded iterations</p><table><thead><tr><th>Metric</th><th>Median</th><th>p95</th><th>MAD</th><th>Min</th><th>Max</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+    return `<section><h2>${escapeHtml(group.key)}</h2><p>${group.records} recorded iterations</p><table><thead><tr><th>Metric</th><th>Samples</th><th>Median</th><th>p95</th><th>MAD</th><th>Min</th><th>Max</th></tr></thead><tbody>${rows}</tbody></table></section>`;
   }).join('');
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Performance report ${escapeHtml(summary.runId || '')}</title><style>body{font:14px system-ui;max-width:1200px;margin:32px auto;padding:0 20px;color:#17202a}table{border-collapse:collapse;width:100%;margin-bottom:28px}th,td{border:1px solid #d9dee3;padding:7px;text-align:left}th{background:#f4f6f7}h1,h2{line-height:1.2}.fail{color:#a11}</style></head><body><h1>Performance report: ${escapeHtml(summary.runId || 'unknown run')}</h1><p>Generated ${escapeHtml(summary.generatedAt)} · ${summary.iterationCount} iterations</p>${budgetRows ? `<h2 class="fail">Budget failures</h2><table><thead><tr><th>Budget</th><th>Metric</th><th>Severity</th><th>Blocking</th><th>Reason</th></tr></thead><tbody>${budgetRows}</tbody></table>` : ''}${groups}</body></html>`;
 }

@@ -1,9 +1,53 @@
 # Changelog
 
-This file records user-visible SUrriculum changes. The 3.1 entry remains
-unreleased until the branch is merged, published, and tagged.
+This file records user-visible SUrriculum changes. Version 3.1 was published
+and tagged on 2026-08-16; subsequent maintenance is recorded separately.
 
-## [Unreleased] — 3.1 candidate
+## [Unreleased]
+
+### Added
+
+- Reviewed ENS 491/491R registration guidance is now shared by Planner and
+  Scheduler, with reusable conditional-rule support for prior credit, program,
+  admit term, linked components, and advisory links back to SUIS.
+- Course-filter surfaces now have a close control, Escape handling, focus
+  restoration, and active-filter feedback; Scheduler also shows the active
+  filter count.
+- A repeatable performance suite now covers deterministic artifact/risk
+  contracts, synthetic browser journeys, workload and target provenance,
+  environment/power capture, comparison reports, and optional diagnostics.
+- Runtime architecture documentation and guarded module-size/ownership
+  contracts now keep shipped script, service-worker, and Pages inventories in
+  sync.
+
+### Changed
+
+- Smart Sort now scores the marginal requirement value a course can still add
+  before the Planner destination or Scheduler term, weights main, double-major,
+  and minor programs independently, and ranks definitively ready/offered choices
+  first while failing open on unknown data.
+- Planned-course filter wording now states its real scope: through the selected
+  Planner semester, but strictly before the selected Scheduler term.
+- The runtime was separated into focused app, Planner, Scheduler, curriculum,
+  requisites, storage, mobile, and styling modules with documented ownership and
+  size guardrails.
+- The academic-year boundary now ends Summer on August 19 and treats August 20
+  as the first day of Fall.
+
+### Fixed
+
+- The requirements refresh handles an explicit missing Total ECTS marker on an
+  otherwise valid undergraduate SUIS summary using the established 240-ECTS
+  degree total, while malformed or incomplete summaries still fail closed.
+- Scheduler background blur keeps its rounded corners while limiting expensive
+  blur to the visible edge regions. Desktop grid geometry, repeated result
+  rendering, preview/scroll interactions, and startup loading avoid unnecessary
+  layout and DOM work.
+- Scheduler loading and planner readiness now fail cleanly when dialogs close or
+  pages reload, and Academic Records import remains unavailable until its
+  required catalogs are ready.
+
+## [3.1.0] — 2026-08-16
 
 ### Added
 

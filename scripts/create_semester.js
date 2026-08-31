@@ -154,7 +154,7 @@ function createSemeter(aslastelement=true, courseList=[], curriculum, course_dat
                 }
             } else {
                 // If we can't find the current term, use a fallback
-                // Prefer the device-based current term from helper_functions.js
+                // Prefer the device-based current term from academic-terms.js
                 let termToUse = '';
                 try {
                     if (typeof window !== 'undefined' && window.currentTermName) {

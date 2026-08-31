@@ -11,6 +11,10 @@ const BASE_URL = `http://127.0.0.1:${PORT}`;
 
 module.exports = defineConfig({
   testDir: './tests/e2e/cross-browser',
+  // Keep cross-browser traces away from both retained performance runs and
+  // the main Chromium suite's transient artifacts. Playwright clears this
+  // directory at the start of every run.
+  outputDir: './test-results/playwright-cross-browser',
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,
@@ -36,5 +40,7 @@ module.exports = defineConfig({
     url: BASE_URL,
     reuseExistingServer: true,
     timeout: 30000,
+    stdout: 'ignore',
+    stderr: 'ignore',
   },
 });

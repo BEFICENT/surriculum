@@ -282,6 +282,8 @@ test.describe('planner accessibility', () => {
           secondary: contrast('--text-secondary', '--bg-card'),
           muted: contrast('--text-muted', '--bg-card'),
           accent: contrast('--accent', '--text-inverse'),
+          primaryAction: contrast('--color-white', '--primary-solid'),
+          mobileNavActive: contrast('--mobile-nav-active-text', '--bg-card'),
         };
         return result;
       });
@@ -289,6 +291,8 @@ test.describe('planner accessibility', () => {
       expect(values.secondary, `${theme} secondary text contrast`).toBeGreaterThanOrEqual(4.5);
       expect(values.muted, `${theme} muted text contrast`).toBeGreaterThanOrEqual(4.5);
       expect(values.accent, `${theme} accent contrast`).toBeGreaterThanOrEqual(4.5);
+      expect(values.primaryAction, `${theme} primary action contrast`).toBeGreaterThanOrEqual(4.5);
+      expect(values.mobileNavActive, `${theme} mobile navigation active contrast`).toBeGreaterThanOrEqual(4.5);
     }
   });
 });

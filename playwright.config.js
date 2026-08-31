@@ -16,6 +16,10 @@ const PAGES_BASE_URL = `http://127.0.0.1:${PAGES_PORT}/surriculum/`;
 
 module.exports = defineConfig({
   testDir: './tests/e2e',
+  // Playwright clears its output directory at the start of a run. Keep those
+  // transient traces separate so correctness tests cannot erase retained
+  // performance baselines under test-results/perf/.
+  outputDir: './test-results/playwright',
   // The app leans on global/DOM state and a shared localStorage; keep runs
   // deterministic by executing serially rather than racing parallel workers.
   fullyParallel: false,
@@ -53,15 +57,23 @@ module.exports = defineConfig({
       url: BASE_URL,
       reuseExistingServer: true,
       timeout: 30000,
+      // The static server writes one line per asset to stderr. With the
+      // intentionally split runtime graph that obscures the actual test
+      // results without adding diagnostic value; Playwright still reports a
+      // failed command or an unreachable health-check URL.
+      stdout: 'ignore',
+      stderr: 'ignore',
     },
     {
       // Mount the repository at the same /surriculum/ subpath used by GitHub
       // Pages. The helper also exposes a test-only legacy worker for upgrades.
-      command: 'python tests/pages_server.py ' + PAGES_PORT,
+      command: 'python tests/e2e/support/pages_server.py ' + PAGES_PORT,
       cwd: __dirname,
       url: PAGES_BASE_URL,
       reuseExistingServer: true,
       timeout: 30000,
+      stdout: 'ignore',
+      stderr: 'ignore',
     },
   ],
 });

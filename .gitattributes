@@ -5,14 +5,9 @@
 # - excludes them from language stats
 # - collapses them in PR diffs (generated files can be hidden)
 
-Academic*Records*Summary_ex.html linguist-generated=true
 index.html text eol=lf
 
-Degree*Detail*Pages*inspect*/** linguist-generated=true
-Pre-Conversion*Files/** linguist-generated=true
-Example*Files/** linguist-generated=true
-minor_htmls/** linguist-generated=true
-updated_htmls/** linguist-generated=true
+tests/fixtures/** linguist-generated=true
 assets/vendor/pdfjs-*/*.mjs text eol=lf linguist-vendored=true
 assets/vendor/pdfjs-*/LICENSE text eol=lf linguist-vendored=true
 assets/vendor/pdfjs-*/README.md text eol=lf linguist-vendored=true

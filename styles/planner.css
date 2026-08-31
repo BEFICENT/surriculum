@@ -1,0 +1,655 @@
+/* === LEGACY COMPATIBILITY - FLEXIBLE HEIGHT === */
+
+/* Planner icon assets live beside this component directory. Keeping URL-valued
+   custom properties here is important: browsers resolve a variable's relative
+   URL from the stylesheet that consumes it. */
+:root {
+    --icon-semester-delete: url('../assets/closedb.png');
+    --icon-semester-drag: url('../assets/dragb.png');
+    --icon-semester-edit: url('../assets/editb.png');
+    --icon-course-delete: url('../assets/closedb.png');
+    --icon-delete-hover: url('../assets/open.png');
+    --icon-delete-hover-filter: invert(18%) sepia(98%) saturate(7492%) hue-rotate(357deg) brightness(97%) contrast(119%);
+    --icon-confirm: url('../assets/tickw.png');
+    --icon-confirm-hover: url('../assets/tickb.png');
+}
+
+/* Each semester column - FLEX LAYOUT USING AVAILABLE HEIGHT */
+.container_semester {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    margin: 16px 8px;
+    flex: 0 0 var(--semester-width);
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    height: 95%; /* Take remaining height between header and footer */
+}
+
+/* Placeholder container for adding new semesters inline */
+.add-semester-ghost {
+    margin: 16px 8px;
+    flex: 0 0 var(--semester-width);
+    border: 2px dashed var(--border);
+    border-radius: var(--radius-md);
+    height: 95%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+}
+
+.add-semester-ghost:hover {
+    background: var(--bg-surface);
+}
+
+/* Top bar showing total credits */
+.container_semester .total_credit {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    background: var(--primary);
+    color: var(--text-inverse);
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.container_semester.current-term {
+    border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent), var(--shadow-sm);
+}
+
+.container_semester.current-term .total_credit {
+    background: var(--accent);
+}
+
+.container_semester .total_credit_line {
+    flex: 1;
+    height: 1px;
+    background: var(--alpha-white-30);
+}
+
+.container_semester .total_credit_text {
+    padding: 0 8px;
+}
+
+.container_semester .total_credit_text span.is-overlimit {
+    color: var(--tone-danger-500);
+    font-weight: 800;
+    text-shadow: 0 1px 0 var(--alpha-black-18);
+}
+
+/* Body container - PROPER FLEX LAYOUT */
+.subcontainer_semester {
+    display: flex;
+    flex-direction: column;
+    padding: 12px;
+    gap: 12px;
+    flex: 1; /* Take remaining space */
+    overflow: hidden; /* Hide overflow from this container */
+    min-height: 0; /* Allow shrinking */
+}
+
+/* Date row with term label and action icons */
+.subcontainer_semester .date {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 600;
+    color: var(--text-primary);
+    flex-shrink: 0;
+}
+
+.subcontainer_semester .date p {
+    margin: 0;
+}
+
+/* Icons container */
+.subcontainer_semester .icons {
+    display: flex;
+    gap: 8px;
+}
+
+.subcontainer_semester .semester_drag,
+.subcontainer_semester .semester_date_edit,
+.subcontainer_semester .delete_semester,
+.subcontainer_semester .semester_move {
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.15s ease;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+}
+
+.subcontainer_semester .semester_move {
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+}
+
+.subcontainer_semester .delete_semester {
+    background-image: var(--icon-semester-delete);
+}
+.subcontainer_semester .semester_drag {
+    background-image: var(--icon-semester-drag);
+}
+.subcontainer_semester .semester_date_edit {
+    background-image: var(--icon-semester-edit);
+}
+
+.subcontainer_semester .semester_drag,
+.subcontainer_semester .semester_date_edit,
+.subcontainer_semester .delete_semester {
+    filter: var(--planner-semester-icon-filter);
+}
+
+.subcontainer_semester .semester_drag:hover,
+.subcontainer_semester .semester_date_edit:hover,
+.subcontainer_semester .delete_semester:hover,
+.subcontainer_semester .semester_move:hover:not(:disabled) {
+    opacity: 1;
+}
+
+/* Course list container - THE KEY FIX */
+.subcontainer_semester .semester {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1; /* Take remaining space in subcontainer */
+    overflow-y: auto; /* Enable scrolling */
+    overflow-x: hidden;
+    min-height: 0; /* Allow shrinking below content size */
+    padding-right: 0; /* Space for scrollbar */
+}
+
+/* Individual course card - FIXED 3-COLUMN LAYOUT WITH LEFT 2-ROW STRUCTURE */
+.course {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.course_container {
+    display: flex;
+    align-items: stretch;
+    padding: 8px;
+    gap: 8px;
+    min-height: 50px;
+}
+
+.course.has-requisite-warning {
+    border-color: var(--state-warning);
+}
+
+.planner-course-warnings {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 7px 8px;
+    border-top: 1px solid var(--state-warning);
+    background: var(--planner-warning-bg);
+}
+
+.planner-requisite-warning {
+    color: var(--planner-warning-text);
+    font-size: 0.7rem;
+    line-height: 1.35;
+    font-weight: 600;
+}
+
+/* LEFT COLUMN - course_label with 2 rows */
+.course_label {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 4px;
+    min-width: 50px;
+    max-width: 70px;
+}
+
+/* Top row in left column - course code */
+.course_label div:first-child {
+    font-weight: 600;
+    color: var(--primary);
+    font-size: 0.875rem;
+    white-space: nowrap;
+}
+
+/* Bottom row in left column - delete button */
+.course_label .course_actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    align-self: flex-start;
+}
+
+.course_label .course_actions button {
+    width: 18px;
+    height: 18px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    opacity: 0.55;
+    transition: opacity 0.15s ease;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.course_label .course_actions button:hover {
+    opacity: 1;
+}
+
+.course_label .course_actions .delete_course {
+    background: var(--icon-course-delete) center/contain no-repeat;
+    filter: brightness(var(--brightness-rate));
+}
+
+.course_label .course_actions .delete_course:hover,
+.input_container .delete_add_course:hover {
+    background-image: var(--icon-delete-hover);
+    filter: var(--icon-delete-hover-filter);
+}
+
+.course_label .course_actions .details_course {
+    color: var(--text-secondary);
+}
+
+.course_label .course_actions .course_drag {
+    color: var(--text-secondary);
+    cursor: grab;
+}
+
+.course_label .course_actions .course_drag:active {
+    cursor: grabbing;
+}
+
+.course-move-destinations {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.course-move-destination {
+    width: 100%;
+    justify-content: flex-start;
+}
+
+.course.course-dragging,
+.container_semester.semester-dragging {
+    opacity: 0.45;
+}
+
+.container_semester.course-drop-target {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 28%, transparent), var(--shadow-sm);
+}
+
+.course-drop-placeholder {
+    min-height: 50px;
+    flex: 0 0 50px;
+    border: 2px dashed var(--primary);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--primary) 10%, transparent);
+    pointer-events: none;
+}
+
+body:not(.is-mobile) .semester-drop-placeholder {
+    box-sizing: border-box;
+    flex: 0 0 var(--semester-width);
+    width: var(--semester-width);
+    height: 95%;
+    margin: 16px 8px;
+    border: 2px dashed var(--primary);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--primary) 10%, var(--bg-card));
+    color: var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    text-align: center;
+    cursor: grabbing;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+.semester-drop-placeholder-label {
+    max-width: 100%;
+    padding: 8px 12px;
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--bg-card) 84%, transparent);
+    font-size: 0.875rem;
+    font-weight: 700;
+    line-height: 1.35;
+}
+
+body.is-mobile .semester-drop-placeholder {
+    display: none !important;
+}
+
+.container_semester.semester-drop-target {
+    position: relative;
+}
+
+.container_semester.semester-drop-target::before,
+.container_semester.semester-drop-target::after {
+    content: '';
+    position: absolute;
+    top: 4%;
+    bottom: 4%;
+    width: 4px;
+    border-radius: 4px;
+    background: var(--primary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 20%, transparent);
+    z-index: 5;
+    pointer-events: none;
+}
+
+.container_semester.semester-drop-target::before {
+    display: none;
+    left: -6px;
+}
+
+.container_semester.semester-drop-target::after {
+    display: none;
+    right: -6px;
+}
+
+.container_semester.semester-drop-target[data-semester-drop-edge="before"]::before,
+.container_semester.semester-drop-target[data-semester-drop-edge="after"]::after {
+    display: block;
+}
+
+.course_label .course_actions .details_course i {
+    font-size: 0.95rem;
+    pointer-events: none;
+}
+
+.course_label .course_actions .details_course:hover {
+    color: var(--text-primary);
+}
+/* MIDDLE COLUMN - Course info */
+.course_info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    color: var(--text-primary);
+    font-size: 0.75rem;
+    align-self: flex-start;
+}
+
+.course_info .course_name {
+    font-weight: 600;
+}
+
+.course_info .course_type {
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    font-size: 0.675rem;
+}
+
+.course_info .course_type.is-overflow-type {
+    color: var(--tone-warning-500);
+    font-weight: 700;
+}
+
+.course_info .course_type .course_type_part.is-overflow-type {
+    color: var(--tone-warning-500);
+    font-weight: 700;
+}
+
+/* Course details modal content */
+.muted {
+    color: var(--text-secondary);
+}
+
+.course-details-modal {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.course-details-modal > * {
+    width: 100%;
+}
+
+.course-details-modal p {
+    margin-bottom: 0;
+}
+
+.course-details-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 12px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-surface);
+    margin: 10px 0 12px;
+}
+
+.course-details-modal .course-details-meta {
+    margin: 0;
+}
+
+.course-details-section p {
+    margin: 0;
+}
+
+.course-details-section h4 {
+    margin: 0 0 6px 0;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+}
+
+.course-registration-guidance {
+    padding: 10px;
+    border: 1px solid var(--state-warning);
+    border-radius: var(--radius-md);
+    background: var(--planner-warning-bg);
+}
+
+.course-registration-guidance-heading,
+.scheduler-registration-guidance-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+.course-registration-guidance-heading h4,
+.scheduler-registration-guidance-heading .scheduler-details-subtitle {
+    margin-bottom: 0;
+}
+
+.course-registration-state {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+    min-height: 20px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: var(--bg-surface);
+    color: var(--planner-warning-text);
+    font-size: 0.68rem;
+    font-weight: 700;
+}
+
+.course-registration-state.is-met {
+    color: var(--accent);
+}
+
+.course-registration-state.is-unmet {
+    color: var(--tone-danger-500);
+}
+
+.course-registration-source,
+.course-registration-advisory {
+    margin-top: 7px !important;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    line-height: 1.35;
+}
+
+.course-registration-source a {
+    color: var(--accent);
+}
+
+.course-details-list {
+    margin: 0;
+    padding-left: 18px;
+}
+
+.course-details-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 12px;
+}
+
+.course-history-table-wrap {
+    overflow-x: auto;
+    width: 100%;
+    display: block;
+}
+
+.course-history-disclosure-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.course-history-disclosure {
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+}
+
+.course-history-disclosure-summary {
+    cursor: pointer;
+    padding: 8px 10px;
+    font-weight: 700;
+    color: var(--text-primary);
+    background: var(--bg-surface);
+}
+
+.course-history-disclosure .course-history-table {
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+}
+
+.course-history-table {
+    width: 100%;
+    max-width: 680px;
+    min-width: 0;
+    margin: 0 auto;
+    font-size: 0.88rem;
+    border: 1px solid var(--border-hover);
+    background: var(--bg-card);
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.course-history-row {
+    display: grid;
+    grid-template-columns: minmax(140px, 180px) minmax(0, 1fr);
+}
+
+.course-history-table--sections .course-history-row {
+    grid-template-columns: minmax(96px, 132px) minmax(0, 1fr) minmax(84px, 104px);
+}
+
+.course-history-table--sections .course-history-row--group {
+    grid-template-columns: minmax(96px, 132px) minmax(0, 1fr);
+}
+
+.course-history-row:not(:last-child) {
+    border-bottom: 1px solid var(--border-hover);
+}
+
+.course-history-row--head {
+    background: var(--bg-surface);
+    font-weight: 700;
+}
+
+.course-history-cell {
+    padding: 8px 10px;
+    text-align: left;
+    border-right: 1px solid var(--border-hover);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+}
+
+.course-history-cell:last-child {
+    border-right: none;
+}
+
+.course-history-cell--term {
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.course-history-cell--number {
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    justify-self: stretch;
+    display: grid;
+    place-items: center;
+    padding-left: 4px;
+    padding-right: 4px;
+}
+
+.course-history-section-rows {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.course-history-section-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(84px, 104px);
+    align-items: stretch;
+}
+
+.course-history-section-row:not(:last-child) {
+    border-bottom: 1px solid var(--border-hover);
+}
+
+.course-history-section-label {
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.course-history-instructor-line {
+    color: var(--text-secondary);
+}
+
+.course-history-cell > div + div {
+    margin-top: 4px;
+}
+
+@media (max-width: 520px) {
+    .course-details-meta {
+        grid-template-columns: 1fr;
+    }
+}

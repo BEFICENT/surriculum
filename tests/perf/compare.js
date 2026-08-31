@@ -69,8 +69,13 @@ function powerAgnosticEnvironmentKey(record) {
   return crypto.createHash('sha256').update(JSON.stringify(stable)).digest('hex').slice(0, 16);
 }
 
-function recordComparisonKey(record, options) {
-  if (!options.allowPowerDifference) return { key: comparisonKey(record), powerAxisFallback: false };
+function recordComparisonKey(record, options = {}) {
+  const comparisonOptions = {
+    ignoreWorkloadHash: options.allowMissingWorkloadProvenance === true,
+  };
+  if (!options.allowPowerDifference) {
+    return { key: comparisonKey(record, comparisonOptions), powerAxisFallback: false };
+  }
   const environmentKey = powerAgnosticEnvironmentKey(record);
   if (!environmentKey) return { key: null, powerAxisFallback: true };
   return {
@@ -82,7 +87,7 @@ function recordComparisonKey(record, options) {
         power: { ...(record.environment?.power || {}), source: 'power-axis' },
       },
       metadata: { ...(record.metadata || {}), powerSource: 'power-axis' },
-    }),
+    }, comparisonOptions),
     powerAxisFallback: false,
   };
 }
@@ -225,6 +230,39 @@ function distinct(values) {
   return Array.from(new Set(values.filter((value) => value !== undefined && value !== null)));
 }
 
+function workloadHashesByScenario(records) {
+  const hashes = new Map();
+  for (const record of records.filter((item) => item.status === 'passed')) {
+    const scenarioId = String(record.scenarioId || 'unknown-scenario');
+    const workloadHash = typeof record.metadata?.workloadHash === 'string'
+      ? record.metadata.workloadHash.trim() : '';
+    if (!workloadHash) continue;
+    if (!hashes.has(scenarioId)) hashes.set(scenarioId, new Set());
+    hashes.get(scenarioId).add(workloadHash);
+  }
+  return hashes;
+}
+
+function mismatchedWorkloadScenarios(baselineRecords, candidateRecords) {
+  const baseline = workloadHashesByScenario(baselineRecords);
+  const candidate = workloadHashesByScenario(candidateRecords);
+  return Array.from(baseline.keys())
+    .filter((scenarioId) => candidate.has(scenarioId))
+    .map((scenarioId) => {
+      const baselineHashes = Array.from(baseline.get(scenarioId)).sort();
+      const candidateHashes = Array.from(candidate.get(scenarioId)).sort();
+      return {
+        scenarioId,
+        baselineHashes,
+        candidateHashes,
+        compatible: baselineHashes.length === candidateHashes.length
+          && baselineHashes.every((hash, index) => hash === candidateHashes[index]),
+      };
+    })
+    .filter((item) => !item.compatible)
+    .map(({ compatible, ...item }) => item);
+}
+
 function compactRange(values) {
   const finite = values.filter(Number.isFinite);
   if (!finite.length) return { min: null, median: null, max: null };
@@ -262,6 +300,17 @@ function collectGroups(records, options = {}) {
   const powerAxisFallbacks = [];
   const powerAxisInvalids = [];
   for (const record of records.filter((item) => item.status === 'passed')) {
+    if (options.requireWorkloadProvenance
+        && (typeof record.metadata?.workloadHash !== 'string'
+          || !record.metadata.workloadHash.trim())) {
+      excluded.push({
+        runId: record.runId || null,
+        scenarioId: record.scenarioId || null,
+        iteration: record.iteration,
+        reason: 'missing workloadHash',
+      });
+      continue;
+    }
     if (options.requireEnvironment && !record.environmentKey) {
       excluded.push({
         runId: record.runId || null,
@@ -546,7 +595,15 @@ function compareRuns(baselineRecords, candidateRecords, options = {}) {
   );
   const requireEnvironment = config.requireSameEnvironment !== false;
   const allowPowerDifference = Boolean(options.allowPowerDifference || options.axis === 'power');
-  const collectionOptions = { requireEnvironment, allowPowerDifference };
+  const allowMissingWorkloadProvenance = Boolean(options.allowMissingWorkloadProvenance);
+  const workloadMismatches = allowMissingWorkloadProvenance
+    ? [] : mismatchedWorkloadScenarios(baselineRecords, candidateRecords);
+  const collectionOptions = {
+    requireEnvironment,
+    allowPowerDifference,
+    requireWorkloadProvenance: !allowMissingWorkloadProvenance,
+    allowMissingWorkloadProvenance,
+  };
   const baselineCollection = collectGroups(baselineRecords, collectionOptions);
   const candidateCollection = collectGroups(candidateRecords, collectionOptions);
   const baseline = baselineCollection.groups;
@@ -599,8 +656,28 @@ function compareRuns(baselineRecords, candidateRecords, options = {}) {
     },
   }));
   const warnings = [];
-  if (baselineCollection.excluded.length || candidateCollection.excluded.length) {
+  const excludedForReason = (collection, reason) => (
+    collection.excluded.filter((item) => item.reason === reason)
+  );
+  const missingEnvironmentBaseline = excludedForReason(baselineCollection, 'missing environmentKey');
+  const missingEnvironmentCandidate = excludedForReason(candidateCollection, 'missing environmentKey');
+  const missingWorkloadBaseline = excludedForReason(baselineCollection, 'missing workloadHash');
+  const missingWorkloadCandidate = excludedForReason(candidateCollection, 'missing workloadHash');
+  if (missingEnvironmentBaseline.length || missingEnvironmentCandidate.length) {
     warnings.push('Passed iterations without an environmentKey were excluded from comparison.');
+  }
+  if (missingWorkloadBaseline.length || missingWorkloadCandidate.length) {
+    warnings.push('Passed iterations without workload provenance were excluded; this comparison is unavailable by default.');
+  }
+  if (workloadMismatches.length) {
+    warnings.push('Scenario workload fingerprints differ between base and candidate; changed harnesses were not compared and this comparison is unavailable.');
+  }
+  if (allowMissingWorkloadProvenance) {
+    warnings.push('LEGACY WORKLOAD-PROVENANCE OVERRIDE ENABLED: scenario and harness compatibility was not enforced; use this result only as a labeled historical/advisory comparison.');
+  }
+  const unsafeLegacyEnforcement = allowMissingWorkloadProvenance && mode === 'enforce';
+  if (unsafeLegacyEnforcement) {
+    warnings.push('Legacy workload-provenance overrides cannot produce an enforceable comparison.');
   }
   if (allowPowerDifference
       && (baselineCollection.powerAxisFallbacks.length || candidateCollection.powerAxisFallbacks.length)) {
@@ -613,7 +690,9 @@ function compareRuns(baselineRecords, candidateRecords, options = {}) {
   if (rejectedPowerAxisGroups.length) {
     warnings.push('Some matched hardware groups were excluded because they did not contain opposite stable AC and battery populations.');
   }
-  if (!matchingKeys.length) warnings.push('No environment-compatible scenario groups were available for comparison.');
+  if (!matchingKeys.length) {
+    warnings.push('No workload- and environment-compatible scenario groups were available for comparison.');
+  }
   const evaluatedRuleIds = distinct(budgetComparisons.map((item) => item.ruleId));
   const ruleEvaluationUnavailable = mode === 'enforce'
     && matchingKeys.length > 0
@@ -621,8 +700,12 @@ function compareRuns(baselineRecords, candidateRecords, options = {}) {
   if (ruleEvaluationUnavailable) {
     warnings.push('Enforced comparison had matching groups, but no configured comparison rule could be evaluated.');
   }
-  const comparisonUnavailable = mode === 'enforce'
-    && (matchingKeys.length === 0 || ruleEvaluationUnavailable);
+  const provenanceUnavailable = !allowMissingWorkloadProvenance
+    && (missingWorkloadBaseline.length > 0 || missingWorkloadCandidate.length > 0);
+  const comparisonUnavailable = provenanceUnavailable
+    || workloadMismatches.length > 0
+    || unsafeLegacyEnforcement
+    || (mode === 'enforce' && (matchingKeys.length === 0 || ruleEvaluationUnavailable));
   return {
     mode,
     passed: blockingRegressions.length === 0 && !comparisonUnavailable,
@@ -645,6 +728,14 @@ function compareRuns(baselineRecords, candidateRecords, options = {}) {
       invalidPowerAxisBaselineIterations: baselineCollection.powerAxisInvalids,
       invalidPowerAxisCandidateIterations: candidateCollection.powerAxisInvalids,
       rejectedPowerAxisGroups,
+    },
+    workloadSafety: {
+      requireWorkloadProvenance: !allowMissingWorkloadProvenance,
+      legacyOverrideEnabled: allowMissingWorkloadProvenance,
+      enforceable: !allowMissingWorkloadProvenance,
+      excludedBaselineIterations: missingWorkloadBaseline,
+      excludedCandidateIterations: missingWorkloadCandidate,
+      mismatchedScenarios: workloadMismatches,
     },
     matchedEnvironmentSummaries,
     warnings,
@@ -702,13 +793,16 @@ function parseArguments(argv) {
     else if (name === '--mode') result.mode = argv[++index];
     else if (name === '--bootstrap') result.bootstrapIterations = argv[++index];
     else if (name === '--allow-power-difference') result.allowPowerDifference = true;
+    else if (name === '--allow-missing-workload-provenance') {
+      result.allowMissingWorkloadProvenance = true;
+    }
     else if (name === '--axis') result.axis = argv[++index];
     else if (name === '--enforce') result.mode = 'enforce';
     else if (name === '--advisory') result.mode = 'advisory';
     else throw new Error(`unknown compare option: ${name}`);
   }
   if (!result.help && (!result.base || !result.candidate)) {
-    throw new Error('Usage: node tests/perf/compare.js --base <run> --candidate <run> [--mode advisory|enforce] [--bootstrap iterations] [--axis power] [--out file]');
+    throw new Error('Usage: node tests/perf/compare.js --base <run> --candidate <run> [--mode advisory|enforce] [--bootstrap iterations] [--axis power] [--allow-missing-workload-provenance] [--out file]');
   }
   if (result.axis && result.axis !== 'power') throw new Error(`unsupported comparison axis: ${result.axis}`);
   return result;
@@ -723,10 +817,16 @@ function runCli(argv = process.argv.slice(2)) {
       '  --mode advisory|enforce',
       '  --bootstrap <iterations>',
       '  --axis power',
+      '  --allow-missing-workload-provenance  UNSAFE legacy/advisory comparison only',
       '  --out <file>',
       '',
     ].join('\n'));
     return 0;
+  }
+  if (options.allowMissingWorkloadProvenance) {
+    process.stderr.write(
+      'WARNING: legacy workload-provenance override enabled; this comparison is historical/advisory and cannot be used as a gate.\n',
+    );
   }
   const result = compareRuns(loadRecords(options.base), loadRecords(options.candidate), options);
   const json = `${JSON.stringify(result, null, 2)}\n`;

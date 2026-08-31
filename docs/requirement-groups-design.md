@@ -1,17 +1,17 @@
 # Requirement Groups — Design
 
-**Status:** proposal (for review, no code yet)
-**Decisions so far:** first-class special requirements with **base-type
-inheritance**; **doc first**, then prototype **VACD** end-to-end, then generalize,
-then teach the scraper. Faculty-course requirements are a **cross-cutting ticker**,
-not a group (see §2).
+**Status:** implemented for 3.1; retained as the design and migration record.
+**Implemented design:** first-class special requirements with **base-type
+inheritance**, prototyped with **VACD** and then generalized through the scraper,
+allocation, audit, summary, and Smart Sort paths. Faculty-course requirements are
+a **cross-cutting ticker**, not a group (see §2).
 
 ---
 
 ## 1. Problem
 
-A program's "special" requirements are currently **conflated with the base course
-type** and **hard-authored in the app**:
+Before this work, a program's "special" requirements were **conflated with the
+base course type** and **hard-authored in the app**:
 
 - VACD's *Core Electives I / II* pools are just `core`-typed courses plus a hidden
   credit-pool constraint checked at graduation (`VACD_CORE_POOL_*` +
@@ -20,15 +20,13 @@ type** and **hard-authored in the app**:
   into the `required` credit count; the specific course lists (`ECON_MATH_REQ`,
   `PSY_PHILOSOPHY`) and the "one of" rule live only in the app.
 - The *Faculty Courses* requirement, EE's *400-level* and *special-topics* rules,
-  MAN's *area-spread* rules, DSA's *core-by-faculty* counts — all are named
-  constants + `PROGRAM_RULES` entries in `scripts/s_curriculum.js`.
+  MAN's *area-spread* rules, and DSA's *core-by-faculty* counts were named
+  constants plus program-specific application rules.
 
-They are therefore **not scraped, not first-class, and not shown as themselves**.
-Step 4 made the rule *logic* data-shaped (one evaluator over `PROGRAM_RULES`
-descriptors); the HUM follow-up moved that rule to scraped data (`humRequired`).
-This proposal finishes the arc: move the special requirements themselves out of the
-base types and out of the app, into scraped, first-class data — supported
-throughout (allocation, graduation, display, summary, scheduler).
+They were therefore **not scraped, not first-class, and not shown as themselves**.
+The implemented model moved the special requirements out of base types and into
+validated, scraped data consumed by the shared requirement engine, allocation,
+graduation, display, summary, Planner, and Scheduler Smart Sort paths.
 
 ---
 
@@ -201,7 +199,7 @@ program's ticker, then its groups in array order — matching today's flag order
 
 ## 7. End-to-end flow ("full support")
 
-### 7.1 Scraper (`fetch_requirements.py`)
+### 7.1 Scraper (`tools/data_pipeline/fetch_requirements.py`)
 Parse the group sections + faculty minimums off SUIS → emit `groups` + `facultyReq`.
 Enumerable pools become `members`; open-ended ones become `match`. **Biggest
 unknown** — see §9. Faculty minimums are small and largely uniform (§6.2).
@@ -216,7 +214,7 @@ so it serves main + DM with no new drift).
 `PROGRAM_RULES` + the hardcoded constants **largely dissolve**:
 `graduationRulesFor(program)` becomes shared university + HUM + the program's
 `facultyReq` ticker + its `groups`. Messages: keep the numeric `flag` on each
-group/ticker (so `flagMessages.js` and wording are unchanged) initially.
+group/ticker (so `graduation-flag-messages.js` and wording are unchanged) initially.
 
 ### 7.4 Display + summary
 - Course label: unchanged by default (still the base type); the group is now
@@ -225,8 +223,9 @@ group/ticker (so `flagMessages.js` and wording are unchanged) initially.
   History: 6/9", "Faculty Courses: 4/5") — the most visible user-facing win.
 
 ### 7.5 Scheduler
-Group/ticker-aware smart-sort (surface a course that fills an unmet group) — a
-follow-up.
+Implemented: Planner and Scheduler Smart Sort add a bonus for enumerable members
+of unmet groups. Progress is reallocated strictly before the destination/selected
+term, rather than inferred by filtering whole-plan totals.
 
 ---
 
@@ -247,7 +246,8 @@ Behavior-preserving throughout; full suite green at each phase.
 4. **Summary UI** renders per-group / per-ticker progress.
 5. **Scraper** parses groups + faculty minimums off SUIS, replacing the
    hand-authored data (the big unknown; do last, once the consumer is proven).
-6. **Scheduler** awareness (optional follow-up).
+6. **Scheduler** awareness. **Completed** with the shared term-scoped Smart Sort
+   scorer.
 
 Steps 1–3 are the core; 4–6 are independent follow-ups. Each is its own reviewed,
 green commit.
@@ -266,16 +266,17 @@ green commit.
 - **Double major.** Groups + ticker evaluated per pass via the `fields` descriptor
   (`effective_type` vs `effective_type_dm`), same as the step-4 evaluators — the DM
   pass inherits the same definitions (a DM program has the same special reqs).
-- **Backward compatibility.** Saved *plans* are unaffected (this is program
-  metadata). Old *requirements data* without `groups`/`facultyReq` → fall back to
-  the current constants until re-scraped (keep constants behind a fallback during
-  phases 1–3).
+- **Backward compatibility.** Saved *plans* are unaffected because this is
+  program metadata. The temporary constant fallback described for phases 1–3 was
+  removed after every supported requirements record was migrated and validated.
 
 ## 10. Non-goals
 
 - The generic credit thresholds and GPA stay exactly as they are — groups/tickers
   are the *special* requirements only.
-- The `main.js` / `scheduler.js` view-layer extraction (a separate deferred effort).
+- The `main.js` / `scheduler.js` view-layer extraction was originally separate
+  from this design and was completed in the later maintainability pass; see
+  `docs/architecture.md`.
 - Changing allocation *outcomes* — every phase is behavior-preserving until we
   deliberately choose otherwise.
 

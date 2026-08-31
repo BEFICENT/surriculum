@@ -9,7 +9,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-import fetch_requirements as fr  # noqa: E402
+from tools.data_pipeline import fetch_requirements as fr  # noqa: E402
 
 
 def records_for(term):

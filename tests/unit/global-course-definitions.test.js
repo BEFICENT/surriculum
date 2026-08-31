@@ -2,9 +2,12 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadScriptGlobals } = require('./helpers/load-script.js');
+const { loadScriptsGlobals } = require('./helpers/load-script.js');
 
-const h = loadScriptGlobals('scripts/helper_functions.js');
+const h = loadScriptsGlobals([
+  'scripts/domain/academic-terms.js',
+  'scripts/data/course-metadata.js',
+]);
 let catalog;
 
 test.before(async () => {
@@ -151,7 +154,7 @@ test('plan-scoped metadata snapshots preserve resolver backfills', () => {
   }
 });
 
-test('internal definitions are hidden from both course dropdown builders', () => {
+test('internal definitions are hidden from course-picker candidates', () => {
   const internal = {
     Major: 'SOC', Code: '301', Course_Name: 'Political Sociology',
     SU_credit: '3', EL_Type: 'unknown', __globalCourseDefinition: true,
@@ -164,9 +167,6 @@ test('internal definitions are hidden from both course dropdown builders', () =>
   const list = h.getCoursesList([internal, real]);
   assert.equal(list.length, 1);
   assert.equal(list[0].code, 'CS201');
-  const html = h.getCoursesDataList([internal, real]);
-  assert.match(html, /CS201/);
-  assert.doesNotMatch(html, /SOC301/);
 });
 
 test('real primary and secondary catalog records outrank an internal fallback', () => {

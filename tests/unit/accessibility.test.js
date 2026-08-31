@@ -2,11 +2,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { readFirstPartyStylesheets } = require('../helpers/runtime-css');
 
 const ROOT = path.resolve(__dirname, '../..');
 const HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-const CSS = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
-const PLAN_MANAGER = fs.readFileSync(path.join(ROOT, 'scripts/plan_manager.js'), 'utf8');
+const CSS = readFirstPartyStylesheets(ROOT).map(({ source }) => source).join('\n');
+const PLAN_UI = fs.readFileSync(path.join(ROOT, 'scripts/plan/ui.js'), 'utf8');
 const SEMESTER_UI = fs.readFileSync(path.join(ROOT, 'scripts/mouse_and_drag.js'), 'utf8');
 
 test('static planner controls expose durable accessible names', () => {
@@ -34,19 +35,33 @@ test('static planner controls expose durable accessible names', () => {
   assert.match(HTML, /id=["']a11yStatus["'][^>]*role=["']status["']/);
 });
 
+test('program selects expose stable browser form identities', () => {
+  for (const identity of [
+    'majorProgram',
+    'majorAdmitTerm',
+    'doubleMajorProgram',
+    'doubleMajorAdmitTerm',
+  ]) {
+    assert.match(
+      HTML,
+      new RegExp(`<select[^>]*id=["']${identity}["'][^>]*name=["']${identity}["']`),
+    );
+  }
+});
+
 test('shared modal has a name, focus trap, Escape handling, and focus restoration', () => {
-  assert.match(PLAN_MANAGER, /aria-labelledby/);
-  assert.match(PLAN_MANAGER, /aria-describedby/);
-  assert.match(PLAN_MANAGER, /e\.key === 'Tab'/);
-  assert.match(PLAN_MANAGER, /e\.key === 'Escape'/);
-  assert.match(PLAN_MANAGER, /previouslyFocused\.focus/);
-  assert.match(PLAN_MANAGER, /Close \$\{title \|\| 'dialog'\}/);
+  assert.match(PLAN_UI, /aria-labelledby/);
+  assert.match(PLAN_UI, /aria-describedby/);
+  assert.match(PLAN_UI, /e\.key === 'Tab'/);
+  assert.match(PLAN_UI, /e\.key === 'Escape'/);
+  assert.match(PLAN_UI, /previouslyFocused\.focus/);
+  assert.match(PLAN_UI, /Close \$\{title \|\| 'dialog'\}/);
 });
 
 test('planner reorder alternatives are buttons and announce their result', () => {
-  assert.match(PLAN_MANAGER, /plan-move-up/);
-  assert.match(PLAN_MANAGER, /plan-move-down/);
-  assert.match(PLAN_MANAGER, /Moved \$\{p\.name\}/);
+  assert.match(PLAN_UI, /plan-move-up/);
+  assert.match(PLAN_UI, /plan-move-down/);
+  assert.match(PLAN_UI, /Moved \$\{p\.name\}/);
   assert.match(SEMESTER_UI, /semester_move_up/);
   assert.match(SEMESTER_UI, /semester_move_down/);
   assert.match(SEMESTER_UI, /announcePlannerChange/);
