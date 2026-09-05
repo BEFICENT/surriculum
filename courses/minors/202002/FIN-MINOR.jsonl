@@ -12,6 +12,7 @@
 {"Major": "IE", "Code": "407", "Course_Name": "Investment Decision Making", "ECTS": "6", "Engineering": 0.0, "Basic_Science": 0.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "IE", "Code": "412", "Course_Name": "Financial Engineering", "ECTS": "6", "Engineering": 0.0, "Basic_Science": 0.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "IE", "Code": "432", "Course_Name": "Stochastic Models in Finance", "ECTS": "6", "Engineering": 4.0, "Basic_Science": 2.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "MGMT", "Code": "423", "Course_Name": "Entrepreneurial Finance", "ECTS": "6", "Engineering": 0.0, "Basic_Science": 0.0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "ACC", "Code": "301", "Course_Name": "Managerial Accounting", "ECTS": "6", "Engineering": 0.0, "Basic_Science": 0.0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "ACC", "Code": "404", "Course_Name": "International Accounting", "ECTS": "6", "Engineering": 0.0, "Basic_Science": 0.0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "ACC", "Code": "405", "Course_Name": "Financial Statement Analysis", "ECTS": "6", "Engineering": 0.0, "Basic_Science": 0.0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "area", "Faculty_Course": "No"}
