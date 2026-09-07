@@ -6,6 +6,7 @@ Run through ``npm run test:python`` or directly from the repository root:
     python tests/scrape_coursepages_fallback_test.py
 """
 
+import argparse
 import json
 import os
 import sys
@@ -121,6 +122,16 @@ class GeneralRequirementParserTests(unittest.TestCase):
             "May not be taken concurrently.",
         )
 
+    def test_blank_dsa492_prerequisite_does_not_hide_its_credit_rule(self):
+        parsed = scraper.parse_coursepage_html(
+            coursepage_html("DSA-492", "91.000 credits"),
+            source_url="fixture://dsa492",
+        )
+
+        self.assertIsNone(parsed["prerequisites"])
+        self.assertEqual(parsed["general_requirements"], "91.000 credits")
+        self.assertEqual(parsed["minimum_earned_su_credits"], 91.0)
+
     def test_generic_boilerplate_is_suppressed_but_self_rule_remains_raw_only(self):
         generic = scraper.parse_coursepage_html(
             coursepage_html(
@@ -194,6 +205,125 @@ class GeneralRequirementParserTests(unittest.TestCase):
             self.assertEqual(records["SPS303"]["minimum_earned_su_credits"], 58.0)
             self.assertEqual(records["SPS303"]["title"], "Preserved title")
             self.assertEqual(records["SPS303"]["scraped_at"], "old-timestamp")
+
+
+class RequisiteReconciliationTests(unittest.TestCase):
+    DSA492_PREREQUISITES = (
+        "DSA 201 - Undergraduate - Min Grade D and "
+        "(DSA 210 - Undergraduate - Min Grade D or "
+        "CS 210 - Undergraduate - Min Grade D)"
+    )
+
+    def test_removal_override_parser_normalizes_and_validates(self):
+        self.assertEqual(
+            scraper.parse_requisite_removal_override(" dsa 492:Prerequisites "),
+            ("DSA492", "prerequisites"),
+        )
+        with self.assertRaises(argparse.ArgumentTypeError):
+            scraper.parse_requisite_removal_override("DSA492:title")
+
+    def test_explicit_removal_course_bypasses_the_incremental_work_cap(self):
+        needed = [
+            scraper.CourseKey("AAA", "101"),
+            scraper.CourseKey("DSA", "492"),
+            scraper.CourseKey("ZZZ", "101"),
+        ]
+
+        limited = scraper.limit_needed_courses(
+            needed,
+            max_courses=1,
+            required_course_ids={"DSA492"},
+        )
+
+        self.assertEqual(
+            [course.course_id for course in limited],
+            ["DSA492", "AAA101"],
+        )
+
+    def test_disappearing_requisite_is_retained_without_discarding_fresh_fields(self):
+        previous = {
+            "course_id": "DSA492",
+            "scrape_ok": True,
+            "prerequisites": self.DSA492_PREREQUISITES,
+            "corequisites": None,
+            "general_requirements": None,
+            "minimum_earned_su_credits": None,
+            "scraped_at": "old-timestamp",
+        }
+        fresh = {
+            "course_id": "DSA492",
+            "scrape_ok": True,
+            "prerequisites": None,
+            "corequisites": None,
+            "general_requirements": "91.000 credits",
+            "minimum_earned_su_credits": 91.0,
+            "scraped_at": "fresh-timestamp",
+        }
+
+        retained = scraper.reconcile_disappearing_requisites(fresh, previous)
+
+        self.assertEqual(retained, ("prerequisites",))
+        self.assertEqual(fresh["prerequisites"], self.DSA492_PREREQUISITES)
+        self.assertEqual(fresh["general_requirements"], "91.000 credits")
+        self.assertEqual(fresh["minimum_earned_su_credits"], 91.0)
+        self.assertEqual(fresh["scraped_at"], "fresh-timestamp")
+        self.assertEqual(fresh["retained_requisite_fields"], ["prerequisites"])
+
+    def test_explicit_acceptance_allows_a_confirmed_removal(self):
+        previous = {
+            "course_id": "DSA492",
+            "scrape_ok": True,
+            "prerequisites": self.DSA492_PREREQUISITES,
+        }
+        fresh = {
+            "course_id": "DSA492",
+            "scrape_ok": True,
+            "prerequisites": None,
+            "retained_requisite_fields": ["prerequisites"],
+        }
+
+        retained = scraper.reconcile_disappearing_requisites(
+            fresh,
+            previous,
+            accepted_removals={("DSA492", "prerequisites")},
+        )
+
+        self.assertEqual(retained, ())
+        self.assertIsNone(fresh["prerequisites"])
+        self.assertNotIn("retained_requisite_fields", fresh)
+
+    def test_fresh_values_win_and_missing_history_is_not_invented(self):
+        replacement = {
+            "course_id": "DSA492",
+            "scrape_ok": True,
+            "prerequisites": "DSA 301 - Undergraduate - Min Grade D",
+        }
+        previous = {
+            "course_id": "DSA492",
+            "scrape_ok": True,
+            "prerequisites": self.DSA492_PREREQUISITES,
+        }
+
+        self.assertEqual(
+            scraper.reconcile_disappearing_requisites(replacement, previous),
+            (),
+        )
+        self.assertEqual(
+            replacement["prerequisites"],
+            "DSA 301 - Undergraduate - Min Grade D",
+        )
+
+        initially_empty = {
+            "course_id": "NEW101",
+            "scrape_ok": True,
+            "prerequisites": None,
+        }
+        self.assertEqual(
+            scraper.reconcile_disappearing_requisites(initially_empty, None),
+            (),
+        )
+        self.assertIsNone(initially_empty["prerequisites"])
+        self.assertNotIn("retained_requisite_fields", initially_empty)
 
 
 class CatalogFallbackCollectionTests(unittest.TestCase):
@@ -358,6 +488,139 @@ class CatalogFallbackMergeTests(unittest.TestCase):
         self.assertIsNone(missing["general_requirement_prerequisites"])
         self.assertNotIn("EL_Type", missing)
         self.assertNotIn("Faculty_Course", missing)
+
+    def test_cli_retains_then_explicitly_accepts_a_disappearing_requisite(self):
+        dsa_prerequisites = RequisiteReconciliationTests.DSA492_PREREQUISITES
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "courses"
+            write_jsonl(
+                root / "202601" / "DSA.jsonl",
+                [catalog_row(
+                    "DSA-492",
+                    title="Graduation Project",
+                    su=3,
+                    ects=5,
+                    faculty="FENS",
+                )],
+            )
+            output_dir = Path(temp_dir) / "output"
+            all_info = output_dir / "all.jsonl"
+            basic_science = output_dir / "basic.jsonl"
+            write_jsonl(all_info, [{
+                "course_id": "DSA492",
+                "subj_code": "DSA",
+                "crse_numb": "492",
+                "scrape_ok": True,
+                "scrape_error": None,
+                "prerequisites": dsa_prerequisites,
+                "corequisites": None,
+                "general_requirements": None,
+                "minimum_earned_su_credits": None,
+                "general_requirement_prerequisites": None,
+            }])
+            write_jsonl(basic_science, [{
+                "course_id": "DSA492",
+                "scrape_ok": True,
+                "breakdown_present": True,
+            }])
+            base_argv = [
+                "tools.data_pipeline.scrape_coursepages",
+                "--courses-dir", str(root),
+                "--out-all-info", str(all_info),
+                "--out-basic-science", str(basic_science),
+                "--cache-dir", str(Path(temp_dir) / "cache"),
+                "--workers", "1",
+                "--retries", "0",
+                "--no-update-course-json",
+            ]
+            fresh_html = coursepage_html("DSA-492", "91.000 credits")
+            fetch_result = (fresh_html, "https://example.test/DSA492")
+
+            with mock.patch.object(sys, "argv", [*base_argv, "--refresh"]), mock.patch.object(
+                scraper,
+                "fetch_coursepage_html",
+                return_value=fetch_result,
+            ):
+                self.assertEqual(scraper.main(), 0)
+
+            retained = scraper.read_jsonl_by_course_id(str(all_info))["DSA492"]
+            self.assertEqual(retained["prerequisites"], dsa_prerequisites)
+            self.assertEqual(retained["minimum_earned_su_credits"], 91.0)
+            self.assertEqual(retained["retained_requisite_fields"], ["prerequisites"])
+
+            with mock.patch.object(
+                sys,
+                "argv",
+                [*base_argv, "--accept-requisite-removal", "DSA492:prerequisites"],
+            ), mock.patch.object(
+                scraper,
+                "fetch_coursepage_html",
+                return_value=fetch_result,
+            ) as fetch:
+                self.assertEqual(scraper.main(), 0)
+                self.assertFalse(fetch.call_args.kwargs["read_cache"])
+
+            accepted = scraper.read_jsonl_by_course_id(str(all_info))["DSA492"]
+            self.assertIsNone(accepted["prerequisites"])
+            self.assertEqual(accepted["minimum_earned_su_credits"], 91.0)
+            self.assertNotIn("retained_requisite_fields", accepted)
+
+    def test_cli_fails_when_an_explicit_removal_cannot_be_verified(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "courses"
+            write_jsonl(
+                root / "202601" / "DSA.jsonl",
+                [catalog_row(
+                    "DSA-492",
+                    title="Graduation Project",
+                    faculty="FENS",
+                )],
+            )
+            output_dir = Path(temp_dir) / "output"
+            all_info = output_dir / "all.jsonl"
+            basic_science = output_dir / "basic.jsonl"
+            write_jsonl(all_info, [{
+                "course_id": "DSA492",
+                "subj_code": "DSA",
+                "crse_numb": "492",
+                "scrape_ok": True,
+                "prerequisites": RequisiteReconciliationTests.DSA492_PREREQUISITES,
+                "corequisites": None,
+                "general_requirements": None,
+                "minimum_earned_su_credits": None,
+                "general_requirement_prerequisites": None,
+            }])
+            write_jsonl(basic_science, [{
+                "course_id": "DSA492",
+                "scrape_ok": True,
+                "breakdown_present": True,
+            }])
+            original_info = all_info.read_text(encoding="utf-8")
+            original_basic_science = basic_science.read_text(encoding="utf-8")
+            argv = [
+                "tools.data_pipeline.scrape_coursepages",
+                "--courses-dir", str(root),
+                "--out-all-info", str(all_info),
+                "--out-basic-science", str(basic_science),
+                "--cache-dir", str(Path(temp_dir) / "cache"),
+                "--workers", "1",
+                "--retries", "0",
+                "--no-update-course-json",
+                "--accept-requisite-removal", "DSA492:prerequisites",
+            ]
+
+            with mock.patch.object(sys, "argv", argv), mock.patch.object(
+                scraper,
+                "fetch_coursepage_html",
+                side_effect=RuntimeError("offline"),
+            ):
+                self.assertEqual(scraper.main(), 1)
+
+            self.assertEqual(all_info.read_text(encoding="utf-8"), original_info)
+            self.assertEqual(
+                basic_science.read_text(encoding="utf-8"),
+                original_basic_science,
+            )
 
     def test_cli_writes_fallback_record_after_total_fetch_failure(self):
         with tempfile.TemporaryDirectory() as temp_dir:

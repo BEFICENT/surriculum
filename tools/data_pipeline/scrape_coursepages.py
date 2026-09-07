@@ -34,6 +34,9 @@ GENERAL_REQUIREMENT_FIELDS = (
     "general_requirement_prerequisites",
 )
 
+REQUISITE_FIELDS = ("prerequisites", "corequisites")
+RETAINED_REQUISITE_FIELDS_KEY = "retained_requisite_fields"
+
 
 # Program catalogs contain both intrinsic course metadata and contextual degree
 # metadata.  Only the former belongs in the course-page index: EL_Type and
@@ -59,8 +62,83 @@ class CourseKey:
         return f"{self.subj_code}{self.crse_numb}"
 
 
+def limit_needed_courses(
+    courses: List[CourseKey],
+    *,
+    max_courses: int,
+    required_course_ids: Iterable[str] = (),
+) -> List[CourseKey]:
+    """Apply the optional work cap without dropping explicit review requests."""
+    if max_courses <= 0:
+        return courses
+    required = set(required_course_ids)
+    explicit = [course for course in courses if course.course_id in required]
+    ordinary = [course for course in courses if course.course_id not in required]
+    return explicit + ordinary[:max_courses]
+
+
 def _now_iso() -> str:
     return _dt.datetime.now(_dt.timezone.utc).isoformat()
+
+
+def parse_requisite_removal_override(value: str) -> Tuple[str, str]:
+    """Parse an explicit ``COURSE:field`` approval for a removed requisite."""
+    course_id, separator, field = str(value or "").partition(":")
+    course_id = re.sub(r"\s+", "", course_id).upper()
+    field = field.strip().lower()
+    if (
+        not separator
+        or not re.fullmatch(r"[A-Z]+[0-9]+[A-Z]?", course_id)
+        or field not in REQUISITE_FIELDS
+    ):
+        allowed = ", ".join(REQUISITE_FIELDS)
+        raise argparse.ArgumentTypeError(
+            f"expected COURSE:field, where field is one of: {allowed}"
+        )
+    return course_id, field
+
+
+def reconcile_disappearing_requisites(
+    fresh_record: Dict[str, Any],
+    previous_record: Optional[Dict[str, Any]],
+    *,
+    accepted_removals: Iterable[Tuple[str, str]] = (),
+) -> Tuple[str, ...]:
+    """Retain previously verified requisites when a valid page becomes empty.
+
+    SUIS occasionally serves a matching, otherwise useful course page whose
+    prerequisite markup is blank or malformed.  Treat that as field-level data
+    loss until a maintainer explicitly accepts the removal; unrelated fresh
+    metadata remains usable.  The marker keeps this provenance reviewable in
+    generated data and is cleared as soon as the source publishes a value or
+    the removal is accepted.
+    """
+    fresh_record.pop(RETAINED_REQUISITE_FIELDS_KEY, None)
+    if (
+        fresh_record.get("scrape_ok") is not True
+        or not previous_record
+        or previous_record.get("scrape_ok") is not True
+    ):
+        return ()
+
+    course_id = str(fresh_record.get("course_id") or "").strip().upper()
+    accepted = set(accepted_removals)
+    retained: List[str] = []
+    for field in REQUISITE_FIELDS:
+        if (course_id, field) in accepted:
+            continue
+        fresh_value = fresh_record.get(field)
+        previous_value = previous_record.get(field)
+        if isinstance(fresh_value, str) and fresh_value.strip():
+            continue
+        if not isinstance(previous_value, str) or not previous_value.strip():
+            continue
+        fresh_record[field] = previous_value
+        retained.append(field)
+
+    if retained:
+        fresh_record[RETAINED_REQUISITE_FIELDS_KEY] = retained
+    return tuple(retained)
 
 
 def build_coursepage_url(subj_code: str, crse_numb: str, *, levl_code: str = "UG", lang: str = "eng") -> str:
@@ -757,6 +835,18 @@ def main() -> int:
         action="store_true",
         help="Re-fetch every course even if it exists in the output files (bypasses the HTML cache).",
     )
+    parser.add_argument(
+        "--accept-requisite-removal",
+        action="append",
+        default=[],
+        type=parse_requisite_removal_override,
+        metavar="COURSE:FIELD",
+        help=(
+            "Accept one verified prerequisite/corequisite removal instead of retaining the "
+            "last known value (for example DSA492:prerequisites). The named course is fetched "
+            "even during an incremental run; repeat the option to accept multiple removals."
+        ),
+    )
     parser.add_argument("--timeout", type=float, default=30.0)
     parser.add_argument("--workers", type=int, default=6, help="Number of parallel workers for scraping course pages.")
     parser.add_argument(
@@ -787,6 +877,7 @@ def main() -> int:
 
     existing_info = read_jsonl_by_course_id(args.out_all_info)
     existing_credits = read_jsonl_by_course_id(args.out_basic_science)
+    accepted_requisite_removals = frozenset(args.accept_requisite_removal)
     cache_dir = None if args.no_cache else args.cache_dir
     if cache_dir and not args.refresh:
         hydrated = hydrate_general_requirement_fields_from_cache(existing_info, cache_dir)
@@ -794,6 +885,16 @@ def main() -> int:
             print(f"Hydrated General Requirements fields from {hydrated} cached course pages.")
 
     unique_courses, expected_breakdown, catalog_fallbacks = collect_catalog_courses(courses_dir)
+    accepted_removal_course_ids = {
+        course_id for course_id, _field in accepted_requisite_removals
+    }
+    unknown_removal_courses = accepted_removal_course_ids.difference(unique_courses)
+    if unknown_removal_courses:
+        parser.error(
+            "--accept-requisite-removal names unknown catalog course(s): "
+            + ", ".join(sorted(unknown_removal_courses))
+        )
+
     needed: List[CourseKey] = []
     for course_id in sorted(unique_courses.keys()):
         existing_record = existing_info.get(course_id) or {}
@@ -802,6 +903,7 @@ def main() -> int:
         )
         if (
             args.refresh
+            or (course_id in accepted_removal_course_ids)
             or (course_id not in existing_info)
             or (course_id not in existing_credits)
             or missing_general_requirement_fields
@@ -818,8 +920,11 @@ def main() -> int:
                 needed.append(unique_courses[course_id])
                 continue
 
-    if args.max_courses and args.max_courses > 0:
-        needed = needed[: args.max_courses]
+    needed = limit_needed_courses(
+        needed,
+        max_courses=args.max_courses,
+        required_course_ids=accepted_removal_course_ids,
+    )
 
     known_valid_attempts = {
         course.course_id
@@ -846,6 +951,7 @@ def main() -> int:
     accepted_scrapes = 0
     successful_scrapes = 0
     successful_course_ids: set[str] = set()
+    applied_requisite_removals: set[Tuple[str, str]] = set()
 
     def store_scrape_result(
         course_id: str,
@@ -860,6 +966,25 @@ def main() -> int:
         ):
             print(f"[warn] retaining last known-good course-page data for {course_id}")
             return False
+        retained_fields = reconcile_disappearing_requisites(
+            info_record,
+            previous_info,
+            accepted_removals=accepted_requisite_removals,
+        )
+        if retained_fields:
+            print(
+                f"[warn] retaining last known requisite field(s) for {course_id} "
+                f"pending review: {', '.join(retained_fields)}"
+            )
+        for field in REQUISITE_FIELDS:
+            override = (course_id, field)
+            fresh_value = info_record.get(field)
+            if (
+                override in accepted_requisite_removals
+                and info_record.get("scrape_ok") is True
+                and not (isinstance(fresh_value, str) and fresh_value.strip())
+            ):
+                applied_requisite_removals.add(override)
         existing_info[course_id] = info_record
         existing_credits[course_id] = credit_record
         return True
@@ -869,6 +994,7 @@ def main() -> int:
         last_err: Optional[BaseException] = None
         last_parsed: Optional[Dict[str, Any]] = None
         valid_parsed: Optional[Dict[str, Any]] = None
+        force_fresh = args.refresh or course.course_id in accepted_removal_course_ids
         for attempt in range(attempts):
             try:
                 session = get_session()
@@ -879,12 +1005,12 @@ def main() -> int:
                     timeout_s=args.timeout,
                     retries=0,
                     net_semaphore=net_semaphore,
-                    read_cache=not args.refresh,
-                    write_cache=not args.refresh,
+                    read_cache=not force_fresh,
+                    write_cache=not force_fresh,
                 )
                 parsed = parse_coursepage_html(html, source_url=url)
                 if _is_valid_scrape(parsed, course):
-                    if args.refresh and cache_dir:
+                    if force_fresh and cache_dir:
                         cache_path = os.path.join(cache_dir, f"{course.course_id}.html")
                         os.makedirs(os.path.dirname(cache_path), exist_ok=True)
                         with open(cache_path, "w", encoding="utf-8") as f:
@@ -998,6 +1124,20 @@ def main() -> int:
                     completed += 1
                     if completed % 200 == 0:
                         print(f"... scraped {completed}/{len(needed)}")
+
+    unapplied_requisite_removals = (
+        accepted_requisite_removals - applied_requisite_removals
+    )
+    if unapplied_requisite_removals:
+        formatted = ", ".join(
+            f"{course_id}:{field}"
+            for course_id, field in sorted(unapplied_requisite_removals)
+        )
+        print(
+            "[error] explicit requisite removal was not confirmed by a valid fresh page: "
+            + formatted
+        )
+        return 1
 
     if args.refresh and known_valid_attempts:
         known_valid_successes = len(successful_course_ids.intersection(known_valid_attempts))

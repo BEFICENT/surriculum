@@ -225,6 +225,28 @@ test('planner combines a HUM General Requirements course clause with its prior-S
   assert.equal(missingCredits.priorSuRequirement.actual, 22.99);
 });
 
+test('DSA492 keeps its reviewed course clause alongside the 91-SU boundary', () => {
+  const info = {
+    prerequisites: 'DSA 201 - Undergraduate - Min Grade D and '
+      + '(DSA 210 - Undergraduate - Min Grade D or '
+      + 'CS 210 - Undergraduate - Min Grade D)',
+    minimum_earned_su_credits: 91,
+  };
+
+  const missingAlternative = req.evaluateCoursePrerequisites(info, ['DSA201']);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(missingAlternative.oneOf)),
+    [['DSA210', 'CS210']],
+  );
+  assert.equal(req.evaluateCoursePrerequisites(info, ['DSA201', 'CS210']), null);
+
+  const below = req.minimumPriorSuRequirement(info, 90.99);
+  assert.equal(below.minimum, 91);
+  assert.equal(below.actual, 90.99);
+  assert.ok(Math.abs(below.missing - 0.01) < 1e-9);
+  assert.equal(req.minimumPriorSuRequirement(info, 91), null);
+});
+
 test('planner checks different-course corequisites but suppresses recitation/lab components', () => {
   const info = new Map([
     ['EE200', { corequisites: 'EE 202' }],

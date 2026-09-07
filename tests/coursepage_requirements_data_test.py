@@ -23,6 +23,7 @@ STRUCTURED_FIELDS = (
     "general_requirement_prerequisites",
 )
 EXPECTED_CREDIT_REQUIREMENTS = {
+    "DSA492": 91.0,
     "HUM201": 23.0,
     "HUM202": 23.0,
     "HUM207": 23.0,
@@ -37,6 +38,12 @@ EXPECTED_COURSE_REQUIREMENTS = {
     "HUM202": HUM_PREREQUISITES,
     "HUM207": HUM_PREREQUISITES,
 }
+DSA492_PREREQUISITES = (
+    "DSA 201 - Undergraduate - Min Grade D and "
+    "(DSA 210 - Undergraduate - Min Grade D or "
+    "CS 210 - Undergraduate - Min Grade D)"
+)
+EXPECTED_RETAINED_REQUISITES = {"DSA492": ("prerequisites",)}
 COURSE_CODE_RE = re.compile(r"([A-Z]{2,5})\s*([0-9]{3,5}[A-Z]?)", re.IGNORECASE)
 CREDIT_RE = re.compile(r"\b(\d+(?:[.,]\d+)?)\s+credits?\b", re.IGNORECASE)
 
@@ -59,11 +66,26 @@ def main() -> None:
     by_code = {}
     credit_requirements = {}
     course_requirements = {}
+    retained_requisites = {}
 
     for row in rows:
         code = str(row.get("course_id") or "").strip().upper()
         assert code and code not in by_code, f"missing or duplicate course_id: {code!r}"
         by_code[code] = row
+
+        retained_fields = row.get("retained_requisite_fields")
+        assert retained_fields is None or (
+            isinstance(retained_fields, list)
+            and retained_fields
+            and len(retained_fields) == len(set(retained_fields))
+            and all(field in {"prerequisites", "corequisites"} for field in retained_fields)
+        ), f"{code}.retained_requisite_fields is invalid: {retained_fields!r}"
+        if retained_fields:
+            for field in retained_fields:
+                assert isinstance(row.get(field), str) and row[field].strip(), (
+                    f"{code}: retained {field} must contain the last reviewed value"
+                )
+            retained_requisites[code] = tuple(retained_fields)
 
         for field in STRUCTURED_FIELDS:
             assert field in row, f"{code}: missing {field}; refresh all course-page records"
@@ -121,14 +143,22 @@ def main() -> None:
         "General Requirements course clauses changed; review parser/evaluator semantics "
         f"before updating the pinned set: {course_requirements!r}"
     )
+    assert retained_requisites == EXPECTED_RETAINED_REQUISITES, (
+        "Retained prerequisite/corequisite review markers changed; inspect the live SUIS "
+        f"pages before updating the pinned set: {retained_requisites!r}"
+    )
 
-    # HUM rules contain independent course and prior-credit conditions. SPS 303
-    # carries only the 58-SU condition. TLL 001's Banner block refers to itself;
-    # keep that unusual source text visible without creating an impossible
-    # evaluator expression.
+    # HUM rules contain independent course and prior-credit conditions. DSA 492
+    # likewise keeps its last reviewed ordinary clause beside the new 91-SU
+    # condition. SPS 303 carries only the 58-SU condition. TLL 001's Banner
+    # block refers to itself; keep that unusual source text visible without
+    # creating an impossible evaluator expression.
     for code in EXPECTED_COURSE_REQUIREMENTS:
         assert by_code[code]["minimum_earned_su_credits"] == 23
         assert by_code[code]["general_requirements"]
+    assert by_code["DSA492"]["prerequisites"] == DSA492_PREREQUISITES
+    assert by_code["DSA492"]["general_requirements"] == "91.000 credits"
+    assert by_code["DSA492"]["minimum_earned_su_credits"] == 91
     assert by_code["SPS303"]["general_requirement_prerequisites"] is None
     assert "58.000 credits" in by_code["SPS303"]["general_requirements"]
     assert by_code["TLL001"]["general_requirements"]
@@ -137,8 +167,13 @@ def main() -> None:
 
     print(
         "OK: %d course-page rows expose reviewed General Requirements metadata "
-        "(%d credit thresholds, %d course expressions)."
-        % (len(rows), len(credit_requirements), len(course_requirements))
+        "(%d credit thresholds, %d course expressions, %d retained requisite reviews)."
+        % (
+            len(rows),
+            len(credit_requirements),
+            len(course_requirements),
+            len(retained_requisites),
+        )
     )
 
 

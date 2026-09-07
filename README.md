@@ -373,6 +373,31 @@ Use `python -m tools.data_pipeline.scrape_coursepages --refresh` for a genuine f
 existing records. Full refreshes bypass the local HTML cache; the automated data
 workflow performs one every Monday and remains incremental on other days.
 
+Requisite removals fail conservatively at field level. If an otherwise valid
+course page changes a previously verified prerequisite or corequisite to an
+empty value, the scraper retains the last known value, records the field in
+`retained_requisite_fields`, and leaves the other freshly scraped metadata
+intact. The reviewed retained-marker set is pinned by the data validation gate,
+so every new disappearance requires inspection. Once a removal is confirmed as
+intentional, accept it explicitly (the named course is fetched even during an
+incremental run, bypasses the cache/work cap, and fails unless a valid fresh
+page still shows the field as empty):
+
+```bash
+python -m tools.data_pipeline.scrape_coursepages \
+  --accept-requisite-removal DSA492:prerequisites
+```
+
+Commit an accepted removal together with the corresponding update to the
+reviewed marker pin in `tests/coursepage_requirements_data_test.py`.
+
+As of 2026-09-07, DSA 492 is the only provisional retention. SUIS now publishes
+its 91 earned-SU General Requirement but returns an empty/malformed ordinary
+prerequisite block, while the description still says prerequisite courses must
+be completed. The previously published `DSA201 AND (DSA210 OR CS210)` rule is
+therefore retained until repeated source evidence or university confirmation
+shows that its removal was deliberate.
+
 Regenerate the data manifest after **any** data update (no network requests). It
 writes `data/manifest.json`, whose content-derived `dataVersion` keys the app's
 service-worker cache — so returning users automatically pick up changed data, with
