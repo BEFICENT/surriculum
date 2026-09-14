@@ -48,6 +48,7 @@
 {"Major": "PHIL", "Code": "300", "Course_Name": "Philosophy of Science", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "required", "Faculty_Course": "No"}
 {"Major": "PHIL", "Code": "301", "Course_Name": "Philosophy of Social Sciences", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "required", "Faculty_Course": "No"}
 {"Major": "ORG", "Code": "302", "Course_Name": "Organizational Behavior", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "core", "Faculty_Course": "SBS"}
+{"Major": "PSY", "Code": "303", "Course_Name": "Making of Modern Psychology", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "304", "Course_Name": "Research Methods and Statistics for Psychology II", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "305", "Course_Name": "Experimental Psychology", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "306", "Course_Name": "Testing and Measurement", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
@@ -55,11 +56,13 @@
 {"Major": "PSY", "Code": "312", "Course_Name": "Sensation / Perception", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "314", "Course_Name": "Language", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "315", "Course_Name": "Memory", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "PSY", "Code": "316", "Course_Name": "Attention", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "341", "Course_Name": "Applied Social Psychology", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "345", "Course_Name": "Stress and Well-Being in Adulthood", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "352", "Course_Name": "Cognitive Neuroscience", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "360", "Course_Name": "Abnormal Behavior", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "361", "Course_Name": "Personality", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "PSY", "Code": "364", "Course_Name": "Clinical Interviewing", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "366", "Course_Name": "Child and Adolescent Psychopathology", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "370", "Course_Name": "Emotion", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "371", "Course_Name": "Stress and Well-Being in Adulthood", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
@@ -68,8 +71,6 @@
 {"Major": "PSY", "Code": "390", "Course_Name": "Sensation / Perception", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "443", "Course_Name": "Psychology of the Self", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "452", "Course_Name": "Cognitive Neuroscience", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
-{"Major": "PSY", "Code": "303", "Course_Name": "Making of Modern Psychology", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
-{"Major": "PSY", "Code": "316", "Course_Name": "Attention", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "317", "Course_Name": "Learning", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "322", "Course_Name": "Lifespan Psychological Science", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "323", "Course_Name": "Human Bonding", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
@@ -79,7 +80,6 @@
 {"Major": "PSY", "Code": "344", "Course_Name": "Group Processes", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "362", "Course_Name": "Clinical Applications of Psychology", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "363", "Course_Name": "Individual Differences", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
-{"Major": "PSY", "Code": "364", "Course_Name": "Clinical Interviewing", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "365", "Course_Name": "Family and Couple Therapy", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "368", "Course_Name": "Adolescent Development and Mental Health", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "398", "Course_Name": "Independent Study I", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
@@ -223,6 +223,7 @@
 {"Major": "CS", "Code": "48010", "Course_Name": "Special Topics in CS: Performance Analysis and Engineering", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CS", "Code": "48011", "Course_Name": "Special Topics in CS: Evolution and Biology for Artificial Intelligence", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CS", "Code": "48012", "Course_Name": "Special Topics in CS: Agentic AI Systems: Architecture and Deployment", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
+{"Major": "CS", "Code": "48013", "Course_Name": "Special Topics in CS: Human-Centered Artificial Intelligence: Design, Implementation, and Research Methods", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CULT", "Code": "299", "Course_Name": "Topics in Turkish Cultural Studies", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CULT", "Code": "322", "Course_Name": "Youth Culture", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CULT", "Code": "355", "Course_Name": "Urban Spaces and Cultures", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}

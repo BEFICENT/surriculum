@@ -63,6 +63,7 @@
 {"Major": "OPIM", "Code": "402", "Course_Name": "Optimization Modeling in Business Analytics", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "OPIM", "Code": "408", "Course_Name": "Retail Operations and Analytics", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "OPIM", "Code": "410", "Course_Name": "Decision Making Under Uncertainty", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "core", "Faculty_Course": "No"}
+{"Major": "ORG", "Code": "405", "Course_Name": "Human Resources Analytics", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "PSIR", "Code": "311", "Course_Name": "Research Methods for Political Science and International Relations I", "ECTS": "7", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "202", "Course_Name": "Research Methods and Statistics for Psychology I", "ECTS": "7", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "306", "Course_Name": "Testing and Measurement", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "core", "Faculty_Course": "No"}
@@ -82,6 +83,7 @@
 {"Major": "EE", "Code": "410", "Course_Name": "Information and Coding Theory", "ECTS": "6", "Engineering": 5.0, "Basic_Science": 1.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "EE", "Code": "48009", "Course_Name": "Special Topics in EE: Machine Learning for Communication Systems", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "EE", "Code": "48010", "Course_Name": "Special Topics in EE: Brain-Computer Interfaces", "ECTS": "6", "Engineering": 4.0, "Basic_Science": 2.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
+{"Major": "EE", "Code": "48012", "Course_Name": "Special Topics in EE: Security, Privacy and Robustness in Machine Learning", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "FIN", "Code": "301", "Course_Name": "Financial Management", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "area", "Faculty_Course": "SBS"}
 {"Major": "FIN", "Code": "401", "Course_Name": "Corporate Finance", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "FIN", "Code": "402", "Course_Name": "Investments", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "area", "Faculty_Course": "No"}
@@ -200,6 +202,7 @@
 {"Major": "CS", "Code": "48007", "Course_Name": "Special Topics in CS: Internet of Things Sensing System", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CS", "Code": "48008", "Course_Name": "Special Topics in CS: Malware Analysis and Detection", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CS", "Code": "48010", "Course_Name": "Special Topics in CS: Performance Analysis and Engineering", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
+{"Major": "CS", "Code": "48013", "Course_Name": "Special Topics in CS: Human-Centered Artificial Intelligence: Design, Implementation, and Research Methods", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CULT", "Code": "322", "Course_Name": "Youth Culture", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CULT", "Code": "355", "Course_Name": "Urban Spaces and Cultures", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "CULT", "Code": "361", "Course_Name": "Oral History", "ECTS": "7", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
@@ -276,7 +279,6 @@
 {"Major": "EE", "Code": "48004", "Course_Name": "Special Topics in EE: Power systems analysis", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "EE", "Code": "48008", "Course_Name": "Special Topics in EE: Heterogeneous Computing and System-on-Chip Design", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "EE", "Code": "48011", "Course_Name": "Secure and Energy-Constrained Integrated Bioelectronic Systems", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "EE", "Code": "48012", "Course_Name": "Special Topics in EE: Security, Privacy and Robustness in Machine Learning", "ECTS": "6", "Engineering": 6.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ENRG", "Code": "220", "Course_Name": "World Energy Outlook: The Coming Year", "ECTS": "6", "Engineering": 3.0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ENRG", "Code": "301", "Course_Name": "Energy Systems and Environment", "ECTS": "6", "Engineering": 3.0, "Basic_Science": 3.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ENRG", "Code": "315", "Course_Name": "Energy", "ECTS": "5", "Engineering": 2.0, "Basic_Science": 3.0, "SU_credit": "3", "Faculty": "FENS", "EL_Type": "free", "Faculty_Course": "No"}
@@ -588,7 +590,6 @@
 {"Major": "ORG", "Code": "401", "Course_Name": "Human Resources Management", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ORG", "Code": "403", "Course_Name": "Cross-Cultural Management", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "ORG", "Code": "404", "Course_Name": "Creativity & Leading  Innovations", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "ORG", "Code": "405", "Course_Name": "Human Resources Analytics", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "SBS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "PHIL", "Code": "202", "Course_Name": "Problems of Philosophy", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "FASS"}
 {"Major": "PHIL", "Code": "300", "Course_Name": "Philosophy of Science", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "PHIL", "Code": "301", "Course_Name": "Philosophy of Social Sciences", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
