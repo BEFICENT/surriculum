@@ -66,6 +66,8 @@ async function readDesktopSidebarLayout(page) {
 
     const main = document.querySelector('.main-content');
     const sidebar = document.querySelector('.sidebar');
+    const sidebarHeader = sidebar.querySelector('.sidebar-header');
+    const sidebarToggle = sidebar.querySelector('.sidebar-toggle');
     const content = sidebar.querySelector('.sidebar-content');
     const board = document.querySelector('.board');
     const reset = sidebar.querySelector('.resetLocal');
@@ -73,12 +75,16 @@ async function readDesktopSidebarLayout(page) {
 
     const mainBox = rect(main);
     const sidebarBox = rect(sidebar);
+    const sidebarHeaderBox = rect(sidebarHeader);
+    const sidebarToggleBox = rect(sidebarToggle);
     const contentBox = rect(content);
     const boardBox = rect(board);
     const resetBox = rect(reset);
     const controls = Array.from(content.querySelectorAll('select, button')).filter(visible).map(rect);
     return {
       sidebarInMain: inside(sidebarBox, mainBox),
+      toggleInsideHeaderVertically: sidebarToggleBox.top >= sidebarHeaderBox.top - 1
+        && sidebarToggleBox.bottom <= sidebarHeaderBox.bottom + 1,
       boardInMain: inside(boardBox, mainBox),
       sidebarBoardOverlap: horizontalOverlap(sidebarBox, boardBox),
       controlsInSidebarHorizontally: controls.every((box) => (
@@ -190,6 +196,7 @@ test.describe('responsive planner and scheduler geometry (desktop)', () => {
       const layout = await readDesktopSidebarLayout(page);
       expect(layout, `${viewport.width}x${viewport.height} containment`).toMatchObject({
         sidebarInMain: true,
+        toggleInsideHeaderVertically: true,
         boardInMain: true,
         controlsInSidebarHorizontally: true,
         resetReachable: true,

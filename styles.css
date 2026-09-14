@@ -638,10 +638,12 @@ html, body {
 
 .sidebar-toggle {
     position: absolute;
-    top: 0; /* Matches the padding of .sidebar-header */
+    top: calc(var(--sidebar-padding-block) / 2);
     right: 0;
     width: 20px;
-    height: 72px;
+    height: 40px;
+    display: grid;
+    place-items: center;
     background: var(--primary);
     color: var(--text-inverse);
     border: none;
