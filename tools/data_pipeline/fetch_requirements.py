@@ -5,9 +5,11 @@ import os
 import datetime
 import re
 import argparse
+import random
 import subprocess
 import sys
 import tempfile
+import time
 
 from .term_utils import generate_terms
 from .suis_page_validation import require_matching_admit_term, validate_suis_term_code
@@ -53,6 +55,7 @@ VALID_HUM_REQUIREMENTS = frozenset({
 })
 
 _session = None
+_RETRYABLE_HTTP_STATUSES = frozenset({408, 425, 429})
 
 
 def parse_hum_requirement(soup):
@@ -147,7 +150,52 @@ def _get_session():
     return _session
 
 
-def fetch_requirements(program, term, offline_dir=None, timeout_s: float = 30.0):
+def _is_retryable_request_error(exc: requests.RequestException) -> bool:
+    if not isinstance(exc, requests.HTTPError):
+        return True
+    response = getattr(exc, "response", None)
+    if response is None:
+        return True
+    status = int(response.status_code)
+    return status in _RETRYABLE_HTTP_STATUSES or status >= 500
+
+
+def _fetch_degree_html(
+    url: str,
+    timeout_s: float = 30.0,
+    retries: int = 3,
+    backoff_s: float = 0.5,
+) -> str:
+    """Fetch one degree page, retrying transient HTTP/network failures."""
+
+    attempts = max(0, int(retries)) + 1
+    for attempt in range(attempts):
+        try:
+            resp = _get_session().get(url, timeout=float(timeout_s or 30.0))
+            resp.raise_for_status()
+            return resp.text
+        except requests.RequestException as exc:
+            if attempt >= attempts - 1 or not _is_retryable_request_error(exc):
+                raise
+            sleep_for = max(0.0, float(backoff_s)) * (2**attempt)
+            sleep_for += random.uniform(0, 0.25)
+            print(
+                "Requirement page request failed "
+                f"(attempt {attempt + 1}/{attempts}); retrying in {sleep_for:.2f}s: {exc}"
+            )
+            time.sleep(sleep_for)
+
+    raise RuntimeError("unreachable requirement-page retry state")
+
+
+def fetch_requirements(
+    program,
+    term,
+    offline_dir=None,
+    timeout_s: float = 30.0,
+    retries: int = 3,
+    backoff_s: float = 0.5,
+):
     """Fetch requirement summary for a program and term.
 
     When ``offline_dir`` is provided and contains a saved HTML page for the
@@ -170,9 +218,12 @@ def fetch_requirements(program, term, offline_dir=None, timeout_s: float = 30.0)
             BASE +
             'SU_DEGREE.p_degree_detail?P_PROGRAM={p}&P_LANG=EN&P_LEVEL=UG&P_TERM={t}&P_SUBMIT=Select'
         ).format(p=program, t=term)
-        resp = _get_session().get(url, timeout=float(timeout_s or 30.0))
-        resp.raise_for_status()
-        html = resp.text
+        html = _fetch_degree_html(
+            url,
+            timeout_s=timeout_s,
+            retries=retries,
+            backoff_s=backoff_s,
+        )
 
     soup = BeautifulSoup(html, 'lxml')
     require_matching_admit_term(soup, term)
@@ -590,6 +641,13 @@ def write_requirements_term_atomic(term, records):
 def main():
     parser = argparse.ArgumentParser(description="Fetch and regenerate graduation requirement summaries.")
     parser.add_argument("--timeout", type=float, default=30.0, help="HTTP timeout in seconds.")
+    parser.add_argument("--retries", type=int, default=3, help="Retry count for HTTP/network errors.")
+    parser.add_argument(
+        "--backoff",
+        type=float,
+        default=0.5,
+        help="Base backoff seconds for retries (exponential).",
+    )
     parser.add_argument("--terms", default="", help="Comma-separated explicit term codes (e.g. 202401,202402).")
     parser.add_argument("--max-terms", type=int, default=0, help="Limit number of terms processed (debug).")
     parser.add_argument("--skip-minors", action="store_true", help="Skip fetching minor catalogs/requirements.")
@@ -613,7 +671,14 @@ def main():
         failures = []
         for prog, major in PROGRAM_CODES.items():
             try:
-                data = fetch_requirements(prog, term, None, timeout_s=args.timeout)
+                data = fetch_requirements(
+                    prog,
+                    term,
+                    None,
+                    timeout_s=args.timeout,
+                    retries=args.retries,
+                    backoff_s=args.backoff,
+                )
                 if not data:
                     raise ValueError('no data parsed')
                 scraped_pools = data.pop('_pools', None)

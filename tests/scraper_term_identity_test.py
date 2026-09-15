@@ -77,6 +77,18 @@ class FakeResponse:
         return None
 
 
+class FakeHttpErrorResponse(FakeResponse):
+    def __init__(self, status_code):
+        super().__init__("")
+        self.status_code = status_code
+
+    def raise_for_status(self):
+        raise fr.requests.HTTPError(
+            f"HTTP {self.status_code}",
+            response=self,
+        )
+
+
 class FakeSession:
     def __init__(self, text):
         self.text = text
@@ -85,6 +97,21 @@ class FakeSession:
     def get(self, _url, timeout=None):
         self.calls += 1
         return FakeResponse(self.text)
+
+
+class SequencedSession:
+    def __init__(self, outcomes):
+        self.outcomes = list(outcomes)
+        self.calls = 0
+
+    def get(self, _url, timeout=None):
+        self.calls += 1
+        outcome = self.outcomes.pop(0)
+        if isinstance(outcome, BaseException):
+            raise outcome
+        if hasattr(outcome, "raise_for_status"):
+            return outcome
+        return FakeResponse(outcome)
 
 
 class TermIdentityTests(unittest.TestCase):
@@ -144,6 +171,110 @@ class TermIdentityTests(unittest.TestCase):
             self.assertEqual(fake.calls, 0, "invalid term input must fail before HTTP")
         finally:
             fr._session = original_session
+
+    def test_requirements_retry_transient_network_errors_with_backoff(self):
+        original_session = fr._session
+        original_sleep = fr.time.sleep
+        original_jitter = fr.random.uniform
+        sleeps = []
+        fake = SequencedSession([
+            fr.requests.ConnectionError("temporary disconnect"),
+            fr.requests.ConnectionError("connection refused"),
+            VALID_PAGE,
+        ])
+        try:
+            fr._session = fake
+            fr.time.sleep = sleeps.append
+            fr.random.uniform = lambda _start, _end: 0.0
+
+            data = fr.fetch_requirements(
+                "BSCS",
+                "202601",
+                retries=2,
+                backoff_s=0.5,
+            )
+
+            self.assertEqual(data["total"], 132)
+            self.assertEqual(fake.calls, 3)
+            self.assertEqual(sleeps, [0.5, 1.0])
+        finally:
+            fr._session = original_session
+            fr.time.sleep = original_sleep
+            fr.random.uniform = original_jitter
+
+    def test_requirements_raise_after_retry_budget_is_exhausted(self):
+        original_session = fr._session
+        original_sleep = fr.time.sleep
+        original_jitter = fr.random.uniform
+        sleeps = []
+        fake = SequencedSession([
+            fr.requests.ConnectionError("first failure"),
+            fr.requests.ConnectionError("second failure"),
+            fr.requests.ConnectionError("final failure"),
+        ])
+        try:
+            fr._session = fake
+            fr.time.sleep = sleeps.append
+            fr.random.uniform = lambda _start, _end: 0.0
+
+            with self.assertRaises(fr.requests.ConnectionError):
+                fr.fetch_requirements(
+                    "BSCS",
+                    "202601",
+                    retries=2,
+                    backoff_s=0.5,
+                )
+
+            self.assertEqual(fake.calls, 3)
+            self.assertEqual(sleeps, [0.5, 1.0])
+        finally:
+            fr._session = original_session
+            fr.time.sleep = original_sleep
+            fr.random.uniform = original_jitter
+
+    def test_requirements_retry_server_errors_but_not_permanent_client_errors(self):
+        original_session = fr._session
+        original_sleep = fr.time.sleep
+        original_jitter = fr.random.uniform
+        try:
+            sleeps = []
+            server_failure = SequencedSession([
+                FakeHttpErrorResponse(503),
+                VALID_PAGE,
+            ])
+            fr._session = server_failure
+            fr.time.sleep = sleeps.append
+            fr.random.uniform = lambda _start, _end: 0.0
+
+            data = fr.fetch_requirements(
+                "BSCS",
+                "202601",
+                retries=2,
+                backoff_s=0.5,
+            )
+            self.assertEqual(data["total"], 132)
+            self.assertEqual(server_failure.calls, 2)
+            self.assertEqual(sleeps, [0.5])
+
+            sleeps.clear()
+            client_failure = SequencedSession([
+                FakeHttpErrorResponse(404),
+                VALID_PAGE,
+            ])
+            fr._session = client_failure
+            with self.assertRaises(fr.requests.HTTPError):
+                fr.fetch_requirements(
+                    "BSCS",
+                    "202601",
+                    retries=2,
+                    backoff_s=0.5,
+                )
+            self.assertEqual(client_failure.calls, 1)
+            self.assertEqual(sleeps, [])
+        finally:
+            fr._session = original_session
+            fr.time.sleep = original_sleep
+            fr.random.uniform = original_jitter
 
     def test_requirements_use_ug_ects_invariant_for_explicit_total_dash(self):
         original_session = fr._session
@@ -652,11 +783,17 @@ class TermIdentityTests(unittest.TestCase):
                 fr.REQUIREMENTS_DIR = tmp
                 fr.PROGRAM_CODES = {"BSCS": "CS"}
                 fr.EXPECTED_MAJORS = ("CS",)
-                fr.fetch_requirements = lambda _program, _term, _offline, timeout_s=30.0: {
-                    "university": 0,
-                    "humRequired": 1,
-                    "humRule": "any",
-                }
+                fetch_options = []
+
+                def fake_fetch(_program, _term, _offline, **options):
+                    fetch_options.append(options)
+                    return {
+                        "university": 0,
+                        "humRequired": 1,
+                        "humRule": "any",
+                    }
+
+                fr.fetch_requirements = fake_fetch
                 fr.special_requirements = lambda _major, _pools=None: {}
                 fr.validate_requirement_record = lambda _major, _record: None
                 published = []
@@ -671,10 +808,21 @@ class TermIdentityTests(unittest.TestCase):
                     raise subprocess.CalledProcessError(1, command)
 
                 fr.subprocess.run = fail_minor_refresh
-                sys.argv = ["tools.data_pipeline.fetch_requirements", "--terms", "202601"]
+                sys.argv = [
+                    "tools.data_pipeline.fetch_requirements",
+                    "--terms", "202601",
+                    "--timeout", "17",
+                    "--retries", "5",
+                    "--backoff", "1.25",
+                ]
 
                 self.assertEqual(fr.main(), 1)
                 self.assertEqual(len(published), 1)
+                self.assertEqual(fetch_options, [{
+                    "timeout_s": 17.0,
+                    "retries": 5,
+                    "backoff_s": 1.25,
+                }])
                 self.assertEqual(len(calls), 1)
                 self.assertIn("tools.data_pipeline.fetch_minors", calls[0])
         finally:
