@@ -608,7 +608,7 @@
 {"Major": "SPS", "Code": "374", "Course_Name": "Global Environmental Challenges", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "SPS", "Code": "384", "Course_Name": "Climate Change and Environmental Politics", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "SPS", "Code": "394", "Course_Name": "Political Ecology and Society", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "SPS", "Code": "404", "Course_Name": "Six Key Global Challenges: A Historical Perspective", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
+{"Major": "SPS", "Code": "404", "Course_Name": "Global Challenges: A Historical Perspective", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "VA", "Code": "201", "Course_Name": "Visual Language I", "ECTS": "7", "Engineering": 0, "Basic_Science": 0, "SU_credit": "4", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "FASS"}
 {"Major": "VA", "Code": "202", "Course_Name": "Visual Language II", "ECTS": "7", "Engineering": 0, "Basic_Science": 0, "SU_credit": "4", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "VA", "Code": "203", "Course_Name": "Language of Drawing I", "ECTS": "7", "Engineering": 0, "Basic_Science": 0, "SU_credit": "4", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "FASS"}
