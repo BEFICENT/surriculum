@@ -74,6 +74,7 @@ test('program context is frozen and binds one academic-import controller with li
   let curriculum = { id: 'curriculum-a' };
   let capturedOptions = null;
   let bindCount = 0;
+  const importPlanFile = () => Promise.resolve('imported-plan');
   const importController = { bind() { bindCount += 1; } };
   const controller = sandbox.surriculumProgramContext.createController({
     model: model(),
@@ -92,6 +93,7 @@ test('program context is frozen and binds one academic-import controller with li
     academicRecordsParser: { parser: true },
     pdfTranscriptReader: { pdf: true },
     loadCoursePageInfoIndex() {},
+    importPlanFile,
   });
 
   assert.equal(Object.isFrozen(sandbox.surriculumProgramContext), true);
@@ -100,6 +102,7 @@ test('program context is frozen and binds one academic-import controller with li
   assert.equal(controller.bindAcademicImport(), importController);
   assert.equal(bindCount, 1);
   assert.equal(capturedOptions.sessionPlanId, 'plan-a');
+  assert.equal(capturedOptions.importPlanFile, importPlanFile);
   assert.equal(typeof capturedOptions.processPendingCustomCourses, 'function');
   assert.equal(capturedOptions.getCourseData(), courseData);
   assert.equal(capturedOptions.getCurriculum(), curriculum);

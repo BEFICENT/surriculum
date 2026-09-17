@@ -2,6 +2,7 @@
 
 const { test, expect } = require('../fixtures');
 const { seedPlan } = require('../helpers/plan');
+const { triggerAcademicImport } = require('../helpers/academic-records');
 
 const TERM = 'Fall 2024-2025';
 const OTHER_TERM = 'Spring 2024-2025';
@@ -395,6 +396,50 @@ test.describe('plan autosave hardening', () => {
     }), oldPlanId);
     expect(result.activeId).not.toBe(oldPlanId);
     expect(result.activeName).toBe('Imported autosave check');
+    expect(result.oldGrades).toEqual([['B-']]);
+    expect(result.activeCourses).toEqual(['MATH102']);
+  });
+
+  test('academic-record import quietly routes plan files through the plan importer', async ({ page }) => {
+    await seedAutosavePlan(page, { grades: [['A']] });
+    const oldPlanId = await page.evaluate(() => window.planStorage.getActivePlanId());
+    const importedState = {
+      major: 'CS',
+      entryTerm: TERM,
+      curriculum: [['MATH102']],
+      grades: [['A-']],
+      dates: [TERM],
+    };
+
+    await page.evaluate(() => {
+      const gradeCell = document.querySelector('.course .grade');
+      gradeCell.click();
+      document.querySelector('.grade-option[data-value="B-"]').click();
+    });
+    await page.locator('#academicRecordsInput').setInputFiles({
+      name: 'planner-backup.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify({
+        type: 'surriculum_plan',
+        version: 1,
+        plan: { name: 'Records-route fallback', state: importedState },
+      })),
+    });
+
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
+      triggerAcademicImport(page),
+    ]);
+    await waitForRenderedCourse(page, 'MATH102');
+
+    const result = await page.evaluate((oldId) => ({
+      activeId: window.planStorage.getActivePlanId(),
+      activeName: window.planStorage.getActivePlan().name,
+      oldGrades: JSON.parse(window.planStorage.getItem('grades', oldId)),
+      activeCourses: window.curriculum.semesters[0].courses.map((course) => course.code),
+    }), oldPlanId);
+    expect(result.activeId).not.toBe(oldPlanId);
+    expect(result.activeName).toBe('Records-route fallback');
     expect(result.oldGrades).toEqual([['B-']]);
     expect(result.activeCourses).toEqual(['MATH102']);
   });

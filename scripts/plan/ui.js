@@ -3,6 +3,7 @@
   'use strict';
 
   let modalSequence = 0;
+  let activePlanFileImporter = null;
 
   function createModal({ title, bodyHtml, input, buttons, onMount }) {
     return new Promise((resolve) => {
@@ -227,6 +228,13 @@
       .replace(/'/g, '&#39;');
   }
 
+  function importPlanFile(file) {
+    if (typeof activePlanFileImporter !== 'function') {
+      return Promise.reject(new Error('The plan importer is not ready yet. Please try again.'));
+    }
+    return activePlanFileImporter(file);
+  }
+
   function initPlanUi(context) {
     const deps = context || {};
     const {
@@ -256,6 +264,25 @@
     const openDropdown = () => {
       dropdown.classList.add('active');
       toggle.setAttribute('aria-expanded', 'true');
+    };
+    activePlanFileImporter = async (file) => {
+      if (!flushSaves()) {
+        showSaveFailure();
+        return null;
+      }
+      const importedId = await planStorage.importPlanFile(file, { activate: false });
+      // FileReader is asynchronous; capture any edits made while it was
+      // reading before switching away from the current plan.
+      if (!flushSaves()) {
+        planStorage.deletePlan(importedId);
+        showSaveFailure();
+        return null;
+      }
+      if (planStorage.setActivePlanId(importedId)) {
+        suspendSaves();
+        location.reload();
+      }
+      return importedId;
     };
 
     const setHeaderName = () => {
@@ -529,24 +556,7 @@
       importInput.addEventListener('change', () => {
         const file = importInput.files && importInput.files[0];
         if (!file) return;
-        if (!flushSaves()) {
-          showSaveFailure();
-          return;
-        }
-        planStorage.importPlanFile(file, { activate: false })
-          .then((importedId) => {
-            // FileReader is asynchronous; capture any edits made while it was
-            // reading before switching away from the current plan.
-            if (!flushSaves()) {
-              planStorage.deletePlan(importedId);
-              showSaveFailure();
-              return;
-            }
-            if (planStorage.setActivePlanId(importedId)) {
-              suspendSaves();
-              location.reload();
-            }
-          })
+        importPlanFile(file)
           .catch((err) => uiModal.alert('Import failed', `<p>${escapeHtml(err && err.message ? err.message : 'Failed to import plan.')}</p>`));
       });
     }
@@ -604,6 +614,7 @@
   const api = Object.freeze({
     createModal,
     uiModal,
+    importPlanFile,
     initPlanUi,
     initStaticDisclosureA11y,
   });

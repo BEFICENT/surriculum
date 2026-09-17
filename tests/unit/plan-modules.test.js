@@ -54,6 +54,7 @@ test('plan modules install frozen namespaces and preserve the uiModal bridge', (
   }
   assert.equal(globals.uiModal, modules.planUi.uiModal);
   assert.equal(typeof globals.uiModal.alert, 'function');
+  assert.equal(typeof modules.planUi.importPlanFile, 'function');
   assert.equal(globals.planStorage, undefined,
     'storage lifecycle remains owned by plan_manager.js');
 });

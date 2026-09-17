@@ -46,6 +46,18 @@
         return 'unknown';
     }
 
+    function isPlanExportDocument(text) {
+        try {
+            const parsed = JSON.parse(String(text || ''));
+            return !!parsed
+                && typeof parsed === 'object'
+                && !Array.isArray(parsed)
+                && parsed.type === 'surriculum_plan';
+        } catch (_) {
+            return false;
+        }
+    }
+
     function createController(options) {
         const opts = options || {};
         const runtime = opts.runtime || global.surriculumAppRuntime;
@@ -61,6 +73,15 @@
             ? opts.getStorage : () => global.planStorage || null;
         const getUi = typeof opts.getUi === 'function'
             ? opts.getUi : () => global.uiModal || null;
+        const importPlanFile = typeof opts.importPlanFile === 'function'
+            ? opts.importPlanFile
+            : (file) => {
+                const planUi = global.SurriculumModules && global.SurriculumModules.planUi;
+                if (!planUi || typeof planUi.importPlanFile !== 'function') {
+                    return Promise.reject(new Error('The plan importer is unavailable. Please try again.'));
+                }
+                return planUi.importPlanFile(file);
+            };
         const sessionPlanId = Object.prototype.hasOwnProperty.call(opts, 'sessionPlanId')
             ? opts.sessionPlanId : runtime.sessionPlanId;
         const escapeHtml = runtime.escapeHtml;
@@ -185,6 +206,22 @@
                         sizeError.code = 'TRANSCRIPT_FILE_TOO_LARGE';
                         throw sizeError;
                     }
+                    if (isPlanExportDocument(htmlContent)) {
+                        try { fileInput.value = ''; } catch (_) {}
+                        const importDropdown = document.getElementById('importDropdown');
+                        if (importDropdown) importDropdown.classList.remove('active');
+                        try {
+                            await importPlanFile(file);
+                        } catch (planImportError) {
+                            const routeError = new Error(
+                                planImportError && planImportError.message
+                                    ? planImportError.message : 'Failed to import plan.'
+                            );
+                            routeError.code = 'PLAN_IMPORT_FAILED';
+                            throw routeError;
+                        }
+                        return;
+                    }
                     if (isNoPermissionHtml(htmlContent)) {
                         await showHtmlSaveWarning();
                         return;
@@ -208,6 +245,14 @@
                     if (ui && typeof ui.alert === 'function') await ui.alert(title, body);
                     else await uiAlert(title, body);
                 };
+                if (errorCode === 'PLAN_IMPORT_FAILED') {
+                    try { fileInput.value = ''; } catch (_) {}
+                    await showImportAlert(
+                        'Import failed',
+                        `<p>${escapeHtml(err && err.message ? err.message : 'Failed to import plan.')}</p>`
+                    );
+                    return;
+                }
                 if (errorCode === 'PDF_NO_TEXT') {
                     try { fileInput.value = ''; } catch (_) {}
                     await showImportAlert(
@@ -561,6 +606,7 @@
 
     global.surriculumAcademicImport = Object.freeze({
         classifyDocument,
+        isPlanExportDocument,
         createController,
     });
 })(typeof window !== 'undefined' ? window : globalThis);

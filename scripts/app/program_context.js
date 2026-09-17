@@ -716,6 +716,7 @@
                 getCurriculum,
                 processPendingCustomCourses,
                 loadCoursePageInfoIndex: opts.loadCoursePageInfoIndex,
+                importPlanFile: opts.importPlanFile,
                 sessionPlanId: appRuntime && appRuntime.sessionPlanId,
             });
             academicImportController.bind();

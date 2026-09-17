@@ -250,11 +250,98 @@ test('academic classifier prioritizes known transcript formats', () => {
   const sandbox = context();
   load('scripts/app/academic_records_import.js', sandbox);
   const classify = sandbox.surriculumAcademicImport.classifyDocument;
+  const isPlanExport = sandbox.surriculumAcademicImport.isPlanExportDocument;
   assert.equal(classify('Academic Records Summary Degree Evaluation'), 'academic-records-summary');
   assert.equal(classify('NOT DOKUM BELGESI Degree Evaluation'), 'yok-transcript');
   assert.equal(classify('Basic Science and Engineering ECTS Distribution'), 'credit-distribution');
   assert.equal(classify('Sorry! You have no permission to access this page'), 'no-permission-html');
   assert.equal(classify('Degree Evaluation'), 'degree-evaluation');
+  assert.equal(isPlanExport(JSON.stringify({ type: 'surriculum_plan', version: 1 })), true);
+  assert.equal(isPlanExport(JSON.stringify({ type: 'academic_records' })), false);
+  assert.equal(isPlanExport('{not valid JSON'), false);
+});
+
+test('academic import quietly delegates plan exports before transcript parsing', async () => {
+  const events = [];
+  const file = {
+    type: 'application/json', name: 'planner-backup.json', size: 100,
+    async text() {
+      return JSON.stringify({
+        type: 'surriculum_plan',
+        version: 1,
+        plan: { name: 'Fallback plan', state: {} },
+      });
+    },
+  };
+  const input = { files: [file], value: 'planner-backup.json' };
+  const elements = {
+    academicRecordsInput: input,
+    importDropdown: { classList: { remove(name) { events.push('close:' + name); } } },
+  };
+  const sandbox = context({
+    document: { getElementById(id) { return elements[id] || null; } },
+    uiModal: { async alert(title) { events.push('alert:' + title); } },
+  });
+  load('scripts/app/academic_records_import.js', sandbox);
+  const controller = sandbox.surriculumAcademicImport.createController({
+    runtime: {
+      escapeHtml: String,
+      uiAlert() {},
+      sessionPlanId: 'current-plan',
+      guidance: { policyListHtml: '', verificationHtml: '' },
+    },
+    parser: {
+      parseAcademicRecords() { throw new Error('transcript parser must not run'); },
+      parseAcademicRecordsPdf() { throw new Error('PDF parser must not run'); },
+    },
+    importPlanFile(importedFile) {
+      assert.equal(importedFile, file);
+      events.push('plan-import');
+      return Promise.resolve('imported-plan');
+    },
+  });
+
+  await controller.handleAcademicRecordsImport();
+
+  assert.equal(input.value, '');
+  assert.deepEqual(events, ['close:active', 'plan-import']);
+});
+
+test('plan-shaped failures use the plan error and never fall through to transcript parsing', async () => {
+  const alerts = [];
+  const input = {
+    files: [{
+      type: 'application/json', name: 'invalid-plan.json', size: 100,
+      async text() { return JSON.stringify({ type: 'surriculum_plan', version: 999 }); },
+    }],
+    value: 'invalid-plan.json',
+  };
+  const sandbox = context({
+    document: { getElementById(id) { return id === 'academicRecordsInput' ? input : null; } },
+    uiModal: { async alert(title, body) { alerts.push([title, body]); } },
+  });
+  load('scripts/app/academic_records_import.js', sandbox);
+  const controller = sandbox.surriculumAcademicImport.createController({
+    runtime: {
+      escapeHtml(value) {
+        return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+      },
+      uiAlert() {},
+      sessionPlanId: 'current-plan',
+      guidance: { policyListHtml: '', verificationHtml: '' },
+    },
+    parser: {
+      parseAcademicRecords() { throw new Error('transcript parser must not run'); },
+    },
+    async importPlanFile() { throw new Error('Unsupported plan export version.'); },
+  });
+
+  await controller.handleAcademicRecordsImport();
+
+  assert.equal(input.value, '');
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0][0], 'Import failed');
+  assert.match(alerts[0][1], /Unsupported plan export version/);
 });
 
 test('academic import checkpoints before mutation and saves before custom review', async () => {

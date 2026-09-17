@@ -809,6 +809,7 @@ async function SUrriculum(major_chosen_by_user, bootManifest, bootMinorTermCodes
             academicRecordsParser: window.academicRecordsParser,
             pdfTranscriptReader: window.pdfTranscriptReader,
             loadCoursePageInfoIndex: window.loadCoursePageInfoIndex,
+            importPlanFile: window.SurriculumModules.planUi.importPlanFile,
             ensureRequirementsReady: () => Promise.all([
                 typeof window.whenRequirementsReady === 'function'
                     ? window.whenRequirementsReady() : Promise.resolve(),
