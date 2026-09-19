@@ -85,6 +85,8 @@ async function readDesktopSidebarLayout(page) {
       sidebarInMain: inside(sidebarBox, mainBox),
       toggleInsideHeaderVertically: sidebarToggleBox.top >= sidebarHeaderBox.top - 1
         && sidebarToggleBox.bottom <= sidebarHeaderBox.bottom + 1,
+      toggleHasComfortableTarget: sidebarToggleBox.right - sidebarToggleBox.left >= 24
+        && sidebarToggleBox.bottom - sidebarToggleBox.top >= 48,
       boardInMain: inside(boardBox, mainBox),
       sidebarBoardOverlap: horizontalOverlap(sidebarBox, boardBox),
       controlsInSidebarHorizontally: controls.every((box) => (
@@ -197,6 +199,7 @@ test.describe('responsive planner and scheduler geometry (desktop)', () => {
       expect(layout, `${viewport.width}x${viewport.height} containment`).toMatchObject({
         sidebarInMain: true,
         toggleInsideHeaderVertically: true,
+        toggleHasComfortableTarget: true,
         boardInMain: true,
         controlsInSidebarHorizontally: true,
         resetReachable: true,

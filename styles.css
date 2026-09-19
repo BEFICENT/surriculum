@@ -306,6 +306,8 @@
     /* Keep the planner controls useful without letting portrait-like desktop
        windows turn them into a half-screen overlay. */
     --sidebar-width: clamp(296px, 20vw, 420px);
+    --sidebar-handle-width: 24px;
+    --sidebar-handle-height: 48px;
     --sidebar-padding-inline: clamp(16px, 1.4vw, 24px);
     --sidebar-padding-block: clamp(12px, 2vh, 24px);
     --sidebar-section-gap: clamp(14px, 2vh, 24px);
@@ -633,15 +635,15 @@ html, body {
 }
 
 .sidebar.collapsed {
-    transform: translateX(calc(-100% + 20px));
+    transform: translateX(calc(-100% + var(--sidebar-handle-width)));
 }
 
 .sidebar-toggle {
     position: absolute;
-    top: calc(var(--sidebar-padding-block) / 2);
+    top: 50%;
     right: 0;
-    width: 20px;
-    height: 40px;
+    width: var(--sidebar-handle-width);
+    height: var(--sidebar-handle-height);
     display: grid;
     place-items: center;
     background: var(--primary);
@@ -650,18 +652,27 @@ html, body {
     border-bottom-left-radius: var(--radius-md);
     border-top-left-radius: var(--radius-md) ;
     cursor: pointer;
+    transform: translateY(-50%);
+}
+
+.sidebar-toggle i {
+    font-size: 1.125rem;
 }
 
 .sidebar.collapsed .sidebar-toggle {
-    transform: rotate(180deg);
+    transform: translateY(-50%) rotate(180deg);
 }
 
 .sidebar.collapsed ~ .board {
-    margin-left: 20px;
+    margin-left: var(--sidebar-handle-width);
 }
 
 .sidebar-header {
-    padding: var(--sidebar-padding-block) var(--sidebar-padding-inline);
+    position: relative;
+    padding: var(--sidebar-padding-block)
+        calc(var(--sidebar-padding-inline) + var(--sidebar-handle-width))
+        var(--sidebar-padding-block)
+        var(--sidebar-padding-inline);
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
 }
