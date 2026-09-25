@@ -32,6 +32,46 @@ test.describe('scheduler (desktop)', () => {
     expect(browserErrors, browserErrors.join('\n')).toEqual([]);
   });
 
+  test('course history tables fill their disclosure without side gutters', async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => { window.openSchedulerModal('202601'); });
+
+    const modal = page.locator('.scheduler-modal');
+    await expect(modal).toBeVisible({ timeout: 15000 });
+    await modal.locator('.scheduler-search').fill('IE413');
+
+    const course = modal.locator('.scheduler-course[data-course="IE413"]');
+    await expect(course).toBeVisible({ timeout: 15000 });
+    await course.locator('.scheduler-course-actions > .scheduler-details').click();
+
+    const details = page.locator('.scheduler-details-modal');
+    await expect(details).toBeVisible();
+    const history = details.locator('.scheduler-details-disclosure');
+    await history.locator(':scope > .scheduler-details-disclosure-summary').click();
+
+    const offeredSummary = history.locator('.course-history-disclosure-summary')
+      .filter({ hasText: /^Offered Terms \(/ });
+    const offered = offeredSummary.locator('..');
+    if ((await offered.getAttribute('open')) === null) await offeredSummary.click();
+    const wrap = offered.locator('.course-history-table-wrap');
+    const table = wrap.locator('.course-history-table');
+    await expect(table).toBeVisible();
+
+    const gaps = await wrap.evaluate((element) => {
+      const tableElement = element.querySelector('.course-history-table');
+      const wrapRect = element.getBoundingClientRect();
+      const tableRect = tableElement.getBoundingClientRect();
+      return {
+        width: wrapRect.width,
+        left: tableRect.left - wrapRect.left,
+        right: wrapRect.right - tableRect.right,
+      };
+    });
+    expect(gaps.width).toBeGreaterThan(680);
+    expect(Math.abs(gaps.left)).toBeLessThanOrEqual(1);
+    expect(Math.abs(gaps.right)).toBeLessThanOrEqual(1);
+  });
+
   test('loads independent Scheduler data concurrently and abandons a closed modal', async ({ page, browserErrors }) => {
     await page.goto('/');
     await page.waitForFunction(() => (

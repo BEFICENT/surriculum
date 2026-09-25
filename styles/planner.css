@@ -604,6 +604,8 @@ body.is-mobile .semester-drop-placeholder {
 }
 
 .course-history-disclosure .course-history-table {
+    max-width: none;
+    margin: 0;
     border-left: none;
     border-right: none;
     border-bottom: none;
