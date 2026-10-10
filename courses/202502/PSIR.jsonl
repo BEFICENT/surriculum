@@ -63,6 +63,7 @@
 {"Major": "POLS", "Code": "434", "Course_Name": "Formal Modelling and Political Analysis I", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "POLS", "Code": "446", "Course_Name": "Latin American Politics", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "POLS", "Code": "457", "Course_Name": "The Politics of Authoritarian Regimes", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
+{"Major": "POLS", "Code": "495", "Course_Name": "Middle Eastern Politics and Government", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "SOC", "Code": "301", "Course_Name": "Political Sociology", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "FASS"}
 {"Major": "SOC", "Code": "408", "Course_Name": "Religion and Politics", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
 {"Major": "SOC", "Code": "420", "Course_Name": "Infrastructure and Mobilities", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "area", "Faculty_Course": "No"}
@@ -529,7 +530,6 @@
 {"Major": "POLS", "Code": "421", "Course_Name": "Modernity: Concept, Perspectives, and Issues", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "POLS", "Code": "448", "Course_Name": "Conflicts in the Middle East", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "POLS", "Code": "491", "Course_Name": "European Politics", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
-{"Major": "POLS", "Code": "495", "Course_Name": "Middle Eastern Politics and Government", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "PROJ", "Code": "301", "Course_Name": "Guided Project I", "ECTS": "2", "Engineering": 0, "Basic_Science": 0, "SU_credit": "1", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "PROJ", "Code": "401", "Course_Name": "Guided Project II", "ECTS": "4", "Engineering": 0, "Basic_Science": 0, "SU_credit": "2", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "No"}
 {"Major": "PSY", "Code": "201", "Course_Name": "Mind and Behavior", "ECTS": "6", "Engineering": 0, "Basic_Science": 0, "SU_credit": "3", "Faculty": "FASS", "EL_Type": "free", "Faculty_Course": "FASS"}
