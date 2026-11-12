@@ -1,11 +1,11 @@
 {
-  "dataVersion": "5d6ba083608e1df7",
-  "generatedAt": "2026-11-11T11:41:16Z",
+  "dataVersion": "74a6f25bf3464736",
+  "generatedAt": "2026-11-12T12:00:25Z",
   "generatedBy": "tools.data_pipeline.build_manifest",
   "inputs": {
     "jsonl": {
       "count": 728,
-      "hash": "de779fb233e474e4"
+      "hash": "43b5c5c05de10657"
     },
     "json": {
       "courses/schedule_subjects.json": "c6f94694d504937e"
@@ -33,7 +33,7 @@
     "202501": "3196ddbb184dd6cb",
     "202502": "7d6628a8cda17915",
     "202503": "b33231d0bac9d6f8",
-    "202601": "acae413140c2c718",
-    "202602": "177a0fceafe10ef5"
+    "202601": "91ed1c672d9cc334",
+    "202602": "635f7662d121298b"
   }
 }
