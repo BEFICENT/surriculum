@@ -1,11 +1,11 @@
 {
-  "dataVersion": "c9b674d2d4fb5b93",
-  "generatedAt": "2026-11-14T11:13:09Z",
+  "dataVersion": "4dab0ea027717fdc",
+  "generatedAt": "2026-11-16T13:10:38Z",
   "generatedBy": "tools.data_pipeline.build_manifest",
   "inputs": {
     "jsonl": {
       "count": 728,
-      "hash": "9225be82c04b16b2"
+      "hash": "7dea8910b95dc139"
     },
     "json": {
       "courses/schedule_subjects.json": "c6f94694d504937e"
