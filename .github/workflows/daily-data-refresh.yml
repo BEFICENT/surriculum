@@ -107,7 +107,77 @@ jobs:
           python tests/scraper_term_identity_test.py
           python tests/manifest_integrity_test.py
 
+      - name: Preserve an unchanged open refresh pull request
+        id: unchanged-pr
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          branch=bot/daily-data-refresh
+          pr_head=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls" \
+            -f state=open -f "head=${GITHUB_REPOSITORY_OWNER}:$branch" -f base=main \
+            --jq 'if length == 1 and .[0].head.repo.id == .[0].base.repo.id
+                   and .[0].head.ref == "bot/daily-data-refresh"
+                   and .[0].user.login == "github-actions[bot]"
+                   then .[0].head.sha else empty end')
+          if [[ ! "$pr_head" =~ ^[0-9a-f]{40}$ ]]; then
+            exit 0
+          fi
+
+          # Fetch only the selected PR commit. Do not persist the token in Git config.
+          git -c credential.helper= -c 'credential.helper=!gh auth git-credential' \
+            fetch --no-tags origin "$pr_head"
+          parents=$(git show -s --format=%P "$pr_head")
+          if [[ "$parents" != "$(git rev-parse HEAD)" ]]; then
+            echo 'Refresh PR was not built directly on this base; recomputing normally.'
+            exit 0
+          fi
+
+          # Model exactly what the PR action would stage, including new and removed
+          # files, without touching the real index or the branch being reviewed.
+          scratch=$(mktemp -d)
+          trap 'rm -rf "$scratch"' EXIT
+          export GIT_INDEX_FILE="$scratch/index"
+          git read-tree HEAD
+          git add -A -- courses requirements data/manifest.json
+
+          # When candidate data returns to main, let the action close the stale PR.
+          if git diff --cached --quiet HEAD -- ||
+             ! git diff --cached --quiet "$pr_head" -- . ":(exclude)data/manifest.json"; then
+            exit 0
+          fi
+
+          old_mode=$(git ls-tree "$pr_head" -- data/manifest.json | cut -d" " -f1)
+          new_mode=$(git ls-files --stage -- data/manifest.json | cut -d" " -f1)
+          if [[ "$old_mode" != 100644 || "$new_mode" != 100644 ]]; then
+            exit 0
+          fi
+          git show "$pr_head:data/manifest.json" > "$scratch/previous.json"
+          git show :data/manifest.json > "$scratch/candidate.json"
+          if python - "$scratch/previous.json" "$scratch/candidate.json" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          def manifest(path):
+              data = json.loads(Path(path).read_text(encoding="utf-8"))
+              if not isinstance(data, dict) or not isinstance(data.pop("generatedAt", None), str):
+                  raise ValueError("Missing generatedAt")
+              return json.dumps(data, sort_keys=True, separators=(",", ":"))
+
+          try:
+              identical = manifest(sys.argv[1]) == manifest(sys.argv[2])
+          except (OSError, ValueError):
+              identical = False
+          sys.exit(0 if identical else 1)
+          PY
+          then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo 'Refresh data and base are unchanged; preserving the existing PR head and checks.'
+          fi
+
       - name: Create pull request if anything changed
+        if: steps.unchanged-pr.outputs.skip != 'true'
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
