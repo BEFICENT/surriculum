@@ -81,6 +81,40 @@ async function mockOfferingHistory(page, records) {
   }, body);
 }
 
+const scheduleRow = (courseId, title, term) => ({
+  course_id: courseId,
+  title,
+  crn: '90001',
+  section: 'A',
+  component: 'Lecture',
+  credits: 3.0,
+  meetings: [],
+  term,
+  subject: courseId.replace(/\d.*$/, ''),
+});
+
+async function mockTermSchedule(page, termCode, rows) {
+  const body = `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`;
+  await page.addInitScript(({ term, jsonl }) => {
+    // Same service-worker-proof approach as mockOfferingHistory: answer the
+    // app's own fetch of this term's schedule and record that it asked for it.
+    window.__e2eMockedScheduleTerms = [];
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = (resource, options) => {
+      const url = typeof resource === 'string'
+        ? resource : String(resource && resource.url || '');
+      if (url.includes(`courses/schedule/${term}.jsonl`)) {
+        window.__e2eMockedScheduleTerms.push(term);
+        return Promise.resolve(new Response(jsonl, {
+          status: 200,
+          headers: { 'Content-Type': 'application/x-ndjson' },
+        }));
+      }
+      return nativeFetch(resource, options);
+    };
+  }, { term: termCode, jsonl: body });
+}
+
 test.describe('planner course filters (desktop)', () => {
   test('close control and Escape dismiss filters, restore focus, and preserve picker-local choices', async ({ page }) => {
     await seedPlan(page, {
@@ -307,6 +341,13 @@ test.describe('planner course filters (desktop)', () => {
       Faculty_Course: 'No',
       EL_Type: 'free',
     };
+    // The live 202601 schedule is refreshed daily and gained a CS395
+    // internship section on 2026-10-13. Pin the exact target-term schedule so
+    // this test exercises the offering filter instead of whatever the
+    // registrar currently lists.
+    await mockTermSchedule(page, '202601', [
+      scheduleRow('CS201', 'Programming Fundamentals', '202601'),
+    ]);
     await seedPlan(page, {
       major: 'CS',
       entryTerm: 'Fall 2024-2025',
@@ -319,12 +360,18 @@ test.describe('planner course filters (desktop)', () => {
 
     const knownPicker = await openPicker(page, 'Fall 2026-2027');
     let controls = await openFilters(knownPicker);
+    // Prove the exclusion below comes from the exact-term offering check rather
+    // than CS395 being absent from the catalog or hidden by another filter.
+    await knownPicker.locator('.course_select').fill('CS395');
+    await expect(courseOption(knownPicker, 'CS395')).toBeVisible({ timeout: 15000 });
+    await expect(courseOption(knownPicker, 'CS395')).toHaveAttribute('data-offering-state', 'not-offered');
     await setChecked(controls.menu.locator('.planner-filter-offered'), true);
     await knownPicker.locator('.course_select').fill('CS201');
     await expect(courseOption(knownPicker, 'CS201')).toBeVisible({ timeout: 15000 });
     await expect(courseOption(knownPicker, 'CS201')).toHaveAttribute('data-offering-state', 'offered');
     await knownPicker.locator('.course_select').fill('CS395');
     await expect(courseOption(knownPicker, 'CS395')).toHaveCount(0);
+    expect(await page.evaluate(() => window.__e2eMockedScheduleTerms)).toContain('202601');
     await closePicker(knownPicker);
 
     const unknownPicker = await openPicker(page, 'Fall 2028-2029');
