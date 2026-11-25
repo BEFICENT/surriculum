@@ -362,6 +362,8 @@ test.describe('planner course filters (desktop)', () => {
     let controls = await openFilters(knownPicker);
     // Prove the exclusion below comes from the exact-term offering check rather
     // than CS395 being absent from the catalog or hidden by another filter.
+    // Offered-only is a picker default, so turn it off explicitly first.
+    await setChecked(controls.menu.locator('.planner-filter-offered'), false);
     await knownPicker.locator('.course_select').fill('CS395');
     await expect(courseOption(knownPicker, 'CS395')).toBeVisible({ timeout: 15000 });
     await expect(courseOption(knownPicker, 'CS395')).toHaveAttribute('data-offering-state', 'not-offered');
